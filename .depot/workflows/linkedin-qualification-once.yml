@@ -37,6 +37,7 @@ jobs:
           fi
           git submodule foreach --recursive true
       - name: Verify locally captured validation inputs
+        id: inputs
         shell: bash
         run: |
           python3 - <<'PY'
@@ -71,9 +72,11 @@ jobs:
             npm install --global npm@11.12.1
           fi
       - name: Frozen frontend dependencies
+        id: dependencies
         working-directory: web
         run: npm ci
       - name: Offline receipt and release-guard contracts
+        id: contracts
         run: |
           bash scripts/cloud-python-bootstrap.sh python - <<'PY'
           import sys, unittest
@@ -89,6 +92,62 @@ jobs:
           result = unittest.TextTestRunner(verbosity=2).run(suite)
           raise SystemExit(not result.wasSuccessful())
           PY
-      - name: Existing LinkedIn release qualification
+      # Independent gates still run after another gate fails; none is waived.
+      - name: Frontend lint
+        id: lint
+        if: ${{ !cancelled() && steps.inputs.outcome == 'success' && steps.dependencies.outcome == 'success' && steps.contracts.outcome == 'success' }}
         working-directory: web
-        run: npm run ci:linkedin:release:jcb
+        run: npm run lint
+      - name: Generate routes and check TypeScript
+        id: types
+        if: ${{ !cancelled() && steps.inputs.outcome == 'success' && steps.dependencies.outcome == 'success' && steps.contracts.outcome == 'success' }}
+        working-directory: web
+        run: node node_modules/next/dist/bin/next typegen && npm run typecheck
+      - name: LinkedIn contracts and disposable PostgreSQL
+        id: backend
+        if: ${{ !cancelled() && steps.inputs.outcome == 'success' && steps.dependencies.outcome == 'success' && steps.contracts.outcome == 'success' }}
+        working-directory: web
+        run: npm run test:linkedin:jcb
+      - name: Automation and scheduler contracts
+        id: automation
+        if: ${{ !cancelled() && steps.inputs.outcome == 'success' && steps.dependencies.outcome == 'success' && steps.contracts.outcome == 'success' }}
+        working-directory: web
+        run: npm run test:linkedin:automation:jcb
+      - name: Frontend contract tests
+        id: frontend
+        if: ${{ !cancelled() && steps.inputs.outcome == 'success' && steps.dependencies.outcome == 'success' && steps.contracts.outcome == 'success' }}
+        working-directory: web
+        run: npm run test:jcb
+      - name: Production-mode build without deployment
+        id: build
+        if: ${{ !cancelled() && steps.inputs.outcome == 'success' && steps.dependencies.outcome == 'success' && steps.contracts.outcome == 'success' && steps.types.outcome == 'success' }}
+        working-directory: web
+        run: npm run build
+      - name: Synthetic browser acceptance
+        id: browser
+        if: ${{ !cancelled() && steps.inputs.outcome == 'success' && steps.dependencies.outcome == 'success' && steps.contracts.outcome == 'success' && steps.build.outcome == 'success' }}
+        working-directory: web
+        run: npm run e2e:linkedin:browser:jcb && node tests/founder-access-browser.cjs
+      - name: Qualification result summary
+        if: ${{ always() }}
+        timeout-minutes: 1
+        env:
+          GATE_INPUTS: ${{ steps.inputs.outcome }}
+          GATE_DEPENDENCIES: ${{ steps.dependencies.outcome }}
+          GATE_CONTRACTS: ${{ steps.contracts.outcome }}
+          GATE_LINT: ${{ steps.lint.outcome }}
+          GATE_TYPES: ${{ steps.types.outcome }}
+          GATE_BACKEND: ${{ steps.backend.outcome }}
+          GATE_AUTOMATION: ${{ steps.automation.outcome }}
+          GATE_FRONTEND: ${{ steps.frontend.outcome }}
+          GATE_BUILD: ${{ steps.build.outcome }}
+          GATE_BROWSER: ${{ steps.browser.outcome }}
+        run: |
+          python3 - <<'PY_SUMMARY'
+          import json, os
+          gates = {key.removeprefix('GATE_').lower(): value for key, value in os.environ.items() if key.startswith('GATE_')}
+          passed = bool(gates) and all(value == 'success' for value in gates.values())
+          print(json.dumps({'qualificationGates': gates, 'allRequiredGatesPassed': passed,
+                            'productionDeployed': False, 'livePosts': False}, sort_keys=True))
+          raise SystemExit(0 if passed else 1)
+          PY_SUMMARY

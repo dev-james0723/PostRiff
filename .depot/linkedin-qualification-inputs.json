@@ -7,7 +7,7 @@
     "production environment and data"
   ],
   "files": {
-    ".depot/workflows/linkedin-qualification-once.yml": "7ce5ba1ba2e594b953982d8f1bbee371388dda8bfebbfbc119925c077bb42740",
+    ".depot/workflows/linkedin-qualification-once.yml": "ba93d66840536e6d9de5c223fb91d165922411625d4ae1f0112e7380c82ebb7a",
     ".gitignore": "3598bd11176bad1d2281e411210c8af13dcc2aebfc00851ddb138f042822384f",
     ".gitmodules": "91752fd73f2198cfe411b1456f9481809c180cc19562a1e41b7e04e84fdc77cd",
     ".node-version": "b911698dc3cf3227d34d0ad6727f1c4408791203c9665de99ab959331a1fb07d",
@@ -2680,7 +2680,7 @@
     "web/src/features/queue/publication-receipt.tsx": "6f8b906367e4f4575b2958c1f13a158457c5bd7243cfd04d8c3bb817393758cf",
     "web/src/features/queue/publish-approved-post-button.tsx": "5bf33d794418aacb020650a6434b6d731e5b31b0261bfd8e14fd234a9c764495",
     "web/src/features/queue/publish-options.tsx": "359700f9c1ac94f19c9555d7f34e8e1f6e695055e7b0cee2c8668cdcdf64bcdf",
-    "web/src/features/queue/queue-view.tsx": "098d63fbd3570ee4d12af4154976625e34e437746a1aa3ced2deb8b1c046da06",
+    "web/src/features/queue/queue-view.tsx": "ace27174e9b954091bbbac8c17ac30399c93aaf3f4695fbff377b1e56d2da7f1",
     "web/src/features/queue/schedule-dialog.tsx": "aa84d976fa6af6f6e7cea1b8c067e278ffe3784d41e1637d61fc6d39293168b9",
     "web/src/features/queue/social-options.tsx": "4901d101099c8415ed618221db57256d6f6514c59a83ae4bd96ce94d66b8283b",
     "web/src/features/queue/status-chip.tsx": "90905defa2c7af1be42d7516f4a19000cbc079416db3b61671f540f477ca6523",
@@ -3132,6 +3132,7 @@
     "web/tests/library-production-browser.cjs": "fb05f2d79b56d8cf5175aeb09b3651e92eebb7bffb09fafe2a3953ad09a9fff1",
     "web/tests/library-upload-body-size.test.mjs": "712f39e4b1d816e35cdb1f71f5bf4befba674107111fffc37b78cd69f854a0f9",
     "web/tests/library-video-policy.test.cjs": "9f1bbc7c0cb33637947f882d035e65471e2324aca26fc2fe0d7dbb42fa6e6ed7",
+    "web/tests/linkedin-queue-binding.test.cjs": "f6cdf475ebfd9cca6aecd4c3718eaa5b6cd0d1dfa995b02e768d1e6a2701f655",
     "web/tests/live-transport-lifecycle.test.cjs": "2ecb7584198a21ebe51a550336f06d137f352f54eaebc6edfbe4a7f93845629c",
     "web/tests/matcher.test.cjs": "37435cdf8fe52dfeae7c4a367a2f6ff6c8f8ecc7d6ab3c19c866fdbc5a95e69e",
     "web/tests/media-cache.test.mjs": "75ca36db144a3acb627feb50f0e7499c9ac15ed1866440c27aa4e90769f7a04d",
