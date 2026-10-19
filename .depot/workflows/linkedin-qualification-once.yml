@@ -19,9 +19,23 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: ''
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ''
     steps:
+      # Depot injects the local patch only AFTER checkout. With orphan Gitlinks
+      # in the remote base, checkout@v4 + persist-credentials:false fails while
+      # removing auth before the patched .gitmodules can be applied.
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          persist-credentials: true
+          submodules: false
+      - name: Remove checkout authorization before running project code
+        shell: bash
+        run: |
+          git config --local --unset-all http.https://github.com/.extraheader || true
+          git config --local --unset-all credential.helper || true
+          if git config --local --get http.https://github.com/.extraheader >/dev/null 2>&1; then
+            echo 'Checkout authorization persisted after scrub' >&2
+            exit 1
+          fi
+          git submodule foreach --recursive true
       - name: Verify locally captured validation inputs
         shell: bash
         run: |
@@ -70,7 +84,8 @@ jobs:
           sys.path[:0] = ['src', 'tests']
           suite = unittest.defaultTestLoader.loadTestsFromNames([
               'test_release_provenance', 'test_release_source_stamp',
-              'test_release_directory_identity', 'test_linkedin_disabled_transport_receipts'])
+              'test_release_directory_identity', 'test_linkedin_disabled_transport_receipts',
+              'test_depot_gitlink_checkout'])
           result = unittest.TextTestRunner(verbosity=2).run(suite)
           raise SystemExit(not result.wasSuccessful())
           PY

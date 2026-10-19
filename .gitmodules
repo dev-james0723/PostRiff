@@ -1,0 +1,11 @@
+# Preserve the two existing source pins without fetching either in CI.
+# The RedNote candidate commit is local-only; a checkout must not try to fetch it.
+[submodule "vendor/xiaohongshu-mcp-v2.5.0-login-fix"]
+  path = vendor/xiaohongshu-mcp-v2.5.0-login-fix
+  url = https://github.com/xpzouying/xiaohongshu-mcp.git
+  update = none
+
+[submodule "vendor/xiaohongshu-mcp-v2.5.0-rednote-candidate"]
+  path = vendor/xiaohongshu-mcp-v2.5.0-rednote-candidate
+  url = https://github.com/xpzouying/xiaohongshu-mcp.git
+  update = none

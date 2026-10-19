@@ -7,8 +7,9 @@
     "production environment and data"
   ],
   "files": {
-    ".depot/workflows/linkedin-qualification-once.yml": "02ce64facdcae9d201d77d4af9284de6e04a51294e3ba41085e0f72bd8068b28",
+    ".depot/workflows/linkedin-qualification-once.yml": "7ce5ba1ba2e594b953982d8f1bbee371388dda8bfebbfbc119925c077bb42740",
     ".gitignore": "3598bd11176bad1d2281e411210c8af13dcc2aebfc00851ddb138f042822384f",
+    ".gitmodules": "91752fd73f2198cfe411b1456f9481809c180cc19562a1e41b7e04e84fdc77cd",
     ".node-version": "b911698dc3cf3227d34d0ad6727f1c4408791203c9665de99ab959331a1fb07d",
     ".python-version": "7b55f8e67b5623c4bef3fa691288da9437d79d3aba156de48d481db32ac7d16d",
     ".vercelignore": "b784ac8153132057685fe9ea9ff2ec614f0bc23bf8dec039def2954be46ef7f1",
@@ -1435,6 +1436,7 @@
     "tests/test_credit_purchases.py": "205dc11d4155cd2b6c139bf3dc91b51de5c919a0135bb1aeb1ff891f1d222380",
     "tests/test_credit_requests.py": "976f73cb8c6907880802cee7fe54692277a41431cabdeeaf9a192335a7756a18",
     "tests/test_credit_wallet.py": "d286919ee2936aca10d84ff3c87898dfaeb9c11e7731131f53c27c22f1b9a932",
+    "tests/test_depot_gitlink_checkout.py": "74c475868c94e272c2f83dd9a2622542d2a2d959c1285d6e8b55d7ec60c416c0",
     "tests/test_dev_hosted_resumable.py": "5a614bb2022bdf69bef195190b0f2ad07f1469d9d942da9cf30eafe6bfc2b165",
     "tests/test_developer_usage.py": "972ad809bce39609b147d2a628ba4c7e9a6f45786745d0d58971a2c87ff9d904",
     "tests/test_discord_capacity_approval_receipt.py": "4d1b21cc31a47dd90f6ef8743270847ff4df5edf39322b50a1ae93da69ccd010",
