@@ -201,7 +201,8 @@ GENUI_ACTION_POLICY = {
 # receipt, `natural` commands are idempotent in the domain, `cas` refuses a second effect through the revision guard.
 _DEDUPE_IDEMPOTENCY = {"intent": "receipt_tx", "natural": "native_key", "cas": "none"}
 JOURNEY_DOMAINS = {"J01": ("content",), "J02": ("content",), "J03": ("library",), "J04": ("memory_brand",), "J05": ("campaigns",),
-                   "J06": ("analytics",), "J07": ("web",), "J08": ("automations", "connections"), "J09": ()}
+                   "J06": ("analytics",), "J07": ("web",), "J08": ("automations", "connections"), "J09": (),
+                   "J10": ()}   # J10 interactive tool: no data grants (no queries, no actions)
 
 # --- CF-1 §10: APP_STATE context sections and R3 native-only actions -----------------------------------------------------
 CONTEXT_CAPABILITIES = {

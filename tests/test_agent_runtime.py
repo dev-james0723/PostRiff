@@ -329,6 +329,19 @@ class AnswerPolicyTest(unittest.TestCase):
         self.assertIsNone(answer_policy.check("我把它保存为草稿而没有发布。", waiting))
         self.assertIsNone(answer_policy.check("我已經幫你將個 post 準備好，等你確認。", waiting))
 
+    def test_chinese_status_descriptions_are_not_change_claims(self):
+        """Live G03 run 2026-10-14: four Chinese answers about connections, consent, automations and campaigns were replaced by
+        the deterministic fallback because a subject-less 已經/已 + state verb read as "Rafii changed it". The English equivalents
+        pass; a claim needs an actor (我/我哋/Rafii or 幫你/為你) in every language."""
+        ledger = rt_context.EffectLedger()
+        for text in ("你嘅 Instagram 已經連接，YouTube 都已連接，暫時冇問題。", "呢三個 source 已啟用 cloud consent，可以用嚟學習你嘅語氣。",
+                     "每週自動化已暫停，下次運行時間未定。", "數據已經更新到昨日，Campaign 入面兩篇已出咗。", "嗰篇草稿已加入咗 campaign，但未排程。",
+                     "你的账号已经连接，自动化已暂停。", "这些来源已启用云端同意。",
+                     "Your Instagram account is connected and the weekly automation is paused."):
+            self.assertIsNone(answer_policy.check(text, ledger), text)
+        for text in ("我已經更新咗篇稿。", "我已经帮你更新了草稿。", "已經幫你改好咗。", "我哋已經將個自動化暫停咗。", "Rafii 已經幫你連接咗 IG。"):
+            self.assertEqual(answer_policy.check(text, ledger), "claims_unverified_change", text)
+
     def test_effect_verbs_and_passive_claims_after_a_proposal_attempt(self):
         ledger = rt_context.EffectLedger()
         for text in ("I've paused your weekly automation.", "I applied the change.", "I’ve turned off the Monday automation.", "我已經暫停咗個自動化。"):

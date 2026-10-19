@@ -9,6 +9,7 @@ import { Button, DateRange, Form, Select, TextField } from './inputs';
 import { Accordion, AccordionItem, Card, EvidenceLink, Grid, RafiiRoot, Section, Stack, TabItem, Tabs, Text } from './layout';
 import { SelectionList } from './selection';
 import { EmptyState, ErrorState, LoadingState } from './states';
+import { NumberField, Readout, Slider, Toggle } from './tool';
 
 export const PRIMITIVE_RENDERERS: JourneyRenderers = {
   RafiiRoot,
@@ -38,6 +39,10 @@ export const PRIMITIVE_RENDERERS: JourneyRenderers = {
   Select,
   DateRange,
   Button,
+  NumberField,
+  Slider,
+  Toggle,
+  Readout,
   ActionButton,
 };
 
@@ -45,4 +50,5 @@ export { AssetPreviewView, previewRouteAllowed, previewUrlAllowed, type AssetPre
 export { collectActionInputs } from './action-button';
 export { useFormValues, useRafiiForm, type RafiiFormContextValue } from './inputs';
 export { safeLinkTarget } from './layout';
+export { numberProblem, readoutText, ReadoutView, toFiniteNumber, type ReadoutFormat } from './tool';
 export { Children, LoadingRows, QueryStateNote, SourceMeta, StatusBadge, statusText, Unrenderable } from './shared';

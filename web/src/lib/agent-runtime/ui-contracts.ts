@@ -35,7 +35,9 @@ export const ATTEMPT_KINDS = ['generate', 'repair', 'edit', 'retry'] as const;
 export const REVISION_KINDS = ['generate', 'repair', 'edit'] as const;
 export const SCOPES = ['workspace', 'founder'] as const;
 export const SLOTS = ['main'] as const;
-export const JOURNEYS = ['J01', 'J02', 'J03', 'J04', 'J05', 'J06', 'J07', 'J08', 'J09'] as const;
+export const JOURNEYS = ['J01', 'J02', 'J03', 'J04', 'J05', 'J06', 'J07', 'J08', 'J09', 'J10'] as const;
+/** Local-only interactive tools (J10): no Query, no @Run, no action id; never combined with a data journey. */
+export const TOOL_JOURNEYS = ['J10'] as const;
 export const UI_ACTION_EFFECTS = ['CREATE_DRAFT', 'MUTATE_REVERSIBLE', 'PREPARE_EXTERNAL'] as const;
 
 export const TRANSITIONS: Record<GenerationState, readonly GenerationState[]> = {

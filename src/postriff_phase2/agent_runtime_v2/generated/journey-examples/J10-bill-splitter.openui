@@ -1,0 +1,14 @@
+root = RafiiRoot([inputs, results, note], "Split the bill")
+$bill = 120
+$tip = 15
+$people = 4
+$roundUp = false
+inputs = Section("Your bill", [bill, tip, people, roundUp])
+bill = NumberField("bill", "Bill total", $bill, 0, 1000000, 0.01)
+tip = Slider("tip", "Tip", 0, 30, $tip, 1, "%")
+people = NumberField("people", "People", $people, 1, 100, 1)
+roundUp = Toggle("roundUp", "Round each share up", $roundUp)
+results = Grid([total, each], 2)
+total = Readout("Total with tip", $bill * (1 + $tip / 100), "currency")
+each = Readout("Each pays", $people > 0 ? ($roundUp ? @Ceil($bill * (1 + $tip / 100) / $people) : $bill * (1 + $tip / 100) / $people) : null, "currency")
+note = Text("Shares are worked out from the numbers above; nothing is saved.", "muted")

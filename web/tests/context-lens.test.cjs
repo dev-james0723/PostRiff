@@ -145,6 +145,7 @@ function sendHarness() {
     agent: { status: { manager: { available: true }, genui: { enabled: true }, contextLens: { enabled: true } }, api: { turn: (_w, body) => { calls.body = body; return pending; } } },
     client: { invalidateQueries: async () => {} }, loadStatus() {}, flushConversation: async () => {},
     uiScope: 'workspace:u1:w1', currentUiContext: () => uiContext, exclusionsFor: L.exclusionsFor, lensPreview: null, lensRemoved: removed,
+    settleAgentTurn: ({ send }) => send(), resyncSignals: () => () => {},
     newKey: () => 'test-key', images: [{ assetId: 'a'.repeat(32) }], timeZone: 'UTC', choice: { model: 'test' },
     setImages: () => { calls.images += 1; }, setLensRemoved: () => { calls.removals += 1; }, markFresh() {},
     voiceSession: { typedExchange: () => { calls.exchanges += 1; } }, api: {},

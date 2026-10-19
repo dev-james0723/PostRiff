@@ -36,9 +36,13 @@ ATTEMPT_KINDS = ("generate", "repair", "edit", "retry")
 REVISION_KINDS = ("generate", "repair", "edit")
 SCOPES = ("workspace", "founder")
 SLOTS = ("main",)
-JOURNEYS = ("J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08", "J09")
-CONSUMER_JOURNEYS = JOURNEYS[:8]
+JOURNEYS = ("J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08", "J09", "J10")
+CONSUMER_JOURNEYS = ("J01", "J02", "J03", "J04", "J05", "J06", "J07", "J08", "J10")
 FOUNDER_JOURNEYS = ("J09",)
+# J10 "Interactive tool": a general-purpose local tool (calculator, converter, estimator, planner, checklist, quiz) the person
+# asked Rafii to build. Its manifest has zero queries and zero actions, its programs are validated local-only (no Query, no
+# @Run, no action id) and it is never combined with a data journey. Only the Adaptive UI Planner proposes it.
+TOOL_JOURNEYS = ("J10",)
 
 # Effect classes a UI action binding may carry (subset of contracts.EFFECTS). Queries are always READ. EXTERNAL_EFFECT,
 # DESTRUCTIVE and SECRET never appear in a manifest: publishing, sending, buying, deleting, disconnecting and secrets stay

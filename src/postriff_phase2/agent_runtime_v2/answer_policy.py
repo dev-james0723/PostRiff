@@ -61,7 +61,10 @@ _DID = re.compile(
     _EN_I + r"(?:created|linked|added|attached|generated|saved|changed|updated|edited|rewrote|rewritten|shortened|made|removed|moved"
     r"|applied|paused|resumed|rescheduled|enabled|disabled|activated|deactivated|restarted|stopped|turned\s+(?:on|off)|switched\s+(?:on|off))\b"
     rf"|{_ZH_I}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})\s*{_ZH_COMPLETE}"
-    rf"|{_ZH_DONE}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})", re.I)
+    # An actor is required, as in English: "我已經更新咗" / "已經幫你改好咗" are claims, a subject-less "已經連接" / "已暫停" /
+    # "數據已經更新" describes a state (live G03 2026-10-14: four Chinese status answers were replaced by the fallback).
+    rf"|{_ZH_I}\s*{_ZH_DONE}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})"
+    rf"|{_ZH_DONE}\s*{_ZH_FOR}\s*{_ZH_OBJ}(?:{_ZH_CHANGED})", re.I)
 
 
 # The tools that prepare or apply proposals (automation changes are MUTATE_REVERSIBLE proposals, not PREPARE_EXTERNAL).
@@ -183,6 +186,8 @@ def compose(ledger: EffectLedger, task=None, *, language: str | None = None, not
 
 def reply_type():
     """The Manager's structured output (pydantic, so the SDK validates it)."""
+    from typing import Literal
+
     from pydantic import BaseModel, Field
 
     class ManagerReply(BaseModel):
@@ -190,6 +195,12 @@ def reply_type():
         speakable: str = Field(description="One to three short spoken sentences for voice: the outcome and the next step. No lists, links or ids.")
         language: str = Field(default="en", description="BCP 47 tag of the language you answered in (en, zh-Hant-HK for Cantonese, zh-Hans or zh-Hant for Mandarin).")
         follow_ups: list[str] = Field(default_factory=list, description="Up to three short follow-up questions the person might ask next.")
+        presentation: Literal["auto", "text", "view", "tool"] = Field(
+            default="auto",
+            description="How this answer is best shown: text = the answer above is enough; view = an interactive view of the records "
+                        "you read would help (compare, filter, explore, review); tool = the person asked for an interactive tool "
+                        "(calculator, converter, planner, timetable, quiz, practice drill) that needs none of their workspace data; "
+                        "auto = no preference. This is a suggestion only; it changes nothing.")
 
     return ManagerReply
 

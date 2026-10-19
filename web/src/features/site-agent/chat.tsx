@@ -41,6 +41,7 @@ import type { AgentResult, AgentStatus, AgentTurnResponse } from '@/lib/agent-ru
 import { agentStatusQuery, useAgent } from '@/lib/agent-runtime/use-agent';
 import { thinkingOrbsEnabled } from '@/lib/agent-runtime/thinking-state';
 import { useThinkingState } from '@/lib/agent-runtime/use-thinking-state';
+import { resyncSignals, settleAgentTurn } from '@/lib/agent-runtime/turn-recovery';
 import { useVoice, voiceSession } from '@/lib/agent-runtime/voice-session';
 import { useTimeZone } from '@/lib/preferences';
 import { timeDefaults } from '@/lib/time';
@@ -291,9 +292,12 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
           // Context Lens: the chips the person removed go with the message; the server leaves them out of this turn.
           const exclude = status?.contextLens?.enabled ? exclusionsFor(lensPreview, lensRemoved) : [];
           // The Agent Runtime answers (same conversation; it falls back to the site agent by itself when it must).
-          const response = await agent.api.turn(w, {
+          // One key for the request and any replay: when the response is lost (a background tab, a dropped connection), the
+          // turn is read back by that key once the tab is visible again instead of staying "working" until a reload.
+          const idempotencyKey = newKey();
+          const turn = (signal?: AbortSignal) => agent.api.turn(w, {
             message,
-            idempotencyKey: newKey(),
+            idempotencyKey,
             conversationId: current.conversations[w] ?? null,
             modality: 'text',
             pageContext,
@@ -304,7 +308,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
             ...(command ? { command } : {}),
             ...(uiContext ? { uiContext } : {}),
             ...(exclude.length ? { contextLens: { exclude } } : {})
-          });
+          }, signal);
+          const response = await settleAgentTurn({ send: turn, replay: () => turn(), wake: resyncSignals });
           if (composerScope.current !== sentScope) return;
           setImages([]);
           if (status?.contextLens?.enabled) {

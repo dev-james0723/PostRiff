@@ -915,6 +915,9 @@ class AgentRuntimeService:
                 result["followUps"] = followups.clean([contracts.trim(item, 120) for item in (getattr(reply, "follow_ups", None) or []) if isinstance(item, str)],
                                                       exclude=ctx.request_text, limit=120)
                 result["language"] = getattr(reply, "language", None)
+                hint = getattr(reply, "presentation", None)
+                if hint in ("text", "view", "tool"):
+                    result["presentationHint"] = hint   # rafii-ui-plan/1: the Manager's suggestion; only the planner reads it
         if reply is None or reason is not None:
             composed_by = "deterministic"
             if interruptions:
@@ -989,7 +992,8 @@ class AgentRuntimeService:
         # Scope comes from the authenticated server context, never the model's result or a client page hint.
         from .tool_adapter import founder_scope
         ui_scope = "founder" if founder_scope(ctx) is not None else "workspace"
-        result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality, scope=ui_scope)
+        result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality, scope=ui_scope,
+                                  ui_selection=getattr(ctx, "ui_selection", None))
         with self.service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, _row, _principal):
             status = self._run_status(cur, ctx.workspace_id, run_id)
             final_status = "cancelled" if status == "cancelled" else "completed"
@@ -1522,12 +1526,13 @@ def evidence_blocks(ledger, text: str, language: str | None) -> list[dict]:
 _NOT_ELIGIBLE = {"eligible": False, "slot": "main", "reason": "not_eligible", "journeyIds": []}
 
 
-def ui_handoff(cfg, workspace_id, result, request_text, modality, *, scope="workspace") -> dict:
+def ui_handoff(cfg, workspace_id, result, request_text, modality, *, scope="workspace", ui_selection=None) -> dict:
     """result.ui: whether this completed Manager turn may get a generated view (deterministic predicate in ui_projection).
     A failure here never fails the turn; the answer stays native."""
     flags = cfg.genui_for(workspace_id, founder=scope == "founder")
     if not flags.get("enabled"):
         return {**_NOT_ELIGIBLE, "reason": "disabled"}
+    flags = {**flags, "tools": cfg.genui_tools_for(workspace_id, founder=scope == "founder")}
     try:
         from . import ui_projection
         decided = ui_projection.eligibility(result, request_text, modality, flags=flags, scope=scope)
@@ -1535,8 +1540,33 @@ def ui_handoff(cfg, workspace_id, result, request_text, modality, *, scope="work
         return {**_NOT_ELIGIBLE, "reason": "not_eligible"}
     if not isinstance(decided, dict):
         return dict(_NOT_ELIGIBLE)
-    return {"eligible": bool(decided.get("eligible")), "slot": "main", "reason": str(decided.get("reason") or "")[:64],
-            "journeyIds": [j for j in decided.get("journeyIds") or [] if isinstance(j, str)][:9]}
+    handoff = {"eligible": bool(decided.get("eligible")), "slot": "main", "reason": str(decided.get("reason") or "")[:64],
+               "journeyIds": [j for j in decided.get("journeyIds") or [] if isinstance(j, str)][:9]}
+    mode = cfg.genui_planner_for(workspace_id, founder=scope == "founder")
+    if mode == "off":
+        return handoff
+    try:
+        # rafii-ui-plan/1: shadow records the plan beside the baseline; active lets it decide. A planner failure is the baseline.
+        # A follow-up counts only when the server re-resolved the view (ui_turn_context: owned, current artifact), never on a
+        # client-sent uiContext id alone.
+        from . import ui_planner
+        planned = ui_planner.plan(result, request_text, modality, flags=flags, scope=scope, context={"followsArtifact": isinstance(ui_selection, dict)})
+        planned = {**planned, "mode": mode}
+    except Exception:  # noqa: BLE001
+        return handoff
+    if mode == "active":
+        handoff = {**handoff, "eligible": bool(planned["eligible"]), "reason": str(planned["reason"])[:64], "journeyIds": list(planned["journeyIds"])[:9]}
+        if planned.get("form") == "tool" and handoff["eligible"] and flags.get("tools"):
+            # J10 interactive tool (RAFII_GENUI_TOOLS_ENABLED, active planner, turn read no workspace data): keep the person's own
+            # request, bounded, as the tool's brief. It stays on this run's result (the asker's own words) and reaches the
+            # presenter only through ui_projection's J10 gates, on the provider this turn already used.
+            from . import ui_projection
+            brief = ui_projection.tool_brief(request_text)
+            if brief:
+                handoff["toolBrief"] = brief
+            else:
+                handoff = {**handoff, "eligible": False, "reason": "plain_answer", "journeyIds": []}
+    return {**handoff, "plan": planned}
 
 
 def ui_turn_context(cfg, cur, workspace_id, principal, member, raw):

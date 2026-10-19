@@ -35,6 +35,8 @@ function policyFor(journey) {
       readBindings: entry.bindings,
       actionIds: entry.actions,
       founder: lib.library === 'founder',
+      // J10 tools are validated exactly as the presenter's J10 output is: local-only.
+      ...(contracts.TOOL_JOURNEYS.includes(journey) ? { localOnly: true } : {}),
     },
   };
 }
@@ -112,7 +114,7 @@ test('every journey example is accepted by the trusted validator under its journ
   }
   // Every example file on disk is indexed (the asset generator feeds all of them into prompts).
   const indexed = new Set(Object.values(catalog.journeys).flatMap((j) => j.examples.map((e) => e.file)));
-  for (const name of fs.readdirSync(EXAMPLES).filter((n) => /^J0[1-9]-.*\.openui$/.test(n))) assert.ok(indexed.has(name), `${name} is indexed`);
+  for (const name of fs.readdirSync(EXAMPLES).filter((n) => /^(J0[1-9]|J10)-.*\.openui$/.test(n))) assert.ok(indexed.has(name), `${name} is indexed`);
 });
 
 test('each journey edit case patches its base: only intended removals, state statements kept, no new authority', () => {

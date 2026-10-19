@@ -78,7 +78,9 @@ LIVE_STATES = ("queued", "streaming", "validating")
 # Validator codes no presenter output can fix → the terminal reason (no automatic repair, no second reservation).
 NOT_REPAIRABLE = {"validation_unavailable": "validation_unavailable", "source_too_large": "source_too_large", "library_unsupported": "library_unsupported",
                   "contract_mismatch": "library_unsupported", "missing_base": "revision_conflict", "validator_error": "validation_unavailable",
-                  "bad_request": "validation_unavailable", "unauthorized": "validation_unavailable"}
+                  "bad_request": "validation_unavailable", "unauthorized": "validation_unavailable",
+                  # A seam that accepted a J10 program naming a query/action ignored the localOnly policy (version skew).
+                  "local_only_violation": "validation_unavailable"}
 _sleep = time.sleep
 
 
@@ -139,6 +141,7 @@ REJECTION_CODES = frozenset((
     "query_args_count", "query_args_shape", "query_binding_denied", "query_defaults_forbidden", "query_inline", "refresh_invalid",
     "root_invalid", "source_not_query", "state_name_invalid", "unexplained_deletion", "unknown_component", "unresolved_ref",
     "unreachable_statement", "query_as_child", "query_arg_placeholder",                       # D-A52 (stricter generate/arguments rules)
+    "local_only_query", "local_only_run", "local_only_action",                                  # J10 interactive tools (local-only)
     "fence_in_source", "library_unsupported", "missing_base", "nesting_too_deep", "parse_exception", "revision_conflict",
     "source_too_large", "parse_rejected",
     "missing-required", "null-required", "unknown-component", "inline-reserved", "excess-args", "type-mismatch",
@@ -974,7 +977,9 @@ def _deadline(started: float) -> float:
 def _flags(runtime, workspace_id, scope) -> dict:
     """The deployment's GenUI switches for this workspace (founder ones in founder scope); the routes re-check them independently."""
     try:
-        return runtime.cfg.genui_for(workspace_id, founder=scope == "founder")
+        flags = runtime.cfg.genui_for(workspace_id, founder=scope == "founder")
+        # J10 interactive tools: re-checked when a view starts (a kill switch for tool views not yet presented).
+        return {**flags, "tools": bool(runtime.cfg.genui_tools_for(workspace_id, founder=scope == "founder"))}
     except Exception:  # noqa: BLE001 — unknown switches: no write controls
         return {"enabled": True, "actions": False, "edits": False}
 

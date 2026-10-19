@@ -169,7 +169,10 @@ def _error_class(value):
     return None if _SECRET.search(value.lower()) else value
 
 
+_UI_PLAN = re.compile(r"^(?:shadow|active):(?:text|comparison|chart|table|timeline|cards|calendar|approval|recovery|tool):(?:same|upgrade|downgrade)$")
+
 FIELDS = {
+    "uiPlan": lambda v: v if isinstance(v, str) and _UI_PLAN.match(v) else None,
     "traceId": _ident(_TRACE), "runId": _ident(_UUID), "taskId": _ident(_UUID), "approvalId": _ident(_UUID), "requestId": _ident(_REQUEST),
     "stepKey": lambda v: v if isinstance(v, str) and _STEP.match(v) and not _SECRET.search(v) else None,
     "seq": _integer(0, 10 ** 6), "attempt": _integer(0, 10 ** 4),
@@ -625,11 +628,14 @@ def outcome_summary(result: dict, trace: dict, status: str) -> dict:
     cost_state = "known" if isinstance(cost, int) and not isinstance(cost, bool) else ("scripted" if billing == "scripted" else "unknown" if billing == "metered" else "none")
     ui = result.get("ui") if isinstance(result.get("ui"), dict) else None
     genui = None if ui is None else ("eligible" if ui.get("eligible") else code_or(ui.get("reason"), "not_eligible"))
+    # rafii-ui-plan/1: "<mode>:<form>:<delta>" (e.g. "shadow:recovery:upgrade") — enum values only, for baseline-vs-planner rates.
+    plan = (ui or {}).get("plan") if isinstance((ui or {}).get("plan"), dict) else None
+    ui_plan = None if plan is None else ":".join(code_or(plan.get(k), "unknown") for k in ("mode", "form", "delta"))
     codes = sorted({c for c in (code_or((e or {}).get("code"), None) for e in (result.get("errors") or []) if isinstance(e, dict)) if c})[:5]
     return {"path": path_of(trace), "status": code_or(status, "unknown"), "outcome": outcome, "composedBy": code_or(result.get("composedBy"), None),
             "fallback": code_or(trace.get("fallback"), None), "workload": code_or(trace.get("workload"), None), "costUsdMicro": cost if cost_state == "known" else None,
             "costState": cost_state, "modelRequests": usage.get("modelRequests") if isinstance(usage.get("modelRequests"), int) else None,
-            "genui": genui, "tenant": "founder" if "founder" in trace else "workspace", "counts": counts, "errorCodes": codes}
+            "genui": genui, "uiPlan": ui_plan, "tenant": "founder" if "founder" in trace else "workspace", "counts": counts, "errorCodes": codes}
 
 
 def run_persisted(runtime, *, run_id, status, result, trace) -> None:
@@ -642,7 +648,7 @@ def run_persisted(runtime, *, run_id, status, result, trace) -> None:
         trace_id = (trace or {}).get("traceId") if isinstance(trace, dict) else None
         emit("agent.verify", traceId=trace_id, runId=run_id, path=summary["path"], status=summary["status"], outcome=summary["outcome"],
              composedBy=summary["composedBy"], fallback=summary["fallback"], workload=summary["workload"], tenant=summary["tenant"],
-             verified=summary["outcome"] == "verified", counts=summary["counts"], genui=summary["genui"],
+             verified=summary["outcome"] == "verified", counts=summary["counts"], genui=summary["genui"], uiPlan=summary["uiPlan"],
              code=summary["errorCodes"][0] if summary["errorCodes"] else None)
         scope = SCOPE.get()
         if summary["path"] in ("stalled", "phone_interrupted"):
