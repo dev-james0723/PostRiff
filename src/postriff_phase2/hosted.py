@@ -232,7 +232,9 @@ class PostgresWorkspaceRepository:
                 if media_consent.decision(state).get("cloud") is not True:
                     from .media_notes import purge_workspace
                     purge_workspace(cur, workspace_id)
-        if action in ("p2_review", "p2_approve", "p2_approve_many", "raffi_run_commit"):
+        # Preparing a frozen needs_review record is passive. Approval/commit and
+        # worker dispatch still require a live publishing entitlement.
+        if action in ("p2_approve", "p2_approve_many", "raffi_run_commit"):
             from .billing import require_publishing
             after = lambda cur, state, principal: require_publishing(cur, workspace_id, self.clock())
         return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event, after=after)
