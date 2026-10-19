@@ -106,7 +106,31 @@ class DisabledHostedSocial:
     def submit(self, _manifest):
         return {"state": "held", "confirmed": NO_SUBMISSION_CONFIRMED}
 
-    def reconcile(self, _manifest, _job):
+    def reconcile(self, manifest, job):
+        # Disabled read transport is not evidence that a known accepted POST
+        # became ambiguous. Preserve only a currently accepted, exact-bound
+        # LinkedIn receipt; never recover an uncertain job from a URN/event alone.
+        import re
+        if isinstance(manifest, dict) and isinstance(job, dict):
+            reference = job.get('providerReference')
+            bound_keys = ('workspaceId', 'channelId', 'actor', 'providerAccountId', 'idempotencyKey')
+            try:
+                known = (manifest.get('platform') == 'LinkedIn'
+                         and job.get('state') == 'provider_accepted'
+                         and job.get('resultSchema') == 'postriff.result.v1'
+                         and job.get('manifest') == manifest
+                         and all(isinstance(manifest.get(key), str) and manifest[key] for key in bound_keys)
+                         and job.get('approvalDigest') == digest(manifest)
+                         and job.get('approvedBy') == manifest.get('actor')
+                         and isinstance(reference, str)
+                         and re.fullmatch(r'urn:li:(share|ugcPost):[0-9]{1,30}', reference))
+            except (TypeError, ValueError, KeyError):
+                known = False
+            if known:
+                url = 'https://www.linkedin.com/feed/update/' + reference + '/'
+                if job.get('url') in (None, url):
+                    return {'state': 'provider_accepted', 'reference': reference, 'url': url,
+                            'confirmed': 'LinkedIn previously accepted this submission; provider reconciliation is unavailable; do not resubmit'}
         return {"state": "uncertain", "confirmed": "Provider reconciliation is unavailable; do not resubmit"}
 
 

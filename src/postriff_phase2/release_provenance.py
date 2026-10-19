@@ -4,6 +4,7 @@ This is deliberately not a signed attestation, complete bundle inventory,
 customer qualification, or evidence of a successful provider action.
 """
 from functools import lru_cache
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -37,32 +38,36 @@ def valid_revision(value: object) -> bool:
 
 
 def read_regular(root: Path, name: str, limit: int) -> bytes:
-    """Read only an in-root regular file, with bounded bytes and no symlinks."""
+    """Read bounded regular bytes via pinned directories and nonblocking/no-follow opens."""
     root = root.resolve(strict=True)
     relative = Path(name)
-    if relative.is_absolute() or '..' in relative.parts:
+    if relative.is_absolute() or '..' in relative.parts or not relative.parts:
         raise ValueError('Invalid witness path')
-    path = root
-    for part in relative.parts:
-        path = path / part
-        if path.is_symlink():
-            raise ValueError('Symlink is not a source witness')
-    if not path.resolve(strict=True).is_relative_to(root):
-        raise ValueError('Witness must remain inside the release root')
-    before = path.stat(follow_symlinks=False)
-    if not stat.S_ISREG(before.st_mode) or before.st_size > limit:
-        raise ValueError('Invalid witness file')
-    with path.open('rb') as stream:
-        opened = os.fstat(stream.fileno())
+    flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
+    with ExitStack() as descriptors:
+        directory = os.open(root, flags | os.O_DIRECTORY)
+        descriptors.callback(os.close, directory)
+        for part in relative.parts[:-1]:
+            directory = os.open(part, flags | os.O_DIRECTORY, dir_fd=directory)
+            descriptors.callback(os.close, directory)
+        leaf = relative.parts[-1]
+        before = os.stat(leaf, dir_fd=directory, follow_symlinks=False)
+        descriptor = os.open(leaf, flags, dir_fd=directory)
+        descriptors.callback(os.close, descriptor)
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_size > limit:
+            raise ValueError('Invalid witness file')
         if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
             raise ValueError('Witness identity changed')
-        raw = stream.read(limit + 1)
-        after = os.fstat(stream.fileno())
-    current = path.stat(follow_symlinks=False)
-    if (len(raw) > limit or opened.st_size != after.st_size
-            or opened.st_mtime_ns != after.st_mtime_ns
-            or (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino)):
-        raise ValueError('Witness changed during read')
+        # ExitStack owns the descriptor even if creating/reading the stream fails.
+        with os.fdopen(descriptor, 'rb', closefd=False) as stream:
+            raw = stream.read(limit + 1)
+        after = os.fstat(descriptor)
+        current = os.stat(leaf, dir_fd=directory, follow_symlinks=False)
+        if (len(raw) > limit or opened.st_size != after.st_size
+                or opened.st_mtime_ns != after.st_mtime_ns
+                or (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino)):
+            raise ValueError('Witness changed during read')
     return raw
 
 
@@ -116,8 +121,9 @@ def _inspect(root: Path) -> dict:
 
 @lru_cache(maxsize=1)
 def _packaged_proof() -> dict:
-    # A deployed function's source bundle is immutable. Do not reread megabytes
-    # on every liveness request. Explicit-root validation never uses this cache.
+    # Contract: default-root callers run in an immutable deployed function bundle.
+    # Success AND failure stay cached for its process lifetime. Mutable local/build
+    # trees must pass an explicit root; they never use this cache.
     return _inspect(_ROOT)
 
 

@@ -81,22 +81,33 @@ def stamp(root: Path = SOURCE_ROOT) -> dict:
 
 
 def build_source_proof(values: Mapping[str, str], root: Path = SOURCE_ROOT) -> dict:
-    """Validate packaged bytes. Only a clean Git checkout can create a missing receipt."""
+    """Validate bytes; if Git exists, also require clean source at the receipt's HEAD."""
     root = Path(root).resolve(strict=True)
+    has_git = os.path.lexists(root / '.git')
+    revision = None
+    if has_git:
+        top = Path(_git(root, 'rev-parse', '--show-toplevel').decode().strip()).resolve()
+        if top != root:
+            raise ValueError('Build only the exact Git worktree root')
+        revision = _git(root, 'rev-parse', 'HEAD').decode().strip()
+        if not valid_revision(revision):
+            raise ValueError('Invalid Git source revision')
+        _clean(root)
     proof = release_source_proof(values, root=root)
-    if proof['status'] in ('missing', 'metadata_only') and (root / '.git').exists():
+    if proof['status'] in ('missing', 'metadata_only') and has_git:
         declared = values.get('VERCEL_GIT_COMMIT_SHA', '')
         if declared and (not valid_revision(declared)
-                         or _git(root, 'rev-parse', 'HEAD').decode().strip() != declared):
+                         or revision != declared):
             raise ValueError('Build metadata does not match the local Git revision')
         stamp(root)
         proof = release_source_proof(values, root=root)
     if not proof['verifiedSelectedRuntimeFiles']:
         raise ValueError('Missing, stale or conflicting source receipt; restamp reviewed clean source before upload')
-    if (root / '.git').exists():
+    if has_git:
         _clean(root)
-        if _git(root, 'rev-parse', 'HEAD').decode().strip() != proof['sourceRevision']:
-            raise ValueError('Source receipt does not identify the current clean Git revision')
+        if (proof['sourceRevision'] != revision
+                or _git(root, 'rev-parse', 'HEAD').decode().strip() != revision):
+            raise ValueError('Source receipt does not match the current clean Git revision')
     return proof
 
 

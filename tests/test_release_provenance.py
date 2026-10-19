@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import tempfile
 import unittest
@@ -168,10 +169,81 @@ class ReleaseProvenanceTests(unittest.TestCase):
 
     def test_receipt_read_failure_is_sanitized(self):
         self.write_receipt()
-        with patch.object(Path, 'open', side_effect=PermissionError('PRIVATE_PATH')):
+        with patch.object(os, 'open', side_effect=PermissionError('PRIVATE_PATH')):
             result = self.proof()
         self.assert_unverified(result)
         self.assertNotIn('PRIVATE_PATH', json.dumps(result))
+
+    def assert_replacement_before_open_rejected(self, replacement):
+        path = self.root / self.module.WITNESS_PATHS[0]
+        copy = self.root / 'symlink-target'
+        copy.write_bytes(path.read_bytes())
+        original_open = os.open
+        original_path_open = Path.open
+        swapped = False
+        followed = []
+
+        def swap():
+            nonlocal swapped
+            if not swapped:
+                path.unlink()
+                if replacement == 'fifo':
+                    os.mkfifo(path)
+                else:
+                    path.symlink_to(copy)
+                swapped = True
+
+        def descriptor_open(name, flags, *args, **kwargs):
+            if str(name) in (str(path), path.name):
+                swap()
+            return original_open(name, flags, *args, **kwargs)
+
+        def pathname_open(target, *args, **kwargs):
+            if target == path:
+                swap()
+                stream = original_path_open(target, *args, **kwargs)
+                followed.append(True)
+                return stream
+            return original_path_open(target, *args, **kwargs)
+
+        def deadline(*_):
+            raise AssertionError('read_regular blocked opening a swapped FIFO')
+
+        handler = signal.signal(signal.SIGALRM, deadline)
+        try:
+            signal.setitimer(signal.ITIMER_REAL, 1)
+            with patch.object(os, 'open', side_effect=descriptor_open), patch.object(Path, 'open', pathname_open):
+                with self.assertRaises((ValueError, OSError)):
+                    self.module.read_regular(self.root, self.module.WITNESS_PATHS[0], 1024)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, handler)
+        self.assertTrue(swapped, 'Regression must exercise replacement immediately before open')
+        self.assertFalse(followed, 'A swapped symlink must be refused before it is opened')
+
+    def test_fifo_swapped_before_open_cannot_block(self):
+        self.assert_replacement_before_open_rejected('fifo')
+
+    def test_symlink_swapped_before_open_is_never_followed(self):
+        self.assert_replacement_before_open_rejected('symlink')
+
+    def test_default_root_cache_explicitly_assumes_immutable_bundle(self):
+        self.module._packaged_proof.cache_clear()
+        self.addCleanup(self.module._packaged_proof.cache_clear)
+        with patch.object(self.module, '_ROOT', self.root):
+            missing = self.module.release_source_proof({})
+            self.write_receipt()
+            self.assertEqual(self.module.release_source_proof({}), missing)
+            self.assertTrue(self.proof()['verifiedSelectedRuntimeFiles'])
+            self.module._packaged_proof.cache_clear()
+            verified = self.module.release_source_proof({})
+            verified['status'] = 'caller mutation'
+            self.assertEqual(self.module.release_source_proof({})['status'], 'verified')
+            (self.root / self.module.WITNESS_PATHS[0]).write_text('mutable tree changed')
+            self.assertTrue(self.module.release_source_proof({})['verifiedSelectedRuntimeFiles'])
+            self.assertFalse(self.proof()['verifiedSelectedRuntimeFiles'])
+            self.module._packaged_proof.cache_clear()
+            self.assertFalse(self.module.release_source_proof({})['verifiedSelectedRuntimeFiles'])
 
 
 class HealthProofRegression(unittest.TestCase):

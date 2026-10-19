@@ -63,3 +63,6 @@ docs/rafii-control-v2/evidence/raw/
 
 # Generated from the clean release commit immediately before source upload.
 /src/postriff_phase2/release-source.json
+
+# Local source-validation logs are not deployable inputs.
+/.source-provenance-local/

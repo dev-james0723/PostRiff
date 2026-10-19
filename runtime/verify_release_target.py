@@ -19,7 +19,7 @@ def verify_source(values):
 def main():
     try:
         proof=verify(os.environ)
-        source = verify_source(os.environ) if os.environ.get('VERCEL_ENV') in ('preview', 'production') else None
+        source = verify_source(os.environ)
     except (ValueError, TypeError, KeyError, OSError):
         print(json.dumps({'status':'failed','reason':'Release binding or source receipt guard rejected this build before backend access.'}))
         return 1

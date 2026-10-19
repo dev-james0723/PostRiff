@@ -78,3 +78,6 @@ requirements-dev.txt
 /.agents
 /.codex
 /.token-pilot
+
+# Local source-validation logs are not deployable inputs.
+/.source-provenance-local/
