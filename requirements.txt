@@ -16,3 +16,6 @@ websockets==16.1.1
 # YouTube's official liveChatMessages.streamList protocol; generated stubs committed locally.
 grpcio==1.84.0
 protobuf==7.36.2
+
+# Maintained AT Protocol XRPC encoding, rich text and official lexicon models.
+atproto==0.0.72

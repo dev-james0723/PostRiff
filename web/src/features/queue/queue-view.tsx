@@ -1,4 +1,5 @@
 'use client';
+import { BlueskyManifestDetails } from './bluesky-manifest-details';
 
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
@@ -201,6 +202,7 @@ function ReviewCard({
           </p>
           <p className='line-clamp-[12] text-sm whitespace-pre-wrap'>{manifest.payload.text}</p>
           <YouTubeManifestDetails manifest={manifest} />
+          <BlueskyManifestDetails manifest={manifest} />
           {manifest.voiceRevision === null && <JobNote>No voice profile. Check the wording before approving.</JobNote>}
         </div>
         <div data-tour={tour ? 'queue-review-phone' : undefined} className='md:pl-2'>

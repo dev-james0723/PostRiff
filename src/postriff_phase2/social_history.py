@@ -47,6 +47,9 @@ def _response(response):
 
 def fetch_page(adapter, access_token, account_id, cursor=None, limit=PAGE_LIMIT):
     """One bounded page scoped to a server-resolved authenticated account only."""
+    if adapter.id == 'bluesky':
+        from .bluesky_history import fetch_owned_page
+        return fetch_owned_page(adapter, access_token, account_id, cursor, limit)
     if type(limit) is not int or not 1 <= limit <= PAGE_LIMIT:
         raise AlphaError('Read between 1 and 25 posts per page.')
     if cursor is not None and (not isinstance(cursor, str) or not re.fullmatch(r'[A-Za-z0-9_.~=-]{1,2048}', cursor)):
@@ -209,6 +212,16 @@ class SocialHistoryService:
         if self._current(workspace_id, token, connection_id) != binding:
             raise AlphaError('The connection changed. Load it again.', 409)
         return adapter, grant, binding
+
+    def bluesky_profile(self, workspace_id, token, connection_id):
+        adapter, grant, binding = self._access(workspace_id, token, connection_id)
+        if adapter.id != 'bluesky':
+            raise AlphaError('Choose a connected Bluesky account.', 400)
+        from .bluesky_history import fetch_profile
+        profile = fetch_profile(adapter, grant['accessToken'], binding['account'], self.clock())
+        if self._current(workspace_id, token, connection_id) != binding:
+            raise AlphaError('The connection changed while reading. Load it again.', 409)
+        return {'connectionId': connection_id, 'profile': profile}
 
     def preview(self, workspace_id, token, connection_id, payload):
         if payload.get('confirmed') is not True:
