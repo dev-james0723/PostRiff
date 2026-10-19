@@ -203,6 +203,7 @@ class TrendWorker:
             dispatched = False
             accounting = None
             batch = None
+            failure_stage = 'claim_preflight'
             attempt_started = self.monotonic()
             try:
                 self._admission(claim, registry)
@@ -223,8 +224,10 @@ class TrendWorker:
                 dispatched = True
                 result['dispatched'] += 1
                 # start() has committed. Adapter I/O is bounded and outside all locks.
+                failure_stage = 'provider_io'
                 batch = adapter(policy=policy, cursor=checkpoint['cursor_value'], now=self.clock(),
                                 payload=claim['payload'], reservation_microusd=amount)
+                failure_stage = 'batch_validation'
                 if (not isinstance(batch, Batch) or len(batch.observations) > claim['payload'].get('max_items', 100)
                         or len(batch.observations) > cap.max_items or type(batch.bytes_received) is not int
                         or not 0 <= batch.bytes_received <= cap.max_response_bytes
@@ -234,6 +237,7 @@ class TrendWorker:
                 # Acquisition uses the existing usage ledger too. A later trust
                 # rejection must never roll back already incurred external cost.
                 from ..usage import UsageEvent
+                failure_stage = 'usage_accounting'
                 accounting = self.jobs.account_attempt(claim['scope_key'], claim['reservation_id'], UsageEvent(
                     task='trend.ingest', model='source/' + cap.provider_id, route='primary', status='ok',
                     provider=cap.provider_id, latency_ms=max(0, round((self.monotonic()-attempt_started)*1000)),
@@ -242,6 +246,7 @@ class TrendWorker:
                     cost_source='table:trend-provider-contract-v1' if batch.cost_microusd is not None else 'unknown'))
                 self._admission(claim, registry)
                 completeness = 'gap' if batch.quarantined else batch.completeness
+                failure_stage = 'database_commit'
                 with self.store.transaction() as cur:
                     if 'frontier' in claim['payload']:
                         frontier.dispatch_context(claim, cursor=cur)
@@ -269,7 +274,8 @@ class TrendWorker:
             except Exception as exc:
                 # Never log provider response text, URLs, account IDs or evidence.
                 code = exc.code if isinstance(exc, ContractError) else 'provider_or_commit_failure'
-                LOG.warning('trend.job_failed code=%s dispatched=%s', code, dispatched)
+                LOG.warning('trend.job_failed code=%s dispatched=%s stage=%s exception=%s',
+                    code, dispatched, failure_stage, type(exc).__name__)
                 try:
                     unmetered = cap.billable_unit == 'unmetered_live_bytes_bounded' and amount == 0
                     if dispatched and accounting is None:
