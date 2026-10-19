@@ -774,12 +774,16 @@ class HostedApplication:
                 from .agent_runtime_v2.task_engine import cron as task_cron
                 return self._json(start_response, 200, task_cron.tick(self._runtime()))
             if path == "/api/cron/worker" and method == "GET":
+                _cron_start = time.monotonic()
                 service = self._runtime()
+                _cron_setup_ms = round((time.monotonic() - _cron_start) * 1000, 2)
                 expected = self.cron_secret or ""
                 supplied = environ.get("HTTP_AUTHORIZATION", "")
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
+                _cron_worker_start = time.monotonic()
                 result = self.worker.tick()
+                _cron_worker_ms = round((time.monotonic() - _cron_worker_start) * 1000, 2)
                 sign_in_alerts = getattr(service, 'deliver_sign_in_alerts', None)
                 if sign_in_alerts is not None:   # RAP-143: new-sign-in mail leaves the request path in observe mode
                     try:
@@ -797,7 +801,9 @@ class HostedApplication:
                     from .growth.history_import import sweep_pending_purges
                     result['historyPurges'] = sweep_pending_purges(repository.connection_factory)
                 from .growth.trends.worker import cron as trend_cron
+                _cron_trends_start = time.monotonic()
                 result['trends'] = trend_cron(service)
+                _cron_trends_ms = round((time.monotonic() - _cron_trends_start) * 1000, 2)
                 ideas = getattr(service, 'ideas', None)
                 if ideas is not None:
                     site_agent = getattr(service, 'site_agent', None)
@@ -870,10 +876,12 @@ class HostedApplication:
                     from .account_deletion import reconcile_identity
                     result['identityDeletion'] = reconcile_identity(service)
                 from .operational_signals import snapshot as operational_snapshot
+                _cron_ops_start = time.monotonic()
                 try:
                     result['operations'] = operational_snapshot(service.repository.connection_factory)
                 except Exception:
                     result['operations'] = {'status':'unavailable', 'notificationDelivery':'not_configured'}
+                _cron_ops_ms = round((time.monotonic() - _cron_ops_start) * 1000, 2)
                 # The founder cron's operational_snapshot stage persists this minute's counts instead of recomputing them.
                 service.last_operational_snapshot = result['operations']
                 try:
@@ -890,6 +898,9 @@ class HostedApplication:
                 genui, genui_failed = genui_cron_summary(result)
                 logging.getLogger('postriff.request').log(logging.INFO if result['operations']['status']=='ok' and not genui_failed else logging.WARNING,
                     json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps, 'phone': result['phone'],
+                                'phaseMs': {'setup': _cron_setup_ms, 'publishingWorker': _cron_worker_ms,
+                                            'trends': _cron_trends_ms, 'operationsSnapshot': _cron_ops_ms,
+                                            'total': round((time.monotonic() - _cron_start) * 1000, 2)},
                                 **({'genui': genui} if genui else {})}))
                 return self._json(start_response, 200, result)
             if not api_bearer:
