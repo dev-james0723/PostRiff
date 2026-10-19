@@ -405,6 +405,90 @@ class ComposeTest(unittest.TestCase):
         self.assertTrue(all(value is None for value in card["queue"].values()))
 
 
+def _calendar_read(days, *, entries=(), verified=True, empty_days=None):
+    """A synthetic calendar.range result: `days` is [(iso date, count)], empty days default to the zero-count days."""
+    weekday = lambda iso: time.strftime("%A", time.strptime(iso, "%Y-%m-%d"))  # noqa: E731
+    counts = {key: 0 for key in tools.CALENDAR_STATUS_KEYS}
+    counts["scheduled"] = len(entries)
+    gaps = empty_days if empty_days is not None else [f"{weekday(d)} {d}" for d, c in days if c == 0]
+    data = {"range": {"label": "1–10 Nov", "start": "2026-11-01T00:00:00Z", "end": "2026-11-11T00:00:00Z", "timeZone": HK},
+            "entries": list(entries), "total": len(entries), "statusCounts": counts, "unknownStates": [],
+            "days": [{"date": d, "weekday": weekday(d), "count": c} for d, c in days],
+            "derived": {"emptyDays": {"rule": "days from today in this range with nothing scheduled, waiting or planned", "days": gaps},
+                        "closeTogether": {"rule": "two posts on the same account less than 2 hours apart", "pairs": []},
+                        "similarText": {"rule": "two posts sharing at least 60% of their words", "pairs": []}},
+            "href": "/app/calendar"}
+    return contracts.result(data, now=NOW, verified=verified)
+
+
+class CalendarCardShapeTest(unittest.TestCase):
+    """The calendar card shows the range's shape (a day grid) and says only what the grid cannot."""
+
+    NOV = [f"2026-11-{day:02d}" for day in range(1, 11)]
+
+    def compose(self, result, text="What is scheduled 1–10 Nov?"):
+        queue = contracts.result({"statusCounts": {key: 0 for key in tools.CALENDAR_STATUS_KEYS}}, now=NOW)
+        return compose_reads.compose("calendar", {"intent": "calendar", "entities": {"platforms": []}},
+                                     {"calendar.range": result, "queue.summary": queue}, text)
+
+    def test_card_carries_compact_day_counts_capped_at_six_weeks(self):
+        days = [{"date": f"d{i}", "weekday": "Monday", "count": i % 3} for i in range(60)]
+        card = contracts.calendar_card(range_view={"label": "x"}, statuses=[], entries=[], total=0, queue={},
+                                       sources={"calendarRange": "verified", "queueSummary": "verified"}, href=None, days=days)
+        self.assertEqual(len(card["days"]), 42)
+        self.assertEqual(card["days"][4], {"date": "d4", "count": 1})
+        self.assertNotIn("action", card)
+        legacy = contracts.calendar_card(range_view={"label": "x"}, statuses=[], entries=[], total=0, queue={},
+                                         sources={"calendarRange": "verified", "queueSummary": "verified"}, href=None)
+        self.assertNotIn("days", legacy)
+
+    def test_verified_range_passes_its_days_into_the_card(self):
+        read = self.compose(_calendar_read([(d, 1 if d == "2026-11-03" else 0) for d in self.NOV]))
+        card = next(block for block in read["blocks"] if block["type"] == "calendar_card")
+        self.assertEqual(card["days"][2], {"date": "2026-11-03", "count": 1})
+        self.assertEqual(len(card["days"]), 10)
+
+    def test_unknown_day_counts_stay_unknown_never_zero(self):
+        result = _calendar_read([(d, 0) for d in self.NOV])
+        result["data"]["days"][1]["count"] = None
+        result["data"]["days"][2]["count"] = -1
+        card = next(b for b in self.compose(result)["blocks"] if b["type"] == "calendar_card")
+        self.assertIsNone(card["days"][1]["count"])
+        self.assertIsNone(card["days"][2]["count"])
+
+    def test_wholly_empty_range_drops_the_redundant_empty_days_observation(self):
+        read = self.compose(_calendar_read([(d, 0) for d in self.NOV]), "Do I have a content gap 1–10 Nov?")
+        self.assertFalse(any(b["type"] == "result_list" for b in read["blocks"]), read["blocks"])
+        self.assertTrue(any("Nothing is scheduled" in line for line in read["lines"]))
+
+    def test_partial_gaps_are_compressed_into_short_date_runs(self):
+        days = [(d, 0 if d in ("2026-11-03", "2026-11-05", "2026-11-06", "2026-11-07") else 1) for d in self.NOV]
+        entry = {"kind": "job", "id": "job-1", "state": "scheduled", "status": "scheduled", "title": "Scheduled", "platform": "Threads",
+                 "account": "@studio", "when": "Sun 2026-11-01 10:00", "href": "/app/queue?job=job-1"}
+        read = self.compose(_calendar_read(days, entries=[entry]))
+        observations = next(b for b in read["blocks"] if b["type"] == "result_list")
+        gap = next(item for item in observations["items"] if item["kind"] == "gap")
+        self.assertEqual(gap["title"], "Empty: 3 Nov, 5–7 Nov (4 days)")
+        self.assertTrue(gap["meta"].startswith("Rule: "))
+        self.assertLess(len(gap["meta"]), 60)
+
+    def test_empty_runs_without_a_grid_still_name_every_day(self):
+        result = _calendar_read([(d, 0) for d in self.NOV])
+        del result["data"]["days"]
+        read = self.compose(result)
+        gap = next(item for b in read["blocks"] if b["type"] == "result_list" for item in b["items"] if item["kind"] == "gap")
+        self.assertEqual(gap["title"], "Empty: 1–10 Nov (10 days)")
+
+    def test_short_empty_ranges(self):
+        short = compose_reads._empty_runs
+        self.assertEqual(short(["Tuesday 2026-11-03"]), "3 Nov")
+        self.assertEqual(short(["Monday 2026-11-30", "Tuesday 2026-12-01", "Wednesday 2026-12-02"]), "30 Nov–2 Dec (3 days)")
+        self.assertEqual(short(["Sunday 2026-11-01", "Monday 2026-11-02"]), "1–2 Nov (2 days)")
+        self.assertEqual(short(["not a date"]), "not a date")
+        alternate = [f"Monday 2026-11-{day:02d}" for day in range(1, 20, 2)]
+        self.assertEqual(short(alternate), "1 Nov, 3 Nov, 5 Nov, 7 Nov, 9 Nov, 11 Nov, … (10 days)")
+
+
 class PolicyTest(unittest.TestCase):
     def check(self, answer, **kw):
         defaults = dict(help_refs={"H1"}, fact_refs={"W1"}, action_refs={"A1"}, known_ids={"job-held"}, grounding_required=True)
