@@ -81,3 +81,7 @@ requirements-dev.txt
 
 # Local source-validation logs are not deployable inputs.
 /.source-provenance-local/
+
+# Manual CI recipe and its hash inventory are not production runtime inputs.
+/.depot/workflows/linkedin-qualification-once.yml
+/.depot/linkedin-qualification-inputs.json

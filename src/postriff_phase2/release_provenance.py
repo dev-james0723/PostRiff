@@ -47,9 +47,11 @@ def read_regular(root: Path, name: str, limit: int) -> bytes:
     with ExitStack() as descriptors:
         directory = os.open(root, flags | os.O_DIRECTORY)
         descriptors.callback(os.close, directory)
+        parents = [os.fstat(directory)]
         for part in relative.parts[:-1]:
             directory = os.open(part, flags | os.O_DIRECTORY, dir_fd=directory)
             descriptors.callback(os.close, directory)
+            parents.append(os.fstat(directory))
         leaf = relative.parts[-1]
         before = os.stat(leaf, dir_fd=directory, follow_symlinks=False)
         descriptor = os.open(leaf, flags, dir_fd=directory)
@@ -68,6 +70,24 @@ def read_regular(root: Path, name: str, limit: int) -> bytes:
                 or opened.st_mtime_ns != after.st_mtime_ns
                 or (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino)):
             raise ValueError('Witness changed during read')
+        # A pinned descriptor can outlive a renamed directory. Reopen the actual
+        # release path so detached-but-unchanged bytes cannot certify its replacement.
+        checked_directory = os.open(root, flags | os.O_DIRECTORY)
+        descriptors.callback(os.close, checked_directory)
+        root_now = os.fstat(checked_directory)
+        if (root_now.st_dev, root_now.st_ino) != (parents[0].st_dev, parents[0].st_ino):
+            raise ValueError('Release root identity changed')
+        for part, prior in zip(relative.parts[:-1], parents[1:]):
+            checked_directory = os.open(part, flags | os.O_DIRECTORY, dir_fd=checked_directory)
+            descriptors.callback(os.close, checked_directory)
+            parent_now = os.fstat(checked_directory)
+            if (parent_now.st_dev, parent_now.st_ino) != (prior.st_dev, prior.st_ino):
+                raise ValueError('Witness parent identity changed')
+        named = os.stat(leaf, dir_fd=checked_directory, follow_symlinks=False)
+        if ((named.st_dev, named.st_ino) != (opened.st_dev, opened.st_ino)
+                or not stat.S_ISREG(named.st_mode)
+                or named.st_size != after.st_size or named.st_mtime_ns != after.st_mtime_ns):
+            raise ValueError('Witness release path changed during read')
     return raw
 
 

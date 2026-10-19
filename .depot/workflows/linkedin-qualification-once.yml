@@ -1,0 +1,79 @@
+name: LinkedIn qualification - manual, no deployment
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualification:
+    runs-on: depot-ubuntu-24.04-8
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      DO_NOT_TRACK: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+      OPENUI_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:4439
+      POSTRIFF_API_ORIGIN: http://127.0.0.1:4438
+      POSTRIFF_DEV_SSR: '1'
+      NEXT_PUBLIC_SUPABASE_URL: ''
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify locally captured validation inputs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path.cwd().resolve()
+          manifest_path = root / '.depot/linkedin-qualification-inputs.json'
+          raw = manifest_path.read_bytes()
+          data = json.loads(raw)
+          assert data['schemaVersion'] == 1
+          assert data['scope'] == 'tracked_validation_text_inputs'
+          assert isinstance(data['files'], dict) and data['files']
+          for name, expected in data['files'].items():
+              relative = Path(name)
+              assert not relative.is_absolute() and '..' not in relative.parts
+              path = root / relative
+              assert path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(root)
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == expected, name
+          print(json.dumps({'sourceInputManifestSha256': hashlib.sha256(raw).hexdigest(),
+                            'verifiedInputFiles': len(data['files']), 'scope': data['scope'],
+                            'productionContacted': False}))
+          PY
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Match the repository npm pin
+        run: |
+          if [ "$(npm --version)" != 11.12.1 ]; then
+            npm install --global npm@11.12.1
+          fi
+      - name: Frozen frontend dependencies
+        working-directory: web
+        run: npm ci
+      - name: Offline receipt and release-guard contracts
+        run: |
+          bash scripts/cloud-python-bootstrap.sh python - <<'PY'
+          import sys, unittest
+          def offline(event, args):
+              if event.startswith('socket.'):
+                  raise AssertionError('Receipt contract tests forbid socket and DNS access')
+          sys.addaudithook(offline)
+          sys.path[:0] = ['src', 'tests']
+          suite = unittest.defaultTestLoader.loadTestsFromNames([
+              'test_release_provenance', 'test_release_source_stamp',
+              'test_release_directory_identity', 'test_linkedin_disabled_transport_receipts'])
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          raise SystemExit(not result.wasSuccessful())
+          PY
+      - name: Existing LinkedIn release qualification
+        working-directory: web
+        run: npm run ci:linkedin:release:jcb
