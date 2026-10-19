@@ -4,6 +4,7 @@ import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-t
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 import type { HistoryImportStatus } from '@/lib/channels/history-import';
 import type { ConnectionHealth } from '@/lib/channels/health';
+import type { SubstackDraftInput, SubstackFeedResult, SubstackHandoffResult, SubstackWorkspace } from '@/lib/substack/types';
 /**
  * Browser client for the hosted PostRiff API. Every request carries the
  * application guard header and, when signed in, the session bearer token.
@@ -265,7 +266,28 @@ export function createApi(getToken: TokenSource) {
 
     /* channels */
     /* `connectionHealth` is present only where the server admits this workspace to the Health Center (RAFII_CONNECTION_HEALTH_ENABLED). */
-    channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[]; connectionHealth?: { available: boolean; href: string } }>(`${ws(w)}/channels`),
+    channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[]; connectionHealth?: { available: boolean; href: string }; substack?: { available: boolean } }>(`${ws(w)}/channels`),
+    // Substack's public feed and manual drafts are separate from OAuth channels. A saved URL proves no account ownership.
+    substackCapabilities: (w: string) => get<SubstackWorkspace>(`${ws(w)}/substack/capabilities`),
+    substackWorkspace: (w: string) => get<SubstackWorkspace>(`${ws(w)}/substack/workspace`),
+    substackAddFeed: (w: string, body: { expectedRevision: number; publicationUrl: string; mode: 'public_feed'; confirmed: true }) =>
+      send<SubstackWorkspace>('POST', `${ws(w)}/substack/connections`, body),
+    substackDisconnect: (w: string, id: string, body: { expectedRevision: number }) =>
+      send<SubstackWorkspace>('POST', `${ws(w)}/substack/connections/${encodeURIComponent(id)}/disconnect`, body),
+    substackRefreshFeed: (w: string, id: string, body: { expectedRevision: number }) =>
+      send<SubstackFeedResult>('POST', `${ws(w)}/substack/connections/${encodeURIComponent(id)}/refresh`, body, 30_000),
+    substackCreateDraft: (w: string, body: SubstackDraftInput) =>
+      send<SubstackWorkspace>('POST', `${ws(w)}/substack/drafts`, body),
+    substackUpdateDraft: (w: string, id: string, body: SubstackDraftInput) =>
+      send<SubstackWorkspace>('PATCH', `${ws(w)}/substack/drafts/${encodeURIComponent(id)}`, body),
+    substackApproveDraft: (w: string, id: string, body: { expectedRevision: number; contentHash: string; confirmed: true }) =>
+      send<SubstackWorkspace>('POST', `${ws(w)}/substack/drafts/${encodeURIComponent(id)}/approve`, body),
+    substackHandoff: (w: string, id: string, body: { expectedRevision: number; contentHash: string }) =>
+      send<SubstackHandoffResult>('POST', `${ws(w)}/substack/drafts/${encodeURIComponent(id)}/handoff`, body),
+    substackCancelDraft: (w: string, id: string, body: { expectedRevision: number; contentHash: string }) =>
+      send<SubstackWorkspace>('POST', `${ws(w)}/substack/drafts/${encodeURIComponent(id)}/cancel`, body),
+    substackDeleteDraft: (w: string, id: string, body: { expectedRevision: number; contentHash: string }) =>
+      send<SubstackWorkspace>('DELETE', `${ws(w)}/substack/drafts/${encodeURIComponent(id)}`, body),
     connectionHealth: (w: string) => get<ConnectionHealth>(`${ws(w)}/connection-health`),
     youtubePolicy: (w: string) => get<YouTubePolicyStatus>(`${ws(w)}/youtube-policy`),
     acceptYouTubePolicy: (w: string, body: { policyId: string; privacyRevision: string; termsRevision: string; confirmed: true }) =>

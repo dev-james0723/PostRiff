@@ -40,6 +40,8 @@ import { ChannelsSummary } from './channels-summary';
 import { ConnectSheet, type ConnectRequest } from './connect-sheet';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 import { ConnectionHealthPanel } from './health/connection-health-panel';
+import { SubstackPanel, SubstackProviderTile } from './substack-panel';
+import { isSubstackProvider } from '@/lib/substack/presentation';
 
 const infoContent = {
   title: 'Channels',
@@ -212,7 +214,9 @@ function ChannelsPage() {
   const canManage = checkAccess(access, { permission: 'manage_connections' });
 
   const { data, isLoading, isFetching, error, refetch } = channelsQuery;
-  const providers = useMemo(() => data?.providers ?? [], [data]);
+  // Substack has its own capability-based flow; it must never enter the generic OAuth sheet.
+  const providers = useMemo(() => (data?.providers ?? []).filter((provider) => !isSubstackProvider(provider)), [data]);
+  const substackAvailable = data?.substack?.available === true;
   const filter = parseChannelFilter(params.get('filter'));
   useSiteAgentPageContext({ visibleState: { filter } });
   const connectedParam = params.get('connected');
@@ -221,6 +225,7 @@ function ChannelsPage() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [companionOpen, setCompanionOpen] = useState<boolean | null>(null);
+  const [substackOpen, setSubstackOpen] = useState(false);
   // Saved folders narrow the account list below (a view, never a mutation); empty means every account.
   const [folderView, setFolderView] = useState<string[]>([]);
 
@@ -305,6 +310,8 @@ function ChannelsPage() {
   // the first provider while React Query refreshes the provider catalog.
   const connectParam = params.get('connect');
   const capabilityParam = params.get('capability');
+  const substackRequested = connectParam?.toLowerCase() === 'substack';
+  const substackDraftId = substackRequested ? params.get('substackDraft') || undefined : undefined;
   const deepLinkRequest = useMemo<ConnectRequest | null>(() => {
     if (!connectParam || !canManage || !providers.some((provider) => provider.id === connectParam)) return null;
     const capability = CONNECT_CAPABILITIES.find((value) => value === capabilityParam);
@@ -488,7 +495,7 @@ function ChannelsPage() {
             </div>
             {error ? (
               <StateMessage kind='partial' layout='inline' title="Couldn't load platforms." />
-            ) : providers.length === 0 ? (
+            ) : providers.length === 0 && !substackAvailable ? (
               <StateMessage
                 kind='partial'
                 layout='inline'
@@ -505,9 +512,17 @@ function ChannelsPage() {
                     onConnect={() => openConnect({ providerId: provider.id })}
                   />
                 ))}
+                {substackAvailable && <SubstackProviderTile onOpen={() => setSubstackOpen(true)} />}
               </div>
             )}
           </section>
+
+          {substackAvailable && (substackOpen || substackRequested) && (
+            <SubstackPanel requestedDraftId={substackDraftId} onClose={() => {
+              setSubstackOpen(false);
+              if (substackRequested) replaceParams((search) => { search.delete('connect'); search.delete('capability'); search.delete('substackDraft'); });
+            }} />
+          )}
 
           {filter !== 'local' && (
             <section className='flex flex-col gap-3' aria-labelledby='local-heading'>

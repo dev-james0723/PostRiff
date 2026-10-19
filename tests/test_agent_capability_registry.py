@@ -49,7 +49,7 @@ def live_snapshot() -> dict:
     tools = {name: {"effect": t.spec.effect, "permission": t.spec.permission, "approval": t.spec.approval, "voice": t.spec.voice,
                     "idempotent": t.spec.idempotent, "audit": t.spec.audit, "tenant": t.spec.tenant}
              for name, t in sorted(tool_adapter.REGISTRY.items())}
-    manager_names = specialists.available(manager.MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", []) + ["library_browse"])
+    manager_names = specialists.available(manager.MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", []) + ["library_browse", "substack_workspace", "substack_draft_get", "substack_draft_save"])
     specialist_names = {key: sorted(specialists.available(list(spec["tools"]) + specialists.EXTRA_SCOPES.get(key, [])))
                         for key, spec in sorted(specialists.SPECIALISTS.items())}
     import inspect
@@ -125,17 +125,19 @@ class Fixtures(unittest.TestCase):
         for key in ("tools", "manager", "specialists", "commandsDirect", "siteAgent", "genuiActions", "genuiQueries", "limits"):
             actual = self.live[key]
             if key == "tools":
-                actual = {name: value for name, value in actual.items() if name not in ("library_browse", "library_metadata_apply")}
+                actual = {name: value for name, value in actual.items() if name not in ("library_browse", "library_metadata_apply", "substack_workspace", "substack_draft_get", "substack_draft_save")}
             elif key == "manager":
-                actual = [name for name in actual if name not in ("library_browse", "library_metadata_apply")]
+                actual = [name for name in actual if name not in ("library_browse", "library_metadata_apply", "substack_workspace", "substack_draft_get", "substack_draft_save")]
             self.assertEqual(actual, self.golden["live"][key], f"today's {key} changed")
-        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + 2, "only declared post-freeze Library tools were added")
+        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + 5, "only declared post-freeze Library and Substack tools were added")
 
     def test_registry_policy_is_frozen(self):
         snapshot = registry_snapshot()
         self.assertEqual(snapshot["capabilities"].pop("tool.library_browse")["since"], 2)
         self.assertEqual(snapshot["capabilities"].pop("tool.library_metadata_apply")["since"], 2)
-        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] not in ("tool.library_browse", "tool.library_metadata_apply")]
+        for name in ("substack_workspace", "substack_draft_get", "substack_draft_save"):
+            self.assertEqual(snapshot["capabilities"].pop("tool." + name)["since"], 3)
+        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] not in ("tool.library_browse", "tool.library_metadata_apply", "tool.substack_workspace", "tool.substack_draft_get", "tool.substack_draft_save")]
         self.assertEqual(sorted(snapshot["capabilities"]), sorted(self.golden["capabilities"]), "no capability vanishes or appears")
         for capability_id, entry in snapshot["capabilities"].items():
             expected = self.golden["capabilities"][capability_id]
@@ -168,7 +170,7 @@ class Fixtures(unittest.TestCase):
         for tool_id in self.live["siteAgent"]:
             self.assertIn(registry.site_capability(tool_id), expected)
         sdk_names = set(self.live["manager"]) | {n for names in self.live["specialists"].values() for n in names}
-        self.assertLessEqual({registry.for_tool(n).capability_id for n in sdk_names if n != "library_browse"}, expected)
+        self.assertLessEqual({registry.for_tool(n).capability_id for n in sdk_names if n not in ("library_browse", "substack_workspace", "substack_draft_get", "substack_draft_save")}, expected)
 
     def test_post_freeze_tool_never_joins_legacy(self):
         # #152 registers this shape only when it is integrated; the explicit since-2 declaration is mandatory.

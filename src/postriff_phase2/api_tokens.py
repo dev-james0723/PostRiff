@@ -31,6 +31,8 @@ def route_scope(method, parts):
         return None
     tail = parts[3:]
     if method == "GET":
+        if tail in (["substack", "workspace"], ["substack", "capabilities"]):
+            return "read"
         if not tail or tail in (["channels"], ["memory"]):
             return "read"
         if tail == ["ideas", "conversations"]:
@@ -40,12 +42,16 @@ def route_scope(method, parts):
         if len(tail) == 4 and tail[:2] == ["ideas", "runs"] and tail[3] == "events":
             return "read"
     if method == "POST":
+        if tail == ["substack", "drafts"]:
+            return "draft"
         if tail in (["ideas", "quick-start"], ["ideas", "conversations"]):
             return "draft"
         if len(tail) == 4 and tail[:2] == ["ideas", "conversations"] and tail[3] in ("turns", "attachments"):
             return "draft"
         if len(tail) == 4 and tail[:2] == ["ideas", "runs"] and tail[3] in ("apply", "cancel"):
             return "draft"
+    if method == "PATCH" and len(tail) == 3 and tail[:2] == ["substack", "drafts"]:
+        return "draft"
     return None
 
 
@@ -149,7 +155,7 @@ class ApiTokens:
                 if scope not in grant["scopes"]:
                     raise AlphaError("This token does not have the required scope.", 403, code="token_scope_denied")
                 require(grant["membership"], "edit" if scope == "draft" else "read")
-                if method == "POST":
+                if method in ("POST", "PATCH"):
                     throttle(cur, "api_token.draft:" + grant["tokenId"], 20, 60)
                     audit(cur, parts[2], grant["createdBy"], "api_token.draft_requested", grant["tokenId"], {"route": parts[-1]})
                 cur.execute("UPDATE public.pr_api_tokens SET last_used_at=to_timestamp(%s),last_used_client=%s WHERE id=%s AND (last_used_at IS NULL OR last_used_at<to_timestamp(%s)-interval '60 seconds')", (self.clock(), (client or "API client")[:120], grant["tokenId"], self.clock()))

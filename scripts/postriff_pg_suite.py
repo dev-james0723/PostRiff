@@ -22,6 +22,14 @@ def main():
     if not scripts: raise ValueError('No selected PostgreSQL tests')
     results=[]
     for script in scripts:
+        if script.name == 'postgres_substack.py':
+            # This suite requires its own marked Unix-socket cluster and extra
+            # fixtures. Never relax its admission check for the generic TCP DSN.
+            print('RUN '+str(script.relative_to(ROOT))+' via scripts/substack_pg_test.py',flush=True)
+            start=time.monotonic()
+            result=subprocess.run([sys.executable,str(ROOT/'scripts/substack_pg_test.py'),'--pg-bin',str(PG)],cwd=ROOT)
+            results.append({'script':str(script.relative_to(ROOT)),'exitCode':result.returncode,'seconds':round(time.monotonic()-start,2)})
+            continue
         with tempfile.TemporaryDirectory(prefix='consumer-pg-') as tmp:
             data=Path(tmp)/'data'
             subprocess.run([str(PG/'initdb'),'-D',str(data),'-A','trust','--no-locale','-E','UTF8'],check=True,stdout=subprocess.DEVNULL)

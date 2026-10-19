@@ -393,6 +393,9 @@ def tool_names(ctx: RafiiRunContext) -> list[str]:
     if _library_browse(ctx):
         from . import library_browse
         names = names + list(library_browse.MANAGER_SCOPE)
+    from . import substack_tools
+    if substack_tools.enabled_for(ctx) and getattr(ctx, "modality", "text") != "voice":
+        names = names + list(substack_tools.MANAGER_SCOPE)
     return specialists.available(names)
 
 
@@ -403,6 +406,9 @@ def instructions(ctx: RafiiRunContext) -> str:
     if _library_browse(ctx):
         from . import library_browse
         base = base + "\n\n" + library_browse.MANAGER_INSTRUCTIONS
+    from . import substack_tools
+    if substack_tools.enabled_for(ctx):
+        base = base + "\n\n" + substack_tools.MANAGER_INSTRUCTIONS
     return specialists.instructions_for("rafii_manager", base) + "\n\n" + agent_style.text_block(getattr(ctx, "style", None))
 
 

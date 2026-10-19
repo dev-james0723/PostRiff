@@ -18,7 +18,7 @@ import time
 from postriff_alpha.domain import AlphaError
 
 from ..coworker import flags
-from .. import account_protection
+from .. import account_protection, substack_notifications
 from . import catalog, delivery, detector, push as push_module, sms, store, webhooks
 
 log = logging.getLogger("postriff.notifications")
@@ -155,6 +155,13 @@ class NotificationService:
             result["scan"] = {"workspaces": scanned, "created": created, "baselined": baselined}
         except Exception as error:  # noqa: BLE001
             result["scan"] = {"error": type(error).__name__}
+        # Manual Substack targets need a due-time scan even when their workspace
+        # revision is unchanged. This seam writes only the existing in-app outbox;
+        # its event-level channel filter prevents email/push/SMS/phone delivery.
+        try:
+            result["substack"] = substack_notifications.scan(self.hosted, self, limit=min(max_items, 50), budget_seconds=2.0)
+        except Exception as error:  # noqa: BLE001 - keep unrelated notification work independent
+            result["substack"] = {"error": type(error).__name__}
         try:
             with factory() as db, db.cursor() as cur:
                 made = 0
