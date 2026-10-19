@@ -1,0 +1,78 @@
+{
+  "verifiedAt": "2026-10-18T17:35:24.794568+00:00",
+  "archiveSha256": "155b82dc751e834a3dabf9f51a314cb1636ad43f3e5a243e8727f6a16be07ce7",
+  "archiveMatch": true,
+  "checksumEntries": 12,
+  "receiptEntries": 12,
+  "allInternalChecksumsMatch": true,
+  "files": [
+    {
+      "file": "AGENT-HANDOFF.md",
+      "sha256": "6382077676f87b2f67ee4e7ab902740fc30a56c23ad9c3656505929639a7f145",
+      "pass": true
+    },
+    {
+      "file": "README.md",
+      "sha256": "bd6c0506b9a1258f0fd772a4cd312ba955b57136a1e7621108f8ac023736fffe",
+      "pass": true
+    },
+    {
+      "file": "TWITCH-COMMERCIAL-REQUEST-DRAFT.md",
+      "sha256": "8cf7bffc73c3ddc6a24f5bc132350299c7a6eae2d27ff39e5e78139b8459a560",
+      "pass": true
+    },
+    {
+      "file": "TWITCH-FULL-INTEGRATION-SPEC.md",
+      "sha256": "2c5a9eb37c91f3201c92ebd381c183fa18df339fb1812f0569c6cc3dc0b38835",
+      "pass": true
+    },
+    {
+      "file": "rafii_twitch/__init__.py",
+      "sha256": "a69dbcb808c6faeda3d4180e2d55f8ec139c902ac7b1449deb4a63a1ecbd1a47",
+      "pass": true
+    },
+    {
+      "file": "rafii_twitch/client.py",
+      "sha256": "2461ba4bd91f5a827be64d22847120b859c8fa3121cd16e44651f60598947311",
+      "pass": true
+    },
+    {
+      "file": "rafii_twitch/eventsub.py",
+      "sha256": "d298a96d18326a3391febb8adc0f56c2835be6835786d1c4636eedeb29194657",
+      "pass": true
+    },
+    {
+      "file": "rafii_twitch/oauth.py",
+      "sha256": "e20cd54fd1b1d5955bc2f9003ba217eadaad18b817da0c4edd28d1042fff0d4b",
+      "pass": true
+    },
+    {
+      "file": "rafii_twitch/operations.py",
+      "sha256": "bc4a6e3b3d9fb097f17154c438cf6033094290ab097c0356b014f0fdfb9d6d9a",
+      "pass": true
+    },
+    {
+      "file": "tests/test_client.py",
+      "sha256": "267256f9c46c887685f95fd8f353b82b27e99c426493d6100c2b94329d53c87e",
+      "pass": true
+    },
+    {
+      "file": "tests/test_eventsub.py",
+      "sha256": "3530b6b154cc4b1f480b002cf634e02256f0af64a06c24291034d1151319eb8d",
+      "pass": true
+    },
+    {
+      "file": "tests/test_oauth.py",
+      "sha256": "647585be6d5cf84e9a73b0eac3c6a4fb552ab0fef7c414e1a7c171e3b7d5d8eb",
+      "pass": true
+    }
+  ],
+  "tests": {
+    "command": "python3 -m unittest discover -s tests -q",
+    "passed": 48,
+    "failed": 0,
+    "exitCode": 0,
+    "output": "----------------------------------------------------------------------\nRan 48 tests in 0.004s\n\nOK\n"
+  },
+  "originalFilesModified": false
+}

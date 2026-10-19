@@ -1,0 +1,3922 @@
+{
+  "generatedAt": "2026-10-18T17:42:51.220898+00:00",
+  "nativeSourceSha256": "219efda968a68f86c2141e8e4d81393fa3f0cdcad52cf86614e93fbab11ab00b",
+  "nativeOperations": 112,
+  "eventSubTypes": 35,
+  "groupCounts": {
+    "channel": 8,
+    "stream": 3,
+    "category": 1,
+    "profile": 2,
+    "schedule": 6,
+    "marker": 2,
+    "chat": 24,
+    "moderation": 22,
+    "automod": 4,
+    "shield": 2,
+    "clip": 5,
+    "video": 2,
+    "poll": 3,
+    "prediction": 3,
+    "raid": 2,
+    "reward": 4,
+    "redemption": 2,
+    "subscription": 2,
+    "bits": 3,
+    "hype_train": 1,
+    "ads": 3,
+    "goals": 1,
+    "charity": 2,
+    "analytics": 5
+  },
+  "operations": [
+    {
+      "action": "twitch.channel.get",
+      "group": "channel",
+      "method": "GET",
+      "path": "/channels",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.channel.update",
+      "group": "channel",
+      "method": "PATCH",
+      "path": "/channels",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:broadcast"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.channel.editors.get",
+      "group": "channel",
+      "method": "GET",
+      "path": "/channels/editors",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:editors"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.channel.followers.get",
+      "group": "channel",
+      "method": "GET",
+      "path": "/channels/followers",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:read:followers"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.channel.followers.total",
+      "group": "channel",
+      "method": "GET",
+      "path": "/channels/followers",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.stream.get",
+      "group": "stream",
+      "method": "GET",
+      "path": "/streams",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.stream.key.get",
+      "group": "stream",
+      "method": "GET",
+      "path": "/streams/key",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:stream_key"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "secret",
+      "workspacePermission": "manage_connections",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.category.search",
+      "group": "category",
+      "method": "GET",
+      "path": "/search/categories",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.channel.labels.get",
+      "group": "channel",
+      "method": "GET",
+      "path": "/content_classification_labels",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.channel.search",
+      "group": "channel",
+      "method": "GET",
+      "path": "/search/channels",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.channel.followed.get",
+      "group": "channel",
+      "method": "GET",
+      "path": "/channels/followed",
+      "requiredScopeAlternatives": [
+        [
+          "user:read:follows"
+        ]
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.stream.followed.get",
+      "group": "stream",
+      "method": "GET",
+      "path": "/streams/followed",
+      "requiredScopeAlternatives": [
+        [
+          "user:read:follows"
+        ]
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.profile.get",
+      "group": "profile",
+      "method": "GET",
+      "path": "/users",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.profile.update",
+      "group": "profile",
+      "method": "PUT",
+      "path": "/users",
+      "requiredScopeAlternatives": [
+        [
+          "user:edit"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.schedule.get",
+      "group": "schedule",
+      "method": "GET",
+      "path": "/schedule",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.schedule.calendar.get",
+      "group": "schedule",
+      "method": "GET",
+      "path": "/schedule/icalendar",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.schedule.settings.update",
+      "group": "schedule",
+      "method": "PATCH",
+      "path": "/schedule/settings",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:schedule"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.schedule.create",
+      "group": "schedule",
+      "method": "POST",
+      "path": "/schedule/segment",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:schedule"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.schedule.update",
+      "group": "schedule",
+      "method": "PATCH",
+      "path": "/schedule/segment",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:schedule"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "schedule",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.schedule.delete",
+      "group": "schedule",
+      "method": "DELETE",
+      "path": "/schedule/segment",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:schedule"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "schedule",
+      "risk": "destructive",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.marker.create",
+      "group": "marker",
+      "method": "POST",
+      "path": "/streams/markers",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:broadcast"
+        ]
+      ],
+      "subjectPolicy": "editor",
+      "eligibility": "",
+      "requiresLive": true,
+      "resourcePolicy": "marker_settings",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.marker.get",
+      "group": "marker",
+      "method": "GET",
+      "path": "/streams/markers",
+      "requiredScopeAlternatives": [
+        [
+          "user:read:broadcast"
+        ],
+        [
+          "channel:manage:broadcast"
+        ]
+      ],
+      "subjectPolicy": "editor",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.send",
+      "group": "chat",
+      "method": "POST",
+      "path": "/chat/messages",
+      "requiredScopeAlternatives": [
+        [
+          "user:write:chat"
+        ]
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "reply",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.reply",
+      "group": "chat",
+      "method": "POST",
+      "path": "/chat/messages",
+      "requiredScopeAlternatives": [
+        [
+          "user:write:chat"
+        ]
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "reply",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.chatters.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/chatters",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:read:chatters"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.settings.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/settings",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.settings.private.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/settings",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:read:chat_settings"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.settings.update",
+      "group": "chat",
+      "method": "PATCH",
+      "path": "/chat/settings",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:chat_settings"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.announcement.send",
+      "group": "chat",
+      "method": "POST",
+      "path": "/chat/announcements",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:announcements"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.shoutout.send",
+      "group": "chat",
+      "method": "POST",
+      "path": "/chat/shoutouts",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:shoutouts"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": true,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.shared.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/shared_chat/session",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.pin.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/pins",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:read:chat_messages"
+        ],
+        [
+          "moderator:manage:chat_messages"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.pin.create",
+      "group": "chat",
+      "method": "PUT",
+      "path": "/chat/pins",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:chat_messages"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.pin.update",
+      "group": "chat",
+      "method": "PATCH",
+      "path": "/chat/pins",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:chat_messages"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.pin.delete",
+      "group": "chat",
+      "method": "DELETE",
+      "path": "/chat/pins",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:chat_messages"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.message.delete",
+      "group": "chat",
+      "method": "DELETE",
+      "path": "/moderation/chat",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:chat_messages"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "destructive",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.clear",
+      "group": "chat",
+      "method": "DELETE",
+      "path": "/moderation/chat",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:chat_messages"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "destructive",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.emotes.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/emotes",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.badges.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/badges",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.emotes.global.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/emotes/global",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.emotes.set.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/emotes/set",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.emotes.user.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/emotes/user",
+      "requiredScopeAlternatives": [
+        [
+          "user:read:emotes"
+        ]
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.badges.global.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/badges/global",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.color.get",
+      "group": "chat",
+      "method": "GET",
+      "path": "/chat/color",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.color.update",
+      "group": "chat",
+      "method": "PUT",
+      "path": "/chat/color",
+      "requiredScopeAlternatives": [
+        [
+          "user:manage:chat_color"
+        ]
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.chat.whisper.send",
+      "group": "chat",
+      "method": "POST",
+      "path": "/whispers",
+      "requiredScopeAlternatives": [
+        [
+          "user:manage:whispers"
+        ]
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "reply",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.ban",
+      "group": "moderation",
+      "method": "POST",
+      "path": "/moderation/bans",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:banned_users"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "destructive",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.timeout",
+      "group": "moderation",
+      "method": "POST",
+      "path": "/moderation/bans",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:banned_users"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "destructive",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.unban",
+      "group": "moderation",
+      "method": "DELETE",
+      "path": "/moderation/bans",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:banned_users"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.banned.get",
+      "group": "moderation",
+      "method": "GET",
+      "path": "/moderation/banned",
+      "requiredScopeAlternatives": [
+        [
+          "moderation:read"
+        ],
+        [
+          "moderator:manage:banned_users"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.warn",
+      "group": "moderation",
+      "method": "POST",
+      "path": "/moderation/warnings",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:warnings"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.channels.get",
+      "group": "moderation",
+      "method": "GET",
+      "path": "/moderation/channels",
+      "requiredScopeAlternatives": [
+        [
+          "user:read:moderated_channels"
+        ]
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.moderators.get",
+      "group": "moderation",
+      "method": "GET",
+      "path": "/moderation/moderators",
+      "requiredScopeAlternatives": [
+        [
+          "moderation:read"
+        ],
+        [
+          "channel:manage:moderators"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.moderator.add",
+      "group": "moderation",
+      "method": "POST",
+      "path": "/moderation/moderators",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:moderators"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "privileged",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.vip.add",
+      "group": "moderation",
+      "method": "POST",
+      "path": "/channels/vips",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:vips"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "privileged",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.moderator.remove",
+      "group": "moderation",
+      "method": "DELETE",
+      "path": "/moderation/moderators",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:moderators"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "privileged",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.vip.remove",
+      "group": "moderation",
+      "method": "DELETE",
+      "path": "/channels/vips",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:vips"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "privileged",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.vips.get",
+      "group": "moderation",
+      "method": "GET",
+      "path": "/channels/vips",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:vips"
+        ],
+        [
+          "channel:manage:vips"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.blocked_terms.get",
+      "group": "moderation",
+      "method": "GET",
+      "path": "/moderation/blocked_terms",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:read:blocked_terms"
+        ],
+        [
+          "moderator:manage:blocked_terms"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.blocked_terms.add",
+      "group": "moderation",
+      "method": "POST",
+      "path": "/moderation/blocked_terms",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:blocked_terms"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.blocked_terms.remove",
+      "group": "moderation",
+      "method": "DELETE",
+      "path": "/moderation/blocked_terms",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:blocked_terms"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.unban_requests.get",
+      "group": "moderation",
+      "method": "GET",
+      "path": "/moderation/unban_requests",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:read:unban_requests"
+        ],
+        [
+          "moderator:manage:unban_requests"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.unban_requests.resolve",
+      "group": "moderation",
+      "method": "PATCH",
+      "path": "/moderation/unban_requests",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:unban_requests"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.automod.settings.get",
+      "group": "automod",
+      "method": "GET",
+      "path": "/moderation/automod/settings",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:read:automod_settings"
+        ],
+        [
+          "moderator:manage:automod_settings"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.automod.settings.update",
+      "group": "automod",
+      "method": "PUT",
+      "path": "/moderation/automod/settings",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:automod_settings"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.automod.check",
+      "group": "automod",
+      "method": "POST",
+      "path": "/moderation/enforcements/status",
+      "requiredScopeAlternatives": [
+        [
+          "moderation:read"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.automod.message.resolve",
+      "group": "automod",
+      "method": "POST",
+      "path": "/moderation/automod/message",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:automod"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.shield.get",
+      "group": "shield",
+      "method": "GET",
+      "path": "/moderation/shield_mode",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:read:shield_mode"
+        ],
+        [
+          "moderator:manage:shield_mode"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.shield.update",
+      "group": "shield",
+      "method": "PUT",
+      "path": "/moderation/shield_mode",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:shield_mode"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "privileged",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.suspicious.add",
+      "group": "moderation",
+      "method": "POST",
+      "path": "/moderation/suspicious_users",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:suspicious_users"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "privileged",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.suspicious.remove",
+      "group": "moderation",
+      "method": "DELETE",
+      "path": "/moderation/suspicious_users",
+      "requiredScopeAlternatives": [
+        [
+          "moderator:manage:suspicious_users"
+        ]
+      ],
+      "subjectPolicy": "moderator",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "privileged",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.user_blocks.get",
+      "group": "moderation",
+      "method": "GET",
+      "path": "/users/blocks",
+      "requiredScopeAlternatives": [
+        [
+          "user:read:blocked_users"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.user_block.add",
+      "group": "moderation",
+      "method": "PUT",
+      "path": "/users/blocks",
+      "requiredScopeAlternatives": [
+        [
+          "user:manage:blocked_users"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.moderation.user_block.remove",
+      "group": "moderation",
+      "method": "DELETE",
+      "path": "/users/blocks",
+      "requiredScopeAlternatives": [
+        [
+          "user:manage:blocked_users"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "moderate",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.clip.get",
+      "group": "clip",
+      "method": "GET",
+      "path": "/clips",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.clip.lookup",
+      "group": "clip",
+      "method": "GET",
+      "path": "/clips",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.clip.create",
+      "group": "clip",
+      "method": "POST",
+      "path": "/clips",
+      "requiredScopeAlternatives": [
+        [
+          "clips:edit"
+        ]
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": true,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.clip.vod.create",
+      "group": "clip",
+      "method": "POST",
+      "path": "/videos/clips",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:clips"
+        ],
+        [
+          "editor:manage:clips"
+        ]
+      ],
+      "subjectPolicy": "editor",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "video",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.clip.download",
+      "group": "clip",
+      "method": "GET",
+      "path": "/clips/downloads",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:clips"
+        ],
+        [
+          "editor:manage:clips"
+        ]
+      ],
+      "subjectPolicy": "editor",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "clip_download",
+      "risk": "content_export",
+      "workspacePermission": "manage_connections",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.video.get",
+      "group": "video",
+      "method": "GET",
+      "path": "/videos",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.video.delete",
+      "group": "video",
+      "method": "DELETE",
+      "path": "/videos",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:videos"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "video",
+      "risk": "destructive",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.poll.get",
+      "group": "poll",
+      "method": "GET",
+      "path": "/polls",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:polls"
+        ],
+        [
+          "channel:manage:polls"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.prediction.get",
+      "group": "prediction",
+      "method": "GET",
+      "path": "/predictions",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:predictions"
+        ],
+        [
+          "channel:manage:predictions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.poll.create",
+      "group": "poll",
+      "method": "POST",
+      "path": "/polls",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:polls"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.poll.end",
+      "group": "poll",
+      "method": "PATCH",
+      "path": "/polls",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:polls"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.prediction.create",
+      "group": "prediction",
+      "method": "POST",
+      "path": "/predictions",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:predictions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "channel_points",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.prediction.end",
+      "group": "prediction",
+      "method": "PATCH",
+      "path": "/predictions",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:predictions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "channel_points",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.raid.start",
+      "group": "raid",
+      "method": "POST",
+      "path": "/raids",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:raids"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": true,
+      "resourcePolicy": "",
+      "risk": "audience_transfer",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.raid.cancel",
+      "group": "raid",
+      "method": "DELETE",
+      "path": "/raids",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:raids"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "write",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.reward.get",
+      "group": "reward",
+      "method": "GET",
+      "path": "/channel_points/custom_rewards",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:redemptions"
+        ],
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.reward.create",
+      "group": "reward",
+      "method": "POST",
+      "path": "/channel_points/custom_rewards",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "channel_points",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.reward.update",
+      "group": "reward",
+      "method": "PATCH",
+      "path": "/channel_points/custom_rewards",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "reward",
+      "risk": "channel_points",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.reward.delete",
+      "group": "reward",
+      "method": "DELETE",
+      "path": "/channel_points/custom_rewards",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "reward",
+      "risk": "destructive",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.redemption.get",
+      "group": "redemption",
+      "method": "GET",
+      "path": "/channel_points/custom_rewards/redemptions",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:redemptions"
+        ],
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "reward",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.redemption.update",
+      "group": "redemption",
+      "method": "PATCH",
+      "path": "/channel_points/custom_rewards/redemptions",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "reward",
+      "risk": "channel_points",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.subscription.get",
+      "group": "subscription",
+      "method": "GET",
+      "path": "/subscriptions",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:subscriptions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.subscription.check",
+      "group": "subscription",
+      "method": "GET",
+      "path": "/subscriptions/user",
+      "requiredScopeAlternatives": [
+        [
+          "user:read:subscriptions"
+        ]
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.bits.leaderboard.get",
+      "group": "bits",
+      "method": "GET",
+      "path": "/bits/leaderboard",
+      "requiredScopeAlternatives": [
+        [
+          "bits:read"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.bits.cheermotes.get",
+      "group": "bits",
+      "method": "GET",
+      "path": "/bits/cheermotes",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "any",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.bits.powerups.get",
+      "group": "bits",
+      "method": "GET",
+      "path": "/bits/custom_power_ups",
+      "requiredScopeAlternatives": [
+        [
+          "bits:read"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.hype_train.get",
+      "group": "hype_train",
+      "method": "GET",
+      "path": "/hypetrain/status",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:hype_train"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.ads.schedule.get",
+      "group": "ads",
+      "method": "GET",
+      "path": "/channels/ads",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:ads"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.ads.snooze",
+      "group": "ads",
+      "method": "POST",
+      "path": "/channels/ads/schedule/snooze",
+      "requiredScopeAlternatives": [
+        [
+          "channel:manage:ads"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "monetization",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.ads.commercial.start",
+      "group": "ads",
+      "method": "POST",
+      "path": "/channels/commercial",
+      "requiredScopeAlternatives": [
+        [
+          "channel:edit:commercial"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "affiliate_or_partner",
+      "requiresLive": true,
+      "resourcePolicy": "",
+      "risk": "monetization",
+      "workspacePermission": "approve",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.goals.get",
+      "group": "goals",
+      "method": "GET",
+      "path": "/goals",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:goals"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.charity.get",
+      "group": "charity",
+      "method": "GET",
+      "path": "/charity/campaigns",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:charity"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.charity.donations.get",
+      "group": "charity",
+      "method": "GET",
+      "path": "/charity/donations",
+      "requiredScopeAlternatives": [
+        [
+          "channel:read:charity"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.analytics.stream.snapshot",
+      "group": "analytics",
+      "method": "GET",
+      "path": "/streams",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.analytics.clips.snapshot",
+      "group": "analytics",
+      "method": "GET",
+      "path": "/clips",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.analytics.videos.snapshot",
+      "group": "analytics",
+      "method": "GET",
+      "path": "/videos",
+      "requiredScopeAlternatives": [
+        []
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.analytics.extension.get",
+      "group": "analytics",
+      "method": "GET",
+      "path": "/analytics/extensions",
+      "requiredScopeAlternatives": [
+        [
+          "analytics:read:extensions"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    },
+    {
+      "action": "twitch.analytics.game.get",
+      "group": "analytics",
+      "method": "GET",
+      "path": "/analytics/games",
+      "requiredScopeAlternatives": [
+        [
+          "analytics:read:games"
+        ]
+      ],
+      "subjectPolicy": "broadcaster",
+      "eligibility": "",
+      "requiresLive": false,
+      "resourcePolicy": "",
+      "risk": "read",
+      "workspacePermission": "read",
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "testEvidence": "tests/test_twitch_native.py",
+      "releaseBlockers": [
+        "Developer app not created",
+        "Live OAuth and provider acceptance not tested",
+        "Candidate not deployed",
+        "Commercial approval not obtained"
+      ]
+    }
+  ],
+  "eventSub": [
+    {
+      "type": "stream.online",
+      "version": "1",
+      "scopes": [],
+      "scope_options": [
+        []
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "stream.offline",
+      "version": "1",
+      "scopes": [],
+      "scope_options": [
+        []
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.update",
+      "version": "2",
+      "scopes": [],
+      "scope_options": [
+        []
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.follow",
+      "version": "2",
+      "scopes": [
+        "moderator:read:followers"
+      ],
+      "scope_options": [
+        [
+          "moderator:read:followers"
+        ]
+      ],
+      "moderator": true,
+      "chat": false,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.chat.message",
+      "version": "1",
+      "scopes": [
+        "user:read:chat",
+        "user:bot"
+      ],
+      "scope_options": [
+        [
+          "user:read:chat",
+          "user:bot"
+        ]
+      ],
+      "moderator": false,
+      "chat": true,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.chat.message_delete",
+      "version": "1",
+      "scopes": [
+        "user:read:chat",
+        "user:bot"
+      ],
+      "scope_options": [
+        [
+          "user:read:chat",
+          "user:bot"
+        ]
+      ],
+      "moderator": false,
+      "chat": true,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.chat.clear",
+      "version": "1",
+      "scopes": [
+        "user:read:chat",
+        "user:bot"
+      ],
+      "scope_options": [
+        [
+          "user:read:chat",
+          "user:bot"
+        ]
+      ],
+      "moderator": false,
+      "chat": true,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.chat.clear_user_messages",
+      "version": "1",
+      "scopes": [
+        "user:read:chat",
+        "user:bot"
+      ],
+      "scope_options": [
+        [
+          "user:read:chat",
+          "user:bot"
+        ]
+      ],
+      "moderator": false,
+      "chat": true,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.chat.notification",
+      "version": "1",
+      "scopes": [
+        "user:read:chat",
+        "user:bot"
+      ],
+      "scope_options": [
+        [
+          "user:read:chat",
+          "user:bot"
+        ]
+      ],
+      "moderator": false,
+      "chat": true,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.chat_settings.update",
+      "version": "1",
+      "scopes": [
+        "user:read:chat",
+        "user:bot"
+      ],
+      "scope_options": [
+        [
+          "user:read:chat",
+          "user:bot"
+        ]
+      ],
+      "moderator": false,
+      "chat": true,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.ban",
+      "version": "1",
+      "scopes": [
+        "channel:moderate"
+      ],
+      "scope_options": [
+        [
+          "channel:moderate"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.unban",
+      "version": "1",
+      "scopes": [
+        "channel:moderate"
+      ],
+      "scope_options": [
+        [
+          "channel:moderate"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.subscribe",
+      "version": "1",
+      "scopes": [
+        "channel:read:subscriptions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:subscriptions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.subscription.end",
+      "version": "1",
+      "scopes": [
+        "channel:read:subscriptions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:subscriptions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.subscription.gift",
+      "version": "1",
+      "scopes": [
+        "channel:read:subscriptions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:subscriptions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.subscription.message",
+      "version": "1",
+      "scopes": [
+        "channel:read:subscriptions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:subscriptions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.cheer",
+      "version": "1",
+      "scopes": [
+        "bits:read"
+      ],
+      "scope_options": [
+        [
+          "bits:read"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.bits.use",
+      "version": "1",
+      "scopes": [
+        "bits:read"
+      ],
+      "scope_options": [
+        [
+          "bits:read"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.ad_break.begin",
+      "version": "1",
+      "scopes": [
+        "channel:read:ads"
+      ],
+      "scope_options": [
+        [
+          "channel:read:ads"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.poll.begin",
+      "version": "1",
+      "scopes": [
+        "channel:read:polls"
+      ],
+      "scope_options": [
+        [
+          "channel:read:polls"
+        ],
+        [
+          "channel:manage:polls"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.poll.progress",
+      "version": "1",
+      "scopes": [
+        "channel:read:polls"
+      ],
+      "scope_options": [
+        [
+          "channel:read:polls"
+        ],
+        [
+          "channel:manage:polls"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.poll.end",
+      "version": "1",
+      "scopes": [
+        "channel:read:polls"
+      ],
+      "scope_options": [
+        [
+          "channel:read:polls"
+        ],
+        [
+          "channel:manage:polls"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.prediction.begin",
+      "version": "1",
+      "scopes": [
+        "channel:read:predictions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:predictions"
+        ],
+        [
+          "channel:manage:predictions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.prediction.progress",
+      "version": "1",
+      "scopes": [
+        "channel:read:predictions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:predictions"
+        ],
+        [
+          "channel:manage:predictions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.prediction.lock",
+      "version": "1",
+      "scopes": [
+        "channel:read:predictions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:predictions"
+        ],
+        [
+          "channel:manage:predictions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.prediction.end",
+      "version": "1",
+      "scopes": [
+        "channel:read:predictions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:predictions"
+        ],
+        [
+          "channel:manage:predictions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.channel_points_custom_reward.add",
+      "version": "1",
+      "scopes": [
+        "channel:read:redemptions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:redemptions"
+        ],
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.channel_points_custom_reward.update",
+      "version": "1",
+      "scopes": [
+        "channel:read:redemptions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:redemptions"
+        ],
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.channel_points_custom_reward.remove",
+      "version": "1",
+      "scopes": [
+        "channel:read:redemptions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:redemptions"
+        ],
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.channel_points_custom_reward_redemption.add",
+      "version": "1",
+      "scopes": [
+        "channel:read:redemptions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:redemptions"
+        ],
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.channel_points_custom_reward_redemption.update",
+      "version": "1",
+      "scopes": [
+        "channel:read:redemptions"
+      ],
+      "scope_options": [
+        [
+          "channel:read:redemptions"
+        ],
+        [
+          "channel:manage:redemptions"
+        ]
+      ],
+      "moderator": false,
+      "chat": false,
+      "eligible": true,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.shield_mode.begin",
+      "version": "1",
+      "scopes": [
+        "moderator:read:shield_mode"
+      ],
+      "scope_options": [
+        [
+          "moderator:read:shield_mode"
+        ],
+        [
+          "moderator:manage:shield_mode"
+        ]
+      ],
+      "moderator": true,
+      "chat": false,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "channel.shield_mode.end",
+      "version": "1",
+      "scopes": [
+        "moderator:read:shield_mode"
+      ],
+      "scope_options": [
+        [
+          "moderator:read:shield_mode"
+        ],
+        [
+          "moderator:manage:shield_mode"
+        ]
+      ],
+      "moderator": true,
+      "chat": false,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "automod.message.hold",
+      "version": "2",
+      "scopes": [
+        "moderator:manage:automod"
+      ],
+      "scope_options": [
+        [
+          "moderator:manage:automod"
+        ]
+      ],
+      "moderator": true,
+      "chat": false,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    },
+    {
+      "type": "automod.message.update",
+      "version": "2",
+      "scopes": [
+        "moderator:manage:automod"
+      ],
+      "scope_options": [
+        [
+          "moderator:manage:automod"
+        ]
+      ],
+      "moderator": true,
+      "chat": false,
+      "eligible": false,
+      "offline": "Verified",
+      "live": "Unverified",
+      "publicRelease": "Blocked",
+      "additionalGate": "Recorded content-storage purpose authorization",
+      "testEvidence": [
+        "tests/test_twitch_eventsub.py",
+        "tests/test_twitch_postgres.py"
+      ]
+    }
+  ],
+  "unsupported": {
+    "twitch.post.text": "Twitch has no general social-feed text-post endpoint.",
+    "twitch.stream.start": "Starting an encoder is separate from Helix stream schedules.",
+    "twitch.video.upload": "No general Helix VOD upload endpoint is documented.",
+    "twitch.video.download": "No general Helix full-VOD download endpoint is documented; authorized clip downloads are supported.",
+    "twitch.analytics.dashboard": "Creator Dashboard revenue, retention, watch time and unique viewers are not exposed by the documented general Helix API.",
+    "twitch.channel_points.grant": "No arbitrary Channel Points balance or point-grant endpoint is documented.",
+    "twitch.subscription.purchase": "Subscriptions are read/notification capabilities; this adapter does not purchase subscriptions.",
+    "twitch.chat.history": "Live chat is received through EventSub; Helix does not provide an arbitrary historical-chat archive."
+  },
+  "outsideThisAdapter": [
+    "General extension-backend JWT administration",
+    "Drops and organization game entitlements",
+    "Guest Star beta integration"
+  ],
+  "oauth": "Offline verified; live unverified; public release blocked",
+  "production": "Not deployed; callback observed404",
+  "commercial": "Not obtained; drafts not sent"
+}

@@ -23,6 +23,8 @@ export function publishingSupport(platform: string): string {
       return 'One video with a title. Needs upload permission. Until Google audits Rafii, uploads stay private.';
     case 'TikTok':
       return 'One video. Needs publish permission. Until TikTok audits Rafii, posts are private.';
+    case 'Twitch':
+      return 'Use the Twitch workspace for native channel, chat and live operations. Each action has its own permissions and approval. A schedule entry does not start a broadcast.';
     case 'Pinterest':
       return 'One image Pin on the board you choose. Needs publish permission.';
     default:

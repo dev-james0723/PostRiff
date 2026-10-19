@@ -1,0 +1,1545 @@
+{
+  "branch": "codex/rafii-twitch-full-20261018",
+  "caseResults": [
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_all_scoped_operations_reject_empty_grant",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_analytics_projection_preserves_real_provenance",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_approval_semantics_stable_across_fresh_resource_verifications",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_ban_cannot_silently_become_timeout_or_vice_versa",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_broadcaster_only_actions_reject_other_user_even_with_all_scopes",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_calendar_requires_complete_bounded_provider_document",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_catalog_blocks_missing_connection_scope_and_live_state",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_channel_resources_cannot_escape_selected_channel",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_chat_cannot_suppress_shared_audience_with_user_token",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_chat_http_200_requires_true_is_sent_and_message_id",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_clip_creation_is_accepted_until_actual_lookup_succeeds",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_clip_editor_scope_and_role_are_both_required",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_clip_lookup_does_not_mistake_missing_resource_for_creation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_content_download_needs_three_separate_proofs",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_creator_app_preflight_enforces_manageable_reward_filter",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_definite_provider_denials_do_not_claim_unknown_or_success",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_downloads_are_official_expiring_links_without_media_fetch",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_editor_preflight_requires_separate_broadcaster_editor_list_grant",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_empty_or_malformed_successful_writes_are_unknown",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_empty_updates_and_mutually_exclusive_controls_are_denied",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_endpoint_specific_pagination_and_reward_cooldown_limits",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_fixed_origin_query_encoding_and_no_credentials_in_results",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_follower_total_projection_does_not_expose_individual_followers",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_header_injection_is_rejected_before_transport",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_live_and_monetization_requirements_fail_closed",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_manifest_rejects_serialized_tampered_and_expired_commands",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_marker_requires_separate_vod_setting_attestation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_moderator_preflight_uses_authenticated_subject_and_bounded_cursor",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_moderator_scope_or_asserted_role_is_not_role_evidence",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_owner_does_not_need_redundant_moderator_scope_lookup",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_prediction_resolution_requires_exact_winning_outcome",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_profile_read_excludes_invalid_deprecated_view_count_and_email",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_registry_and_projection_cannot_be_mutated",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_request_cannot_override_any_principal_or_permission",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_resource_preflight_must_match_every_exact_requested_id",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_reward_creator_app_must_be_verified",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_rights_are_resource_subject_client_and_time_bound",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_schedule_preflight_records_actual_recurring_semantics",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_schedule_series_evidence_is_required_and_semantic",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_scheduling_never_creates_encoder_action",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_scope_options_and_official_marker_scope",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_secure_sink_failure_does_not_leak_secret_in_traceback",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_secure_stream_key_is_never_in_generic_or_agent_result",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_strict_numeric_boolean_and_nested_schemas",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_subscribed_user_lists_may_intentionally_reference_other_channels",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_unbounded_clock_cannot_escape_as_an_overflow_exception",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_unbounded_json_integers_produce_safe_validation_error",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_unknown_writes_never_retry_and_errors_hide_upstream",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_vacation_times_and_timezone_are_validated",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_verified_moderator_identity_is_bound_to_query",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_whisper_204_is_not_a_delivery_confirmation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeSecurityTests.test_wrong_expired_future_or_long_lived_role_evidence_is_denied",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_ads_commercial_start",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_ads_schedule_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_ads_snooze",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_analytics_clips_snapshot",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_analytics_extension_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_analytics_game_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_analytics_stream_snapshot",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_analytics_videos_snapshot",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_automod_check",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_automod_message_resolve",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_automod_settings_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_automod_settings_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_bits_cheermotes_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_bits_leaderboard_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_bits_powerups_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_category_search",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_channel_editors_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_channel_followed_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_channel_followers_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_channel_followers_total",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_channel_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_channel_labels_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_channel_search",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_channel_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_charity_donations_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_charity_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_announcement_send",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_badges_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_badges_global_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_chatters_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_clear",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_color_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_color_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_emotes_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_emotes_global_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_emotes_set_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_emotes_user_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_message_delete",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_pin_create",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_pin_delete",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_pin_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_pin_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_reply",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_send",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_settings_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_settings_private_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_settings_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_shared_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_shoutout_send",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_chat_whisper_send",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_clip_create",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_clip_download",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_clip_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_clip_lookup",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_clip_vod_create",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_goals_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_hype_train_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_marker_create",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_marker_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_ban",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_banned_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_blocked_terms_add",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_blocked_terms_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_blocked_terms_remove",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_channels_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_moderator_add",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_moderator_remove",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_moderators_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_suspicious_add",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_suspicious_remove",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_timeout",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_unban",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_unban_requests_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_unban_requests_resolve",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_user_block_add",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_user_block_remove",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_user_blocks_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_vip_add",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_vip_remove",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_vips_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_moderation_warn",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_poll_create",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_poll_end",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_poll_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_prediction_create",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_prediction_end",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_prediction_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_profile_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_profile_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_raid_cancel",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_raid_start",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_redemption_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_redemption_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_reward_create",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_reward_delete",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_reward_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_reward_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_schedule_calendar_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_schedule_create",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_schedule_delete",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_schedule_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_schedule_settings_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_schedule_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_shield_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_shield_update",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_stream_followed_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_stream_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_stream_key_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_subscription_check",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_subscription_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_video_delete",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_contract_video_get",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_native.NativeWireContracts.test_every_registered_operation_has_independent_wire_vector",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_app_rotation_projects_reconnect_without_exposing_or_using_old_tokens",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_channels_project_current_expiry_refresh_and_scope_loss_without_network",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_common_flow_encrypts_tokens_and_returns_no_credentials",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_concurrent_refresh_is_serialized_once",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_configuration_change_after_start_rejected_before_exchange",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_cross_workspace_callback_cannot_exchange",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_current_twitch_metadata_remains_workspace_bound",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_disconnect_before_profile_save_prevents_stale_restoration",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_disconnect_revokes_refresh_custody_and_native_jobs_atomically",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_disconnected_token_is_unavailable_across_tenants",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_every_worker_access_validates_including_new_process",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_expired_token_rotates_both_credentials_atomically",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_expired_twitch_access_is_refreshable_without_inventing_publish",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_failed_provider_exchange_stays_consumed",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_foreign_connection_id_does_not_expand_scopes",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_hourly_sweep_validates_active_and_never_calls_when_paused",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_missing_refresh_does_not_hide_expired_access",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_native_upgrade_preserves_and_displays_old_granted_scopes",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_new_consent_cannot_be_erased_by_stale_revocation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_other_member_callback_cannot_exchange",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_reconnect_is_bound_to_selected_account",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_reconnect_replaces_consent_generation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_revoked_refresh_persists_local_disconnect",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_scope_loss_is_recorded_and_invalidates_queued_authority",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_stale_channel_cannot_hide_revoked_or_missing_custody",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_state_replay_never_reexchanges",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_transient_validation_failure_preserves_tokens_and_scopes",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_viewer_cannot_request_native_scopes",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_wrong_refresh_subject_invalidates_only_local_generation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_app_token_without_user_cannot_be_a_user_connection",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_callback_is_exact_and_ignores_request_input",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_cleanup_revoke_allowed_even_while_release_paused",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_client_rotation_rejects_old_vault_envelope_without_network",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_cold_callback_and_authorization_use_the_same_canonical_origin",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_defaults_cannot_start_or_exchange",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_envelope_version_must_be_an_integer",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_eventsub_consent_is_selected_subtype_only",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_exchange_uses_validate_scopes_and_seals_both_tokens",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_identity_checks_token_subject_and_never_returns_email",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_malformed_credentials_do_not_mount_or_leak",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_minimal_identity_authorize_has_no_pkce_or_email",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_progressive_native_scopes_only",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_refresh_and_access_envelopes_cannot_be_swapped",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_refresh_preserves_generation_and_subject",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_refresh_rejects_changed_subject",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_registry_rejects_conflicting_callback_pin",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_registry_requires_both_independent_flags",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_token_shapes_and_scope_shapes_fail_closed",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_token_validation_subject_matches_saved_connection",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_transport_error_and_upstream_body_are_not_exposed",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_wrong_client_rejected_before_helix_identity",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_agent_schedule_contract_matches_native_service_rfc3339",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_ai_purpose_authorization_is_independent_and_only_local_context_survives",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_both_operator_flags_required_before_any_workspace_or_native_call",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_connection_facts_are_workspace_bound_and_strip_all_provider_prose",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_connection_projection_is_bounded_and_malformed_rows_are_not_reported",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_current_human_request_cannot_come_from_args_or_earlier_context",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_educational_and_negated_prose_never_authorizes",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_english_and_chinese_explicit_owned_requests_are_accepted",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_foreign_non_twitch_unverified_and_revoked_connections_fail_before_service",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_instructions_explain_native_human_approval_and_metric_limits",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_invalid_and_missing_counters_never_become_a_zero",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_model_cannot_select_workspace_token_consent_approval_or_dispatch",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_native_metrics_are_exact_numeric_snapshots_without_private_text",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_no_live_stream_is_not_reported_as_zero_viewers",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_no_oauth_stream_key_download_read_or_unsupported_action_can_be_prepared",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_non_finite_large_payloads_and_times_never_reach_preview",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_permissions_intersect_current_request_domain_role_and_generation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_prepare_only_calls_preview_under_agent_context_and_remains_unapproved",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_quoted_code_and_lazy_markdown_instructions_are_data",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_registered_once_with_small_scopes_and_no_effect_tools",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_tools_require_the_real_permissioned_execution_context",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_upstream_approval_claims_and_malformed_receipts_do_not_enter_effect_ledger",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_voice_wrong_scope_cancel_and_live_role_do_not_create_drafts",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_wrong_subject_accepted_unconfirmed_and_wrong_shapes_are_blocked",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubCustodyBoundaryTest.test_current_credential_generation_is_checked_before_signature_or_content",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubCustodyBoundaryTest.test_revoked_or_cleaned_subscription_is_closed_before_decryption",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubCustodyBoundaryTest.test_unknown_callback_cannot_select_trust_from_payload",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubCustodyBoundaryTest.test_wrong_signed_condition_is_safe_403_before_receipt_write",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_authenticated_duplicate_json_keys_at_any_depth_fail",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_authenticated_non_json_nonfinite_and_invalid_utf8_fail",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_body_is_bytes_and_bounded_before_signature_work",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_challenge_requires_pending_status_and_safe_nonempty_value",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_challenge_returns_exact_utf8_bytes_and_no_event",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_duplicate_headers_are_rejected_even_if_values_agree",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_exact_subscription_id_type_version_and_condition_must_match",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_header_count_and_value_size_are_bounded",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_message_type_tampering_cannot_turn_valid_notification_into_revocation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_missing_headers_and_invalid_header_syntax_fail",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_nonfinite_clock_cannot_disable_replay_window",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_notification_authenticates_exact_unicode_bytes_and_trusted_identity",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_notification_requires_enabled_subscription_and_event_object",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_payload_workspace_and_generation_are_never_used_as_trust",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_pending_callback_never_accepts_an_empty_provider_id",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_pending_callback_rejects_malformed_provider_ids",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_pending_permission_cannot_rebind_existing_id_or_relax_condition",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_pending_subscription_can_bind_only_a_valid_signed_challenge",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_required_headers_are_case_insensitive",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_revocation_accepts_only_documented_disabled_statuses",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_signature_requires_exact_algorithm_and_hex_format",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_signed_but_invalid_or_naive_timestamps_fail_closed",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_signed_revocation_carries_reason_without_accepting_event_content",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_sixty_second_future_boundary_is_inclusive",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_ten_minute_old_boundary_is_inclusive",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_timestamp_accepts_rfc3339_fraction_and_offset_without_losing_authority",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_timestamp_and_message_id_are_both_authenticated",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_trusted_generation_and_secret_require_valid_server_evidence",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_unknown_message_type_is_not_acknowledged_as_notification",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_unsigned_type_headers_cannot_override_signed_subscription",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_whitespace_reserialization_and_byte_changes_break_signature",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_eventsub.EventSubVerifierTest.test_wrong_secret_fails_before_json_interpretation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_action_approval_reconciliation_and_secret_access_routes_are_distinct",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_authenticated_oauth_completion_keeps_url_workspace_and_session_binding",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_bad_webhook_length_and_truncated_body_never_reach_service",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_cancel_and_pause_keep_explicit_pause_flag",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_cross_origin_mutations_and_reads_are_denied_before_dispatch",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_disallowed_api_token_cannot_bypass_boundary_using_missing_origin_guard",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_duplicate_receipt_acknowledgement_does_not_return_event_content",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_every_private_native_surface_requires_a_bearer_before_service_dispatch",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_forged_missing_and_proxy_joined_signature_headers_are_rejected",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_invalid_json_media_types_and_top_level_shapes_do_not_dispatch",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_malformed_or_short_bearers_never_reach_twitch",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_native_collection_and_connection_are_mounted",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_native_mutations_require_application_guard",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_native_read_routes_action_and_payload_without_request_authority",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_native_route_does_not_expose_worker_dispatch_or_arbitrary_subpaths",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_oauth_callback_does_not_require_runtime_or_exchange_on_cold_start",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_oauth_start_complete_and_disconnect_remain_authenticated",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_other_public_webhook_methods_or_extra_segments_do_not_dispatch",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_payload_tenant_fields_cannot_change_router_selected_principal",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_preview_retains_exact_action_body_for_service_validation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_proxy_origin_guard_uses_browser_facing_host_and_protocol",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_public_twitch_oauth_callback_is_mounted_and_only_redirects_to_fixed_origin",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_service_permission_failures_preserve_safe_status_and_code",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_signed_notification_is_204_after_service_returns",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_signed_public_eventsub_challenge_passes_raw_bytes_without_session_or_origin",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_unexpected_provider_text_and_tokens_never_reach_http_response_or_log",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_http.TwitchHttpBoundaryTest.test_webhook_storage_failure_does_not_send_success_ack_or_leak_payload",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_01_migration_enables_and_forces_rls_on_every_native_table",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_02_authenticated_browser_cannot_select_or_write_native_tables",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_03_service_role_can_use_real_rls_runtime_policy",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_04_cross_tenant_connections_identical_local_ids_stay_distinct",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_05_preview_has_no_native_mutation_and_encrypts_content",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_06_wrong_hash_cannot_approve",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_07_actor_bound_even_another_owner_cannot_approve",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_08_viewer_cannot_prepare_or_approve",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_09_recent_interactive_session_required",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_10_agent_cannot_approve_own_preview_even_full_permission",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_11_expired_preview_cannot_approve",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_12_encrypted_payload_tampering_fails_exact_consent",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_13_concurrent_workers_issue_exactly_one_mutation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_14_unknown_write_never_retries",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_15_generation_change_revokes_queued_authority",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_16_scope_reduction_purges_approved_payload_and_stops_write",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_17_current_membership_is_checked_before_provider_call",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_18_current_workspace_block_stops_dispatch",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_19_schedule_does_not_dispatch_early",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_20_postgres_microsecond_precision_does_not_change_consent",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_21_cancellation_stops_native_mutation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_22_release_disabled_causes_zero_egress",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_23_stale_dispatch_recovery_is_unknown_not_replay",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_24_registered_challenge_can_race_create_response_without_deadlock",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_25_duplicate_event_is_durable_once_and_encrypted",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_26_tampered_webhook_has_no_durable_receipt",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_27_foreign_generation_webhook_fails_closed",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_28_database_constraint_rejects_event_tenant_substitution",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_29_disconnect_purges_content_even_with_inflight_callback",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_30_expired_events_are_removed_before_read_and_purged",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_31_viewer_event_content_never_enters_agent_surface",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_32_secret_requires_exact_approved_recent_session_and_is_not_stored",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_33_download_separate_content_authorization_cannot_be_inferred",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_34_explicit_account_check_populates_ui_eligibility",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_35_missing_scope_projects_real_progressive_consent",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_36_markers_need_a_recorded_setting_attestation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_37_ai_purpose_gate_is_independent_of_public_connect",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_38_chat_clear_requires_moderation_not_reply_permission",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_39_validation_cursor_is_durable_and_prevents_duplicate_sweep",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_40_http_connection_cannot_select_foreign_action",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_41_database_rejects_foreign_tenant_approval_as_subscription_parent",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_42_eventsub_storage_requires_separate_recorded_purpose",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_43_withdrawn_storage_purpose_discards_new_events_and_purges_old",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_44_ai_purpose_withdrawal_stops_already_approved_agent_action",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_45_app_rotation_projects_reconnect_instead_of_hiding_all_connections",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_46_startup_validation_bypasses_recent_sweep_but_still_uses_a_lease",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_47_exact_execution_time_is_part_of_approved_digest",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_48_authorized_clip_links_are_returned_once_without_downloading_files",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_49_signed_payload_tenant_text_cannot_change_registered_destination",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_postgres.PostgresAcceptance.test_50_pending_challenge_cannot_accept_forged_notification_binding",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_runtime.RuntimeBoundaries.test_disabled_worker_never_starts_token_validation",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_runtime.RuntimeBoundaries.test_generic_text_publisher_rejects_twitch_even_if_fixture_claims_verified",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_runtime.RuntimeBoundaries.test_invalid_production_configuration_fails_before_runtime_initialization",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_runtime.RuntimeBoundaries.test_production_target_binds_sql_and_supabase_to_same_canonical_project",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_runtime.RuntimeBoundaries.test_worker_stdout_excludes_provider_content_and_secrets",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_runtime.RuntimeBoundaries.test_wrong_project_or_query_routing_cannot_masquerade_as_production",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_client_rotation_and_wrong_subject_are_local_reconnect_facts",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_connected_by_is_bound_to_workspace_and_connection_together",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_current_refresh_expiry_and_zero_scope_identity_reach_both_views",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_expired_refreshable_access_does_not_become_false_reconnect",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_failed_session_verification_precedes_any_projection_query",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_identical_connection_ids_keep_each_workspaces_vault_and_role_facts",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_missing_or_disabled_refresh_has_the_current_custody_state",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_revoked_and_absent_custody_override_stale_verified_channel",
+      "status": "pass"
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_serialized_mixed_provider_profiles_preserve_unrelated_state",
+      "status": "pass"
+    }
+  ],
+  "durationSeconds": 5.927,
+  "finishedAt": "2026-10-18T17:41:36.841584+00:00",
+  "groups": {
+    "test_twitch_agent": {
+      "pass": 24,
+      "run": 24
+    },
+    "test_twitch_eventsub": {
+      "pass": 36,
+      "run": 36
+    },
+    "test_twitch_http": {
+      "pass": 27,
+      "run": 27
+    },
+    "test_twitch_native": {
+      "pass": 165,
+      "run": 165
+    },
+    "test_twitch_oauth": {
+      "pass": 51,
+      "run": 51
+    },
+    "test_twitch_postgres": {
+      "pass": 50,
+      "run": 50
+    },
+    "test_twitch_refresh_projection": {
+      "pass": 9,
+      "run": 9
+    },
+    "test_twitch_runtime": {
+      "pass": 6,
+      "run": 6
+    }
+  },
+  "kind": "offline-candidate-acceptance",
+  "liveTwitchCalls": false,
+  "postgresTarget": "127.0.0.1:55439/rafii_twitch_test",
+  "productionDatabaseUsed": false,
+  "python": "3.12.14",
+  "sourceBaseCommit": "691616e8dad6e135dc9a7aeceb21bedf10c90e6a",
+  "sourceSha256": {
+    "migrations/postriff/134_twitch_native.sql": "d5b40899556ba9ef00b1b0a452e6280eaf492650335227b937f8ba041c66e4b4",
+    "src/postriff_phase2/twitch_agent.py": "db45f71958d7aeb3468789dd53f6c0fa5e0fff241c4967723081a1f6b06dc023",
+    "src/postriff_phase2/twitch_eventsub.py": "7b7a2c6aecb8e5750d5025c75e6261c7148a21ba35a32be519f054ccff51e941",
+    "src/postriff_phase2/twitch_http.py": "a486a2f3e39a498a94548b02cc6e17bbdaad9f6b86df2bd02e68878d5bf4b4ab",
+    "src/postriff_phase2/twitch_native.py": "219efda968a68f86c2141e8e4d81393fa3f0cdcad52cf86614e93fbab11ab00b",
+    "src/postriff_phase2/twitch_oauth.py": "8141e20cbe953d5766ddef2165efbcc010e7f79bc6f7f014b4fa351e6e57e11c",
+    "src/postriff_phase2/twitch_service.py": "c86b71008a8b89942af9ffc5f0e2b893664e96c4bcc418e9fb966b64167859f7",
+    "src/postriff_phase2/twitch_worker.py": "21b9493238b63937b75579e09afb9915bf7a9e1db64328f1604a090f26f77708",
+    "tests/test_twitch_agent.py": "a5a1022c8113b4c5727f5cb4fe7db35dab5f4b3f193be51bc4a4c963df6a2c74",
+    "tests/test_twitch_eventsub.py": "91647b3a67880c2a3f63391e44ed5d2ca51afd1a4bb4c821763f7b00577920b9",
+    "tests/test_twitch_http.py": "4e8722dac46ff726e7fa2ca763ebb472e7b17ae437d432dec063246e977df267",
+    "tests/test_twitch_native.py": "d01863e1716b110b736639f3ce3d608d9402949d06009499db1f84cb787e5b4e",
+    "tests/test_twitch_oauth.py": "9b5038d2f9f931e9c9ca8eb1b39447944bc7a2cdf4148fb1a62b08764e16dab5",
+    "tests/test_twitch_postgres.py": "fa6561ae675c2627bd91778401b7e864605b283f46d280b7256600542b5abdd1",
+    "tests/test_twitch_refresh_projection.py": "7f3843b75e41f6b60721938ea82ec723bda1b06a06f32ec6c636de2cfda47ec0",
+    "tests/test_twitch_runtime.py": "2deebe50ee31fbddab60165012aa306f2b55cc688330910d20dfc1cfc9af46eb"
+  },
+  "startedAt": "2026-10-18T17:41:30.915054+00:00",
+  "successful": true,
+  "testsRun": 368,
+  "totals": {
+    "pass": 368
+  },
+  "uniqueTestIds": 368,
+  "workingTreeCandidate": true
+}
