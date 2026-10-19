@@ -5,11 +5,71 @@ import json
 import re
 import socket
 import ssl
+import time
+from contextlib import contextmanager
+from contextvars import ContextVar
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from functools import wraps
+from threading import BoundedSemaphore
 from urllib.parse import urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 
 _LABEL = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)$")
 _BLOCKED_SUFFIXES = (".local", ".localhost", ".internal", ".lan", ".home.arpa", ".invalid", ".test", ".example", ".onion")
+_REQUEST_DEADLINE = ContextVar('public_provider_request_deadline', default=None)
+_SYSTEM_RESOLVER = socket.getaddrinfo
+_DNS_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix='public-provider-dns')
+_DNS_SLOTS = BoundedSemaphore(8)
+
+
+@contextmanager
+def request_deadline(seconds):
+    if type(seconds) not in (int, float) or not 0 < seconds <= 20:
+        raise ValueError('Use a bounded request deadline.')
+    existing = _REQUEST_DEADLINE.get()
+    until = time.monotonic() + seconds
+    token = _REQUEST_DEADLINE.set(min(existing, until) if existing is not None else until)
+    try:
+        yield
+    finally:
+        _REQUEST_DEADLINE.reset(token)
+
+
+def _request_remaining():
+    until = _REQUEST_DEADLINE.get()
+    remaining = 20 if until is None else min(20, until - time.monotonic())
+    if remaining <= 0:
+        raise AlphaError('The instance verification window ended. Try again later.', 503)
+    return remaining
+
+
+def _public_answers(resolver, host):
+    if resolver is not _SYSTEM_RESOLVER:
+        return resolver(host, 443, type=socket.SOCK_STREAM)  # Explicit injected test transport.
+    slots = _DNS_SLOTS
+    if not slots.acquire(blocking=False):
+        raise AlphaError('Instance DNS verification is busy. Try again later.', 503)
+    try:
+        future = _DNS_EXECUTOR.submit(resolver, host, 443, type=socket.SOCK_STREAM)
+    except Exception:
+        slots.release()
+        raise
+    # Running OS calls cannot be interrupted. Keep their capacity reserved
+    # until they actually finish; do not create unbounded replacement threads.
+    future.add_done_callback(lambda _future: slots.release())
+    try:
+        return future.result(timeout=min(5, _request_remaining()))
+    except FutureTimeout as error:
+        future.cancel()
+        raise AlphaError('Instance DNS verification timed out. Try again later.', 503) from error
+
+
+def _bounded_public_transport(function):
+    @wraps(function)
+    def bounded(*args, **kwargs):
+        with request_deadline(20):
+            return function(*args, **kwargs)
+    return bounded
 
 
 def public_host(value, *, message="Enter a server name such as mastodon.social."):
@@ -36,7 +96,7 @@ def public_host(value, *, message="Enter a server name such as mastodon.social."
 
 def assert_public(host, resolver=socket.getaddrinfo):
     try:
-        answers = resolver(host, 443, type=socket.SOCK_STREAM)
+        answers = _public_answers(resolver, host)
     except (OSError, UnicodeError) as error:
         raise AlphaError("That server can't be reached.", 400) from error
     if not answers:
@@ -64,6 +124,7 @@ def public_https_url(url, resolver=socket.getaddrinfo):
     return url
 
 
+@_bounded_public_transport
 def pinned_public_json_transport(method, url, headers=None, form=None, body=None, data=None,
                                  *, resolver=socket.getaddrinfo):
     """HTTPS request to a public address resolved once, with TLS verified for the original host.
@@ -81,7 +142,7 @@ def pinned_public_json_transport(method, url, headers=None, form=None, body=None
         raise AlphaError("The instance address is not allowed.", 400)
     host = public_host(parts.hostname)
     try:
-        answers = resolver(host, 443, type=socket.SOCK_STREAM)
+        answers = _public_answers(resolver, host)
     except (OSError, UnicodeError) as error:
         raise AlphaError("That server can't be reached.", 400) from error
     addresses = []
@@ -105,19 +166,35 @@ def pinned_public_json_transport(method, url, headers=None, form=None, body=None
         request_headers["Content-Type"] = "application/x-www-form-urlencoded"
     elif body is not None:
         request_headers["Content-Type"] = "application/json"
-    conn = http.client.HTTPSConnection(host, timeout=20, context=ssl.create_default_context())
+    conn = http.client.HTTPSConnection(host, timeout=_request_remaining(), context=ssl.create_default_context())
+    response = None
     try:
         # HTTPSConnection.request will use this already connected socket, so no second DNS lookup occurs.
-        raw_socket = socket.create_connection((addresses[0], 443), timeout=20)
+        raw_socket = socket.create_connection((addresses[0], 443), timeout=_request_remaining())
         try:
+            raw_socket.settimeout(_request_remaining())
             conn.sock = conn._context.wrap_socket(raw_socket, server_hostname=host)
         except Exception:
             raw_socket.close()
             raise
+        conn.sock.settimeout(_request_remaining())
         conn.request(method, (parts.path or "/") + ("?" + parts.query if parts.query else ""),
                      body=payload, headers=request_headers)
+        conn.sock.settimeout(_request_remaining())
+        wire_socket = conn.sock
         response = conn.getresponse()
-        raw = response.read(262145)
+        chunks, received = [], 0
+        while received <= 262144:
+            if wire_socket is not None:
+                wire_socket.settimeout(_request_remaining())
+            else:
+                _request_remaining()
+            chunk = response.read1(min(8192, 262145 - received))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            received += len(chunk)
+        raw = b''.join(chunks)
         if len(raw) > 262144:
             raise AlphaError("Provider response limit exceeded.", 502)
         content_type = response.getheader("content-type", "").split(";", 1)[0].strip().lower()
@@ -131,4 +208,6 @@ def pinned_public_json_transport(method, url, headers=None, form=None, body=None
     except (OSError, TimeoutError, ssl.SSLError, http.client.HTTPException) as error:
         raise AlphaError("The instance is temporarily unreachable.", 503) from error
     finally:
+        if response is not None:
+            response.close()
         conn.close()
