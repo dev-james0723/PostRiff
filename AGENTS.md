@@ -2,6 +2,13 @@
 
 Effective: 2026-10-18. Applies to this repository; does not supersede existing security, production provenance, human approval, data isolation, provider access, or release-owner rules.
 
+## Existing release safety rules (preserved)
+- Do not push directly to `consumer-saas`, merge a pull request, promote Production, alter runtime secrets, or publish to providers without explicit authorization for the exact action. The owner's 2026-10-18 cost-optimization approval authorizes only the documented cost-control changes, not blanket new Production releases.
+- Do not confuse a Vercel `READY` result with green CI, authenticated browser or OAuth acceptance, security review, or end-user launch readiness.
+- Never skip required hosted QA merely to reduce spend. Where true hosted validation is needed, arrange one explicitly authorized staged candidate or a bounded temporary Preview window; restore cost controls afterward.
+- Never change, delete, or merge an in-flight PR merely because the newer policy supersedes its old assumptions. Draft PR #205 remains review-only, its Phase 2B branch policy predates this on-demand switch, and it overlaps `AGENTS.md` and `CLAUDE.md`. Reconcile separately rather than merging stale automation guidance blindly.
+- Store receipts without credentials, cookies, OAuth tokens, user account details, or copied private environment values.
+
 ## Vercel is on-demand, not per commit
 - Vercel automatic Git deployment is deliberately disabled in `vercel.json` (`git.deploymentEnabled=false`). The production and staging Vercel projects also have `previewDeploymentsDisabled=true` to suppress repeated Git Preview deployments. Do not undo either control incidentally.
 - Git commit, push, PR creation, CI retries, unit tests, and agent handoffs must not imply a Vercel build. Develop and run appropriate tests without a new Vercel deployment when possible. Prefer existing low-cost CI/Depot pipelines that have already been authorized. Do not introduce new paid CI services.
