@@ -114,6 +114,38 @@ class OAuthService:
         finally:
             data['jobs'], data['reviews'] = jobs, reviews
 
+    def _revoke_linkedin_authority(self, state, connection_id, now):
+        """Workspace JSON authority and credentials are revoked in one transaction.
+
+        Invalidate the current capability version and mark pending approvals revoked.
+        The durable job marker survives reconnects even when adapter versions match.
+        Keep unknown results for reconciliation.
+        """
+        data = state.get('phase2', {})
+        for channel in data.get('channels', []):
+            if channel.get('id') == connection_id and channel.get('platform') == 'LinkedIn':
+                channel.update(revoked=True, identityVerified=False, capabilityVerified=False,
+                               capabilityVersion=channel.get('capabilityVersion', 0) + 1)
+                for capability in (channel.get('capabilities') or {}).values():
+                    if isinstance(capability, dict):
+                        capability.update(level='Unsupported', evidence='Disconnected by the customer.')
+        for review in data.get('reviews', []):
+            if review.get('manifest', {}).get('channelId') == connection_id and review['manifest'].get('platform') == 'LinkedIn':
+                review['status'] = 'stale'
+        for job in data.get('jobs', []):
+            if job.get('manifest', {}).get('channelId') != connection_id or job['manifest'].get('platform') != 'LinkedIn':
+                continue
+            if job.get('state') in ('approved', 'scheduled', 'claimed', 'held', 'submitting', 'processing', 'uncertain'):
+                status = 'uncertain' if job['state'] in ('submitting', 'processing', 'uncertain') else 'held'
+                job.update(state=status, leaseOwner=None, leaseId=None, leaseUntil=0, approvalRevokedAt=now)
+                job.setdefault('events', []).append({'at': now, 'state': status,
+                    'message': 'LinkedIn disconnected. Reconcile any attempted request; pending approvals cannot resume after reconnect.'})
+        for action in data.get('nativeSocialActions', []):
+            manifest = action.get('manifest', {})
+            if manifest.get('connectionId') == connection_id and manifest.get('platform') == 'LinkedIn':
+                if action.get('state') in ('preview', 'submitting'):
+                    action.update(state='uncertain' if action['state'] == 'submitting' else 'held', authorityRevokedAt=now)
+
     def _pinterest_private_pin_allowed(self, pin_id):
         """Only IDs durably returned by an approved intent in this exact active trial."""
         adapter = self.providers.get('pinterest')
@@ -2105,8 +2137,12 @@ class OAuthService:
                     raise AlphaError('Use the owned Discord identity disconnect action.', 403)
             remote = None
             shared = self._shared_elsewhere(cur, workspace_id, connection_id, stored[0]) if stored[0] != 'discord' else False
-            if shared or stored[0] == 'discord':
-                remote = False  # another connection still uses Rafii's bot there; removing it would disconnect them too
+            if shared or stored[0] in ('discord', 'linkedin'):
+                remote = False
+                # LinkedIn's token revoke has no local-generation precondition.
+                # Defer it rather than revoke a concurrently renewed grant or
+                # hold the workspace lock during provider I/O. No token is read
+                # again after commit to revoke a replacement credential.
             else:
                 try:
                     access = self.vault.decrypt(stored[1], stored[2])
@@ -2122,6 +2158,9 @@ class OAuthService:
             revoked_samples = revoke_connection_samples(state, connection_id, principal, self.clock())
             state_changed = bool(revoked_samples)
             pinterest_stop = None
+            if stored[0] == 'linkedin':
+                self._revoke_linkedin_authority(state, connection_id, self.clock())
+                state_changed = True
             if stored[0] == 'discord':
                 for channel in state.get('phase2', {}).get('channels', []):
                     if channel.get('id') == connection_id and channel.get('platform') == 'Discord':
@@ -2158,7 +2197,7 @@ class OAuthService:
             account_pictures.guarded(cur, account_pictures.remove, workspace_id, connection_id)
             from .growth.history_import import mark_for_purge
             mark_for_purge(cur, workspace_id, connection_id)   # imported history goes after commit (purge_after_disconnect)
-            audit(cur, workspace_id, principal, "channel.disconnected", connection_id, {"remoteRevoked": bool(remote), "remoteRevocationDeferred": shared and stored[0] == 'youtube'})
+            audit(cur, workspace_id, principal, "channel.disconnected", connection_id, {"remoteRevoked": bool(remote), "remoteRevocationDeferred": stored[0] == 'linkedin' or shared and stored[0] == 'youtube'})
             from . import product_events
             # Product taxonomy: the connection generation (when it was verified) is the version, pairing it with its connect.
             connected = next((item for item in ((state or {}).get("phase2") or {}).get("channels") or [] if isinstance(item, dict) and item.get("id") == connection_id), {})
@@ -2171,19 +2210,21 @@ class OAuthService:
         purge_after_disconnect(self.repository.connection_factory, workspace_id, connection_id)
         snapshot = self.repository.get(workspace_id, token)
         revision = snapshot["revision"]
-        if stored[0] not in ('youtube', 'discord', 'pinterest'):
+        if stored[0] not in ('youtube', 'discord', 'pinterest', 'linkedin'):
             try:
                 saved = self.repository.mutate(workspace_id, token, snapshot["revision"], "p2_channel_disconnect", {"channelId": connection_id})
                 revision = saved["revision"]
             except AlphaError:
                 revision = snapshot["revision"]  # channel absent from state; credentials are already revoked
-        # YouTube state was revoked atomically with its credential. A second
+        # LinkedIn/YouTube state was revoked atomically with its credential. A second
         # mutation here could incorrectly revoke a consent completed meanwhile.
-        deferred = shared and stored[0] == 'youtube'
+        deferred = stored[0] == 'linkedin' or shared and stored[0] == 'youtube'
         note = "Local execution access removed; approved jobs for this account are held at the next claim."
         if stored[0] == 'pinterest':
             note = 'Pinterest access removed. Pending jobs were canceled atomically; any request already sent requires reconciliation. Remove Rafii in Pinterest account settings to revoke provider consent.'
-        if deferred:
+        if stored[0] == 'linkedin':
+            note = 'LinkedIn local access and pending approval authority were removed atomically. Provider revocation was deferred to protect renewed grants. Remove Rafii in LinkedIn account settings to revoke provider consent; reconcile any request already sent.'
+        elif deferred:
             note += " Google project-wide revocation was deferred to protect other active Google connections. Review Google account permissions to revoke the entire project grant."
         return {"connectionId": connection_id, "disconnected": True, "remoteRevoked": bool(remote), "remoteRevocationDeferred": deferred, "revision": revision, "note": note,
                 **(pinterest_stop or {})}

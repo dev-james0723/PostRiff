@@ -99,6 +99,25 @@ class SourceStampTests(unittest.TestCase):
             self.module.build_source_proof({}, self.root)
         self.assertEqual(receipt.read_bytes(), before)
 
+    def test_build_rejects_an_old_commit_even_when_selected_witnesses_match(self):
+        self.module.stamp(self.root)
+        receipt = self.root / provenance.MANIFEST_PATH
+        before = receipt.read_bytes()
+        (self.root / 'source-note.txt').write_text('new tracked source outside the selected witnesses')
+        self.git('add', 'source-note.txt')
+        self.git('commit', '-qm', 'advance source without changing selected witnesses')
+        self.assertTrue(provenance.release_source_proof({}, root=self.root)['verifiedSelectedRuntimeFiles'])
+        with self.assertRaises(ValueError):
+            self.module.build_source_proof({}, self.root)
+        self.assertEqual(receipt.read_bytes(), before)
+
+    def test_build_rejects_tracked_drift_outside_the_selected_witnesses(self):
+        self.module.stamp(self.root)
+        (self.root / '.gitignore').write_text('/' + provenance.MANIFEST_PATH + '\n# uncommitted source change\n')
+        self.assertTrue(provenance.release_source_proof({}, root=self.root)['verifiedSelectedRuntimeFiles'])
+        with self.assertRaises(ValueError):
+            self.module.build_source_proof({}, self.root)
+
     def test_packaged_build_without_git_requires_a_valid_receipt(self):
         with tempfile.TemporaryDirectory() as empty, self.assertRaises(ValueError):
             self.module.build_source_proof({}, Path(empty))

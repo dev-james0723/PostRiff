@@ -114,7 +114,7 @@ class AdditionalPublishers:
         if action not in ('create', 'publish'): return _unknown('Invalid Pinterest transition')
         # Never duplicate a Pin after an uncertain POST. The worker persists publish intent.
         body = {'board_id': options['boardId'], 'title': options.get('title', ''), 'description': m['payload']['text'], 'alt_text': asset.get('alt', '')}
-        if options.get('sectionId'): body['board_section_id'] = options['sectionId']
+        if options.get('boardSectionId'): body['board_section_id'] = options['boardSectionId']
         if options.get('link'): body['link'] = options['link']
         if video:
             if action != 'publish' or not asset.get('poster'): return {'state': 'held', 'confirmed': 'Pinterest video requires an immutable approved cover frame and processed media'}

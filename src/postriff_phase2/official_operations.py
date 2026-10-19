@@ -265,7 +265,8 @@ class OfficialAPI:
                 "rate": {key: value for key,value in headers.items() if key in ("retry-after", "x-rate-limit-limit", "x-rate-limit-remaining", "x-rate-limit-reset", "x-app-usage", "x-business-use-case-usage")},
                 "metered": self.provider == "x"}
 
-    def write(self, action, target, payload):
+    def authorize_write(self, action, payload):
+        """Check current app/grant/actor authority without performing a mutation."""
         member_product = (self.provider == 'linkedin' and action in ('edit', 'delete')
                           and not str(payload.get('actor', '')).startswith('urn:li:organization:')
                           and getattr(self.adapter, 'member_publishing_approved', lambda: False)())
@@ -273,6 +274,28 @@ class OfficialAPI:
             raise AlphaError("Official native action execution is not enabled/reviewed.", 409)
         from .official_action_contracts import validate
         validate(self.provider, action, payload)
+        if self.provider == 'linkedin':
+            authenticated = self.adapter.identity(self.token)['providerAccountId']
+            actor = payload.get('actor') or authenticated
+            if not actor.startswith('urn:li:organization:') and actor != authenticated:
+                raise AlphaError('Member actor must match the connected identity.', 409)
+            organization = actor.startswith('urn:li:organization:')
+            feed_action = action in ('reply', 'comment_edit', 'delete_comment', 'react', 'remove_reaction')
+            self.require([('w_organization_social_feed' if organization else 'w_member_social_feed') if feed_action
+                          else ('w_organization_social' if organization else 'w_member_social')])
+            if organization:
+                self.require(['r_organization_admin'] if feed_action else ['rw_organization_admin'])
+                authorized = (self.adapter.organization_feed_authorized(self.token, authenticated, actor, write=True) if feed_action
+                              else self.adapter.organization_authorized(self.token, authenticated, actor, 'DELETE' if action == 'delete' else 'UPDATE'))
+                if not authorized:
+                    raise AlphaError('The exact organization action is not authorized.', 409)
+            return actor
+
+    def write(self, action, target, payload):
+        actor = self.authorize_write(action, payload)
+        return self._write_authorized(action, target, payload, actor)
+
+    def _write_authorized(self, action, target, payload, actor):
         encoded = _identifier(target)
         pid = self.provider
         if pid in ("threads", "instagram"):
@@ -290,18 +313,6 @@ class OfficialAPI:
                 self.require(["threads_basic", "threads_content_publish"]);response = self.meta("POST", target, "repost")
             else: raise AlphaError("Use the approved publishing lifecycle for this action.", 409)
         elif pid == "linkedin":
-            authenticated = self.adapter.identity(self.token)['providerAccountId']
-            actor = payload.get("actor") or authenticated
-            if not actor.startswith('urn:li:organization:') and actor != authenticated:
-                raise AlphaError('Member actor must match the connected identity.', 409)
-            organization = actor.startswith("urn:li:organization:")
-            feed_action = action in ("reply", 'comment_edit', 'delete_comment', 'react', 'remove_reaction')
-            scope = ("w_organization_social_feed" if organization else "w_member_social_feed") if feed_action else ("w_organization_social" if organization else "w_member_social")
-            self.require([scope])
-            if organization:
-                self.require(['r_organization_admin'] if feed_action else ['rw_organization_admin'])
-                authorized = self.adapter.organization_feed_authorized(self.token, authenticated, actor, write=True) if feed_action else self.adapter.organization_authorized(self.token, authenticated, actor, "DELETE" if action == "delete" else "UPDATE")
-                if not authorized: raise AlphaError("The exact organization action is not authorized.", 409)
             if action == "delete": response = self.adapter.api(self.token, "DELETE", "/posts/"+encoded)
             elif action == "edit":
                 from .provider_candidates import little_text
@@ -463,13 +474,70 @@ ACTION_FIELDS = {
 }
 ACTION_FIELDS['delete_comment'] = ('actor','commentId')
 
+# Server-owned allowlist; an action/payload can never choose its own authority.
+ACTION_PERMISSIONS = {
+    **dict.fromkeys(('reply', 'comment', 'comment_edit', 'live_chat_send', 'react', 'remove_reaction'), 'reply'),
+    **dict.fromkeys(('delete', 'delete_comment', 'hide', 'unhide', 'moderate', 'live_chat_delete', 'live_chat_ban',
+                     'live_chat_unban', 'board_delete', 'caption_delete', 'playlist_delete', 'playlist_item_delete',
+                     'reporting_delete', 'live_broadcast_delete', 'live_stream_delete', 'section_delete',
+                     'feed_delete', 'product_group_delete', 'cancel_transfer'), 'moderate'),
+    **dict.fromkeys(('repost', 'article_publish', 'quote', 'edit', 'article_draft', 'playlist_create', 'playlist_edit',
+                     'playlist_item', 'video_edit', 'live_broadcast_create', 'live_stream_create', 'live_bind',
+                     'live_transition', 'board_create', 'board_edit', 'section_create', 'thumbnail', 'playlist_image',
+                     'caption_upload', 'caption_update', 'reporting_create', 'section_edit', 'product_tag',
+                     'feed_create', 'feed_edit', 'feed_ingest', 'product_group_create', 'product_group_edit'), 'approve'),
+}
+
+
+def action_permission(action):
+    if action not in ACTION_PERMISSIONS:
+        raise AlphaError('Choose a supported native action.', 400)
+    return ACTION_PERMISSIONS[action]
+
+
+def logical_operation(manifest):
+    """A provider principal survives reconnects, local connection IDs and preview IDs.
+
+    Grant generation and createdAt are intentionally absent: renewal cannot erase an
+    ambiguous create. Older JSON-ledger intents are compared by the same identity.
+    """
+    payload = copy.deepcopy(manifest['payload'])
+    action, platform = manifest['action'], manifest['platform']
+    author = (payload.pop('actor', None) or manifest['providerAccountId']) if platform == 'LinkedIn' else manifest['providerAccountId']
+    # Shared preview fields ignored by a provider must not disguise a duplicate
+    # request. Preserve the exact approval manifest; canonicalize only this key.
+    if action in ('reply', 'comment_edit') and platform != 'LinkedIn' or action == 'edit' and platform != 'Pinterest':
+        payload = {'text': payload['text']}
+    if action == 'delete_comment' and platform != 'LinkedIn':
+        payload = {}
+    if platform == 'LinkedIn' and 'commentId' in payload:
+        payload['commentId'] = str(payload['commentId'])
+    if action in ('caption_upload', 'caption_update'):
+        payload.setdefault('isDraft', False)
+        if action == 'caption_upload': payload.setdefault('name', '')
+    if action == 'moderate': payload.setdefault('banAuthor', False)
+    target = None if action in ('playlist_create', 'live_broadcast_create', 'live_stream_create', 'live_chat_ban',
+                               'reporting_create', 'article_draft', 'board_create', 'feed_create', 'product_group_create') else manifest['target']
+    return digest({'workspaceId': manifest['workspaceId'], 'platform': manifest['platform'],
+                   'providerAccountId': manifest['providerAccountId'], 'author': author,
+                   'action': action, 'target': target, 'payload': payload})
+
+
+def require_reconciled(state, manifest, excluding=None):
+    operation = logical_operation(manifest)
+    if any(item.get('id') != excluding and item.get('state') in ('submitting', 'uncertain')
+           and logical_operation(item['manifest']) == operation
+           for item in state.get('phase2', {}).get('nativeSocialActions', [])):
+        raise AlphaError('Reconcile the existing native operation before another approval. No replacement was sent.',
+                         409, code='native_action_reconcile_required')
+
 
 class SocialActionsService:
     """Native actions share Rafii's membership, immutable approvals, audit and token vault.
 
     Persist intent in one transaction before dispatch. A crash/ambiguous response
     cannot be re-approved to send a second action; explicit manual reconciliation
-    is required. No external request is made while preparing a preview.
+    is required. Preview may verify current authority, but never writes to a provider.
     """
     def __init__(self, oauth): self.oauth, self.repository = oauth, oauth.repository
 
@@ -492,8 +560,7 @@ class SocialActionsService:
                and item['manifest'].get('action') in ('edit', 'delete')
                for item in data.get('nativeSocialActions', [])):
             raise AlphaError('Reconcile the pending LinkedIn action before another edit.', 409, code='linkedin_action_unresolved')
-        destination = (job['manifest'].get('publishOptions') or {}).get('selectedDestination') or {}
-        actor = destination.get('id') or account
+        actor = (job['manifest'].get('publishOptions') or {}).get('authorUrn') or account
         proof = {'jobId': job['id'], 'reference': target, 'connectionId': connection, 'actor': actor,
                  'lastEditId': (job.get('publishedEdit') or {}).get('actionId')}
         return job, proof
@@ -504,14 +571,32 @@ class SocialActionsService:
 
     def preview(self, workspace, token, connection, action, target, payload):
         if action not in ACTION_FIELDS: raise AlphaError("Choose a supported native action.", 400)
+        permission = action_permission(action)
         _identifier(target)
         payload = _options(payload or {}, ACTION_FIELDS[action])
         if action in ("reply", "quote", "comment", "live_chat_send") and (not isinstance(payload.get("text"), str) or not 1 <= len(payload["text"]) <= 4000):
             raise AlphaError("Review the exact action text.", 400)
+        post_proof = None
+        if action in ('edit', 'delete'):
+            # Resolve the receipt under lock, then perform provider checks outside
+            # it. The persistence transaction below rechecks that exact author.
+            with self.repository.transaction(token, workspace) as (_, row, _):
+                from .hosted import _membership
+                from .permissions import require
+                require(_membership(row), permission)
+                state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                channel = next((c for c in state.get('phase2', {}).get('channels', []) if c['id'] == connection and not c.get('revoked')), None)
+                if channel and channel['platform'] == 'LinkedIn':
+                    _, post_proof = self._linkedin_post(state, connection, channel['providerAccountId'], target)
+            if post_proof:
+                if payload.get('actor') and payload['actor'] != post_proof['actor']:
+                    raise AlphaError('The action actor must match the accepted post.', 409)
+                adapter, grant = self.oauth._member_grant(workspace, token, connection, permission)
+                OfficialAPI(adapter, grant).authorize_write(action, {**payload, 'actor': post_proof['actor']})
         with self.repository.transaction(token, workspace) as (cur, row, principal):
             from .hosted import _membership
             from .permissions import require
-            require(_membership(row), "edit")
+            require(_membership(row), permission)
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             channel = next((c for c in state.get("phase2", {}).get("channels", []) if c["id"] == connection and not c.get("revoked")), None)
             if not channel or channel.get("evidenceSource") != "live_provider": raise AlphaError("Connect a real provider account.", 409)
@@ -524,6 +609,8 @@ class SocialActionsService:
                         "action": action, "target": target, "payload": payload, "createdAt": self.oauth.clock()}
             if provider_id == 'linkedin' and action in ('edit', 'delete'):
                 _, proof = self._linkedin_post(state, connection, channel['providerAccountId'], target)
+                if proof != post_proof:
+                    raise AlphaError('The LinkedIn post changed. Review the action again.', 409)
                 if payload.get('actor') and payload['actor'] != proof['actor']:
                     raise AlphaError('The action actor must match the accepted post.', 409)
                 manifest['payload']['actor'] = proof['actor']
@@ -534,7 +621,9 @@ class SocialActionsService:
                 if payload.get('rightsConfirmed') is not True or not is_postable_image(image) or image.get('mime') != 'image/jpeg' or image['bytes'] > 2_000_000 or (action == 'playlist_image' and image['width'] != image['height']):
                     raise AlphaError('Review a decoded JPEG up to 2 MB with rights confirmed. Podcast images must be square.',409)
                 manifest['mediaProof'] = {k:image[k] for k in ('id','hash','bytes','mime','width','height','objectName')}
-            item = {"id": uid(), "state": "preview", "manifest": manifest, "digest": digest(manifest)}
+            require_reconciled(state, manifest)
+            item = {"id": uid(), "state": "preview", "manifest": manifest, "digest": digest(manifest),
+                    'logicalOperationId': logical_operation(manifest)}
             actions = state["phase2"].setdefault("nativeSocialActions", [])
             if len(actions) >= 500: raise AlphaError("Native action history is full; archive reviewed receipts before adding more.", 409)
             actions.append(item)
@@ -546,12 +635,14 @@ class SocialActionsService:
         with self.repository.transaction(token, workspace) as (cur, row, principal):
             from .hosted import _membership, audit
             from .permissions import require
-            require(_membership(row), "approve")
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             item = next((a for a in state.get("phase2", {}).get("nativeSocialActions", []) if a["id"] == action_id), None)
             if not item or item["state"] != "preview" or item["digest"] != approval_digest or digest(item["manifest"]) != approval_digest:
                 raise AlphaError("Action changed or was already attempted. Reconcile its receipt before a new approval.", 409)
             manifest = copy.deepcopy(item["manifest"])
+            permission = action_permission(manifest['action'])
+            require(_membership(row), permission)
+            require_reconciled(state, manifest, excluding=action_id)
             if connection_id is not None and manifest['connectionId'] != connection_id:
                 raise AlphaError('The reviewed action belongs to a different connection.', 409)
             if manifest['platform'] == 'LinkedIn' and manifest['action'] in ('edit', 'delete'):
@@ -564,7 +655,7 @@ class SocialActionsService:
             audit(cur, workspace, principal, "social.native_action_attempted", action_id, {"action": manifest["action"]})
         write_started = False
         try:
-            adapter, grant = self.oauth._member_grant(workspace, token, manifest["connectionId"], "approve")
+            adapter, grant = self.oauth._member_grant(workspace, token, manifest["connectionId"], permission)
             if adapter.identity(grant["accessToken"])["providerAccountId"] != manifest["providerAccountId"]:
                 raise AlphaError("Connected identity changed; review again.", 409)
             payload = copy.deepcopy(manifest['payload'])
@@ -578,10 +669,27 @@ class SocialActionsService:
                 raw = self.assets.storage.get(workspace,'media',proof['objectName'])
                 if len(raw) != proof['bytes'] or hashlib.sha256(raw).hexdigest() != proof['hash']: raise AlphaError('Approved image bytes changed.',409)
                 payload['_media'] = {'raw':raw,**proof}
+            api = OfficialAPI(adapter, grant)
+            authorized_actor = api.authorize_write(manifest['action'], payload)
+            with self.repository.transaction(token, workspace) as (_, row, _):
+                # Final role/connection/competing-intent fence after grant/media I/O.
+                require(_membership(row), permission)
+                state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                channel = next((c for c in state.get('phase2', {}).get('channels', []) if c['id'] == manifest['connectionId'] and not c.get('revoked')), None)
+                current = next((a for a in state['phase2'].get('nativeSocialActions', []) if a['id'] == action_id), None)
+                if not channel or channel['providerAccountId'] != manifest['providerAccountId'] or not current or current['state'] != 'submitting':
+                    raise AlphaError('Native action authority changed; review again.', 409)
+                if manifest.get('postProof'):
+                    _, proof = self._linkedin_post(state, manifest['connectionId'], manifest['providerAccountId'], manifest['target'], excluding=action_id)
+                    if proof != manifest['postProof']:
+                        raise AlphaError('The LinkedIn post author changed. Review again.', 409)
+                require_reconciled(state, manifest, excluding=action_id)
             write_started = True
-            result = OfficialAPI(adapter, grant).write(manifest["action"], manifest["target"], payload)
+            result = api._write_authorized(manifest["action"], manifest["target"], payload, authorized_actor)
         except AlphaError as error:
             result = {"executionState": "uncertain" if write_started else "held", "message": str(error)}
+            if error.code == 'native_action_reconcile_required':
+                result.update(code=error.code, reconcileRequired=True)
         except Exception:
             result = {'executionState':'uncertain' if write_started else 'held',
                       'message':'Provider outcome unknown. The durable intent cannot be repeated; reconcile its receipt first.'

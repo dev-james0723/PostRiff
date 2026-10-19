@@ -353,6 +353,8 @@ class PostgresWorker:
         from .billing import require_publishing
         try:
             now = self.clock() if now is None else now
+            if job.get('manifest', {}).get('platform') == 'LinkedIn' and job.get('approvalRevokedAt') is not None:
+                return False  # Reconnect cannot restore an explicitly withdrawn approval.
             if job.get('privacyErased') or job.get('youtubeProviderDataRemoved') or job.get('manifest', {}).get('privacyErased'):
                 return False
             if state.get('accountDeletion') or state.get('accountBlock'): return False

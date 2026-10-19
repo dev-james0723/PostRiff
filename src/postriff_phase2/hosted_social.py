@@ -63,6 +63,8 @@ class HostedSocial:
         self.official = OfficialPublishers(self)
 
     def official_enabled(self, manifest):
+        if manifest['platform'] in ('YouTube', 'Pinterest'):
+            return False  # Preserve their current journal, grant and dispatch fences.
         provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
         return bool(provider and getattr(provider, "official_social_enabled", False))
 
@@ -143,6 +145,12 @@ class HostedSocial:
             return {"state": "held", "confirmed": "Publishing to this platform isn't available yet. Nothing was posted."}
         if self.official_enabled(manifest) and manifest["platform"] in ("LinkedIn", "Threads", "Instagram"):
             return self.advance_official(manifest, {"progress": {"stage": "create_attempted"}}, "create")
+        if manifest['platform'] == 'LinkedIn':
+            options = manifest.get('publishOptions') or {}
+            if (set(options) - {'destinationType', 'authorUrn'}
+                    or options.get('destinationType', 'member') != 'member'
+                    or options.get('authorUrn', manifest['providerAccountId']) != manifest['providerAccountId']):
+                return {'state': 'held', 'confirmed': 'The approved LinkedIn options require the expanded publishing workflow. Nothing was posted; review again after it is enabled.'}
         if manifest['platform'] == 'YouTube':
             try:
                 return self._submit_youtube(manifest, provider, None)
@@ -1122,20 +1130,12 @@ class HostedSocial:
                 result = {'state': 'verified', 'reference': ids[0], 'providerThread': ids, 'threadChecked': checked, 'verification': 'provider_lookup', 'confirmed': 'Every X thread post matched the approved author, text and hierarchy'}
                 if checked < len(ids): result.update(state='processing', verification='thread_lookup', confirmed='Known X thread IDs partly verified; remaining metered lookups pending')
                 return result
-            if self.official_enabled(manifest) and job.get('cancelRequested') and manifest.get('nativeScheduleAt') and reference and job.get('progress', {}).get('stage') == 'cancel_attempted':
-                if manifest['platform'] == 'YouTube':
-                    response = provider.api(token, 'GET', provider.API+'/videos?'+urlencode({'part':'id','id':reference}))
-                    gone = response.get('status') == 200 and (response.get('body') or {}).get('items') == []
-                else:
-                    page = provider.revalidate_page(token, 'CREATE_CONTENT')
-                    response = provider.graph('GET', '/'+quote(reference,safe=''), page['token'], {'fields':'id'})
-                    gone = response.get('status') == 404
+            if self.official_enabled(manifest) and manifest['platform'] == 'Facebook' and job.get('cancelRequested') and manifest.get('nativeScheduleAt') and reference and job.get('progress', {}).get('stage') == 'cancel_attempted':
+                page = provider.revalidate_page(token, 'CREATE_CONTENT')
+                response = provider.graph('GET', '/'+quote(reference,safe=''), page['token'], {'fields':'id'})
+                gone = response.get('status') == 404
                 if gone: return {'state':'canceled','reference':reference,'verification':'provider_lookup','confirmed':'Provider lookup confirms scheduled content was removed'}
                 return _uncertain('Native cancellation is not confirmed; inspect the scheduled content; do not repeat deletion')
-            if self.official_enabled(manifest) and manifest['platform'] == 'YouTube'  and job.get('providerUpload') and not reference:
-                recovered = self.official.additional.youtube(manifest, job, 'status', provider, grant)
-                if recovered.get('state') == 'processing': recovered['verification'] = 'resumable_upload_status'
-                return recovered
             publisher = getattr(provider, "publisher", None)
             if publisher is not None:
                 return publisher.reconcile(manifest, job, provider, token, self)

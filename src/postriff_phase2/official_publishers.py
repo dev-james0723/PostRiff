@@ -13,7 +13,8 @@ from .official_social import LINKEDIN_VERSION, THREADS_VERSION
 from .provider_candidates import little_text
 from .outcomes import valid_receipt_url
 
-ASYNC_PLATFORMS = ("LinkedIn", "Threads", "Instagram", "Facebook", "X", "YouTube", "TikTok", "Pinterest")
+# YouTube and Pinterest have newer journal/locked dispatchers in HostedSocial.
+ASYNC_PLATFORMS = ("LinkedIn", "Threads", "Instagram", "Facebook", "X", "TikTok")
 FORWARD_STAGES = ("assets_uploaded", "children_created", "children_ready", "container_created", "container_ready", "upload_session", "upload_finalizable", "next_asset", "metadata_pending", "thread_ready")
 
 

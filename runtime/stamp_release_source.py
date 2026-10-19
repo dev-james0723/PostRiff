@@ -93,6 +93,10 @@ def build_source_proof(values: Mapping[str, str], root: Path = SOURCE_ROOT) -> d
         proof = release_source_proof(values, root=root)
     if not proof['verifiedSelectedRuntimeFiles']:
         raise ValueError('Missing, stale or conflicting source receipt; restamp reviewed clean source before upload')
+    if (root / '.git').exists():
+        _clean(root)
+        if _git(root, 'rev-parse', 'HEAD').decode().strip() != proof['sourceRevision']:
+            raise ValueError('Source receipt does not identify the current clean Git revision')
     return proof
 
 
