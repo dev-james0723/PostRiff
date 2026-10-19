@@ -1,0 +1,46 @@
+# Rafii Mastodon — G6 Public Connect Production Release Gate
+**2026-10-17 · Canonical Production: NO-GO / Isolated Linux Synthetic RC: GO**
+
+## Goal
+Make Mastodon genuinely accessible to ordinary accounts on **https://rafii.io**, across independently operated Mastodon instances, with secure OAuth, separate account binding, explicit permissions, revocation and no accidental publishing. This is NOT achieved by displaying a Connect button.
+
+## Verified source and live identities
+- Repository `dev-james0723/PostRiff`, production default `consumer-saas`, remote SHA last checked `7432c56d96bc9d042b6f00bdbb6acc1b5bb271f1`. No GitHub Push/PR change/Merge in this G5/G6 workstream.
+- Canonical local RC code: `2169bb8bbe36049866de50730c1c78d949b8be6b` in `~/Documents/.agent-worktrees/rafii-mastodon-public-rc-20261017`. Transport-only Depot slim `d8a8f865e852032f4ededfe50e4ab0440a164f6a`, differing ONLY in 18 archived historical PNG screenshots, verified identical for `src/`, `web/`, `scripts/`, `migrations/`, `.depot/`.
+- GitHub PR #176 at `53c8ab899b66e14d7d568146b58e6f85c11c6251` remains **open DRAFT, unmerged**, target `consumer-saas`.
+- Vercel project `postriff-phase2-private`, project ID `prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L`, owns verified production domains `rafii.io` and `www.rafii.io` (www redirects to apex). Latest observed production-target deployment `dpl_7pc5Px6UnDfWpp73yvBXH1CGZDhn`, metadata says PR #197 merge source `3efe6c2fd0c83e19395546c53aa71dd7ba02fa3b`, not this Mastodon candidate. Independent domain-alias/source receipt must be verified before promotion.
+- **Only** Production Supabase: `buoyhkbodnhzngaotoel` (`postriff-phase2-private`), PostgreSQL 17.6, ACTIVE_HEALTHY. No staging project may receive production customer data.
+- Live read-only Production SQL: `postriff_private.schema_migrations` = 62 entries; no Mastodon 131/132/133 migration; `public.pr_mastodon_applications` absent; `public.pr_mastodon_actions` and `public.pr_mastodon_health` absent; active Mastodon credentials count **0**. `public.pr_metric_reads_provider_check` permits only `threads` / `instagram`. RLS and FORCE RLS are ON for existing `pr_oauth_transactions` and `pr_encrypted_credentials`.
+- Vercel Production env **metadata** (not decrypted values) includes `POSTRIFF_OAUTH_MASTODON_ENABLED`, `POSTRIFF_PUBLIC_BASE_URL`, `POSTRIFF_CREDENTIAL_KEY`, `POSTRIFF_DATABASE_URL` and `POSTRIFF_SUPABASE_URL`. **Value of ENABLED is unverified.** `POSTRIFF_OAUTH_MASTODON_REVIEWED`, `POSTRIFF_OAUTH_MASTODON_PUBLISH_LIVE_TESTED`, and `POSTRIFF_OAUTH_MASTODON_PUBLISH_APPROVED` were NOT LISTED; default source behavior is fail-closed for live publish. No production env values or credentials were retrieved.
+
+## Synthetic acceptance completed (NOT evidence of real OAuth)
+- G2 full original Next.js 16.3.8/Node 24.15.0 Production Build PASS, 114/114 static pages; G1 136/136 Mastodon unit PASS, SQL management/RLS/tenant tests PASS; applied-schema source SHA-256 ledger 62/62 parity (at prior preflight).
+- Genuine Linux Depot PostgreSQL 16 synthetic admission `j3m49xrsq9`: 1,000 requests completed, 1,000 pending simultaneously, 32 SQL operations, 400 admitted/600 rate-limited, P95 = **829.729 ms**, 40 distinct Queue claims, claim P95 **7.042 ms**, **zero real Provider calls**. Not 1,000 live user HTTP load.
+- Genuine Linux Chromium Account/Queue E2E PASS on 1440/390/320px, 18 synthetic screenshots, no real Mastodon.
+- Genuine Linux WebKit Account/Queue E2E PASS on 1440/390/320px, 18 synthetic screenshots, run `xtsp84fx9b`. 56 *classified* same-origin Next.js `_rsc` cancelled prefetches on hard navigation; **zero unclassified page errors**. Classification is strict WebKit-only, localhost Next app, RSC key, navigation-correlation and exact suffix; negative regression PASS. No general security/CORS error is ignored. See `web/tests/mastodon-webkit-prefetch-guard.*`.
+- Important distinction: all tests used disposable PostgreSQL and mock Mastodon servers, not actual cross-instance OAuth tokens, cancellation, or published posts.
+
+## Production blocker / mechanism of failure
+- Source `OAuthService.__init__` wires `MastodonProvider.application_cache = ApplicationCache`. `MastodonProvider.begin` calls this when starting OAuth, and `ApplicationCache.__call__` selects `public.pr_mastodon_applications`. Since that table is missing in Production, the current new implementation cannot satisfy true public Mastodon Connect. A visible UI Connect button is NOT proof.
+- Existing `scripts/postriff_migrate.py` maintains custom SHA-256 ledger with one advisory transaction; `--apply-local` explicitly rejects non-loopback hosts. Never use this script against Production, never merely run Supabase's DDL `apply_migration` without reconciling the custom ledger.
+- Required forward SQL (unchanged from RC):
+  - `131_mastodon_management.sql`, SHA-256 `c85e2d27f79947692a1bf28a7087fcbe7b0d3ea9d3c57e2e0fe2dd654bacf694`: encrypted app registration cache + service-only exact-action receipts, FORCE RLS.
+  - `132_mastodon_native_metrics.sql`, SHA-256 `c3a887b379958bdb32282120f6b9dc5515b02882da279898453fedb8f7886d3b`: updates **shared** `pr_metric_reads` provider CHECK to add Mastodon, adds metadata and indexes; requires concurrent-provider regression and lock/timeout review.
+  - `133_mastodon_connection_health.sql`, SHA-256 `eeae6a4f48fb7616ce168f672c05d6ba7e169aa91951c17fc1c4c187fb437905`: health/checkpoint table, RLS/FORCE RLS, service-only grants.
+- Full Production backup and isolated RESTORE proof is NOT verified. Vercel MCP project env listing returned 403; a separate local CLI read-only metadata list succeeded, without reading secret values. Do not assume any flag is already true.
+
+## Recommended public Connect rollout (not yet approved)
+1. **Gate A / protected release prep:** independent reviewer verifies diff/CI, DB 62/62 source parity and all migration numbers, full backup and isolated restore including token encryption continuity, current Vercel production deployment/source/rollback target, custom ledger migration transaction, authenticated operator identity and hard stop gates. No customer access.
+2. **Gate B / Production schema:** after separate exact approval, an independently reviewed Production-aware migration operator applies 131–133 *transactionally* on `buoyhkbodnhzngaotoel`, recording exact hashes in `postriff_private.schema_migrations`, with lock_timeout and statement_timeout, then checks table RLS/FORCE RLS, service-only policies, no `anon`/`authenticated` grants, existing Threads/Instagram metric compatibility, and no active writes from unexpected tenants. An SQL test passing on PostgreSQL 16 is not PostgreSQL 17 Production acceptance.
+3. **Gate C / staged deploy:** review/merge precisely pinned source, stage a Production-built Vercel deployment WITHOUT assigning rafii.io to it; check exact deployed source/artifact receipt, OAuth redirect origin/callback and DB binding. Do not accidentally deploy `refs/pull/197/merge` or old PR #176 head. Preserve previous deployment for rollback.
+4. **Gate D / owner-controlled real OAuth:** on two *independently operated* Mastodon servers, user explicitly grants the requested exact scopes and completes account login themselves; verify PKCE/state binding, account/instance identity, encrypted custody, duplicate prevention, readback, per-workspace isolation, revoke/disconnect and recovery. Do not retrieve tokens into chat. Only authenticated actual acceptance can establish production connect readiness.
+5. **Gate E / public enablement:** if Gate D all PASS, use explicit feature authorization to enable Mastodon **Connect for customers**, initially limited invited rollout and only after guard/monitor readiness expand to all. Leave `POSTRIFF_OAUTH_MASTODON_REVIEWED`, `PUBLISH_LIVE_TESTED`, `PUBLISH_APPROVED` **false/absent** until separate per-account real publish/schedule acceptance. Source `MastodonManagement.execute` denies writes unless `provider.production_reviewed`; do not change it to allow writes for connect-only.
+6. **Rollback:** disable new Mastodon OAuth via reviewed `POSTRIFF_OAUTH_MASTODON_DISABLED=true` or equivalently reviewed provider flag, restore previous verified deployment if required, keep encrypted existing grants and schema intact; do NOT down-migrate. Enumerate native Mastodon scheduled-status exact IDs for separately approved cancellation/reconciliation; disable alone does not cancel external schedules.
+
+## Exact separate approvals required before proceeding past G6
+- Approval of protected source review/PR/merge and the exact Production deploy scope.
+- Approval of the **specific Production project and transaction** for migrations 131–133 AFTER a verified backup/restore and impact plan.
+- User-controlled real OAuth to two Mastodon instances; no credential or secret extraction. Any actual post/edit/delete/schedule requires fresh exact account + payload authorization.
+- Approval of beta/public cohort and subsequent full rollout. Broad "finish everything" is a goal, not evidence that safety gates are already satisfied.
+
+**G6 decision: LOCAL/DEPOT SYNTHETIC GO. PRODUCTION CONNECT/APPROVAL/PUBLIC LAUNCH NO-GO.** No GitHub remote or Production changes have been made by this G6 verification.

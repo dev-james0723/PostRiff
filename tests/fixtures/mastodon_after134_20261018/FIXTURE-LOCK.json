@@ -1,0 +1,13 @@
+{
+  "purpose": "SYNTHETIC cloud DB fixture only; never production ledger adoption",
+  "schema_source_commit": "0114c94206eab037a3cdf74cfb2218e56075783b",
+  "connect134_source_commit": "01c9c742f44ebc67e9d9a8cff88672695a8801ec",
+  "management_runtime_base": "057062fb18490fac94443409c59b86a115bd5298",
+  "files": {
+    "PROPOSAL-METADATA.json": "af0495a9a310161da262a514697a43585757d34542dec639d8ff506350fb4fff",
+    "20261018160404_mastodon_management_after_connect_134.sql": "66afc61f47add5747fd819dab89d98a2d84f357f0f4e250df8974eda69b1b3ea",
+    "SHARED-INDEXES-CONCURRENT-PROPOSAL.sql": "722ec74aec227adc38cb2680d583546557b3b210c4e50126c960147df7c6a6e4",
+    "134_mastodon_connect_applications.sql": "d2012caa4dbd5684c89b7d8fd50746c84bb4a770657202f6366e99007425ccc3"
+  },
+  "connect134_sha256": "d2012caa4dbd5684c89b7d8fd50746c84bb4a770657202f6366e99007425ccc3"
+}

@@ -78,6 +78,8 @@ def attach_readings(cur, workspace_id, posts):
 def on_verified(cur, workspace_id, job):
     """Freeze the check bound to the exact approved publication; this hook never schedules or publishes."""
     manifest = job.get('manifest') or {}
+    if manifest.get('platform') == 'Mastodon' and (manifest.get('publishOptions') or {}).get('visibility', 'public') not in ('public', 'unlisted'):
+        return
     prediction = manifest.get('postDoctor')
     if not prediction or not job.get('verification') or not job.get('providerReference'):
         return

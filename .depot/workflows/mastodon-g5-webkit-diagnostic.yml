@@ -1,0 +1,59 @@
+# HISTORICAL G7 FORENSIC WORKFLOW; not current Connect/after134 release acceptance.
+# Existing entry scripts fail closed without explicit forensic-only opt-in; no execution authorized.
+# Manual one-shot WebKit-only diagnostics, no provider calls.
+name: HISTORICAL Rafii Mastodon G5 isolated WebKit diagnostic
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  webkit_diag:
+    runs-on: depot-ubuntu-24.04-4
+    timeout-minutes: 8
+    env:
+      CI: "true"
+      G5_BROWSER_ENGINES: "webkit"
+      DO_NOT_TRACK: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_SENTRY_DISABLED: "true"
+      NEXT_PUBLIC_SUPABASE_URL: ""
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ""
+      POSTRIFF_RESEARCH: "0"
+      POSTRIFF_OAUTH_MASTODON_DISABLED: "true"
+      OPENAI_API_KEY: ""
+      POSTRIFF_DATABASE_URL: ""
+      G5_SYNTHETIC_ONLY: "1"
+      POSTRIFF_API_ORIGIN: "http://127.0.0.1:4348"
+      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:4448"
+      POSTRIFF_DEV_SSR: "1"
+      OPENUI_TELEMETRY_DISABLED: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          submodules: false
+      - name: Repair orphan Gitlinks in throwaway runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          git rm --cached -f -- vendor/xiaohongshu-mcp-v2.5.0-login-fix vendor/xiaohongshu-mcp-v2.5.0-rednote-candidate
+          git submodule foreach --quiet true
+          git config --local --unset-all http.https://github.com/.extraheader || true
+      - name: Source guard and synthetic only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f scripts/mastodon-g5-browser.sh
+          test "$G5_SYNTHETIC_ONLY" = 1
+          test "$(uname -s)" = Linux
+          test -z "$OPENAI_API_KEY"
+          test -z "$POSTRIFF_DATABASE_URL"
+          test -z "$NEXT_PUBLIC_SUPABASE_URL"
+          echo "LINUX=YES; PROVIDER_CREDENTIALS=ABSENT; SYNTHETIC_FIXTURE=REQUIRED"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - name: Run genuine Linux Chromium and WebKit synthetic browser E2E
+        shell: bash
+        run: bash scripts/mastodon-g5-browser.sh

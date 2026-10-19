@@ -465,7 +465,7 @@ def main():
 
     def on_verified(cur, workspace_id, job):
         manifest = job["manifest"]
-        provider = {"LinkedIn": "linkedin", "Threads": "threads"}.get(manifest["platform"])
+        provider = {"LinkedIn": "linkedin", "Threads": "threads", "Mastodon": "mastodon"}.get(manifest["platform"])
         if provider == "threads":
             insights.ingest_post_insights(cur, transport, service.oauth, workspace_id, manifest["channelId"], provider, job["providerReference"], job["id"], time.time())
             service.audience.ingest_replies(cur, workspace_id, manifest["channelId"], provider, job["providerReference"], time.time())

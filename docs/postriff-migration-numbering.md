@@ -102,3 +102,10 @@ It loads 001, 002, 004–012, 018, 019, then 023–025 and the released 030–03
    - the untracked ai-routing docs in its worktree (`migration-rollback.md`, `route-contract.md`, `developer-setup.md`).
 5. Run the full chain 001–029 on a disposable PostgreSQL, and the production-shaped rehearsal. Then staging, then production.
 6. ai-routing is a stale fork (September 17–20) of lines already merged into `consumer-saas`, so bring it up to date before any of this.
+
+## 2026-10-17 Mastodon isolated RC reservation (not deployed)
+
+- **131** 131_mastodon_management.sql, **132** 132_mastodon_native_metrics.sql, and **133** 133_mastodon_connection_health.sql are reserved **only in the isolated Mastodon public-RC branch**. Prior source versions used 113-115, which conflicted with other concurrent worktrees (including X's 113).
+- A read-only scan checked 598 local refs and 209 accessible worktrees before allocation and found no 131-139 files. Git remote refs must be rescanned at release time; this does not establish global exclusivity.
+- Production's checksum ledger contained none of 131-133 at preflight, so these are **pending forward migrations**. The historical Mastodon Cloud Preview already carries the old 113-115 SQL, and must not be conflated with this revised RC. Rehearse a new isolated preview with exact checksums and rollback receipts.
+- Production's applied 103, 116, and 117 sources must remain byte-identical, and the complete applied ledger must match the source inventory before any production migration. No migration is authorized by this note.

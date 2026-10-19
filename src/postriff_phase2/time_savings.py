@@ -377,6 +377,10 @@ def with_time_back(on_verified, time_savings):
                 on_verified(cur, workspace_id, job)
         finally:
             time_savings.record_verified_publish(cur, workspace_id, job)
+    # The worker rolls back a failed optional hook before keeping the verified
+    # receipt. Restore this independent, idempotent ledger write afterwards;
+    # otherwise that rollback also erases the successful finally-block write.
+    hook.after_rollback = time_savings.record_verified_publish
     return hook
 
 

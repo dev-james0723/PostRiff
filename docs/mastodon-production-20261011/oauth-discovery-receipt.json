@@ -1,0 +1,95 @@
+{
+  "status": "PASS",
+  "runId": "p24hzcfj6c",
+  "receiptPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T205554243958Z-test.json",
+  "sourceHead": "a8273335860e6d386694f8a622a89ef03cfb78cc",
+  "snapshot": {
+    "sourceHead": "a8273335860e6d386694f8a622a89ef03cfb78cc",
+    "sourceFingerprint": "81dafd06dc44ee90ba4a24210d8dd86bb86c2d2f94522864261bd2a834f68452",
+    "patchSha256": "3ba5b20a7b806b16c0bce32944fe2d379ae97505f5c6c77876b4558771757d45",
+    "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847"
+  },
+  "unitSummary": [
+    "Ran 19 tests in 0.103s",
+    "OK"
+  ],
+  "publicDiscovery": [
+    {
+      "event": "real_public_oauth_discovery",
+      "observedAt": "2026-10-11T20:55:38.718096+00:00",
+      "instance": "mastodon.social",
+      "version": "4.8.0-nightly.2026-10-06",
+      "issuer": "https://mastodon.social/",
+      "authorizationEndpoint": "https://mastodon.social/oauth/authorize",
+      "tokenEndpoint": "https://mastodon.social/oauth/token",
+      "s256Advertised": true,
+      "publishScopesAdvertised": true,
+      "requests": [
+        {
+          "method": "GET",
+          "url": "https://mastodon.social/api/v2/instance",
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "url": "https://mastodon.social/.well-known/oauth-authorization-server",
+          "status": 200
+        }
+      ],
+      "oauthClientRegistered": false,
+      "ownerIdentityVerified": false,
+      "actualGrantedScopes": "NOT_VERIFIED",
+      "actualS256Flow": "NOT_RUN"
+    },
+    {
+      "event": "real_public_oauth_discovery",
+      "observedAt": "2026-10-11T20:55:39.659942+00:00",
+      "instance": "mstdn.social",
+      "version": "4.7.2",
+      "issuer": "https://mstdn.social/",
+      "authorizationEndpoint": "https://mstdn.social/oauth/authorize",
+      "tokenEndpoint": "https://mstdn.social/oauth/token",
+      "s256Advertised": true,
+      "publishScopesAdvertised": true,
+      "requests": [
+        {
+          "method": "GET",
+          "url": "https://mstdn.social/api/v2/instance",
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "url": "https://mstdn.social/.well-known/oauth-authorization-server",
+          "status": 200
+        }
+      ],
+      "oauthClientRegistered": false,
+      "ownerIdentityVerified": false,
+      "actualGrantedScopes": "NOT_VERIFIED",
+      "actualS256Flow": "NOT_RUN"
+    }
+  ],
+  "scope": "Actual public read-only application discovery; not owner OAuth, granted scopes, PKCE exchange or A-E acceptance.",
+  "sourceFileSha256": {
+    "src/postriff_phase2/mastodon_protocol.py": "5231b5e9e8f57a6c8a7c4945e8b0cde72d2f58ca40f64e2f9c12f460bbc1c515",
+    "tests/test_mastodon_management.py": "7d4eac21075f15630f96fc8b5492f7f37fadacc8ae573b6ed87666114c9201bd",
+    "scripts/cloud-mastodon-automation.sh": "681867d96ce7dd540dcbe3c744b0519c19eca265c7a8cc961bc82e4fc339b229"
+  },
+  "independentReview": {
+    "status": "PASS_SOURCE_ONLY",
+    "reviewer": "mastodon_security_review",
+    "baseRevision": "a8273335860e6d386694f8a622a89ef03cfb78cc",
+    "twoFileDiffSha256": "44e3f4903c826c8f7297e6b892550787c460ed1cf6b09bddc0aa3959564d65c2",
+    "scope": "Only exact origin or one root slash accepted as issuer; endpoints, S256 and scopes remain strict. No tests or provider calls by reviewer; registration/grants/actual PKCE remain NOT_RUN."
+  },
+  "originalFailure": {
+    "observedAt": "2026-10-11T20:46:20Z",
+    "stage": "public metadata preflight",
+    "realIssuerRootSlashRejected": true,
+    "affectedInstances": [
+      "mastodon.social",
+      "mstdn.social"
+    ],
+    "fixed": true
+  }
+}
