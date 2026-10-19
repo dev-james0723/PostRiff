@@ -100,10 +100,11 @@ def defer_pinterest_budget(job, result, reconciliation):
     return True
 
 
+
 class DisabledHostedSocial:
     """Fail closed until an exact provider transport and token vault are configured."""
     def submit(self, _manifest):
-        return {"state": "held", "confirmed": "Live provider transport is not configured; nothing was submitted"}
+        return {"state": "held", "confirmed": NO_SUBMISSION_CONFIRMED}
 
     def reconcile(self, _manifest, _job):
         return {"state": "uncertain", "confirmed": "Provider reconciliation is unavailable; do not resubmit"}
@@ -409,8 +410,8 @@ class PostgresWorker:
                 raise AlphaError('Hosted sample workspaces are read-only.', 403)
             job = find(state.get('phase2', {}).get('jobs', []), job_id)
             require(Membership.from_row(*row[2:7]), 'reply' if job['manifest'].get('operation') == 'discord.reply' else 'approve')
-            if job['manifest'].get('platform') != 'Discord':
-                raise AlphaError('Select an approved Discord post for this action.', 409)
+            if job['manifest'].get('platform') not in ('Discord', 'LinkedIn'):
+                raise AlphaError('Select an approved Discord or LinkedIn post for this action.', 409)
             if (job['manifest'].get('workspaceId') != workspace_id
                     or approval_digest != job.get('approvalDigest') or approval_digest != digest(job['manifest'])):
                 raise AlphaError('This approval changed. Reload the post before continuing.', 409)
@@ -499,50 +500,34 @@ class PostgresWorker:
                         target = find(state['phase2']['jobs'], job_id)
                         if not self._requester_may_approve(cur, workspace_id, dispatch_principal, target):
                             raise AlphaError('This action needs the permission for its approved operation.', 403)
-                        if (target['manifest'].get('platform') != 'Discord'
-                                or target['manifest'].get('workspaceId') != workspace_id
+                        if (target['manifest'].get('workspaceId') != workspace_id
                                 or approval_digest != target.get('approvalDigest')
                                 or approval_digest != digest(target['manifest'])):
                             raise AlphaError('This approval changed. Reload the post before continuing.', 409)
                     else:
-                        if youtube_only or exclude_youtube:
-                            # Invalidation can hold jobs too; the isolated lane must
-                            # not change another platform's review or queued job.
+                        if youtube_only or exclude_youtube or linkedin_only or discord_only or exclude_discord:
+                            # Invalidation can hold jobs too; isolated lanes must
+                            # not mutate another platform's approval or queued job.
                             data = state['phase2']
                             jobs, reviews = data['jobs'], data['reviews']
                             def selected_platform(item):
-                                match = item.get('manifest', {}).get('platform') == 'YouTube'
-                                return match if youtube_only else not match
+                                platform = item.get('manifest', {}).get('platform')
+                                if discord_only:
+                                    return platform == 'Discord'
+                                if exclude_discord and platform == 'Discord':
+                                    return False
+                                if linkedin_only:
+                                    return platform == 'LinkedIn'
+                                match = platform == 'YouTube'
+                                return match if youtube_only else not match if exclude_youtube else True
                             data['jobs'] = [job for job in jobs if selected_platform(job)]
                             data['reviews'] = [review for review in reviews if selected_platform(review)]
                             try:
-                                self.commands.engine.invalidate(state)
+                                self._invalidate_owned(state)
                             finally:
                                 data['jobs'], data['reviews'] = jobs, reviews
                         else:
-                            if youtube_only or exclude_youtube or linkedin_only or discord_only or exclude_discord:
-                                # Invalidation can hold jobs too; the isolated lane must
-                                # not change another platform's review or queued job.
-                                data = state['phase2']
-                                jobs, reviews = data['jobs'], data['reviews']
-                                def selected_platform(item):
-                                    platform = item.get('manifest', {}).get('platform')
-                                    if discord_only:
-                                        return platform == 'Discord'
-                                    if exclude_discord and platform == 'Discord':
-                                        return False
-                                    if linkedin_only:
-                                        return platform == 'LinkedIn'
-                                    match = platform == 'YouTube'
-                                    return match if youtube_only else not match if exclude_youtube else True
-                                data['jobs'] = [job for job in jobs if selected_platform(job)]
-                                data['reviews'] = [review for review in reviews if selected_platform(review)]
-                                try:
-                                    self._invalidate_owned(state)
-                                finally:
-                                    data['jobs'], data['reviews'] = jobs, reviews
-                            else:
-                                self._invalidate_owned(state)
+                            self._invalidate_owned(state)
                     selected = None
                     for job in sorted(state["phase2"]["jobs"], key=lambda item: item.get('lastDispatchedAt', 0)):
                         if scoped and job.get('id') != job_id:
@@ -593,17 +578,20 @@ class PostgresWorker:
                         if scoped and job.get('providerReference') and job.get('state') not in IN_FLIGHT:
                             self._event(job, 'uncertain', 'Known provider receipt retained; reconcile without creating another post')
                         stage = job.get('progress', {}).get('stage')
-                        instagram = job['manifest']['platform'] == 'Instagram' and hasattr(self.social, 'advance_instagram')
+                        from .official_publishers import ASYNC_PLATFORMS, FORWARD_STAGES
+                        official = (job['manifest']['platform'] in ASYNC_PLATFORMS and hasattr(self.social, 'official_enabled')
+                                    and self.social.official_enabled(job['manifest']))
+                        instagram = official or (job['manifest']['platform'] == 'Instagram' and hasattr(self.social, 'advance_instagram'))
                         if instagram and job.get('container') and not stage:
                             self._event(job, 'uncertain', 'Legacy container has no durable stage; reconcile without creating or publishing again')
-                        forward = instagram and stage in ('container_created', 'container_ready') and job['state'] == 'processing'
+                        forward = instagram and stage in FORWARD_STAGES and job['state'] == 'processing'
                         youtube_forward = (job['manifest']['platform'] == 'YouTube' and bool(getattr(self.social, 'youtube', None))
                                            and (stage not in ('native_scheduled', 'native_schedule_reconciling') or job.get('cancelRequested')))
                         pinterest_forward = (job['manifest']['platform'] == 'Pinterest'
                                              and isinstance(self.social, HostedSocial)
                                              and job.get('state') not in IN_FLIGHT)
                         if job.get("cancelRequested") and (job.get("state") not in IN_FLIGHT or forward):
-                            self._event(job, "canceled", "Canceled before provider submission")
+                            self._event(job, "held" if job.get('providerThread') else "canceled", "Further thread creation stopped; already-created provider posts remain" if job.get('providerThread') else "Canceled before provider submission")
                             continue
                         if job['manifest']['platform'] == 'YouTube' and not capacity_ready:
                             # Preserve the operation, approval and journal. Once
@@ -620,6 +608,13 @@ class PostgresWorker:
                             self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
                         reconciliation = job.get("state") in IN_FLIGHT and not forward
                         linkedin_reverify = False
+                        if job['manifest']['platform'] == 'LinkedIn' and not reconciliation:
+                            try:
+                                channel = find(state['phase2']['channels'], job['manifest']['channelId'])
+                            except AlphaError:
+                                self._event(job, 'held', 'LinkedIn connection is unavailable; a new review is required')
+                                continue
+                            linkedin_reverify = self.commands.engine.channel_reverification_due(channel)
                         authority_options = {'allow_reverification': True} if linkedin_reverify else {}
                         if is_discord and not reconciliation and not self._approved(cur, workspace_id, state, job, now=now):
                             self._event(job, 'held', 'Discord needs a current human approval bound to this exact destination and content')
@@ -656,6 +651,13 @@ class PostgresWorker:
                             from . import product_events
                             product_events.publish_outcome(cur, workspace_id, job, "failed")
                             continue
+                        if release_hold:
+                            if adopt_legacy:
+                                # Retain the original exact manifest/digest and attempt history.
+                                # The requester authorizes this server-owned deployment binding now.
+                                job['workerBinding'] = copy.deepcopy(self.worker_binding)
+                            job.pop('previewDispatchPending', None)
+                            self._event(job, 'scheduled', 'Approved preview post released by the authenticated exact-job worker action')
                         youtube_generation = None
                         if is_youtube:
                             from .youtube import workspace_provider_data as youtube_data
@@ -682,7 +684,7 @@ class PostgresWorker:
                             job["checks"] = job.get("checks", 0) + 1
                         elif not forward:
                             self._event(job, "claimed", "Hosted worker acquired the fenced lease")
-                            if not youtube_forward and not pinterest_forward:
+                            if not youtube_forward and not pinterest_forward and not linkedin_reverify:
                                 job.setdefault("attempts", []).append({"number": len(job.get("attempts", [])) + 1, "startedAt": now, "idempotencyKey": job["manifest"]["idempotencyKey"]})
                                 self._event(job, "submitting", "Hosted worker began the approved provider operation")
                         if discord_managed:
@@ -690,18 +692,24 @@ class PostgresWorker:
                         selected = {"workspaceId": workspace_id, "job": copy.deepcopy(job), "reconciliation": reconciliation}
                         if scoped:
                             selected['dispatchPrincipal'] = dispatch_principal
+                        if official and reconciliation and job.get('cancelRequested') and job['manifest'].get('nativeScheduleAt') and job.get('providerReference'):
+                            if job.get('progress', {}).get('stage') != 'cancel_attempted':
+                                job['progress'] = {'version': 1, 'stage': 'cancel_attempted'}
+                                selected.update(job=copy.deepcopy(job), nativeCancel=True)
                         if is_youtube:
                             selected['youtubeAuthorizationGeneration'] = youtube_generation
                         if youtube_forward:
                             selected.update(youtubeForward=True, previousState=previous_state)
                         if pinterest_forward:
                             selected.update(pinterestForward=True, previousState=previous_state)
+                        if linkedin_reverify:
+                            selected.update(linkedinForward=True, previousState=previous_state)
                         if instagram and not reconciliation:
-                            action = 'status' if stage == 'container_created' else 'publish' if stage == 'container_ready' else 'create'
-                            if action != 'status':
+                            action = 'status' if stage in ('container_created', 'children_created', 'assets_uploaded') else 'parent' if stage == 'children_ready' else 'publish' if stage in ('container_ready', 'thread_ready') else 'upload' if stage == 'upload_session' else 'finalize' if stage == 'upload_finalizable' else 'metadata' if stage == 'metadata_pending' else 'create'
+                            if action != 'status' and not linkedin_reverify:
                                 job['progress'] = {'version': 1, 'stage': action + '_attempted'}
-                                self._event(job, 'submitting', 'Durable Instagram ' + action + ' intent recorded')
-                            selected.update(job=copy.deepcopy(job), instagramAction=action)
+                                self._event(job, 'submitting', 'Durable provider ' + action + ' intent recorded')
+                            selected.update(job=copy.deepcopy(job), instagramAction=action, officialAction=official)
                         break
                     if discord_only or selected and discord_worker.managed(selected['job']):
                         state['phase2'][discord_worker.CURSOR] = {'version': 1, 'lastClaimedAt': self._db_now(cur)}
@@ -772,6 +780,12 @@ class PostgresWorker:
                         self._hold_discord_destination(state, job, now)
                 if result.get("reference"):
                     job["providerReference"] = result["reference"]
+                if "providerUpload" in result:
+                    job["providerUpload"] = result["providerUpload"]
+                if "providerAssets" in result:
+                    job["providerAssets"] = result["providerAssets"]
+                for key in ('providerThread', 'threadChecked'):
+                    if key in result: job[key] = result[key]
                 job["providerConfirmed"] = result["confirmed"]
                 if result.get('visibility'):
                     job['providerVisibility'] = result['visibility']
@@ -814,7 +828,7 @@ class PostgresWorker:
                     job['nextAction'] = 'Reconcile the existing YouTube session or immutable Video ID; never re-upload this operation'
                 if result['state'] == 'processing':
                     job['processingChecks'] = job.get('processingChecks', 0) + 1
-                    if job['processingChecks'] >= 6 and job.get('progress', {}).get('stage') == 'container_created':
+                    if job['processingChecks'] >= (20 if getattr(self.social, 'official_enabled', lambda _: False)(job.get('manifest') or {}) else 6) and job.get('progress', {}).get('stage') in ('container_created', 'children_created', 'assets_uploaded'):
                         self._event(job, 'held', 'Container processing did not finish within bounded checks; review before continuing')
                 if result['state'] == 'native_scheduled':
                     job['nextAt'] = max(now+60, job['manifest']['nativeScheduleAt'])
@@ -832,12 +846,14 @@ class PostgresWorker:
                     job["nextAction"] = "Inspect receipt"
                 else:
                     job["nextAction"] = "Await container processing; not published" if job['state'] == 'processing' else "Await provider reconciliation; do not resubmit"
+                if result.get('retryAfterSeconds'):
+                    job['nextAction'] = 'Await LinkedIn retry backoff; the same approval and bounded retry limit apply'
                 if youtube_progress and progress.get('stage') == 'quota_delayed':
                     job['nextAction'] = 'Publishing delayed by capacity controls; the same approved upload resumes after retryAt. Review the time if approval or publication time expires.'
                 cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s", (json.dumps(state), claimed["workspaceId"], revision))
                 return cur.rowcount == 1
 
-    def authorize_dispatch(self, claimed, *, youtube_verified=False, pinterest_verified=False):
+    def authorize_dispatch(self, claimed, *, youtube_verified=False, pinterest_verified=False, linkedin_verified=False):
         """Re-read cancellation, exact approval and fence immediately before forward work."""
         with self.connection_factory() as db:
             with db.cursor() as cur:
@@ -884,8 +900,11 @@ class PostgresWorker:
                     job['nextAt'] = self.clock() + 1
                     cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
                     return False
-                if ((job.get('cancelRequested') and not youtube_cancel)
+                requester_allowed = (not claimed.get('dispatchPrincipal') or self._requester_may_approve(cur, claimed['workspaceId'], claimed['dispatchPrincipal'], job))
+                if (not requester_allowed or not self._binding_matches(job)
+                        or (job.get('cancelRequested') and not youtube_cancel)
                         or (claimed.get('youtubeForward') and not youtube_verified)
+                        or (claimed.get('linkedinForward') and not linkedin_verified)
                         or (claimed.get('pinterestForward') and not pinterest_verified)
                         or (claimed.get('dispatchPrincipal') and not self._requester_may_approve(cur, claimed['workspaceId'], claimed['dispatchPrincipal'], job))
                         or not self._approved(cur, claimed['workspaceId'], state, job, now=now)):
@@ -895,9 +914,11 @@ class PostgresWorker:
                     job['leaseOwner'], job['leaseUntil'] = None, 0
                     cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
                     return False
-                if (claimed.get('youtubeForward') or claimed.get('pinterestForward')) and not claimed['reconciliation']:
+                if (claimed.get('youtubeForward') or claimed.get('pinterestForward') or claimed.get('linkedinForward')) and not claimed['reconciliation']:
                     job.setdefault('attempts', []).append({'number': len(job.get('attempts', [])) + 1,
                         'startedAt': self.clock(), 'idempotencyKey': job['manifest']['idempotencyKey']})
+                    if claimed.get('linkedinForward') and claimed.get('instagramAction') not in (None, 'status'):
+                        job['progress'] = {'version': 1, 'stage': claimed['instagramAction'] + '_attempted'}
                     self._event(job, 'submitting', 'Hosted worker began the approved provider operation')
                     cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
                     claimed['job'] = copy.deepcopy(job)
@@ -1087,6 +1108,7 @@ class PostgresWorker:
                     or job.get('leaseUntil', 0) <= self.clock()):
                 return False
             if job['state'] == 'claimed':
+                platform = job['manifest']['platform']
                 self._event(job, claimed['previousState'], f'{platform} verification unavailable; no provider operation was sent')
             job['leaseOwner'], job['leaseUntil'] = None, 0
             job['nextAt'] = self.clock() + 60
@@ -1212,7 +1234,10 @@ class PostgresWorker:
             return True
         try:
             if claimed.get('instagramAction'):
-                result = self.social.advance_instagram(claimed['job']['manifest'], claimed['job'], claimed['instagramAction'])
+                advance = self.social.advance_official if claimed.get('officialAction') else self.social.advance_instagram
+                result = advance(claimed['job']['manifest'], claimed['job'], claimed['instagramAction'])
+            elif claimed.get("nativeCancel"):
+                result = self.social.cancel_native(claimed["job"]["manifest"], claimed["job"])
             elif claimed['reconciliation'] and claimed['job']['manifest'].get('operation') == 'discord.reply':
                 result = self.social.reconcile_discord(claimed['job']['manifest'], claimed['job'],
                                                        read_authorize=self._discord_reply_read_guard(claimed, reconciliation=True))
@@ -1244,6 +1269,24 @@ class PostgresWorker:
         from .youtube.fleet import enabled
         fleet_owns_youtube = enabled()
         return self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
+
+    def tick_linkedin(self, max_jobs=25, max_seconds=45):
+        """Bounded server-only LinkedIn lane; no other platform or maintenance I/O."""
+        if type(max_jobs) is not int or not 1 <= max_jobs <= 25 or type(max_seconds) not in (int, float) or not 1 <= max_seconds <= 45:
+            raise AlphaError('Use bounded LinkedIn worker limits.', 503)
+        started, processed = time.monotonic(), 0
+        while processed < max_jobs and time.monotonic() - started < max_seconds:
+            if self.step(linkedin_only=True):
+                processed += 1
+            elif self.claim_contended:
+                # A peer owns only the short SQL claim transaction. Remain in
+                # this bounded lane rather than abandoning a ready queue.
+                time.sleep(.02)
+            else:
+                break
+        return {'processed': processed, 'execution': 'hosted-worker', 'platform': 'LinkedIn',
+                'externalExecution': not isinstance(self.social, DisabledHostedSocial),
+                'budget': {'maxJobs': max_jobs, 'maxSeconds': max_seconds}}
 
     def tick_youtube(self, max_jobs, max_seconds):
         """Dedicated lane: no other platform or maintenance dispatch can run."""

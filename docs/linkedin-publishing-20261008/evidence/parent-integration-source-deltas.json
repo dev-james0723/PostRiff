@@ -1,0 +1,32 @@
+{
+  "schema": "rafii.parent-integration-delta.v1",
+  "sourceSha": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+  "workerCandidateReceipt": "worker-dispatch-candidate/RESULT.json",
+  "changedSinceWorker": [
+    {
+      "path": "src/postriff_phase2/hosted_worker.py",
+      "workerCandidateHash": "367850f8cf379b4870c9aebc2c88d127285e653b51068594f69b27087a154ba4",
+      "currentHash": "e69721f15d723ff170485d6ce7e0c48e94c155f56fd3a98e28a608d506b9d378"
+    },
+    {
+      "path": "web/src/features/queue/job-sheet.tsx",
+      "workerCandidateHash": "381ef10732e1cb49ba6b7b85bcf9f2e3d4d04f834a9029c4477abc8769681f66",
+      "currentHash": "5e95b28e70556763a46d47b29fef8a5a98eebb8daf8935a9fe9ed08192040a20"
+    },
+    {
+      "path": "web/tests/job-dispatch.test.mjs",
+      "workerCandidateHash": "89428677adea76782063968fa00ffb6712d210ea9393d3f47936af2716b11a79",
+      "currentHash": "f74772585626cc9b11d79d12f295b5575b72f0fe8d077fdfaa496806e8907db4"
+    },
+    {
+      "path": "web/tests/official-social-browser.cjs",
+      "workerCandidateHash": "ab4a89bbe291f24a5cf7df5440dffc7d6d6c8247d4babaf102160da6b2a93743",
+      "currentHash": "7ac803ec3266217d641ef010196873f34753bd3e0db02b8ae096212531ee1499"
+    }
+  ],
+  "reasons": [
+    "hosted_worker tolerates absent reviews in bounded retry fixture; focused Python RED/GREEN and complete GitHub suite passed at7a4",
+    "job-sheet restores fresh review for expired no-submit preview holds; focused Depot browser RED/GREEN atd38"
+  ],
+  "workerHistoricalReceiptPreserved": true
+}

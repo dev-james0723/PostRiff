@@ -138,6 +138,8 @@ class ConnectionFlowRepository:
             self.result = (self.generation,)
         elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
             self.result = (self.generation,) if params[1] in self.credentials else None
+        elif sql.startswith('UPDATE public.pr_workspaces SET state='):
+            self.state = json.loads(params[0])
         elif sql.startswith('INSERT INTO public.pr_channel_capabilities'):
             pass
         else:
@@ -781,8 +783,11 @@ class YouTubeOAuthBindingTests(unittest.TestCase):
                                               'fixture:' + old['accessToken'], 'fixture:' + old['refreshToken'],
                                               'fixture-key', [READ], NOW - 1, True)
         repository.generation = 'synthetic-old-consent'
+        repository.state['phase2']['channels'].append({'id': connection, 'platform': 'YouTube',
+            'providerAccountId': account, 'scopes': [READ], 'revoked': False})
         standard.identity = Mock(return_value={'providerAccountId': account, 'handle': 'Synthetic', 'accountType': 'channel'})
-        commands = SimpleNamespace(upsert_verified_channel=lambda state, actor, channel, **kw: state['phase2']['channels'].append(channel))
+        commands = SimpleNamespace(upsert_verified_channel=lambda state, actor, channel, **kw:
+            (state['phase2']['channels'].append(channel), state)[1])
         service = OAuthService(repository, commands, vault, {'youtube': standard}, 'https://rafii.example', clock=lambda: NOW)
         stub_policy_dependency(service)
         service._keep_picture = Mock()
@@ -920,7 +925,8 @@ class YouTubeOAuthBindingTests(unittest.TestCase):
         for provider in (standard, agentic):
             provider.identity = Mock(return_value=identity)
             provider.exchange = Mock(return_value=provider._grant({'access_token': 'synthetic-access', 'refresh_token': 'synthetic-refresh', 'scope': ' '.join([READ, UPLOAD, MANAGE]), 'expires_in': 3600}))
-        commands = SimpleNamespace(upsert_verified_channel=lambda state, actor, channel, **kw: state['phase2']['channels'].append(channel))
+        commands = SimpleNamespace(upsert_verified_channel=lambda state, actor, channel, **kw:
+            (state['phase2']['channels'].append(channel), state)[1])
         service = OAuthService(repository, commands, vault, {'youtube': standard}, 'https://legacy.example', clock=lambda: NOW,
                                youtube_public_base_url='https://rafii.example')
         stub_policy_dependency(service)

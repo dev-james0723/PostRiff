@@ -14,6 +14,7 @@ import secrets
 import time
 import zipfile
 import zoneinfo
+from urllib.parse import urlsplit
 from postriff_alpha.domain import AlphaError
 from postriff_alpha.domain import Store
 from postriff_alpha import profiles
@@ -276,6 +277,7 @@ class HostedPhase2Commands:
 
     def present(self, state, revision):
         shown = self.engine._present(state, revision)
+        shown['workerBinding'] = copy.deepcopy(self.engine.worker_binding)
         shown['state']['brandBrain'] = brand_brain.projection(state)
         shown['workerBinding'] = copy.deepcopy(self.engine.worker_binding)
         return shown
@@ -422,6 +424,8 @@ class HostedPhase2Commands:
             raise AlphaError("A complete server-verified channel record is required.")
         if channel.get("authorizationLane", "standard") not in ("standard", "agentic"):
             raise AlphaError("A server-bound YouTube authorization lane is required.")
+        groups = channel.get('enabledPermissionGroups',[])
+        if not isinstance(groups,list) or len(groups) > 30 or any(not isinstance(g,str) or not re.fullmatch(r'[a-z_]{1,40}',g) for g in groups): raise AlphaError('Invalid enabled permission groups.',400)
         saved = copy.deepcopy(channel)
         # identityVerified comes from the provider identity endpoint; capabilityVerified only when
         # publish scopes were granted to a production-reviewed app (see OAuthService._capabilities).
@@ -468,6 +472,7 @@ class HostedWorkspaceService:
         from .audience import AudienceService
         credential_vault = vault or CredentialVault(None)
         self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock, youtube_public_base_url=youtube_public_base_url)
+        self.oauth.native_social.assets = self.assets
         self.productivity_connectors = productivity_connectors.ProductivityConnectorService(
             self.repository, credential_vault, productivity_providers or {}, public_base_url,
             flags=productivity_flags or {}, clock=clock,

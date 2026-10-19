@@ -1,0 +1,70 @@
+{
+  "observedAtUtc": "2026-10-08T03:42:14.046678+00:00",
+  "execution": "REAL validated resolved merge recovered from saved Git index; new commit/preview pending",
+  "candidateParent": "18798a19fc5ad11262f0350b216bebcb83ec6248",
+  "upstreamParent": "8377ebbb037633d7a360207872f37c51ae088fba",
+  "cloudValidation": [
+    {
+      "task": "ci",
+      "runId": "ntmbjzz255",
+      "exitCode": 0,
+      "elapsedSeconds": 132.845,
+      "receiptLocal": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T032455815601Z-ci.json",
+      "sourceHead": "18798a19fc5ad11262f0350b216bebcb83ec6248",
+      "sourceFingerprint": "0d302bab4bad4d97d0efa3939732545eaa7281bb8050ab82c6166761681c7169",
+      "patchSha256": "3bc0815a03908a85e61b58674f33b97a74d0e3b80e74bb4014eeea4ab5d7920f",
+      "patchBytes": 806712,
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/ntmbjzz255"
+    },
+    {
+      "task": "e2e",
+      "runId": "0j6slmkf5x",
+      "exitCode": 0,
+      "elapsedSeconds": 86.573,
+      "receiptLocal": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T032644435650Z-e2e.json",
+      "sourceHead": "18798a19fc5ad11262f0350b216bebcb83ec6248",
+      "sourceFingerprint": "0d302bab4bad4d97d0efa3939732545eaa7281bb8050ab82c6166761681c7169",
+      "patchSha256": "3bc0815a03908a85e61b58674f33b97a74d0e3b80e74bb4014eeea4ab5d7920f",
+      "patchBytes": 806712,
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/0j6slmkf5x"
+    }
+  ],
+  "resolvedFilesSha256": {
+    ".depot/workflows/james-cloud-build.yml": "4d54e572641bda5d9ff11ab96da788c4daed9a8eb4357404de4b5c087f3e7295",
+    ".james-cloud-build.json": "ce42ea77a90316cd833984494baa43812630f2fa467ebaadbb94056cfe20b238",
+    "tests/phase2/rls.sql": "591939887ccb281ab3ab62737c848d57f697895bf80a02059dac55cfea5367d4",
+    "web/package-lock.json": "9460a6ea4d9a6bb7dd1d9a15dbef03028ce10fed3bee61f75d362e0f609c15f4",
+    "web/package.json": "1d8bbf335151e6bb55761b6d0978109ab72ad345a7611084c71f42599e7bb698",
+    "web/src/features/agent/attachments/picker-items.ts": "f3a298170d476b3ea948f2f3c6199491a41b7a9f7853ce9b56c4a3083cd2f9b9",
+    "web/src/features/agent/attachments/use-composer-attachments.ts": "88c0b9f3416e96170d5aca19a989c3bfc84f42a315cd9e607aab5dfc33f5a6a4",
+    "web/src/features/library/asset-card.tsx": "575c46b3e3a1522c904d5b4a2d25a57dbf4a8242c6423c2fc9eec00dc87fbf20",
+    "web/src/features/library/asset-detail.tsx": "e8894996fd22d6cecb92f42a66300c1084a33b03df8a2fa01375dc17b066720f",
+    "web/src/lib/api/types.ts": "3e08fd8613eeaf434d3b59818167a6e717e089a7d05ad85ccfc876ad4f8831b9",
+    "web/src/lib/media/asset-kinds.ts": "c971a3e7195e21385a44f9019a6f8e53decc8357b34ea123d34da84fc7ea7e29"
+  },
+  "resolutions": [
+    "Preserve upstream Universal Library including audio/documents and 093-096 migrations/workflow.",
+    "Preserve authenticated legacy PDF download/post support and image/video composer media chips.",
+    "Retain social cloud mappings plus union secret-safe exclusions; npm ci/audit passed remotely.",
+    "Retain both Library and social disposable SQL migrations; no production DDL."
+  ],
+  "limits": "Cloud tests are synthetic; no real provider call, real iPhone or production acceptance. Source fingerprint was recorded from both successful runs before the worktree access stall; it is not recomputed from a new clock or mocked token.",
+  "recovery": {
+    "reason": "Local open/getcwd calls on the recovery worktree time out; a one-second stack sample shows open during zsh getcwd, before the commit command. Main-repository Git metadata remains readable.",
+    "method": "Copy only this worktree index into a temporary index; retain its exact staged source and add scoped evidence blobs. Create a two-parent candidate commit and push without force. Original working files, index, local branch and MERGE_HEAD remain unchanged until filesystem access recovers.",
+    "originalIndexSha256": "343c0df8869f43f200533f9c4ab92afeca4dae29479ed0dd1f5a0f0a7b45bb09",
+    "diagnosticLocal": "/private/tmp/rafii-shell-stall-sample.txt",
+    "noActiveCommitHooks": "Verified no core.hooksPath and no non-sample common Git hooks.",
+    "safety": "No security policy changes, registry deletion, cookie export, reset, force-push or unrelated worktree/index mutation."
+  },
+  "counts": {
+    "capabilities": 205,
+    "liveCases": 196,
+    "livePartial": 2,
+    "liveNotRun": 194,
+    "livePassed": 0,
+    "ordinaryExternalBasicProvidersObserved": 1,
+    "fullAcceptanceProviders": 0
+  },
+  "next": "Push candidate object to approved branch, verify required CI and exact preview source, then B saved usable identity grant. Reconcile local worktree later without resetting unrelated changes."
+}

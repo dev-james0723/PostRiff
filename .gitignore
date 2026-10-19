@@ -60,3 +60,6 @@ control-web/.env*
 !control-web/.env.example
 docs/rafii-control-v2/evidence/raw/
 /.founder-signin-evidence/
+
+# Generated from the clean release commit immediately before source upload.
+/src/postriff_phase2/release-source.json

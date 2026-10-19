@@ -4,6 +4,7 @@ import { YouTubeManifestDetails } from '@/features/youtube/manifest-details';
 import { PublicationReceipt } from './publication-receipt';
 import { canPublishApprovedJob, recoverablePreviewHold } from './job-dispatch';
 import { PublishApprovedPostButton } from './publish-approved-post-button';
+import { LinkedInPostEdit } from './linkedin-post-edit';
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { toast } from 'sonner';
@@ -239,7 +240,7 @@ function FooterActions({ job, nowSeconds, workerBinding, canApprove, canSchedule
   const expired = recoverable && job.manifest.expiresAt <= nowSeconds;
   const prepare = canSchedule && (HELD.has(job.state) || failed) && (!recoverable || expired);
   const cancel = canApprove && canCancel(job);
-  const publish = job.manifest.platform === 'Discord' && canPublishApprovedJob(job, nowSeconds, canApprove, workerBinding);
+  const publish = ['Discord', 'LinkedIn'].includes(job.manifest.platform) && canPublishApprovedJob(job, nowSeconds, canApprove, workerBinding);
   if (!prepare && !cancel && !publish) return null;
   const available = draftAvailable(job.manifest.variantId);
   return (
@@ -304,6 +305,7 @@ export function JobSheet(props: JobSheetProps) {
       <Timeline job={job} />
       <Attempts job={job} />
       <Platform job={job} nowSeconds={nowSeconds} />
+      <LinkedInPostEdit key={job.id} job={job} />
     </div>
   ) : null;
   const footer = job ? (

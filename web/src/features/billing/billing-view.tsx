@@ -11,6 +11,8 @@ import { ApiError } from '@/lib/api/client';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { relativeTime } from '@/lib/time';
 import { Allowances } from './allowances';
+import { hasUnlimitedFounderAccess } from './billing-model';
+import { FounderAccess } from './founder-access';
 import { CreditBalance } from './credit-balance';
 import { CreditPacks } from './credit-packs';
 import { PAGE, infoContent } from './billing-copy';
@@ -100,6 +102,7 @@ export function BillingView() {
   useEffect(() => setNow(Date.now() / 1000), [usage.dataUpdatedAt]);
 
   const data = usage.data;
+  const unlimited = data ? hasUnlimitedFounderAccess(data) : false;
 
   return (
     <PageContainer pageTitle={PAGE.title} infoContent={infoContent}>
@@ -113,10 +116,16 @@ export function BillingView() {
         <div className='flex flex-col gap-8'>
           {phase !== 'idle' && <CheckoutConfirmation phase={phase} />}
           {usage.isError && <LoadError error={usage.error} hasData updatedAt={usage.dataUpdatedAt} onRetry={() => usage.refetch()} />}
-          <PlanCard usage={data} isOwner={isOwner} redirect={redirect} now={now} />
-          {data.credits ? <CreditBalance balance={data.credits} /> : <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />}
-          <Plans usage={data} isOwner={isOwner} redirect={redirect} />
-          {data.credits && isOwner && <CreditPacks />}
+          {unlimited ? (
+            <FounderAccess />
+          ) : (
+            <>
+              <PlanCard usage={data} isOwner={isOwner} redirect={redirect} now={now} />
+              {data.credits ? <CreditBalance balance={data.credits} /> : <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />}
+              <Plans usage={data} isOwner={isOwner} redirect={redirect} />
+              {data.credits && isOwner && <CreditPacks />}
+            </>
+          )}
           {/* Run-by-run costs are the owner's; other members simply don't see the section. */}
           {isOwner && <Ledger entries={data.ledger} canEdit={canEdit} />}
         </div>

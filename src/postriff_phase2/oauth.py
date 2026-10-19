@@ -6,6 +6,7 @@ never exchanges) → authenticated `complete` (same member, same workspace, sing
 server-side connector worker; they never reach the browser, the agent, or a log.
 """
 import base64
+import copy
 from contextlib import contextmanager
 import hashlib
 import hmac
@@ -96,6 +97,22 @@ class OAuthService:
         self.youtube_policy = YouTubePolicyAcceptance(self)
         from .social_history import SocialHistoryService
         self.history = SocialHistoryService(self)
+        from .official_operations import SocialActionsService
+        self.native_social = SocialActionsService(self)
+
+    def _invalidate_linkedin_connection(self, state, connection_id):
+        """LinkedIn maintenance may invalidate only this account's approvals."""
+        data = state.get('phase2', {})
+        jobs, reviews = data.get('jobs', []), data.get('reviews', [])
+        def selected(item):
+            return (item.get('manifest', {}).get('channelId') == connection_id
+                    and item['manifest'].get('platform') == 'LinkedIn')
+        data['jobs'] = [job for job in jobs if selected(job)]
+        data['reviews'] = [review for review in reviews if selected(review)]
+        try:
+            self.commands.engine.invalidate(state)
+        finally:
+            data['jobs'], data['reviews'] = jobs, reviews
 
     def _pinterest_private_pin_allowed(self, pin_id):
         """Only IDs durably returned by an approved intent in this exact active trial."""
@@ -182,6 +199,14 @@ class OAuthService:
             history = pid == 'instagram' or (pid == 'linkedin' and bool(getattr(adapter, 'history_approved', False)))
             connect_ready = adapter is not None and not issues and contract_verified
             reviewed = bool(adapter and adapter.production_reviewed)
+            from .connection_review import public_connection_review
+            public_ready = bool(adapter and connect_ready and public_connection_review(adapter, callback))
+            if pid == 'facebook' and adapter and hasattr(adapter, 'connection_review') and (not adapter.config_id or not getattr(adapter, 'login_configs', {}).get(tuple(sorted(adapter.capability_scopes('identity'))))):
+                issues.append('The operator must configure Facebook Login for Business for the exact basic Page connection permissions.')
+                connect_ready = False
+            if adapter and hasattr(adapter, 'connection_review') and not public_ready:
+                issues.append('Provider review pending: external-user access for the minimum connection permissions and this callback has not been verified.')
+                connect_ready = False
             normalized = cls.normalized_capabilities() if getattr(cls, 'wave', None) else None
             if normalized is None:
                 legacy = {cap: bool(adapter and adapter.capability_scopes(cap)) for cap in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply')}
@@ -219,13 +244,15 @@ class OAuthService:
                 'analyticsPermission': bool(diagnostic.get('analyticsPermission')), 'commentsPermission': bool(diagnostic.get('commentsPermission')),
                 'productionEnabled': bool(diagnostic.get('productionEnabled')) and not paused,
             }
-            readiness = configuration if adapter is None else 'paused' if paused else 'configuration_blocked' if not connect_ready else 'identity_connection_available' if reviewed else 'configured_awaiting_provider_review'
+            readiness = configuration if adapter is None else 'paused' if paused else 'provider_review_pending' if adapter and hasattr(adapter, 'connection_review') and not public_ready and len(issues) == 1 else 'configuration_blocked' if not connect_ready else 'identity_connection_available' if public_ready else 'configured_awaiting_provider_review'
             entries.append({'id': pid, 'platform': cls.platform, 'configured': adapter is not None,
                             'connectReady': connect_ready, 'configurationState': configuration, 'credentialPresence': presence,
-                            'readinessState': readiness, 'publicConnectionReady': connect_ready and reviewed and not (getattr(adapter, 'trial_readonly', False) or getattr(adapter, 'private_trial', False)), 'liveVerified': False,
+                            'readinessState': readiness, 'publicConnectionReady': public_ready and not (getattr(adapter, 'trial_readonly', False) or getattr(adapter, 'private_trial', False)), 'liveVerified': False,
                             'reviewStatus': 'operator_declared_reviewed' if reviewed else 'not_confirmed',
                             'reviewNote': 'Review readiness is operator-declared, not independently verified with the platform. Unreviewed apps may be limited to eligible app-role test accounts.',
                             'productionReviewed': reviewed, 'executionPaused': paused,
+                            'memberPublishingApproved': bool(pid == 'linkedin' and adapter and getattr(adapter, 'member_publishing_approved', lambda: False)()),
+                            'memberPublishingStatus': getattr(adapter, 'member_publishing_status', lambda: None)() if pid == 'linkedin' and adapter else None,
                             **({'trialReadonly': bool(getattr(adapter, 'trial_readonly', False)), 'privateTrial': bool(getattr(adapter, 'private_trial', False)), 'trialVisibility': 'creator_only' if getattr(adapter, 'private_trial', False) else None} if pid == 'pinterest' else {}),
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
@@ -243,6 +270,13 @@ class OAuthService:
                 entries.append({'id': pid, 'platform': adapter.platform, 'configured': True, 'productionReviewed': adapter.production_reviewed,
                                 'executionPaused': not getattr(adapter, 'execution_enabled', True),
                                 'capabilities': {cap: bool(adapter.capability_scopes(cap)) for cap in ('identity', 'publish', 'analytics', 'comments_read', 'reply')}})
+        from .official_social import CATALOG, capability_states
+        for entry in entries:
+            pid, adapter = entry['id'], self.providers.get(entry['id'])
+            if pid in CATALOG:
+                entry['officialCapabilities'] = capability_states(pid, approvals=getattr(adapter, 'official_approvals', {}), implemented=getattr(adapter, 'official_implemented', ()), connection_approval=getattr(adapter, 'connection_review', {}) if entry.get('publicConnectionReady') else {}, member_publishing_approved=entry.get('memberPublishingApproved', False), now=self.clock())
+                groups = {f.permission_group for f in CATALOG[pid].values() if f.support == 'documented'}
+                entry['capabilities'].update({group: bool(adapter and adapter.capability_scopes(group)) for group in groups})
         return entries
 
     @staticmethod
@@ -271,11 +305,12 @@ class OAuthService:
             elif read_scope:
                 history = 'HISTORICAL_IMPORT_PERMISSION_UNAVAILABLE'
             if publish_scope and publish_scope in scopes:
-                if not provider.get('productionReviewed'):
+                member_product = platform == 'LinkedIn' and channel.get('accountType') == 'member' and provider.get('memberPublishingApproved')
+                if not provider.get('productionReviewed') and not member_product:
                     publishing = 'PUBLISHING_AWAITING_PROVIDER_REVIEW'
                 elif channel.get('capabilities', {}).get('publish', {}).get('level') == 'Direct':
                     publishing = 'PUBLISHING_AVAILABLE'
-        return {'connection': 'CONNECTED' if connected else 'REAUTHORIZATION_REQUIRED' if channel.get('connectionState') in ('token_expired', 'reauthorization_required', 'scope_missing') else 'NOT_CONNECTED',
+        return {'connection': 'DESTINATION_REQUIRED' if platform == 'Facebook' and channel.get('accountType') == 'person' and channel.get('connectionState') in ('read_verified', 'publish_verified', 'identity_known') else 'CONNECTED' if connected else 'REAUTHORIZATION_REQUIRED' if channel.get('connectionState') in ('token_expired', 'reauthorization_required', 'scope_missing') else 'NOT_CONNECTED',
                 'history': history, 'publishing': publishing,
                 'fullyAvailable': history == 'HISTORICAL_IMPORT_AVAILABLE' and publishing == 'PUBLISHING_AVAILABLE',
                 'evidence': 'last_verified_grant', 'liveVerified': False}
@@ -443,9 +478,19 @@ class OAuthService:
             if getattr(type(adapter), 'provider_approval_required', False) and not diagnostic.get('providerVerified'):
                 raise AlphaError("This connection is waiting for provider application approval.", 409)
             raise AlphaError("This connection is not enabled yet.", 409)
+        from .connection_review import public_connection_review
+        if hasattr(adapter, 'connection_review') and not public_connection_review(adapter, self.callback_uri(provider_id)):
+            raise AlphaError('Provider review pending for public account connection. The operator must verify this app and callback; customers do not need developer apps or tester roles.', 409)
+        from .official_social import CATALOG
+        feature_groups = {f.permission_group for f in CATALOG.get(provider_id, {}).values() if f.support == 'documented'}
         youtube_features = tuple(adapter.SCOPES) if provider_id == 'youtube' else ('boards_read',) if provider_id == 'pinterest' else ()
-        if capability not in (*CAPABILITIES, 'posts_read', *youtube_features) or capability in ("media_types", "webhooks"):
+        if capability not in (*CAPABILITIES, 'posts_read', *feature_groups, *youtube_features) or capability in ("media_types", "webhooks"):
             raise AlphaError("Choose the capability you want to enable.", 400)
+        if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+            # A connection starts before the account ID exists. A separate, narrow
+            # workspace OAuth budget must authorize its first paid identity lookup.
+            from .social_budget import XRequestBudget
+            XRequestBudget(self, workspace_id, 'oauth').available()
         scopes = adapter.capability_scopes(capability)
         if not scopes:
             raise AlphaError(f"{adapter.platform} does not offer '{capability}' through its official API for this app.", 409)
@@ -474,6 +519,16 @@ class OAuthService:
                 if not authorization or authorization[0] is not True:
                     raise AlphaError('Sensitive creator access is not authorized for this workspace.', 403)
             throttle(cur, f"oauth-start:{workspace_id}", 20, 600)
+            workspace_state = json.loads(row[1]) if isinstance(row[1],str) else copy.deepcopy(row[1])
+            previous = next((c for c in workspace_state.get('phase2',{}).get('channels',[]) if c.get('id') == (inputs or {}).get('connectionId') and c.get('platform') == adapter.platform and not c.get('revoked')),None)
+            if (inputs or {}).get('connectionId') and previous is None:
+                raise AlphaError('The connection to reconnect is unavailable in this workspace.', 404)
+            groups = set(previous.get('enabledPermissionGroups') or (['publish'] if previous.get('capabilityVerified') else ['identity'])) if previous and capability != 'identity' else set()
+            groups.add(capability)
+            if previous and capability != 'identity':
+                retained = set(previous.get('scopes') or [])
+                allowed = {scope for group in groups for scope in adapter.capability_scopes(group)}
+                scopes = sorted(set(scopes) | (retained & allowed))
             state = secrets.token_urlsafe(32)
             verifier, challenge = pkce_pair()
             custody = json.dumps({'pkce': verifier, 'connectionId': (inputs or {}).get('connectionId'),
@@ -482,9 +537,15 @@ class OAuthService:
             if provider_id == 'pinterest':
                 custody = json.dumps({'pkce': verifier, 'binding': self._pinterest_binding(adapter)})
             ciphertext, key_id = self.vault.encrypt(custody)
-            stored_capability = capability if capability in CAPABILITIES else 'identity'
+            stored_capability = {'organization_publish': 'publish', 'organization_analytics': 'analytics'}.get(capability, capability if capability in CAPABILITIES else 'identity')
             cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, stored_capability, redirect, list(scopes), hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
             transaction_id = cur.fetchone()[0]
+            if provider_id in CATALOG:
+                requests = workspace_state.setdefault('phase2',{}).setdefault('oauthFeatureRequests',{})
+                requests = {key:value for key,value in requests.items() if self.clock()-value.get('createdAt',0) < TRANSACTION_TTL}
+                requests[transaction_id] = {'capability':capability,'groups':sorted(groups),'expectedAccountId':previous.get('providerAccountId') if previous else None,'createdAt':self.clock()}
+                workspace_state['phase2']['oauthFeatureRequests'] = requests
+                cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',(json.dumps(workspace_state),workspace_id))
             audit(cur, workspace_id, principal, "oauth.started", transaction_id, {"provider": provider_id, "capability": capability, **({'authorizationLane': lane} if provider_id == 'youtube' else {})})
             return {"transactionId": transaction_id, "provider": provider_id, "platform": adapter.platform, "capability": capability, "scopes": list(scopes), "permissionExplanation": adapter.explain(capability), "authorizeUrl": adapter.authorize_url(redirect, state, challenge, scopes), "expiresAt": self.clock() + TRANSACTION_TTL, **({'authorizationLane': lane} if provider_id == 'youtube' else {})}
 
@@ -517,7 +578,7 @@ class OAuthService:
         ciphertext, key_id = self.vault.encrypt(json.dumps({"verifier": verifier, **context}))
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(_membership(row), "manage_connections")
-            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, 'identity' if capability == 'posts_read' else capability, redirect, scopes, hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
+            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, {'organization_publish': 'publish', 'organization_analytics': 'analytics'}.get(capability, capability if capability in CAPABILITIES else 'identity'), redirect, scopes, hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
             transaction_id = cur.fetchone()[0]
             audit(cur, workspace_id, principal, "oauth.started", transaction_id, {"provider": provider_id, "capability": capability})
         return {"transactionId": transaction_id, "provider": provider_id, "platform": adapter.platform, "capability": capability, "scopes": scopes,
@@ -531,6 +592,33 @@ class OAuthService:
         allowed = {k: clean(v, 512) for k, v in query.items() if k in ("state", "code", "error", "error_description", "iss")}
         allowed["provider"] = provider_id
         return f"{web_base_url.rstrip('/')}/channels/connect?{urlencode(allowed)}"
+
+    def completion_context(self, token, provider_id, state):
+        """Recover the initiating workspace after sign-in; state alone reveals nothing."""
+        if not isinstance(state, str) or not 20 <= len(state) <= 128:
+            raise AlphaError('Connection request unavailable.', 404)
+        principal = self.repository.verify_session(token)
+        with self.repository.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT t.workspace_id::text,extract(epoch from t.expires_at) FROM public.pr_oauth_transactions t JOIN public.pr_memberships m ON m.workspace_id=t.workspace_id AND m.user_id=t.member_id JOIN public.pr_profiles p ON p.user_id=t.member_id WHERE t.state_hash=%s AND t.provider=%s AND t.member_id=%s AND t.consumed_at IS NULL AND m.status='active' AND p.deleted_at IS NULL", (hashlib.sha256(state.encode()).hexdigest(), provider_id, principal))
+                row = cur.fetchone()
+                if not row or row[1] <= self.clock():
+                    raise AlphaError('This connection request is unavailable or expired. Sign in as the account that started it, or start again.', 404)
+                return {'workspaceId': row[0]}
+
+    def _claim_redirect(self, workspace_id, token, provider_id, state_hash):
+        """Commit single use before remote exchange, including unknown exchange outcomes."""
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            from .hosted import _membership
+            require(_membership(row), 'manage_connections')
+            cur.execute("SELECT id::text,member_id::text,provider,capability,redirect_uri,scopes,verifier_ciphertext,key_id,extract(epoch from expires_at),consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE state_hash=%s AND workspace_id=%s FOR UPDATE", (state_hash, workspace_id))
+            txn = cur.fetchone()
+            if not txn or txn[1] != principal or txn[2] != provider_id or txn[9]:
+                raise AlphaError('Connection request unavailable.', 404)
+            if txn[8] <= self.clock():
+                raise AlphaError('This connection request expired. Start again.', 409)
+            cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome=NULL WHERE id::text=%s", (txn[0],))
+            return txn[0]
 
     # --- complete (authenticated exchange) ----------------------------------------
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
@@ -610,6 +698,10 @@ class OAuthService:
         if not isinstance(state, str) or not 20 <= len(state) <= 128:
             raise AlphaError("Connection request unavailable.", 404)
         state_hash = hashlib.sha256(state.encode()).hexdigest()
+        if not bot_code and not device_code and claimed is None:
+            # YouTube already commits single use before unlocked quota admission.
+            # Reuse that internal claim; consuming it twice rejects a valid callback.
+            claimed = self._claim_redirect(workspace_id, token, provider_id, state_hash)
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
@@ -691,6 +783,9 @@ class OAuthService:
                 grant = adapter.exchange(code, verifier, redirect, iss=iss)
             else:
                 grant = adapter.exchange(code, verifier, redirect)
+            if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+                from .social_budget import BudgetedToken, XRequestBudget
+                grant['accessToken'] = BudgetedToken(grant['accessToken'], XRequestBudget(self, workspace_id, 'oauth', cursor=cur))
             if provider_id == 'youtube':
                 # Incremental Google consent can return older, broader permissions.
                 # Only the legacy nonpublic READ grant may proceed without policy.
@@ -706,6 +801,11 @@ class OAuthService:
                 bound = json.loads(grant['accessToken'])
                 bound['accountId'] = identity['providerAccountId']
                 grant['accessToken'] = json.dumps(bound)
+            workspace_state = json.loads(row[1]) if isinstance(row[1],str) else row[1]
+            intent = workspace_state.get('phase2',{}).get('oauthFeatureRequests',{}).get(transaction_id,{})
+            if intent.get('expectedAccountId') and intent['expectedAccountId'] != identity['providerAccountId']:
+                raise AlphaError('Feature authorization must use the connected account. Start a separate connection for another account.',409)
+            enabled_groups = intent.get('groups') or [capability]
             # Requested scopes are not proof of granted scopes. Empty/unknown fails closed.
             reported = grant.get('scopes')
             if (reported is None or (provider_id == 'youtube' and not reported)) and hasattr(adapter, 'inspect_scopes'):
@@ -745,44 +845,51 @@ class OAuthService:
                 self.youtube_policy.bind(cur, workspace_id, connection_id, policy_acceptance)
             now = self.clock()
             matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
+            if not missing:
+                for group in enabled_groups:
+                    scopes_for_group = adapter.capability_scopes(group)
+                    if scopes_for_group and set(scopes_for_group).issubset(granted):
+                        mapped = 'publish' if group in ('organization_publish','upload_inbox') else 'analytics' if group.startswith('organization_') and 'analytics' in group else 'comments_read' if group == 'organization_comments_read' else 'reply' if group == 'organization_reply' else group
+                        candidate = self._capabilities(adapter,mapped,granted,[],now,grant['accessToken'])
+                        for name,value in candidate.items():
+                            if value['level'] == 'Direct': matrix[name] = value
             for name, value in matrix.items():
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
             from . import product_events
             # Product taxonomy (PRD §8.6): one event per completed connect flow (the OAuth transaction is the version).
             product_events.record(cur, workspace_id, principal, "channel.connected", connection_id, transaction_id, {"provider": provider_id})
-        # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
-        horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
-        channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
-        if provider_id == 'discord':
-            with self.repository.connection_factory() as db, db.cursor() as cur:
-                cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='discord' AND revoked_at IS NULL", (workspace_id, connection_id))
+            # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
+            horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
+            channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "enabledPermissionGroups": enabled_groups, "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
+            if provider_id == 'discord':
+                cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='discord' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
                 generation_row = cur.fetchone()
                 if not generation_row:
                     raise AlphaError('This Discord connection changed. Reconnect before authorizing channels.', 409)
                 channel['discordAuthorizationGeneration'] = generation_row[0]
-        if provider_id == 'youtube':
-            channel['refreshBindingRequired'] = False
-            channel['authorizationLane'] = getattr(adapter, 'authorization_lane', 'standard')
-            channel['youtubeIdentityIngestedAt'] = now
-        snapshot = self.repository.get(workspace_id, token)
-        # A disconnect/new consent can commit after token custody but before
-        # this workspace save. The same-transaction fence rolls back a stale
-        # profile restoration rather than trusting a newly fetched revision.
-        def consent_fence(cur, _state, _actor):
-            if provider_id == 'discord':
-                cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='discord' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
-                current = cur.fetchone()
-                if not current or current[0] != channel['discordAuthorizationGeneration']:
-                    raise AlphaError('This Discord connection changed. Reconnect before authorizing channels.', 409)
-            elif provider_id == 'youtube':
+            if provider_id == 'youtube':
+                channel['refreshBindingRequired'] = False
+                channel['authorizationLane'] = getattr(adapter, 'authorization_lane', 'standard')
+                channel['youtubeIdentityIngestedAt'] = now
                 self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
-            else:
-                cur.execute("SELECT access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='pinterest' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
-                fresh = cur.fetchone()
-                if not fresh or fresh[0] != access_ct:
-                    raise AlphaError('Pinterest authorization changed while connecting. Reload and reconnect.', 409)
-        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id in ('youtube', 'discord', 'pinterest') else {}))
+            if provider_id == 'facebook':
+                page = adapter.session(grant['accessToken']).get('page') or {}
+                if page.get('id'):
+                    channel['destinationId'] = page['id']
+            # Credentials, capabilities and customer-visible state commit together.
+            # The workspace row is already locked; a second command transaction
+            # would allow an intervening edit to strand a successfully exchanged grant.
+            import copy
+            # Declining an optional LinkedIn read permission must not invalidate
+            # a separately verified member write grant. The denied operation
+            # retains its own non-Direct capability and missingScopes result.
+            publish_verified = matrix["publish"]["level"] == "Direct" and (not missing or provider_id == 'linkedin')
+            updated = self.commands.upsert_verified_channel(copy.deepcopy(workspace_state), principal, channel, capability_verified=publish_verified)
+            cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(updated), workspace_id))
+            for effect in getattr(self.repository, 'effects', []):
+                effect(cur, workspace_id, workspace_state, updated, principal)
+            saved = {"revision": row[0] + 1}
         self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': consent_generation} if provider_id == 'youtube' else {'pinterest_ciphertext': access_ct} if provider_id == 'pinterest' else {}))
         return {"connected": True, "connectionId": connection_id, "account": channel["account"], "providerAccountId": identity["providerAccountId"], "confirmAccount": True, "missingScopes": missing, "capabilities": matrix, "revision": saved["revision"]}
 
@@ -849,11 +956,13 @@ class OAuthService:
         short-lived token (Pinterest, TikTok, YouTube) is renewed before Rafii asks the provider anything."""
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership
-            require(_membership(row), requirement)
             cur.execute("SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
             stored = cur.fetchone()
             if stored:
                 self._assert_pinterest_context(stored[0], workspace_id, principal)
+            # Choosing a Facebook Page finishes connection; it does not require publishing authority.
+            permission = ('manage_connections' if stored and stored[0] == 'facebook' else 'approve') if requirement == 'destination_list' else requirement
+            require(_membership(row), permission)
         if not stored:
             raise AlphaError("Connection unavailable.", 404)
         grant = (self.discord_grant_for_worker(workspace_id, connection_id) if stored[0] == 'discord'
@@ -864,7 +973,7 @@ class OAuthService:
         """Where this account can post: a Discord channel or Facebook Page (chosen once), or a Pinterest board (per Pin)."""
         if board_id is not None and (not isinstance(board_id, str) or not re.fullmatch(r'\d{1,30}', board_id)):
             raise AlphaError('Choose a valid Pinterest board.', 400)
-        adapter, grant = self._member_grant(workspace_id, token, connection_id, "approve")
+        adapter, grant = self._member_grant(workspace_id, token, connection_id, "destination_list")
         if board_id is not None:
             if adapter.id != 'pinterest':
                 raise AlphaError('Board sections are available only for Pinterest.', 400)
@@ -1240,6 +1349,11 @@ class OAuthService:
         granted_set = set(granted or [])
         account_scoped = bool(getattr(adapter, "account_scoped_direct", False))
         direct_allowed = bool(adapter.production_reviewed or account_scoped)
+        facebook_page = None
+        if getattr(adapter, 'id', None) == 'facebook' and access_token:
+            facebook_page = adapter.session(access_token).get('page')
+            direct_allowed = direct_allowed and isinstance(facebook_page, dict) and bool(facebook_page.get('id'))
+        member_product = bool(getattr(adapter, 'id', None) == 'linkedin' and getattr(adapter, 'member_publishing_approved', lambda: False)())
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
 
         publish_scopes = set(adapter.capability_scopes("publish"))
@@ -1250,7 +1364,10 @@ class OAuthService:
              not getattr(adapter, "publishing_permission", False) or
              not getattr(adapter, "write_qualified", lambda _token: True)(access_token))
         )
-        if publish_granted and direct_allowed and publisher_ready:
+        if getattr(adapter, 'id', None) == 'facebook':
+            publisher_ready = publisher_ready and bool(isinstance(facebook_page, dict) and facebook_page.get('token')
+                and {'CREATE_CONTENT', 'PROFILE_PLUS_CREATE_CONTENT', 'MANAGE', 'PROFILE_PLUS_FULL_CONTROL'} & set(facebook_page.get('tasks') or []))
+        if publish_granted and (direct_allowed or member_product) and publisher_ready:
             evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "You approve each post; Rafii publishes it."
             set_level(matrix, "publish", "Direct", evidence, now, adapter.capability_version)
             schedule_scopes = set(adapter.capability_scopes("schedule"))
@@ -1265,7 +1382,8 @@ class OAuthService:
             if missing:
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", "Some permissions weren't granted, so you post the last step yourself.", now, adapter.capability_version)
             else:
-                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
+                message = 'Rafii member publishing access has not yet been verified/configured for this deployment. Your account connection is retained.' if getattr(adapter, 'id', None) == 'linkedin' else f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself."
+                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", message, now, adapter.capability_version)
 
         for name in ("analytics", "comments_read", "reply", "moderate"):
             required = set(adapter.capability_scopes(name))
@@ -1304,6 +1422,21 @@ class OAuthService:
         annotate_capabilities(views, snapshot['state'], channel_actor, now, self.providers.get('discord'))
         for view in views:
             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
+            provider = by_platform.get(view['platform']) or {}
+            if provider.get('officialCapabilities') is not None:
+                from .official_social import capability_states
+                adapter = self.providers.get(provider['id'])
+                raw = next(c for c in snapshot['state']['phase2']['channels'] if c['id'] == view['id'])
+                key = str(raw.get('providerAccountId', '')) + ':' + str(raw.get('destinationId') or '')
+                qualification = getattr(adapter, 'official_evidence', {}).get(key, {})
+                trusted = {**raw, 'eligibility': qualification.get('eligibility', {})}
+                view['officialCapabilities'] = capability_states(provider['id'], trusted,
+                    approvals=getattr(adapter, 'official_approvals', {}), evidence=qualification.get('features', {}),
+                    implemented=getattr(adapter, 'official_implemented', ()),
+                    connection_approval=getattr(adapter, 'connection_review', {}) if provider.get('publicConnectionReady') else {},
+                    member_publishing_approved=provider.get('memberPublishingApproved', False), now=now)
+                # Compatibility summary never promotes an eight-platform connection to Full Access.
+                view['socialReadiness']['fullyAvailable'] = False
         for view in views:
             if view.get('platform') == 'Pinterest':
                 from .pinterest_analytics import describe
@@ -1317,7 +1450,10 @@ class OAuthService:
             return self._token_for_worker(workspace_id, connection_id, youtube_policy_required=youtube_policy_required,
                                           **({'pinterest_force_refresh': True} if pinterest_force_refresh else {}))
         except AlphaError as error:
-            if error.code == 'youtube_revoked_oauth':
+            if error.code == 'reauthorization_required' and getattr(error, 'linkedin_credential_ciphertext', None):
+                self.mark_linkedin_reauthorization(workspace_id, connection_id,
+                    expected_ciphertext=error.linkedin_credential_ciphertext)
+            elif error.code == 'youtube_revoked_oauth':
                 self.mark_youtube_revoked(workspace_id, connection_id,
                                          expected_ciphertext=getattr(error, 'credential_revocation_ciphertext', None),
                                          expected_generation=getattr(error, 'credential_revocation_generation', None))
@@ -1351,6 +1487,36 @@ class OAuthService:
             audit(cur, workspace_id, principal, 'oauth.authorization_refreshed', connection_id, {'provider': 'pinterest'})
         return {'connectionId': connection_id, 'authorizationRefreshed': True,
                 'identityVerified': True, 'expiresAt': grant['expiresAt']}
+    def mark_linkedin_reauthorization(self, workspace_id, connection_id, *, expected_ciphertext):
+        """Fence invalidation to the exact observed grant; a concurrent reconnect wins.
+
+        A transient provider outage never enters this path. Keep drafts, job
+        receipts and all historical user data; queued approval cannot survive
+        revoked access. The failed credential transaction has already rolled back.
+        """
+        if not expected_ciphertext:
+            return False
+        from .hosted import audit
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
+            row = cur.fetchone()
+            if not row:
+                return False
+            cur.execute("SELECT access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='linkedin' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+            credential = cur.fetchone()
+            if not credential or not hmac.compare_digest(credential[0], expected_ciphertext):
+                return False
+            cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),refresh_supported=false,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='linkedin' AND revoked_at IS NULL AND access_ciphertext=%s", (workspace_id, connection_id, expected_ciphertext))
+            cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='LinkedIn access expired or was revoked. Reconnect and review queued posts.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
+            state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+            for channel in state.get('phase2', {}).get('channels', []):
+                if channel.get('id') == connection_id and channel.get('platform') == 'LinkedIn':
+                    channel.update(revoked=True, capabilityVerified=False)
+                    channel['capabilityVersion'] = int(channel.get('capabilityVersion') or 0) + 1
+            self._invalidate_linkedin_connection(state, connection_id)
+            cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
+            audit(cur, workspace_id, None, 'linkedin.reauthorization_required', connection_id)
+            return True
 
     def mark_youtube_revoked(self, workspace_id, connection_id, *, expected_access_token=None, expected_ciphertext=None, expected_generation=None):
         from .hosted import audit
@@ -1409,6 +1575,8 @@ class OAuthService:
             if provider_id == 'youtube' and error.code == 'youtube_revoked_oauth':
                 error.credential_revocation_ciphertext = access_ciphertext
                 error.credential_revocation_generation = authorization_generation
+            elif provider_id == 'linkedin' and error.code == 'reauthorization_required':
+                error.linkedin_credential_ciphertext = access_ciphertext
             raise
 
     def _token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False, pinterest_force_refresh=False):
@@ -1475,11 +1643,11 @@ class OAuthService:
                             cur.execute('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,refresh_supported=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s', (access_ct, refresh_ct, key_id, bool(refresh_supported), workspace_id, connection_id))
                     now = self.clock()
                     expired = bool(expires and expires <= now)
-                    if provider == 'instagram' and expired:
+                    if provider in ('instagram', 'threads') and expired:
                         raise AlphaError('Instagram access expired; re-authorization required. Expired long-lived tokens cannot be refreshed.', 409, code='reauthorization_required')
                     # Refresh requires a still-valid token at least 24 hours old.
                     # Unknown age never grants permission to renew; reconnect remains available.
-                    renew_instagram = (provider == 'instagram' and expires and 0 < expires - now <= 7 * 86400
+                    renew_instagram = (provider in ('instagram', 'threads') and expires and 0 < expires - now <= 7 * 86400
                                        and issued_at is not None and now - issued_at >= 86400
                                        and refresh_supported and refresh_ct)
                     # X and Bluesky tokens are short-lived: renew within the adapter's margin, not after a failed call.
@@ -1492,7 +1660,8 @@ class OAuthService:
                             error.credential_binding_generation = authorization_generation
                             raise error
                         if not (refresh_supported and refresh_ct):
-                            raise AlphaError("Access expired and cannot be refreshed; re-authorization required.", 409)
+                            raise AlphaError("Access expired and cannot be refreshed; re-authorization required.", 409,
+                                             code='reauthorization_required' if provider == 'linkedin' else None)
                         grant = adapter.refresh(self.vault.decrypt(refresh_ct, key_id))
                         binding_scopes = None
                         preserve = getattr(adapter, "preserve_destination", None)
@@ -1503,6 +1672,9 @@ class OAuthService:
                         expires = self.clock() + float(grant.get("expiresIn") or 3600)
                         cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,access_expires_at=to_timestamp(%s),rotated_at=now(),updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (access_ct, new_refresh, key_id, expires, workspace_id, connection_id))
                     access_token = self.vault.decrypt(access_ct, key_id)
+                    if provider == 'x' and getattr(adapter, 'budget_enforced', False):
+                        from .social_budget import BudgetedToken, XRequestBudget
+                        access_token = BudgetedToken(access_token, XRequestBudget(self, workspace_id, connection_id))
                     inspector = getattr(adapter, "inspect_scopes", None)
                     if inspector:
                         try:
@@ -1511,6 +1683,8 @@ class OAuthService:
                             if provider != 'youtube' or error.code == 'youtube_revoked_oauth':
                                 raise
                             raise AlphaError('YouTube permissions could not be verified. Try again when provider verification is available.', 503, code='youtube_verification_unavailable') from error
+                        if reported is None and provider != 'youtube':
+                            raise AlphaError('Provider permission verification is temporarily unavailable. Try again.', 503)
                         authoritative = isinstance(reported, list) and all(isinstance(s, str) for s in reported)
                         if provider == 'youtube' and not authoritative:
                             # An unavailable tokeninfo observation is not an empty grant.
@@ -1577,6 +1751,9 @@ class OAuthService:
             grant = self.token_for_worker(workspace_id, connection_id)
             adapter = self.provider_for_grant(grant)
             self._admit_identity(workspace_id, adapter)
+            if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+                from .social_budget import BudgetedToken, XRequestBudget
+                grant['accessToken'] = BudgetedToken(grant['accessToken'], XRequestBudget(self, workspace_id, connection_id))
             identity = adapter.identity(grant["accessToken"])
             drift = identity["providerAccountId"] != account_id
             inspected = hasattr(adapter, "inspect_scopes")
@@ -1589,6 +1766,14 @@ class OAuthService:
                       "state": "reauthorization_required" if drift else "scope_missing" if not reported else "read_verified" if lower_bound or not changed else "scope_changed",
                       **({'refreshBindingRequired': grant.get('refreshBindingRequired') is True} if provider_id == 'youtube' else {})}
         except AlphaError as error:
+            if provider_id == 'youtube':
+                # Even an unavailable identity observation must not hide replacement
+                # consent. The same token text can belong to a newer generation.
+                with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                    from .hosted import _membership
+                    require(_membership(row), 'manage_connections')
+                    self._assert_youtube_generation(cur, workspace_id, connection_id,
+                        grant.get('authorizationGeneration') if grant else starting_generation)
             if provider_id == 'youtube' and error.code in ('youtube_verification_unavailable', 'youtube_oauth_binding_required', 'youtube_oauth_binding_changed', 'youtube_capacity_schema', 'youtube_capacity_delay'):
                 # Manual Verify must preserve the same authority as worker revalidation
                 # when Google cannot provide an authoritative scope observation.
@@ -1601,7 +1786,7 @@ class OAuthService:
                         'state': 'client_binding_missing' if binding_missing else 'verification_unavailable',
                         'refreshBindingRequired': binding_missing}
             # Do not leak provider responses, nor label a transient network failure as token expiry.
-            result = {"connectionId": connection_id, "identityVerified": False, "scopes": [], "state": "verification_unavailable"}
+            return {"connectionId": connection_id, "identityVerified": False, "scopes": list(scopes), "state": "verification_unavailable"}
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
@@ -1639,7 +1824,10 @@ class OAuthService:
                 channel["revoked"] = True
             if not lower_bound:
                 cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (reported, workspace_id, connection_id))
-            self.commands.engine.invalidate(state)
+            if provider_id == 'linkedin':
+                self._invalidate_linkedin_connection(state, connection_id)
+            else:
+                self.commands.engine.invalidate(state)
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
             audit(cur, workspace_id, principal, "channel.verified", connection_id, {"state": result["state"]})
         if provider_id == 'youtube' and grant and result['state'] == 'reauthorization_required':
@@ -1704,23 +1892,42 @@ class OAuthService:
             if target is None:
                 return
             connection_id = target['id']
-            cur.execute("SELECT provider_account_id,refresh_supported,refresh_ciphertext IS NOT NULL AND refresh_ciphertext<>'',extract(epoch from access_expires_at)::float8 FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL", (workspace_id, connection_id))
-            credential = cur.fetchone()
-            if not credential or (credential[3] is not None and credential[3] <= self.clock() and not (credential[1] and credential[2])):
-                raise AlphaError('This YouTube connection needs Google authorization again. Reconnect it before reviewing a post.', 409, code='youtube_reconnect_required')
-            if credential[0] != target.get('providerAccountId'):
-                raise AlphaError('YouTube channel identity changed. Reload and prepare a new review.', 409, code='youtube_connection_changed')
-            # One selected connection per request, regardless of bulk destination count.
-            # Counters commit before provider I/O, including unsuccessful observations.
-            throttle(cur, f'youtube-composer-workspace:{workspace_id}', 10, 60)
-            throttle(cur, f'youtube-composer-channel:{workspace_id}:{connection_id}', 2, 60)
+            linkedin = target.get('platform') == 'LinkedIn'
+            if linkedin:
+                cur.execute("SELECT provider_account_id,refresh_supported,refresh_ciphertext IS NOT NULL AND refresh_ciphertext<>'',extract(epoch from access_expires_at)::float8 FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='linkedin' AND revoked_at IS NULL", (workspace_id, connection_id))
+                credential = cur.fetchone()
+                if not credential or (credential[3] is not None and credential[3] <= self.clock() and not (credential[1] and credential[2])):
+                    raise AlphaError('This LinkedIn connection needs authorization again. Reconnect before reviewing a post.', 409, code='reauthorization_required')
+                if credential[0] != target.get('providerAccountId'):
+                    raise AlphaError('LinkedIn account identity changed. Reload and prepare a new review.', 409, code='linkedin_connection_changed')
+                throttle(cur, f'linkedin-composer-workspace:{workspace_id}', 10, 60)
+                throttle(cur, f'linkedin-composer-channel:{workspace_id}:{connection_id}', 2, 60)
+            else:
+                cur.execute("SELECT provider_account_id,refresh_supported,refresh_ciphertext IS NOT NULL AND refresh_ciphertext<>'',extract(epoch from access_expires_at)::float8 FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL", (workspace_id, connection_id))
+                credential = cur.fetchone()
+                if not credential or (credential[3] is not None and credential[3] <= self.clock() and not (credential[1] and credential[2])):
+                    raise AlphaError('This YouTube connection needs Google authorization again. Reconnect it before reviewing a post.', 409, code='youtube_reconnect_required')
+                if credential[0] != target.get('providerAccountId'):
+                    raise AlphaError('YouTube channel identity changed. Reload and prepare a new review.', 409, code='youtube_connection_changed')
+                # One selected connection per request, regardless of bulk destination count.
+                # Counters commit before provider I/O, including unsuccessful observations.
+                throttle(cur, f'youtube-composer-workspace:{workspace_id}', 10, 60)
+                throttle(cur, f'youtube-composer-channel:{workspace_id}:{connection_id}', 2, 60)
         try:
             result = self._reverify_connection(workspace_id, connection_id,
                 authenticated=(token, revision, action), actor=principal, audit_event=self.COMPOSER_REVERIFIED)
         except AlphaError as error:
+            if linkedin and (error.status == 404 or error.code == 'reauthorization_required'):
+                raise AlphaError('This LinkedIn connection needs authorization again. Reconnect before reviewing a post.', 409, code='reauthorization_required') from error
             if error.status == 404 or error.code == 'youtube_revoked_oauth':
                 raise AlphaError('This YouTube connection needs Google authorization again. Reconnect it before reviewing a post.', 409, code='youtube_reconnect_required') from error
             raise
+        if linkedin:
+            if result.get('state') == 'verification_unavailable':
+                raise AlphaError('LinkedIn permissions could not be verified. Try again shortly; no post was approved.', 503, code='linkedin_verification_unavailable')
+            if result.get('state') != 'read_verified' or result.get('ready') is not True:
+                raise AlphaError('LinkedIn permissions or identity changed. Reload and review again; reconnect if required. No post was approved.', 409, code='linkedin_connection_changed')
+            raise AlphaError('LinkedIn connection refreshed. Reload and review the post, then try again. No post was approved.', 409, code='linkedin_connection_refreshed')
         if result.get('state') == 'verification_unavailable':
             raise AlphaError('YouTube permissions could not be verified. Try again shortly; no post was approved.', 503, code='youtube_verification_unavailable')
         if result.get('state') != 'read_verified' or result.get('ready') is not True:
@@ -1806,6 +2013,9 @@ class OAuthService:
             grant = self.token_for_worker(workspace_id, connection_id)
             adapter = self.provider_for_grant(grant)
             self._admit_identity(workspace_id, adapter)
+            if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+                from .social_budget import BudgetedToken, XRequestBudget
+                grant['accessToken'] = BudgetedToken(grant['accessToken'], XRequestBudget(self, workspace_id, connection_id))
             identity = adapter.identity(grant["accessToken"])
             drift = identity["providerAccountId"] != account_id
             inspected = hasattr(adapter, "inspect_scopes")
@@ -1864,7 +2074,10 @@ class OAuthService:
                 channel["revoked"] = True
             if observed != credential_scopes:
                 cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (sorted(observed), workspace_id, connection_id))
-            self.commands.engine.invalidate(state)
+            if provider_id == 'linkedin':
+                self._invalidate_linkedin_connection(state, connection_id)
+            else:
+                self.commands.engine.invalidate(state)
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
             audit(cur, workspace_id, actor, audit_event, connection_id, {"state": outcome})
             ready = outcome == "read_verified" and not channel.get('refreshBindingRequired') and self.commands.engine.channel_state(channel) == "Ready for posting"

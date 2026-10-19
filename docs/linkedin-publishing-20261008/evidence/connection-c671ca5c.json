@@ -1,0 +1,242 @@
+{
+  "schema": "rafii.connection-preview.runtime.v1",
+  "observedAtUtc": "2026-10-08T07:30:28.600Z",
+  "environment": "preview",
+  "sourceSha": "c671ca5ce985bbf911e8185b917d1179ff962565",
+  "deploymentId": "dpl_4K31t18C7dHHdjwNts3h8ymJ8ex6",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "fixedOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+  "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+  "connectionRef": "247a97cd88669d3bd8f327b71bac18c2",
+  "normalAuthenticatedChannelsStatus": 200,
+  "sameConnectionAsOriginalApprovedJob": true,
+  "actualScopes": [
+    "openid",
+    "profile",
+    "w_member_social"
+  ],
+  "connectionState": "publish_verified",
+  "capabilities": {
+    "identity": {
+      "level": "Direct",
+      "evidence": "Account confirmed.",
+      "capabilityVersion": 4,
+      "verifiedAt": 1791440258.235126
+    },
+    "publish": {
+      "level": "Direct",
+      "evidence": "You approve each post; Rafii publishes it.",
+      "capabilityVersion": 4,
+      "verifiedAt": 1791440258.235126
+    },
+    "schedule": {
+      "level": "Direct",
+      "evidence": "Rafii publishes the approved post at the scheduled time.",
+      "capabilityVersion": 4,
+      "verifiedAt": 1791440258.235126
+    },
+    "analytics": {
+      "level": "Unsupported",
+      "evidence": "",
+      "capabilityVersion": 0,
+      "verifiedAt": null
+    },
+    "comments_read": {
+      "level": "Unsupported",
+      "evidence": "",
+      "capabilityVersion": 0,
+      "verifiedAt": null
+    },
+    "reply": {
+      "level": "Unsupported",
+      "evidence": "",
+      "capabilityVersion": 0,
+      "verifiedAt": null
+    },
+    "moderate": {
+      "level": "Unsupported",
+      "evidence": "",
+      "capabilityVersion": 0,
+      "verifiedAt": null
+    },
+    "media_types": {
+      "level": "Unsupported",
+      "evidence": "",
+      "capabilityVersion": 0,
+      "verifiedAt": null
+    },
+    "webhooks": {
+      "level": "Unsupported",
+      "evidence": "",
+      "capabilityVersion": 0,
+      "verifiedAt": null
+    }
+  },
+  "socialReadiness": {
+    "connection": "CONNECTED",
+    "history": "HISTORICAL_IMPORT_AWAITING_PROVIDER_APPROVAL",
+    "publishing": "PUBLISHING_AVAILABLE",
+    "fullyAvailable": false,
+    "evidence": "last_verified_grant",
+    "liveVerified": false
+  },
+  "visibleStatus": "Connected — publishing permission granted; verification pending.",
+  "heldPostRecoveryLink": "Review held posts",
+  "providers": [
+    {
+      "id": "linkedin",
+      "configured": true,
+      "connectReady": true,
+      "publicConnectionReady": true,
+      "configurationState": "configured",
+      "credentialPresence": {
+        "clientId": true,
+        "clientSecret": true
+      },
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "memberPublishingApproved": true,
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback",
+      "setupIssues": []
+    },
+    {
+      "id": "threads",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "memberPublishingApproved": false,
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/threads/callback",
+      "setupIssues": [
+        "Server setup required: configure POSTRIFF_OAUTH_THREADS_CLIENT_ID and POSTRIFF_OAUTH_THREADS_CLIENT_SECRET. These are channel credentials, not app sign-in providers."
+      ]
+    },
+    {
+      "id": "instagram",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "memberPublishingApproved": false,
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/instagram/callback",
+      "setupIssues": [
+        "Server setup required: configure POSTRIFF_OAUTH_INSTAGRAM_CLIENT_ID and POSTRIFF_OAUTH_INSTAGRAM_CLIENT_SECRET. These are channel credentials, not app sign-in providers."
+      ]
+    },
+    {
+      "id": "x",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "memberPublishingApproved": false,
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/x/callback",
+      "setupIssues": [
+        "Server setup required: configure POSTRIFF_OAUTH_X_CLIENT_ID and POSTRIFF_OAUTH_X_CLIENT_SECRET. These are channel credentials, not app sign-in providers."
+      ]
+    },
+    {
+      "id": "facebook",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "memberPublishingApproved": false,
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/facebook/callback",
+      "setupIssues": [
+        "Server setup required: configure POSTRIFF_OAUTH_FACEBOOK_CLIENT_ID and POSTRIFF_OAUTH_FACEBOOK_CLIENT_SECRET. These are channel credentials, not app sign-in providers."
+      ]
+    },
+    {
+      "id": "youtube",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "memberPublishingApproved": false,
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/youtube/callback",
+      "setupIssues": [
+        "Server setup required: configure POSTRIFF_OAUTH_YOUTUBE_CLIENT_ID and POSTRIFF_OAUTH_YOUTUBE_CLIENT_SECRET. These are channel credentials, not app sign-in providers."
+      ]
+    },
+    {
+      "id": "tiktok",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "memberPublishingApproved": false,
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/tiktok/callback",
+      "setupIssues": [
+        "Server setup required: configure POSTRIFF_OAUTH_TIKTOK_CLIENT_ID and POSTRIFF_OAUTH_TIKTOK_CLIENT_SECRET. These are channel credentials, not app sign-in providers."
+      ]
+    },
+    {
+      "id": "pinterest",
+      "configured": false,
+      "connectReady": false,
+      "publicConnectionReady": false,
+      "configurationState": "not_configured",
+      "credentialPresence": {
+        "clientId": false,
+        "clientSecret": false
+      },
+      "productionReviewed": false,
+      "liveVerified": false,
+      "executionPaused": false,
+      "memberPublishingApproved": false,
+      "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/pinterest/callback",
+      "setupIssues": [
+        "Server setup required: configure POSTRIFF_OAUTH_PINTEREST_CLIENT_ID and POSTRIFF_OAUTH_PINTEREST_CLIENT_SECRET. These are channel credentials, not app sign-in providers."
+      ]
+    }
+  ],
+  "publicPublicationPerformed": false,
+  "fullAcceptance": false,
+  "realIphoneSafari": "NOT_RUN",
+  "liveTenantNegative": "NOT_RUN",
+  "productionReleasedByThisTask": false
+}

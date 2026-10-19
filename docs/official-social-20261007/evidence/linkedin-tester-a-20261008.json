@@ -1,0 +1,135 @@
+{
+  "observedAt": "2026-10-08T01:15:02Z",
+  "execution": "real preview provider exchange and targeted metadata read; not ordinary-external acceptance",
+  "environment": {
+    "project": "postriff-phase2-private",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "deploymentId": "dpl_dGprvZgYtv29YTby6NYbYJh53kFu",
+    "sourceSha": "a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2",
+    "origin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+    "callback": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback",
+    "databaseProject": "oxacvkhpfgytkepxcaqh"
+  },
+  "provider": {
+    "id": "linkedin",
+    "appId": "263833009",
+    "appName": "James Studio",
+    "product": "Sign In with LinkedIn using OpenID Connect",
+    "tier": "Standard Tier observed in operator console",
+    "minimumScopes": [
+      "openid",
+      "profile"
+    ]
+  },
+  "testSubject": {
+    "label": "Tester A",
+    "workspaceRefMd5": "a58131ee20e1ece4c84521a0f93c264b",
+    "accountRefMd5": "c6ab7097b2851aa1d71208285a23fbab",
+    "memberRefMd5": "58c6b0a690cf020e176488f6b2edbb33",
+    "workspaceRole": "owner; not Founder",
+    "intendedLinkedInAccount": "confirmed by user in conversation",
+    "providerAppRole": "UNVERIFIED; intended profile display name also appears on app admin list, so no ordinary-external claim"
+  },
+  "oauthTransactions": [
+    {
+      "refMd5": "4604e7014c9892203377c653f2347692",
+      "capability": "identity",
+      "requestedScopes": [
+        "openid",
+        "profile"
+      ],
+      "createdAt": "2026-10-08T00:52:55.365147Z",
+      "consumedAt": "2026-10-08T00:53:20.101686Z",
+      "outcome": "exchanged",
+      "singleUseConsumed": true
+    },
+    {
+      "refMd5": "a7e37084b3e47e333e9bb54cc7b42fc1",
+      "capability": "publish permission extension",
+      "requestedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "createdAt": "2026-10-08T00:53:37.349392Z",
+      "consumedAt": "2026-10-08T00:53:45.891513Z",
+      "outcome": "exchanged",
+      "singleUseConsumed": true,
+      "publicationExecution": "NONE; permission consent is not publication approval or feature acceptance"
+    }
+  ],
+  "savedConnection": {
+    "evidenceSource": "live_provider",
+    "identityVerified": true,
+    "accountType": "member",
+    "sameWorkspaceAsConsumedTransactions": true,
+    "actualScopes": [
+      "openid",
+      "profile",
+      "w_member_social"
+    ],
+    "scopeEvidence": "server adapter grant evidence and persisted live_provider record, not requestedScopes inferred as grant",
+    "encryptedAccessPresent": true,
+    "encryptedRefreshPresent": false,
+    "refreshSupported": false,
+    "revoked": false,
+    "createdAt": "2026-10-08T00:53:20.101686Z",
+    "updatedAt": "2026-10-08T00:53:45.891513Z",
+    "accessExpiresAt": "2026-12-07T00:53:45.396696Z",
+    "navigationReload": "observed existing connection after browser reload",
+    "freshRafiiSession": "PENDING",
+    "renewal": "No refresh supported for this grant; reauthorize at expiry. Real aging/reauthorization not yet observed."
+  },
+  "incident": {
+    "symptom": "Saved member identity shown BLOCKED with organization/approval/eligibility/release blockers",
+    "fix": "Separate saved account identity from app-wide release qualification; reuse validated minimum OIDC review only for LinkedIn identity rows; keep publishing and other operations gated",
+    "previewFixVerification": "PENDING deployment of validated candidate"
+  },
+  "qualification": {
+    "ordinaryExternalPass": false,
+    "livePassed": 0,
+    "fullConnectionAcceptance": "PARTIAL",
+    "publication": "NOT_RUN",
+    "realIPhoneSafari": "PENDING",
+    "twoUserTenancy": "PENDING",
+    "disconnectReconnect": "PENDING",
+    "realRefresh": "NOT_RUN",
+    "production": "NOT_RELEASED"
+  },
+  "secretSafety": "No token, secret, state, PKCE verifier, password, cookie, email or raw customer identifier exported in this receipt.",
+  "validation": [
+    {
+      "task": "test",
+      "runId": "s46w6dqjbr",
+      "exitCode": 1,
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/s46w6dqjbr",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T010621176484Z-test.json",
+      "sourceHead": "a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2",
+      "sourceFingerprint": "e1cf1d16ded1f465313a3b1e30a37d468070bf0283124b1573b423b898e4cb2e",
+      "patchSha256": "9474781503c6a38735f1b8164cbffccf89ecd9d6d3ee6eaeabb9a0e821e3455f",
+      "execution": "synthetic cloud validation; not live provider qualification"
+    },
+    {
+      "task": "ci",
+      "runId": "6071ptxnrz",
+      "exitCode": 0,
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/6071ptxnrz",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T011048545413Z-ci.json",
+      "sourceHead": "a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2",
+      "sourceFingerprint": "bb357e713e92060a9244aa074039d58c2f274a03c9ed4b6936eb0b29a04e42ef",
+      "patchSha256": "26f9c7531026a7594848ba899924d5b68e8e54a95fcefd9b9889f0c989257b35",
+      "execution": "synthetic cloud validation; not live provider qualification"
+    },
+    {
+      "task": "e2e",
+      "runId": "gts9clzcv7",
+      "exitCode": 0,
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/gts9clzcv7",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T011230958564Z-e2e.json",
+      "sourceHead": "a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2",
+      "sourceFingerprint": "bb357e713e92060a9244aa074039d58c2f274a03c9ed4b6936eb0b29a04e42ef",
+      "patchSha256": "26f9c7531026a7594848ba899924d5b68e8e54a95fcefd9b9889f0c989257b35",
+      "execution": "synthetic cloud validation; not live provider qualification"
+    }
+  ]
+}

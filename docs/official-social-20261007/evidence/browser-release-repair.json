@@ -1,0 +1,74 @@
+{
+  "executionState": "SYNTHETIC_REMOTE_BROWSER_REGRESSION_ONLY",
+  "sourceParentSha": "8015c795a13aa89ba798a32c3f5413c86c0552c9",
+  "failedRequiredGate": {
+    "runId": 37578276261,
+    "mergeSha": "2fbb779303902afc2dbb7d11f17a2babbfbccb86",
+    "artifactId": 11463874185,
+    "artifactDigest": "sha256:bafe2718d13311a36ad1f70a769abac65d75687808d0f40abb6ccb8e82347a26",
+    "postgresPrograms": 93,
+    "postgresFailures": 0,
+    "generalBrowser": "PASS",
+    "performanceBrowser": "PASS",
+    "historyImport": "FAIL",
+    "firstCausalFailure": "history-import-browser.cjs:155 checked count synchronously after disconnect toast, before subsequent channel-query refresh"
+  },
+  "diagnosis": {
+    "sourceOrdering": "ChannelCard.disconnect emits toast.success before await refresh; the browser test asserted removal at the toast boundary",
+    "observedAfterRepair": {
+      "controlCountAtToast": 1,
+      "controlCountAfterRefresh": 0
+    },
+    "repair": "Wait for the history-import button to become hidden within the existing 30s Playwright timeout, retain exact zero-count assertion, and record pre/post refresh counts. No product behavior or authorization gate changed."
+  },
+  "narrowDepot": {
+    "runId": "7bcnwwp95q",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/7bcnwwp95q",
+    "runner": "depot-ubuntu-24.04-8",
+    "exitCode": 0,
+    "remoteExitCode": 0,
+    "elapsedSeconds": 113.118,
+    "snapshot": {
+      "sourceFingerprint": "83309130a73004844b0da603bc8d3c3b8d91f260d8e222390d2dfc8d774fcdf2",
+      "patchSha256": "1f234923bb36a729dceae223f9df9f2e1a700e34d33ee44ad20e6eff5196e296",
+      "sourceHead": "8015c795a13aa89ba798a32c3f5413c86c0552c9",
+      "baseSha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e"
+    },
+    "checkCount": 15,
+    "checks": [
+      "opening/review does not POST; unchecked explicit metadata/analytics consent; real 202 request and queued status",
+      "running automatic retry preserves progress and offers no duplicate submission",
+      "metadata completion remains separate from pending metrics; repeat requires new review and consent",
+      "incomplete pagination is a failed/partial coverage state",
+      "cancelled import is explicitly labelled rather than reported complete",
+      "pending purge visibly blocks new imports",
+      "viewer can read status but cannot consent or request",
+      "non-Direct analytics blocked with reconnect action",
+      "permission revoked after review is denied by the real endpoint",
+      "loading and unavailable status disable requests; explicit refresh recovers",
+      "real backend hourly throttle is localized and cannot report a queued run",
+      "lost POST response triggers GET reconciliation and resets confirmation; no automatic POST retry",
+      "saved Hong Kong display locale, mobile layout, dialog keyboard close/reopen, consent reset and axe checks",
+      "OFF-gate response hides the entry point",
+      "disconnect review includes imported-data purge; actual disconnect removes import control"
+    ],
+    "pageErrors": []
+  },
+  "runnerSetupFailure": {
+    "runId": "cbvmqcbkkm",
+    "exitCode": 1,
+    "testExecuted": false,
+    "observedFailure": "disposable backend exited before readiness; startup stderr was not retained and no artifact existed",
+    "remediation": "Match passing GitHub PostgreSQL socket-directory preparation and retain synthetic server startup logs if the narrow harness fails",
+    "causalStartupError": "unavailable; not mislabeled as the browser assertion failure"
+  },
+  "validatedFileSha256": {
+    "web/tests/history-import-browser.cjs": "eefc95cd432040b388972d19087ab13f15dee6e1e785a2463e8bab1a7c68cf6d",
+    "scripts/social-validation-cloud.sh": "bc02332865f8c37d60a6a680bc1ba328518db12e8420754ba59b2d04ee7ba696"
+  },
+  "liveProviderPasses": 0,
+  "ordinaryExternalProvidersVerified": 0,
+  "productionChanged": false,
+  "providerEnablementChanges": [],
+  "localHeavyProcessesObserved": 0
+}

@@ -1,0 +1,36 @@
+{
+  "schema": "rafii.connection-preview.two-workspace-positive.v1",
+  "observedAtUtc": "2026-10-08T07:31:57.923Z",
+  "sourceSha": "c671ca5ce985bbf911e8185b917d1179ff962565",
+  "deploymentId": "dpl_4K31t18C7dHHdjwNts3h8ymJ8ex6",
+  "workspaceARef": "a58131ee20e1ece4c84521a0f93c264b",
+  "connectionARef": "73f65b0074242d0fb7ab3cf1866af5f1",
+  "workspaceBRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+  "connectionBRef": "247a97cd88669d3bd8f327b71bac18c2",
+  "distinctConnectionIds": true,
+  "distinctWorkspaceEndpointPaths": true,
+  "workspaceA": {
+    "normalAuthenticatedChannelsStatus": 200,
+    "actualScopes": [
+      "openid",
+      "profile",
+      "w_member_social"
+    ],
+    "connectionState": "read_verified"
+  },
+  "workspaceB": {
+    "normalAuthenticatedChannelsStatus": 200,
+    "actualScopes": [
+      "openid",
+      "profile",
+      "w_member_social"
+    ],
+    "connectionState": "publish_verified"
+  },
+  "scope": "Separate normal authenticated UI reloads only",
+  "liveUnauthorizedCrossTenantRequestIssued": false,
+  "liveTenantNegative": "NOT_RUN",
+  "providerAppRoleOfA": "UNVERIFIED",
+  "ordinaryExternalB": "Owner attested no provider-app role; prior non-Founder evidence retained",
+  "productionAcceptance": false
+}

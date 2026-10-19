@@ -185,7 +185,10 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
   if (channelData) {
     const connected = channelData.channels.filter((channel) => isConnected(channel));
     const unreviewed = channelData.providers.filter(
-      (provider) => !provider.productionReviewed && connected.some((channel) => channel.platform === provider.platform)
+      (provider) => !provider.productionReviewed
+        && connected.some((channel) => channel.platform === provider.platform)
+        // A connection's Direct write grant takes precedence over provider-wide qualification for other operations.
+        && !connected.some((channel) => channel.platform === provider.platform && channel.capabilities.publish?.level === 'Direct')
     );
     if (unreviewed.length) {
       items.push({

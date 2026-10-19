@@ -363,6 +363,12 @@ export function createApi(getToken: TokenSource) {
         `${ws(w)}/youtube/${encodeURIComponent(c)}/sensitive-authorization`,
         { capability, enabled, confirmed: true }
       ),
+    nativeSocialRead: (w: string, id: string, feature: string, target: string, options: Record<string, string> = {}) =>
+      send<import('./types').NativeSocialReading>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-read`, { feature, target, options }),
+    nativeSocialPreview: (w: string, id: string, action: string, target: string, payload: Record<string, unknown>) =>
+      send<import('./types').NativeSocialPreview>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-action`, { action, target, payload }),
+    nativeSocialApprove: (w: string, id: string, actionId: string, digest: string) =>
+      send<import('./types').NativeSocialReading>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-action/${encodeURIComponent(actionId)}/approve`, { digest, confirmed: true }),
     oauthContext: (provider: string, state: string) =>
       send<{ workspaceId: string }>('POST', `/api/oauth/${encodeURIComponent(provider)}/context`, { state }),
     discordGuilds: (w: string, id: string) => get<{ identityConnectionId: string; guilds: { id: string; name: string }[] }>(`${ws(w)}/discord/identities/${encodeURIComponent(id)}/guilds`),

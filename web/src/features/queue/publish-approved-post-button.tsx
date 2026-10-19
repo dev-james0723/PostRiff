@@ -26,7 +26,7 @@ export function PublishApprovedPostButton({ job, nowSeconds, allowed, workerBind
     }),
     onSettled: () => client.invalidateQueries({ queryKey: keys.snapshot(workspaceId ?? '') })
   });
-  if (job.manifest.platform !== 'Discord' || job.manifest.workspaceId !== workspaceId || !canPublishApprovedJob(job, nowSeconds, allowed, workerBinding)) return null;
+  if (!['Discord', 'LinkedIn'].includes(job.manifest.platform) || job.manifest.workspaceId !== workspaceId || !canPublishApprovedJob(job, nowSeconds, allowed, workerBinding)) return null;
   return (
     <Button variant='action' size='control' className='h-11 px-3.5 text-[13px]'
       disabled={execute.isPending || execute.isError} onClick={() => execute.mutate()}>

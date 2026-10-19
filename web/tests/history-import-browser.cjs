@@ -184,10 +184,14 @@ async function api(method, url, body) {
     await page.getByText('Threads disconnected',{exact:true}).waitFor();
     // The server receipt toast precedes the awaited channel-query refresh.
     // Check the eventual rendered state, not the race between those updates.
-    await page.getByRole('button',{name:'Past analytics',exact:true}).waitFor({state:'hidden',timeout:10_000});
+    const historyControl=page.getByRole('button',{name:'Past analytics',exact:true});
+    const historyControlAtToast=await historyControl.count();
+    await historyControl.waitFor({state:'hidden',timeout:10_000});
+    const historyControlAfterRefresh=await historyControl.count();
+    assert.equal(historyControlAfterRefresh,0);
     checks.push('disconnect review includes imported-data purge; actual disconnect removes import control');
     assert.deepEqual(errors,[]);
-    const report={execution:'actual local browser/UI/API/disposable DB; synthetic providers and seeded status data; OFF/network fault responses explicitly mocked',checks,screenshots:['review-desktop.png','review-mobile-hant.png'],pageErrors:errors};
+    const report={execution:'actual local browser/UI/API/disposable DB; synthetic providers and seeded status data; OFF/network fault responses explicitly mocked',checks,disconnectRefresh:{controlCountAtToast:historyControlAtToast,controlCountAfterRefresh:historyControlAfterRefresh},screenshots:['review-desktop.png','review-mobile-hant.png'],pageErrors:errors};
     fs.writeFileSync(path.join(out,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

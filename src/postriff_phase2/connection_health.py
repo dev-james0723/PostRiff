@@ -275,6 +275,8 @@ def access(view, now):
         status = "expired"
     elif state == "reauthorization_required":
         status = "revoked"
+    elif not renews and expires is not None and expires <= now and state in (*VERIFIED, "identity_known", "scope_missing"):
+        status = "expired"
     elif state in VERIFIED and not renews and expires is not None and 0 < expires - now < EXPIRING_SOON_SECONDS:
         status = "expiring"
     elif state in VERIFIED or state in ("identity_known", "scope_missing"):

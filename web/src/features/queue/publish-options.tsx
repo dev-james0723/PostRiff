@@ -28,7 +28,7 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { YouTubeOptions } from '@/features/youtube/youtube-options';
 
 /** Platforms whose review carries per-post choices; the server refuses a review without them. */
-export const NEEDS_OPTIONS = new Set(['TikTok', 'YouTube', 'Pinterest', 'Google Business Profile']);
+export const NEEDS_OPTIONS = new Set(['LinkedIn', 'Threads', 'Instagram', 'Facebook', 'X', 'TikTok', 'YouTube', 'Pinterest', 'Google Business Profile']);
 
 export type PublishOptionsValue = Record<string, unknown> | null;
 
@@ -140,14 +140,16 @@ function TikTokFields({ channelId, asset, text, onChange }: Props) {
     retry: false
   });
   const info = creator.data ?? null;
-  const durationSec = isVideo(asset) ? (asset?.duration ?? null) : null;
-  const video = isVideo(asset) ? { durationSec } : null;
+  const photo = Boolean(asset?.mime.startsWith('image/'));
+  const durationSec = isVideo(asset) ? (asset?.duration ?? null) : photo ? 1 : null;
+  const video = isVideo(asset) || photo ? { durationSec } : null;
   const issues = problems(choice, info, video);
   const branded = choice.commercial.enabled && choice.commercial.brandedContent;
 
   useEffect(() => {
-    onChange(toOptions(choice, info, isVideo(asset) ? { durationSec } : null));
-  }, [choice, info, asset, durationSec, onChange]);
+    const result = toOptions(choice, info, isVideo(asset) || photo ? { durationSec } : null);
+    onChange(result && photo ? { ...result, allowDuet: false, allowStitch: false, coverIndex: 0 } : result);
+  }, [choice, info, asset, durationSec, photo, onChange]);
 
   const interaction = (kind: 'comment' | 'duet' | 'stitch', key: 'allowComment' | 'allowDuet' | 'allowStitch', label: string) => (
     <Label className='flex items-center gap-2 text-sm font-normal'>
@@ -227,7 +229,7 @@ function TikTokFields({ channelId, asset, text, onChange }: Props) {
       <div className='flex flex-col gap-1'>
         <span className='text-muted-foreground text-xs'>Preview</span>
         <div className='rafii-quiet rounded-md p-2 text-sm whitespace-pre-wrap'>{text || 'No caption'}</div>
-        <span className='text-muted-foreground text-xs'>{isVideo(asset) ? `Video${durationSec ? ` · ${Math.round(durationSec)} s` : ''}` : 'No video chosen'}</span>
+        <span className='text-muted-foreground text-xs'>{isVideo(asset) ? `Video${durationSec ? ` · ${Math.round(durationSec)} s` : ''}` : photo ? 'Photo post' : 'No media chosen'}</span>
       </div>
 
       <Caution>{UNAUDITED_NOTICE}</Caution>
