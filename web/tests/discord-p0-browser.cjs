@@ -158,22 +158,31 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
       await page.getByText('Channel authorized and set as the default.', {exact: false}).waitFor();
       await page.keyboard.press('Escape'); assert.equal(authorizations, 1);
       stage = 'prepare-review-' + width; activeWorkStartedAt = performance.now();
+      // A passive review must be future-dated; advance to the unchanged approved due time only after it exists.
+      await page.evaluate(now => { Date.now = () => now; }, (input.job.manifest.timing.timestamp - 60) * 1000);
       await page.getByRole('link', {name: 'Queue', exact: true}).first().click();
       await page.getByRole('button', {name: 'Schedule a draft', exact: true}).click();
       const composer = page.getByRole('dialog');
-      await composer.getByRole('combobox', {name: 'Draft', exact: true}).click();
-      await page.getByRole('option').filter({hasText: input.variant.text.slice(0, 40)}).click();
-      await composer.getByRole('combobox', {name: 'Account', exact: true}).click();
-      await page.getByRole('option').filter({hasText: channel.account}).click();
+      await composer.getByRole('combobox', {name: 'Draft', exact: true}).selectOption(input.variant.id);
+      await composer.getByRole('combobox', {name: 'Account', exact: true}).selectOption(channelId);
       assert.equal(await composer.getByRole('button', {name: 'Prepare review', exact: true}).isDisabled(), true);
-      await composer.getByRole('combobox', {name: 'Discord server and channel', exact: true}).click();
-      await page.getByRole('option', {name: `${first.guildName} · ${first.channelName}`, exact: true}).click();
-      const destinationLabel = (await composer.getByRole('combobox', {name: 'Discord server and channel', exact: true}).innerText()).trim();
+      await composer.getByRole('combobox', {name: 'Discord server and channel', exact: true}).selectOption(first.id);
+      const destinationLabel = (await composer.getByRole('combobox', {name: 'Discord server and channel', exact: true}).locator('option:checked').innerText()).trim();
       assert.equal(destinationLabel, `${first.guildName} · ${first.channelName}`, 'The closed destination field must show the selected server and channel.');
       assert.equal(destinationLabel.includes(first.id), false, 'The authorization ID remains a payload value, never the selected destination label.');
       assert.match(await composer.locator('[data-discord-target]').innerText(), /555555.*7777777/);
       await composer.locator('input[type="datetime-local"]').fill(input.job.manifest.timing.local);
       await composer.getByRole('checkbox', {name: /I have the rights/}).check();
+      const timeField = composer.locator('input[type="datetime-local"]');
+      await timeField.fill('2000-01-01T00:00');
+      assert.equal(await composer.getByRole('button', {name: 'Prepare review', exact: true}).isDisabled(), true, 'An expired local time cannot prepare a review.');
+      assert.equal(preparations, 0);
+      await timeField.fill('');
+      assert.equal(await composer.getByRole('button', {name: 'Prepare review', exact: true}).isDisabled(), true, 'An empty time cannot prepare a review.');
+      await timeField.fill(input.job.manifest.timing.local);
+      assert.match(await composer.locator('[data-review-time]').innerText(), new RegExp(input.job.manifest.timing.local.replace('T', ' ')));
+      assert.equal(await composer.locator('[data-review-time] time').getAttribute('datetime'), new Date(input.job.manifest.timing.timestamp * 1000).toISOString());
+      assert.equal(await composer.getByRole('button', {name: 'Prepare review', exact: true}).isEnabled(), true);
       // Whole active seconds must be positive so cleanup telemetry is covered independent of click speed.
       await page.waitForTimeout(1100);
       const activityClosed = page.waitForResponse(response => response.url() === activityUrl &&
@@ -185,6 +194,7 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
       assert.equal(approvals, 0); assert.equal(dispatches, 0); assert.equal(snapshot.state.phase2.jobs.length, 0);
       assert.equal(await page.getByRole('button', {name: 'Publish approved post', exact: true}).count(), 0);
       stage = 'explicit-human-approval-' + width;
+      await page.evaluate(now => { Date.now = () => now; }, nowSeconds * 1000);
       approvalClicked = true;
       await page.getByRole('button', {name: 'Approve & schedule', exact: true}).click();
       await page.getByRole('button', {name: 'Approve & schedule', exact: true}).waitFor({state: 'detached'});
