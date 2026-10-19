@@ -1420,6 +1420,14 @@ class OAuthService:
                 row = cur.fetchone()
                 if not row or row[6]:
                     raise AlphaError("Connection unavailable.", 404)
+                if row[0] == 'discord':
+                    # Installation consent is not observable as a user OAuth
+                    # scope list. Never let generic custody replace it with
+                    # the legacy adapter's inferred bot/identify pair.
+                    envelope = json.loads(self.vault.decrypt(row[1], row[3]))
+                    if isinstance(envelope, dict) and envelope.get('kind') in ('installation', 'identity'):
+                        raise AlphaError('Use the Discord connection verification workflow.', 409,
+                                         code='discord_installation_verification_required')
                 self._assert_pinterest_context(row[0], workspace_id, scopes=row[7])
                 authorization_generation = None
                 if row[0] == 'youtube':
@@ -1557,6 +1565,8 @@ class OAuthService:
                                 and self.youtube_policy.required(self._provider('youtube'), scopes=stored[2]))
                 self.youtube_policy.require_user(cur, workspace_id, principal, token, adapter, scopes=stored[2], force=policy_force)
         provider_id, account_id, scopes, starting_ciphertext = stored[:4]
+        if provider_id == 'discord' and getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
+            return self.discord_connections.reverify_installation(workspace_id, connection_id, token=token)
         grant = None
         reported = []
         identity = None
@@ -1773,6 +1783,9 @@ class OAuthService:
         if not stored:
             raise AlphaError("Connection unavailable.", 404)
         provider_id, account_id, state = stored
+        if provider_id == 'discord' and getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
+            return self.discord_connections.reverify_installation(workspace_id, connection_id,
+                authenticated=authenticated, actor=actor, audit_event=audit_event)
         state = json.loads(state) if isinstance(state, str) else state
         if not any(c.get("id") == connection_id for c in state.get("phase2", {}).get("channels", [])):
             raise AlphaError("Connection unavailable.", 404)

@@ -275,6 +275,8 @@ export interface VariantFeedback {
 }
 
 export interface SnapshotVariant {
+  /** Retry identity for an original-text save; no model or publication authority. */
+  manualRequestId?: string;
   postDoctorGoal?: 'conversation' | 'shareability' | 'authority' | 'reach' | 'general';
   /** Post media recorded when the draft was written (chat-context SPEC §5.10). */
   media?: RunMedia[];

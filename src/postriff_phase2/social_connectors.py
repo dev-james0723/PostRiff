@@ -439,7 +439,11 @@ class DiscordProvider(OAuthProvider):
         return {"providerAccountId": str(body["id"]), "handle": str(body.get("name") or body["id"]), "accountType": "server", "pictureUrl": picture}
 
     def inspect_scopes(self, access_token, expected_account_id=None):
-        """The bot is still in the server; the scopes are the ones Discord granted when it was added."""
+        """Legacy bot presence only; linked installations use separate proofs."""
+        if self.session(access_token).get('kind') == 'installation':
+            # Bot membership does not introspect installation consent or the
+            # linked person's OAuth grant. DiscordConnections verifies both.
+            return None
         try:
             identity = self.identity(access_token)
         except AlphaError:

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type ReactNode } from 'react';
+import { useRef, type ReactNode, type SyntheticEvent } from 'react';
 import { Icons } from '@/components/icons';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,13 @@ export function ExpandedIdeaDialog({ open, onOpenChange, value, onChange, placeh
   // Chat attachments (chat-context SPEC §4.9 item 8): the same handlers as the composer, a compact chip strip, and the
   // `@` list inside this dialog's popup, where Escape closes only the list.
   const handlers = textareaHandlers;
+  const lastTextEvent = useRef<Event | null>(null);
+  function updateText(event: SyntheticEvent<HTMLTextAreaElement>) {
+    if (lastTextEvent.current !== event.nativeEvent) {
+      lastTextEvent.current = event.nativeEvent;
+      onChange(event.currentTarget.value);
+    }
+  }
   return (
     <RafiiDialog open={open} onOpenChange={onOpenChange}>
       <RafiiDialogContent size='xl' aria-describedby={undefined} initialFocus={field}>
@@ -34,9 +41,9 @@ export function ExpandedIdeaDialog({ open, onOpenChange, value, onChange, placeh
             }}
             aria-label='Expanded writing space'
             value={value}
-            onChange={(event) => onChange(event.target.value)}
+            onChange={updateText}
             onKeyDown={(event) => void handlers?.onKeyDown?.(event)}
-            onInput={(event) => handlers?.onInput?.(event)}
+            onInput={(event) => { handlers?.onInput?.(event); updateText(event); }}
             onSelect={(event) => handlers?.onSelect?.(event)}
             onCompositionStart={() => handlers?.onCompositionStart?.()}
             onCompositionEnd={() => handlers?.onCompositionEnd?.()}
