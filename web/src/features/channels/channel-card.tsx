@@ -412,7 +412,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           <span aria-hidden className='hidden md:inline'>
             ·
           </span>
-          {channel.platform === 'YouTube' ? <Link href={`/app/youtube?channel=${encodeURIComponent(channel.id)}`} className='text-sm underline'>Independent creator capabilities</Link> : <ScopesList scopes={channel.scopes} />}
+          {channel.platform === 'YouTube' ? <Link href={`/app/youtube?channel=${encodeURIComponent(channel.id)}`} className='text-sm underline'>Independent creator capabilities</Link> : channel.platform === 'X' ? <Link href={`/app/x?channel=${encodeURIComponent(channel.id)}`} className='text-sm underline'>Manage X directly</Link> : <ScopesList scopes={channel.scopes} />}
         </div>
       )}
 

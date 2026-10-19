@@ -94,6 +94,9 @@ class HostedSocial:
 
     # --- submit -------------------------------------------------------------------
     def submit(self, manifest):
+        if manifest.get('platform') == 'X':
+            return {'state': 'held', 'confirmed': 'Review this X action in Direct Management. A fresh account-bound approval is required.',
+                    'reasonCode': 'x_direct_management_review_required'}
         provider = self._provider(manifest)
         if provider is None:
             return {"state": "held", "confirmed": "Publishing to this platform isn't available yet. Nothing was posted."}
@@ -312,34 +315,9 @@ class HostedSocial:
         return _uncertain("No conclusive Discord create response; do not resubmit")
 
     def _submit_x(self, manifest, provider, token):
-        refusal = self._unsupported_media(manifest)
-        if refusal:
-            return refusal
-        payload = {"text": manifest["payload"]["text"]}
-        image = self._image(manifest)
-        if image:
-            raw, mime, _ = image
-            body, content_type = multipart([("media_category", "tweet_image")], [("media", "image", mime, raw)])
-            uploaded = provider.api(token, "POST", "/2/media/upload", headers={"Content-Type": content_type}, data=body)
-            early = self._classify_status(uploaded.get("status"), uploaded.get("body"), "X")
-            if early:
-                return early
-            data = uploaded.get("body", {}).get("data") if isinstance(uploaded.get("body"), dict) else None
-            media_id = str(data.get("id", "")) if isinstance(data, dict) else ""
-            if uploaded.get("status") not in (200, 201) or not media_id.isdigit():
-                return {"state": "failed", "confirmed": "X did not accept the image, so nothing was posted."}
-            payload["media"] = {"media_ids": [media_id]}
-        response = provider.api(token, "POST", "/2/tweets", body=payload)
-        data = response.get("body", {}).get("data") if isinstance(response.get("body"), dict) else None
-        post_id = str(data.get("id", "")) if isinstance(data, dict) else ""
-        if response.get("status") == 201 and post_id.isdigit():
-            return {"state": "provider_accepted", "reference": post_id, "confirmed": "X created the post; read-back pending"}
-        early = self._classify_status(response.get("status"), response.get("body"), "X")
-        if early:
-            return early
-        return _uncertain("No conclusive X create response; do not resubmit")
+        return {'state': 'held', 'confirmed': 'X actions require Direct Management approval.',
+                'reasonCode': 'x_direct_management_review_required'}
 
-    @staticmethod
     def _x_expanded(data):
         """X's stored text as the author wrote it: entities decoded, t.co links expanded, the attached-media link dropped."""
         text = str(data.get("text") or "")
@@ -745,6 +723,9 @@ class HostedSocial:
 
     # --- reconcile ----------------------------------------------------------------
     def reconcile(self, manifest, job):
+        if manifest.get('platform') == 'X':
+            return {'state': 'held', 'confirmed': 'Legacy X job retained for review in Direct Management; no provider request was repeated.',
+                    'reasonCode': 'x_direct_management_review_required'}
         provider = self._provider(manifest)
         if provider is None:
             return _uncertain("Provider reconciliation is unavailable; do not resubmit")

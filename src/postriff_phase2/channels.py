@@ -67,7 +67,7 @@ def connection_state(channel, now):
         return "reauthorization_required"
     if not channel.get("identityVerified"):
         return "identity_known" if channel.get("providerAccountId") else "disconnected"
-    refreshable_youtube = channel.get("platform") == "YouTube" and channel.get("refreshSupported") is True
+    refreshable_youtube = channel.get("platform") in ("YouTube", "X") and channel.get("refreshSupported") is True
     if channel.get("expiresAt", 0) <= now and not refreshable_youtube:
         return "client_binding_missing" if channel.get('refreshBindingRequired') else "token_expired"
     if not channel.get("scopes"):
@@ -77,8 +77,30 @@ def connection_state(channel, now):
     return "read_verified"
 
 
+def direct_only_matrix(channel, matrix):
+    """Retire legacy X handoff levels in every customer/agent projection.
+
+    Historical database rows are evidence of the old mode, never authority to
+    offer a browser or manual publishing path in the Direct-only integration.
+    """
+    if str(channel.get("platform", "")).lower() not in ("x", "twitter"):
+        return matrix
+    projected = {name: dict(value) for name, value in matrix.items()}
+    for name, value in projected.items():
+        if value.get("level") in ("Assisted", "Bridge") or (value.get("level") == "Direct" and name != "identity" and not channel.get("authorizationGeneration")):
+            projected[name] = {
+                "level": "Unsupported",
+                "evidence": "Unavailable — Direct X API access has not been verified for this capability.",
+                "verifiedAt": None,
+                "capabilityVersion": value.get("capabilityVersion", 0),
+                "reasonCode": "x_direct_access_unverified",
+            }
+    return projected
+
+
 def customer_view(channel, matrix, now):
     """What the Channels card shows: identity, then one row per capability, never a blended 'Ready'."""
+    matrix = direct_only_matrix(channel, matrix)
     return {
         "id": channel["id"], "platform": channel["platform"], "account": channel["account"], "accountType": channel.get("accountType"),
         "connectionState": connection_state(channel, now),

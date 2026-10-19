@@ -263,6 +263,11 @@ export function createApi(getToken: TokenSource) {
     portal: (w: string, returnPath?: string) =>
       send<{ url: string }>('POST', `${ws(w)}/billing/portal`, { returnPath }),
 
+    xOverview: (w: string, c: string) => get<import('./x-types').XOverview>(`${ws(w)}/x/${encodeURIComponent(c)}`),
+    xPreview: (w: string, c: string, body: import('./x-types').XActionInput) => send<import('./x-types').XOperation>('POST', `${ws(w)}/x/${encodeURIComponent(c)}/preview`, body),
+    xRead: (w: string, c: string, body: import('./x-types').XActionInput) => send<Record<string, unknown>>('POST', `${ws(w)}/x/${encodeURIComponent(c)}/read`, body),
+    xApprove: (w: string, c: string, id: string, body: { digest: string; confirmed: true }) => send<import('./x-types').XOperation>('POST', `${ws(w)}/x/${encodeURIComponent(c)}/operations/${encodeURIComponent(id)}/approve`, body),
+    xCancel: (w: string, c: string, id: string) => send<import('./x-types').XOperation>('POST', `${ws(w)}/x/${encodeURIComponent(c)}/operations/${encodeURIComponent(id)}/cancel`, {}),
     /* channels */
     /* `connectionHealth` is present only where the server admits this workspace to the Health Center (RAFII_CONNECTION_HEALTH_ENABLED). */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[]; connectionHealth?: { available: boolean; href: string } }>(`${ws(w)}/channels`),

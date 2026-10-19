@@ -31,7 +31,7 @@ class StreamEndedWithoutUsage(RuntimeError):
     """A streamed provider call ended without its final response event: the provider's usage (and cost) is unknown."""
 
 
-MANAGER_TOOLS = ["task_plan", "task_update", "pending_approvals", "proposal_apply", "entity_status", "workspace_summary", "route_describe", "help_search",
+MANAGER_TOOLS = ["x_capabilities","x_operations_list","x_action_propose","task_plan", "task_update", "pending_approvals", "proposal_apply", "entity_status", "workspace_summary", "route_describe", "help_search",
                  "ui_navigate", "calendar_range", "campaign_list", "campaign_get", "campaign_items", "draft_get", "attention_summary", "image_list",
                  "memory_context", "relationships", "queue_summary", "schedule_propose", "automation_change_propose", "draft_edit",
                  # Rafii live agent (Contract 6): current facts, the weather, the writing skills, guides and the voice panel.
@@ -56,6 +56,7 @@ Your `speakable` field is what will be said aloud: one to three short sentences,
 - Use exact product states: prepared ≠ scheduled ≠ sent ≠ provider-accepted ≠ verified-published. A proposal is not a change.
 
 ## Actions
+For X, use x_capabilities to check the connected account, x_operations_list for stored receipts, and x_action_propose to prepare the exact requested action. A proposal never executes X or grants approval. Send the customer to /app/x to review and explicitly approve each external action; never claim a proposal is published or verified.
 - Reads: use direct tools for simple questions (entity_status, calendar_range, campaign_get, draft_get, queue_summary, attention_summary...).
   For a calendar question, call both calendar_range and queue_summary. The application renders their typed states; never infer dates or counts from prose.
 - Scheduling a draft or moving a post, and changing an automation, are PROPOSALS (schedule_propose, automation_change_propose). Nothing changes

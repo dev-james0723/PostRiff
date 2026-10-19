@@ -29,6 +29,9 @@ export function ConnectReturn() {
 
   const provider = params.get('provider') ?? '';
   const state = params.get('state') ?? '';
+  const missingPermissionsNotice = provider === 'x'
+    ? 'Direct actions that require these permissions are unavailable.'
+    : 'Publishing stays Assisted.';
 
   useEffect(() => {
     if (handled.current) return;
@@ -50,7 +53,7 @@ export function ConnectReturn() {
         await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
         if (value.connected && connectionId) {
           if (value.missingScopes?.length) {
-            toast.warning('Some permissions weren’t granted', { description: `Missing: ${value.missingScopes.join(', ')}. Publishing stays Assisted.` });
+            toast.warning('Some permissions weren’t granted', { description: `Missing: ${value.missingScopes.join(', ')}. ${missingPermissionsNotice}` });
           }
           if (expected && expected.channelId !== connectionId) {
             toast.warning(`Different account connected. ${expected.account} still needs reconnecting.`);
@@ -62,7 +65,7 @@ export function ConnectReturn() {
         setResult(value);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Start again from Channels.'));
-  }, [api, client, params, provider, router, state, workspaceId]);
+  }, [api, client, missingPermissionsNotice, params, provider, router, state, workspaceId]);
 
   const back = (
     <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
@@ -80,7 +83,7 @@ export function ConnectReturn() {
             <StateMessage
               kind='success'
               title={`Connected ${result.account ?? ''}`.trim()}
-              description={result.missingScopes?.length ? `Missing permissions: ${result.missingScopes.join(', ')}. Publishing stays Assisted.` : undefined}
+              description={result.missingScopes?.length ? `Missing permissions: ${result.missingScopes.join(', ')}. ${missingPermissionsNotice}` : undefined}
               action={back}
             />
           ) : (

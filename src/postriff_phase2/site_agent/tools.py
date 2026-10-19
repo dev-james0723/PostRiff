@@ -28,6 +28,13 @@ MAX_TOOLS_PER_TURN = 6
 _ID = r"^[A-Za-z0-9_.:-]{1,120}$"
 
 _DEFINITIONS = (
+    ("x.capabilities","read","Read X Direct availability and exact input schema from Rafii records. No X API request.",
+     {"connectionId":{"type":"string","pattern":r"^[0-9a-f]{32}$"},"operation":{"type":"string","pattern":_ID},"offset":{"type":"number"}},("connectionId",)),
+    ("x.operations.list","read","Read stored X action states and verified receipt IDs. No X API request.",
+     {"connectionId":{"type":"string","pattern":r"^[0-9a-f]{32}$"}},("connectionId",)),
+    ("x.action.propose","workspace_mutation","Prepare an exact X management action or thread for customer approval. Requires operation/path/body/query/maxBillableResources and stable requestKey in request. Never publishes, approves, or incurs X charges.",
+     {"connectionId":{"type":"string","pattern":r"^[0-9a-f]{32}$"},"request":{"type":"object"}},("connectionId","request")),
+
     ("library.search", "read", "Search approved Library source facts. Requires per-source cloud sharing consent; returns traceable asset/source ids.", {"query":{"type":"string","maxLength":120}, "limit":{"type":"number"}}, ()),
     ("library.read", "read", "Read approved facts and provenance from a Library asset admitted by source/egress policy.", {"assetId":{"type":"string","pattern":r"^[0-9a-f]{32}$"}}, ("assetId",)),
     ("help.search", "read", "Search Rafii's versioned help for passages that answer a question.",
@@ -84,7 +91,7 @@ _DEFINITIONS = (
     ("campaign.membership", "read", "The campaigns a draft or post belongs to: linked by a person, or made by the campaign's automation.",
      {"type": {"type": "string", "maxLength": 40}, "id": {"type": "string", "pattern": _ID}}, ("type", "id")),
 )
-REQUIREMENT = {"automation.patch_propose": "edit"}
+REQUIREMENT = {"automation.patch_propose":"edit","x.action.propose":"edit"}
 
 
 def _definition(tool_id, effect, purpose, properties, required):
@@ -200,6 +207,8 @@ def run(tool_id: str, args: dict, ctx: Context) -> tuple[dict, dict]:
 
 
 LABELS = {
+    "x.capabilities":"Checked X Direct availability","x.operations.list":"Read X action evidence",
+    "x.action.propose":"Prepared an X action for approval",
     "help.search": "Searched Rafii help", "help.get": "Read a help article", "route.describe": "Checked this page",
     "workspace.summary": "Read your workspace summary", "channels.capabilities": "Checked your connected accounts",
     "queue.summary": "Checked the queue", "job.get": "Read the post's publishing record", "draft.get": "Read the draft",
@@ -460,6 +469,15 @@ def channels_capabilities(ctx, platform=None, connectionId=None):
         if platform and channel.get("platform", "").lower() != platform.lower():
             continue
         view = customer_view(channel, matrices.get(channel["id"], assisted_matrix()), ctx.now)
+        if channel.get('platform')=='X':
+            oauth=getattr(ctx.service,'oauth',None)
+            adapter=ctx.providers.get('x')
+            if oauth is not None and adapter is not None:
+                current=oauth._capabilities(adapter,'identity',channel.get('scopes') or [],[],ctx.now,workspace_id=ctx.workspace_id)
+                for name,value in current.items():
+                    if name!='identity' and value.get('level')!='Direct':
+                        view['capabilities'][name]=value
+
         route = capabilities.publish_route(shown_state, {"platform": channel["platform"], "channelId": channel["id"]}, providers=ctx.providers, live=ctx.live, can_publish=can_publish)
         try:
             state = engine.channel_state(channel) if engine is not None else None
@@ -749,4 +767,6 @@ EXECUTORS.update({
     "record.attribution": reads.record_attribution, "campaign.membership": reads.campaign_membership,
     "workspace.search": reads.picker_search,
 })
+from . import x_tools
+EXECUTORS.update({"x.capabilities":x_tools.capabilities,"x.operations.list":x_tools.operations,"x.action.propose":x_tools.propose})
 assert set(EXECUTORS) == set(CATALOG)

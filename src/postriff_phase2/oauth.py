@@ -94,11 +94,11 @@ class OAuthService:
             if pid == 'x':
                 if not diagnostic.get('xCustomerEntitlementAttested'):
                     issues.append('X customer OAuth entitlement needs independent Developer Console verification.')
-                if not diagnostic.get('xConnectPilotEnabled'):
-                    issues.append('X Connect-only pilot is off; publishing approval does not enable it.')
+                if not any(diagnostic.get(name) for name in ('xConnectPilotEnabled', 'xPublicConnectEnabled', 'xDirectAcceptanceEnabled')):
+                    issues.append('X customer connections are not enabled for this release.')
                 if not diagnostic.get('xDailyIdentityCallLimit'):
                     issues.append('X billed identity reads have no approved daily call allowance.')
-                if not diagnostic.get('xPilotWorkspaceAllowlistSize'):
+                if not diagnostic.get('xPilotWorkspaceAllowlistSize') and not diagnostic.get('xPublicConnectEnabled') and not diagnostic.get('xDirectAcceptanceEnabled'):
                     issues.append('X customer pilot requires an explicit server-side workspace allowlist.')
             try:
                 callback = self.callback_uri(pid)
@@ -135,8 +135,14 @@ class OAuthService:
                     'comments_read': bool(adapter and normalized['comments_read'] == 'supported' and adapter.capability_scopes('comments_read')),
                     'reply': bool(adapter and normalized['comments_reply'] == 'supported' and adapter.capability_scopes('reply')),
                 }
-            if pid == 'x' and not getattr(adapter, 'publishing_release_enabled', False):
-                legacy['publish'] = False
+            if pid == 'x':
+                # OAuth permissions are progressive; requesting one never establishes a live capability.
+                legacy = {name: bool(adapter and adapter.capability_scopes(name)
+                          and (name == 'identity' or getattr(adapter, 'direct_management_enabled', False) or getattr(adapter, 'direct_acceptance_enabled', False)))
+                          for name in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply',
+                                       'interactions', 'account_management', 'bookmarks', 'lists', 'direct_messages', 'moderate')}
+                if not getattr(adapter, 'publishing_release_enabled', False) and not getattr(adapter, 'direct_acceptance_enabled', False):
+                    legacy['publish'] = False
             requested = list(getattr(cls, 'documented_scopes', ())) or sorted({scope for scopes in cls.SCOPES.values() for scope in scopes})
             checklist = {
                 'clientIdConfigured': bool(presence.get('clientId')), 'clientSecretConfigured': bool(presence.get('clientSecret')),
@@ -151,7 +157,7 @@ class OAuthService:
             readiness = configuration if adapter is None else 'paused' if paused else 'configuration_blocked' if not connect_ready else 'identity_connection_available' if reviewed else 'configured_awaiting_provider_review'
             entries.append({'id': pid, 'platform': cls.platform, 'configured': adapter is not None,
                             'connectReady': connect_ready, 'configurationState': configuration, 'credentialPresence': presence,
-                            'readinessState': readiness, 'publicConnectionReady': connect_ready and reviewed, 'liveVerified': False,
+                            'readinessState': readiness, 'publicConnectionReady': connect_ready and reviewed and (pid != 'x' or bool(getattr(adapter, 'public_connect_enabled', False))), 'liveVerified': False,
                             'reviewStatus': 'operator_declared_reviewed' if reviewed else 'not_confirmed',
                             'reviewNote': 'Review readiness is operator-declared, not independently verified with the platform. Unreviewed apps may be limited to eligible app-role test accounts.',
                             'productionReviewed': reviewed, 'executionPaused': paused,
@@ -268,6 +274,21 @@ class OAuthService:
         identity = f'{provider_id}:{account_id}' if provider_id != 'youtube' or lane == 'standard' else f'youtube:agentic:{account_id}'
         return hashlib.sha256(identity.encode()).hexdigest()[:32]
 
+    def _identity(self, workspace_id, connection_id, adapter, access_token):
+        if getattr(adapter, 'id', None) != 'x':
+            return adapter.identity(access_token)
+        direct = getattr(self, 'x_direct', None)
+        if direct is None:
+            raise AlphaError('X API cost admission is unavailable.', 503, code='x_cost_admission_required')
+        with direct.request_context(workspace_id, connection_id, 'identity.read'):
+            return adapter.identity(access_token)
+
+    def _assert_x_generation(self, cur, workspace_id, connection_id, generation):
+        cur.execute("SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='x' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+        row = cur.fetchone()
+        if (not row or not generation or self._provider('x').authorization_generation(self.vault.decrypt(row[0], row[1])) != generation):
+            raise AlphaError('X authorization changed. Reconnect and review again.', 409, code='x_authorization_changed')
+
     def _admit_identity(self, workspace_id, adapter):
         if getattr(adapter, 'id', None) != 'youtube':
             return
@@ -325,12 +346,12 @@ class OAuthService:
         lane = inputs.get('authorizationLane', 'standard') if provider_id == 'youtube' else 'standard'
         adapter = self._youtube_provider(lane) if provider_id == 'youtube' else self._provider(provider_id)
         if provider_id == 'x':
-            if (not getattr(adapter, 'customer_connect_enabled', False)
-                    or workspace_id not in getattr(adapter, 'customer_connect_workspaces', frozenset())
-                    or not getattr(adapter, 'execution_enabled', True)):
+            from .x_release import connection_allowed, management_allowed
+            if not connection_allowed(adapter, workspace_id):
                 raise AlphaError('X account linking is not available for this workspace yet.', 503)
-            if capability != 'identity':
-                raise AlphaError('X publishing is not part of this account-connection beta.', 409)
+            if capability != 'identity' and not management_allowed(adapter, workspace_id):
+                raise AlphaError('Unavailable — the X Direct management release is not enabled.', 409,
+                                 code='x_direct_release_disabled')
         if provider_id == 'youtube' and (capability == 'autopilot' and lane != 'agentic'
                 or lane == 'agentic' and inputs.get('agenticConsent') is not True):
             raise AlphaError('Explicitly approve the separate AI-agent connection before requesting its permissions.', 403, code='youtube_agentic_consent_required')
@@ -343,7 +364,7 @@ class OAuthService:
             if getattr(type(adapter), 'provider_approval_required', False) and not diagnostic.get('providerVerified'):
                 raise AlphaError("This connection is waiting for provider application approval.", 409)
             raise AlphaError("This connection is not enabled yet.", 409)
-        youtube_features = tuple(adapter.SCOPES) if provider_id == 'youtube' else ()
+        youtube_features = tuple(adapter.SCOPES) if provider_id in ('youtube', 'x') else ()
         if capability not in (*CAPABILITIES, 'posts_read', *youtube_features) or capability in ("media_types", "webhooks"):
             raise AlphaError("Choose the capability you want to enable.", 400)
         scopes = adapter.capability_scopes(capability)
@@ -388,7 +409,8 @@ class OAuthService:
             custody = json.dumps({'pkce': verifier, 'connectionId': (inputs or {}).get('connectionId'),
                                   'clientId': adapter.client_id, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard'),
                                   'policyAcceptance': policy_acceptance}) if provider_id == 'youtube' else json.dumps(
-                                      {'pkce': verifier, 'clientId': adapter.client_id, 'expectedConnectionId': expected_x_connection}
+                                      {'pkce': verifier, 'clientId': adapter.client_id, 'expectedConnectionId': expected_x_connection,
+                                       'requestedCapability': capability}
                                   ) if provider_id == 'x' else verifier
             ciphertext, key_id = self.vault.encrypt(custody)
             stored_capability = capability if capability in CAPABILITIES else 'identity'
@@ -445,9 +467,8 @@ class OAuthService:
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
         if provider_id == 'x':
             adapter = self._provider('x')
-            if (not getattr(adapter, 'customer_connect_enabled', False)
-                    or workspace_id not in getattr(adapter, 'customer_connect_workspaces', frozenset())
-                    or not getattr(adapter, 'execution_enabled', True)):
+            from .x_release import connection_allowed, management_allowed
+            if not connection_allowed(adapter, workspace_id):
                 raise AlphaError('X account linking is not available for this workspace yet.', 503)
             if not isinstance(state, str) or not 20 <= len(state) <= 128:
                 raise AlphaError('Connection request unavailable.', 404)
@@ -459,9 +480,14 @@ class OAuthService:
                 cur.execute("SELECT id::text,member_id::text,provider,capability,scopes,extract(epoch from expires_at),consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE workspace_id=%s AND state_hash=%s FOR UPDATE",
                             (workspace_id, hashlib.sha256(state.encode()).hexdigest()))
                 txn = cur.fetchone()
-                if (not txn or txn[1] != principal or txn[2] != 'x' or txn[3] != 'identity'
-                        or set(txn[4] or []) != set(adapter.capability_scopes('identity')) or txn[6]):
+                if not txn or txn[1] != principal or txn[2] != 'x' or txn[6]:
                     raise AlphaError('Connection request unavailable.', 404)
+                allowed_scope_sets = [set(adapter.capability_scopes('identity'))]
+                if management_allowed(adapter, workspace_id):
+                    allowed_scope_sets = [set(value) for value in adapter.SCOPES.values() if value]
+                if set(txn[4] or []) not in allowed_scope_sets:
+                    raise AlphaError('X permissions changed. Start a new connection request.', 409,
+                                     code='x_oauth_scope_binding_changed')
                 if txn[5] <= self.clock():
                     raise AlphaError('This connection request expired. Start again.', 409)
                 if code and not error:
@@ -574,6 +600,12 @@ class OAuthService:
                 if expected_x_connection is not None and (not isinstance(expected_x_connection, str)
                         or not re.fullmatch(r'[0-9a-f]{32}', expected_x_connection)):
                     raise AlphaError('Connection request unavailable.', 404)
+                requested_x_capability = x_context.get('requestedCapability', capability)
+                if (not isinstance(requested_x_capability, str)
+                        or set(adapter.capability_scopes(requested_x_capability)) != set(scopes or [])):
+                    raise AlphaError('X permission request changed. Start again.', 409,
+                                     code='x_oauth_scope_binding_changed')
+                capability = requested_x_capability
                 verifier = x_context['pkce']
             youtube_context = {}
             if provider_id == 'youtube' and verifier.startswith('{'):
@@ -610,7 +642,7 @@ class OAuthService:
                     raise AlphaError('YouTube permissions could not be verified.', 503, code='youtube_verification_unavailable')
                 policy_acceptance = self.youtube_policy.require_pending(cur, workspace_id, principal, token,
                     adapter, returned_scopes, youtube_context)
-            identity = adapter.identity(grant["accessToken"])
+            identity = self._identity(workspace_id, "oauth." + str(transaction_id), adapter, grant["accessToken"])
             # Requested scopes are not proof of granted scopes. Empty/unknown fails closed.
             reported = grant.get('scopes')
             if (reported is None or (provider_id == 'youtube' and not reported)) and hasattr(adapter, 'inspect_scopes'):
@@ -654,7 +686,7 @@ class OAuthService:
                 consent_generation = cur.fetchone()[0]
                 self.youtube_policy.bind(cur, workspace_id, connection_id, policy_acceptance)
             now = self.clock()
-            matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
+            matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"], workspace_id=workspace_id)
             for name, value in matrix.items():
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
@@ -664,6 +696,9 @@ class OAuthService:
         # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
         horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
         channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
+        if provider_id == 'x':
+            channel['authorizationGeneration'] = adapter.authorization_generation(grant['accessToken'])
+            channel['refreshSupported'] = bool(refresh_ct)
         if provider_id == 'youtube':
             channel['refreshBindingRequired'] = False
             channel['authorizationLane'] = getattr(adapter, 'authorization_lane', 'standard')
@@ -673,12 +708,15 @@ class OAuthService:
         # this workspace save. The same-transaction fence rolls back a stale
         # profile restoration rather than trusting a newly fetched revision.
         def consent_fence(cur, _state, _actor):
-            self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
-        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id == 'youtube' else {}))
-        self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': consent_generation} if provider_id == 'youtube' else {}))
+            if provider_id == 'x':
+                self._assert_x_generation(cur, workspace_id, connection_id, channel['authorizationGeneration'])
+            else:
+                self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
+        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id in ('youtube','x') else {}))
+        self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation':consent_generation} if provider_id=='youtube' else {'x_generation':channel['authorizationGeneration']} if provider_id=='x' else {}))
         return {"connected": True, "connectionId": connection_id, "account": channel["account"], "providerAccountId": identity["providerAccountId"], "confirmAccount": True, "missingScopes": missing, "capabilities": matrix, "revision": saved["revision"]}
 
-    def _keep_picture(self, workspace_id, token, connection_id, identity, *, youtube_generation=None):
+    def _keep_picture(self, workspace_id, token, connection_id, identity, *, youtube_generation=None, x_generation=None):
         """Download outside any transaction, then store: the account's picture for previews (account_pictures.py)."""
         try:
             outcome = account_pictures.picture_from_identity(identity, self.picture_fetch)
@@ -690,6 +728,8 @@ class OAuthService:
             with self.repository.transaction(token, workspace_id) as (cur, _, _):
                 if youtube_generation is not None:
                     self._assert_youtube_generation(cur, workspace_id, connection_id, youtube_generation)
+                if x_generation is not None:
+                    self._assert_x_generation(cur,workspace_id,connection_id,x_generation)
                 account_pictures.guarded(cur, account_pictures.store, workspace_id, connection_id, outcome)
         except AlphaError:
             pass  # membership ended in between; nothing to decorate
@@ -944,7 +984,7 @@ class OAuthService:
         return adapter.client_metadata() if name == "client-metadata.json" else adapter.jwks()
 
     @staticmethod
-    def _capabilities(adapter, requested, granted, missing, now, access_token=None):
+    def _capabilities(adapter, requested, granted, missing, now, access_token=None, *, workspace_id=None):
         """Build the whole matrix from the live grant, not only the last requested slice.
 
         Incremental Meta OAuth can return a token containing permissions granted in earlier
@@ -953,6 +993,40 @@ class OAuthService:
         and an account-scoped Standard Access grant remain distinct: the latter can prove Direct
         execution only for the exact connected account.
         """
+        if getattr(adapter, 'id', None) == 'x':
+            from .x_release import management_allowed, publishing_allowed
+            from .x_access_evidence import current_access
+            access_evidence=current_access(adapter,now)
+            matrix = unsupported_matrix()
+            granted_set = set(granted or [])
+            identity_scopes = set(adapter.capability_scopes('identity')) - {'offline.access'}
+            if identity_scopes and identity_scopes <= granted_set:
+                set_level(matrix, 'identity', 'Direct', 'X returned this account identity under its OAuth grant.', now, adapter.capability_version)
+            implemented = getattr(adapter, 'implemented_capabilities', frozenset())
+            for name in CAPABILITIES:
+                if name == 'identity':
+                    continue
+                required = set(adapter.capability_scopes(name))
+                reason, code = 'Unavailable — Rafii has no verified X API handler for this capability.', 'x_handler_unavailable'
+                if name in implemented and required:
+                    if not required <= granted_set:
+                        reason, code = 'Unavailable — reconnect X and grant the required permissions: ' + ', '.join(sorted(required - granted_set)), 'x_scope_missing'
+                    elif not getattr(adapter, 'execution_enabled', True):
+                        reason, code = 'Unavailable — X API execution is paused.', 'x_execution_paused'
+                    elif not management_allowed(adapter, workspace_id):
+                        reason, code = 'Unavailable — the X Direct release is not enabled.', 'x_direct_release_disabled'
+                    elif 'x_api_v2' not in access_evidence['entitlements']:
+                        reason,code='Unavailable — current X developer application entitlement evidence is missing.','x_app_access_unverified'
+                    elif not callable(getattr(adapter,'cost_capability_ready',None)) or not adapter.cost_capability_ready(workspace_id,name):
+                        reason, code = 'Unavailable — the current account capability, request quota and approved X cost grant must all be verified.', 'x_cost_admission_required'
+                    elif name in ('publish', 'schedule', 'reply') and not publishing_allowed(adapter, workspace_id):
+                        reason, code = 'Unavailable — direct X publishing acceptance is not verified for this release.', 'x_publishing_release_disabled'
+                    else:
+                        set_level(matrix, name, 'Direct', 'Authorized official X API handler; each write requires an exact user approval and an API receipt.', now, adapter.capability_version)
+                        continue
+                set_level(matrix, name, 'Unsupported', reason, now, adapter.capability_version)
+                matrix[name]['reasonCode'] = code
+            return matrix
         if getattr(adapter, 'id', None) == 'youtube':
             from .youtube.model import READ, UPLOAD, MANAGE, ANALYTICS, has_scopes, project_public_gate
             matrix = unsupported_matrix()
@@ -974,8 +1048,7 @@ class OAuthService:
         publish_scopes = set(adapter.capability_scopes("publish"))
         publish_granted = bool(publish_scopes) and publish_scopes <= granted_set
         publisher_ready = not (
-            (getattr(adapter, 'id', None) == 'x' and not getattr(adapter, 'publishing_release_enabled', False)) or
-            getattr(adapter, "publisher", None) is not None and
+getattr(adapter, "publisher", None) is not None and
             (not getattr(adapter, "publish_live_tested", False) or
              not getattr(adapter, "publishing_permission", False) or
              not getattr(adapter, "write_qualified", lambda _token: True)(access_token))
@@ -1006,10 +1079,6 @@ class OAuthService:
                 set_level(matrix, name, "Direct", evidence, now, adapter.capability_version)
             elif name == requested:
                 set_level(matrix, name, "Unsupported", f"Waiting for {adapter.platform} to approve Rafii.", now, adapter.capability_version)
-        if getattr(adapter, 'id', None) == 'x' and not getattr(adapter, 'publishing_release_enabled', False):
-            for name in ('publish', 'schedule'):
-                set_level(matrix, name, 'Unsupported',
-                          'X Connect-only pilot: publishing requires a separate release.', now, adapter.capability_version)
         return matrix
 
     # --- read / refresh / disconnect -------------------------------------------------
@@ -1028,6 +1097,16 @@ class OAuthService:
         by_platform = {provider['platform']: provider for provider in catalog}
         views = [{**customer_view(with_youtube_credential_status(c, credentials.get((workspace_id, c['id']))), matrices.get(c['id'], assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
         for view in views:
+            if view.get('platform') == 'X':
+                adapter = self.providers.get('x')
+                if adapter is None:
+                    view['capabilities'] = unsupported_matrix()
+                else:
+                    # Persisted Direct labels from an older release cannot override current server gates.
+                    current = self._capabilities(adapter, 'identity', view.get('scopes') or [], [], now, workspace_id=workspace_id)
+                    for name, value in current.items():
+                        if name != 'identity' and value.get('level') != 'Direct':
+                            view['capabilities'][name] = value
             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
         return {'channels': views, 'providers': catalog}
 
@@ -1192,6 +1271,8 @@ class OAuthService:
                         expires = self.clock() + float(grant.get("expiresIn") or 3600)
                         cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,access_expires_at=to_timestamp(%s),rotated_at=now(),updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (access_ct, new_refresh, key_id, expires, workspace_id, connection_id))
                     access_token = self.vault.decrypt(access_ct, key_id)
+                    if provider == 'x':
+                        authorization_generation = adapter.authorization_generation(access_token)
                     inspector = getattr(adapter, "inspect_scopes", None)
                     if inspector:
                         try:
@@ -1213,6 +1294,7 @@ class OAuthService:
                                 generation=authorization_generation, force=youtube_policy_required, cur=cur)
                         cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (scopes, workspace_id, connection_id))
                     return {"provider": provider, "accessToken": access_token, "scopes": list(scopes), "expiresAt": expires, 'providerAccountId': account_id,
+                            **({'authorizationGeneration': authorization_generation, 'refreshSupported': bool(refresh_supported and refresh_ct)} if provider == 'x' else {}),
                             **({'refreshBindingRequired': refresh_binding_required, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard'),
                                 'authorizationGeneration': authorization_generation,
                                 '_youtubePolicyContext': {'workspace': workspace_id, 'connection': connection_id,
@@ -1246,9 +1328,8 @@ class OAuthService:
                 raise AlphaError("Connection unavailable.", 404)
             if stored[0] == 'x':
                 adapter = self._provider('x')
-                if (not getattr(adapter, 'customer_connect_enabled', False)
-                        or workspace_id not in getattr(adapter, 'customer_connect_workspaces', frozenset())
-                        or not getattr(adapter, 'execution_enabled', True)):
+                from .x_release import connection_allowed
+                if not connection_allowed(adapter, workspace_id):
                     raise AlphaError('X account verification is paused.', 503)
                 limit = getattr(adapter, 'daily_identity_limit', 0)
                 if not isinstance(limit, int) or not 1 <= limit <= 100:
@@ -1274,7 +1355,7 @@ class OAuthService:
             grant = self.token_for_worker(workspace_id, connection_id)
             adapter = self.provider_for_grant(grant)
             self._admit_identity(workspace_id, adapter)
-            identity = adapter.identity(grant["accessToken"])
+            identity = self._identity(workspace_id, connection_id, adapter, grant["accessToken"])
             drift = identity["providerAccountId"] != account_id
             inspected = hasattr(adapter, "inspect_scopes")
             reported = grant["scopes"] if inspected and not drift else []
@@ -1342,7 +1423,7 @@ class OAuthService:
         if provider_id == 'youtube' and grant and result['state'] == 'reauthorization_required':
             self.mark_youtube_revoked(workspace_id, connection_id, expected_access_token=grant['accessToken'], expected_generation=grant.get('authorizationGeneration'))
         if identity and result["identityVerified"]:
-            self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': grant.get('authorizationGeneration')} if provider_id == 'youtube' else {}))
+            self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation':grant.get('authorizationGeneration')} if provider_id=='youtube' else {'x_generation':grant.get('authorizationGeneration')} if provider_id=='x' else {}))
         return result
 
     # --- worker re-verification (orchestration §5 step 2) ------------------------------
@@ -1495,7 +1576,8 @@ class OAuthService:
             with self.repository.connection_factory() as db:
                 with db.cursor() as cur:
                     return unavailable(cur, "account_deletion_pending")
-        if provider_id == 'x' and not getattr(self._provider('x'), 'publishing_release_enabled', False):
+        from .x_release import publishing_allowed
+        if provider_id == 'x' and not publishing_allowed(self._provider('x'), workspace_id):
             # Worker re-verification belongs to Publishing Release, never Connect-only.
             # Otherwise a queued pre-release X job could incur an unbudgeted paid identity read.
             with self.repository.connection_factory() as db:
@@ -1506,7 +1588,7 @@ class OAuthService:
             grant = self.token_for_worker(workspace_id, connection_id)
             adapter = self.provider_for_grant(grant)
             self._admit_identity(workspace_id, adapter)
-            identity = adapter.identity(grant["accessToken"])
+            identity = self._identity(workspace_id, connection_id, adapter, grant["accessToken"])
             drift = identity["providerAccountId"] != account_id
             inspected = hasattr(adapter, "inspect_scopes")
             reported = grant["scopes"] if inspected and not drift else []
@@ -1578,21 +1660,20 @@ class OAuthService:
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
             self.repository.assert_fresh(token, principal)
-            cur.execute("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+            cur.execute("SELECT provider,access_ciphertext,key_id,refresh_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
             stored = cur.fetchone()
             if not stored:
                 raise AlphaError("Connection unavailable.", 404)
             remote = None
             shared = self._shared_elsewhere(cur, workspace_id, connection_id, stored[0])
-            if shared or stored[0] == 'x':
-                # X customer pilot never makes an unbudgeted remote revocation request.
-                # Local credentials are destroyed; X-side grant revocation requires the
-                # customer to remove Rafii via X Connected Apps until separately qualified.
+            if shared:
                 remote = False
             else:
                 try:
                     access = self.vault.decrypt(stored[1], stored[2])
-                    remote = self._provider_for_access(stored[0], access).revoke(access)
+                    adapter = self._provider_for_access(stored[0], access)
+                    remote = (adapter.revoke_grant(access, self.vault.decrypt(stored[3], stored[2]) if stored[3] else None)
+                              if stored[0] == 'x' else adapter.revoke(access))
                 except AlphaError:
                     remote = False
             cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
@@ -1601,6 +1682,27 @@ class OAuthService:
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             revoked_samples = revoke_connection_samples(state, connection_id, principal, self.clock())
             state_changed = bool(revoked_samples)
+            if stored[0] == 'x':
+                # Invalidate pre-existing in-flight consent; a previously claimed
+                # transaction cannot decrypt its verifier and reconnect after revoke.
+                cur.execute("""UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='disconnected',
+                    verifier_ciphertext='',expires_at=now() WHERE workspace_id=%s AND provider='x'
+                    AND expires_at>now() AND (consumed_at IS NULL OR outcome='exchange_started')""",(workspace_id,))
+                from .x_resource_evidence import purge_connection
+                purge_connection(cur,workspace_id,connection_id)
+                for channel in state.get('phase2', {}).get('channels', []):
+                    if channel.get('id') == connection_id and channel.get('platform') == 'X':
+                        channel.update(revoked=True, capabilityVerified=False, refreshSupported=False)
+                        state_changed = True
+                for job in state.get('phase2', {}).get('jobs', []):
+                    if job.get('manifest', {}).get('channelId') == connection_id and job.get('state') not in ('verified','failed','canceled'):
+                        job['cancelRequested'] = True
+                        if job.get('state') not in ('submitting','provider_accepted','published','uncertain'):
+                            job['state'] = 'held'
+                        state_changed = True
+                from . import x_direct_journal
+                if x_direct_journal.schema_ready(cur):
+                    cur.execute("UPDATE public.pr_x_direct_operations SET cancel_requested=true,state=CASE WHEN state IN ('needs_approval','queued') THEN 'canceled' ELSE state END,reason_code='x_disconnected',reason='Customer disconnected this X authorization.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND state NOT IN ('verified','failed','canceled')", (workspace_id, connection_id))
             if stored[0] == 'youtube':
                 from .youtube.agent import revoke_connection_authority
                 state_changed = revoke_connection_authority(state, connection_id, principal, self.clock(),
@@ -1635,7 +1737,7 @@ class OAuthService:
         purge_after_disconnect(self.repository.connection_factory, workspace_id, connection_id)
         snapshot = self.repository.get(workspace_id, token)
         revision = snapshot["revision"]
-        if stored[0] != 'youtube':
+        if stored[0] not in ('youtube', 'x'):
             try:
                 saved = self.repository.mutate(workspace_id, token, snapshot["revision"], "p2_channel_disconnect", {"channelId": connection_id})
                 revision = saved["revision"]
@@ -1646,7 +1748,7 @@ class OAuthService:
         deferred = shared and stored[0] == 'youtube'
         note = "Local execution access removed; approved jobs for this account are held at the next claim."
         if stored[0] == 'x':
-            note += " X-side refresh grant revocation is unverified; remove Rafii in X Connected Apps to revoke provider consent."
+            note += " Official X token revocation was confirmed." if remote else " Official X token revocation could not be confirmed; local authority and pending work were removed."
         if deferred:
             note += " Google project-wide revocation was deferred to protect other active Google connections. Review Google account permissions to revoke the entire project grant."
         return {"connectionId": connection_id, "disconnected": True, "remoteRevoked": bool(remote), "remoteRevocationDeferred": deferred, "revision": revision, "note": note}

@@ -468,6 +468,8 @@ class HostedWorkspaceService:
         from .youtube.service import YouTubeCreatorService
         self.youtube = YouTubeCreatorService(self)
         self.commands.youtube_capacity = self.youtube.capacity
+        from .x_direct_service import XDirectService
+        self.x_direct = XDirectService(self)
         from .learning_service import HostedLearning
         # Preference learning: every command's implied events are captured in that command's transaction.
         self.learning = HostedLearning(connection_factory, clock)

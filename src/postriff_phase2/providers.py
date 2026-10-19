@@ -265,6 +265,11 @@ def registry_from_environment(values, transport=None):
         adapter.publish_live_tested = str(values.get(prefix + "PUBLISH_LIVE_TESTED", "")).lower() == "true"
         adapter.publishing_permission = str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true"
         if provider_id == "x":
+            from .x_access_evidence import load_evidence
+            import time
+            adapter.x_access_evidence = load_evidence(values, adapter.client_id, time.time())
+            adapter.verified_entitlements = adapter.x_access_evidence.get('entitlements', frozenset())
+            adapter.public_customer_acceptance_verified = adapter.x_access_evidence.get('publicCustomerVerified', False)
             # Operator assertions do not replace console or customer OAuth acceptance evidence.
             def enabled_flag(name):
                 return str(values.get(name, "")).lower() == "true"
@@ -279,7 +284,14 @@ def registry_from_environment(values, transport=None):
                 workspace_ids and len(workspace_ids) <= 10
                 and all(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", w) for w in workspace_ids)
             ) else frozenset()
-            adapter.customer_connect_enabled = (
+            # Public customer admission is independent of the limited identity pilot.
+            # These switches permit an attempt; they are not provider acceptance evidence.
+            adapter.public_connect_enabled = (
+                enabled_flag("POSTRIFF_OAUTH_X_PUBLIC_CONNECT_ENABLED")
+                and enabled_flag("POSTRIFF_OAUTH_X_CUSTOMER_ACCESS_APPROVED")
+                and adapter.production_reviewed
+                and adapter.daily_identity_limit > 0)
+            adapter.customer_connect_enabled = adapter.public_connect_enabled or (
                 enabled_flag("POSTRIFF_OAUTH_X_CONNECT_PILOT_ENABLED")
                 and enabled_flag("POSTRIFF_OAUTH_X_CUSTOMER_ACCESS_APPROVED")
                 and adapter.daily_identity_limit > 0
@@ -288,7 +300,24 @@ def registry_from_environment(values, transport=None):
                 enabled_flag("POSTRIFF_OAUTH_X_PUBLISHING_RELEASE_ENABLED")
                 and adapter.production_reviewed and adapter.publish_live_tested
                 and adapter.publishing_permission)
+            raw_acceptance = str(values.get("POSTRIFF_OAUTH_X_DIRECT_ACCEPTANCE_WORKSPACES", "")).strip()
+            acceptance_ids = [w for w in re.split(r"[\s,]+", raw_acceptance) if w]
+            adapter.direct_acceptance_workspaces = frozenset(acceptance_ids) if (
+                acceptance_ids and len(acceptance_ids) <= 10
+                and all(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", w) for w in acceptance_ids)
+            ) else frozenset()
+            adapter.direct_acceptance_enabled = (
+                enabled_flag("POSTRIFF_OAUTH_X_DIRECT_ACCEPTANCE_ENABLED")
+                and enabled_flag("POSTRIFF_OAUTH_X_CUSTOMER_ACCESS_APPROVED")
+                and adapter.production_reviewed and adapter.daily_identity_limit > 0
+                and bool(adapter.direct_acceptance_workspaces))
+            adapter.direct_management_enabled = (
+                enabled_flag("POSTRIFF_OAUTH_X_DIRECT_MANAGEMENT_ENABLED")
+                and adapter.public_connect_enabled and adapter.production_reviewed)
             registry.diagnostics["x"].update({
+                "xPublicConnectEnabled": adapter.public_connect_enabled,
+                "xDirectAcceptanceEnabled": adapter.direct_acceptance_enabled,
+                "xDirectManagementEnabled": adapter.direct_management_enabled,
                 "xConnectPilotEnabled": enabled_flag("POSTRIFF_OAUTH_X_CONNECT_PILOT_ENABLED"),
                 "xCustomerEntitlementAttested": enabled_flag("POSTRIFF_OAUTH_X_CUSTOMER_ACCESS_APPROVED"),
                 "xDailyIdentityCallLimit": adapter.daily_identity_limit,

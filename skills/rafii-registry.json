@@ -2047,7 +2047,7 @@
    "version": "1.1.0",
    "kind": "knowledge",
    "sha256": "sha256:2f59dec0c18e30a26298e61ba47ea4165b1648df1a898bf85e54e9b6e7e35e9c",
-   "description": "Prepare and validate X drafts, or use the qualified free controlled-browser route for exact approved text posts and X-native scheduling.",
+   "description": "Prepare X drafts and propose exact customer-approved actions through Rafii's official X API connector.",
    "intents": [
     "*"
    ],

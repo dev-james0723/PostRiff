@@ -61,7 +61,7 @@ class DisabledHostedSocial:
 
 
 class PostgresWorker:
-    def __init__(self, connection_factory, social=None, clock=time.time, worker_id=None, on_verified=None, youtube_maintenance=None):
+    def __init__(self, connection_factory, social=None, clock=time.time, worker_id=None, on_verified=None, youtube_maintenance=None, x_maintenance=None):
         self.connection_factory = connection_factory
         self.social = social or DisabledHostedSocial()
         self.clock = clock
@@ -70,6 +70,7 @@ class PostgresWorker:
         # Optional server-side hook (e.g. native insights ingestion) run in the same transaction once verified.
         self.on_verified = on_verified
         self.youtube_maintenance = youtube_maintenance
+        self.x_maintenance = x_maintenance
         self.capacity_intervention = None
 
     def _event(self, job, state, message):
@@ -485,11 +486,17 @@ class PostgresWorker:
         maintenance = ({'enabled': False, 'scheduler': 'isolated_upload_lane'} if youtube_only else
                        youtube.maintenance(dispatch=False) if youtube and exclude_youtube else
                        youtube.maintenance() if youtube else {'enabled': False})
+        x_dispatch = {'enabled': False}
+        x_service = getattr(self, 'x_maintenance', None)
+        if not youtube_only and x_service and time.monotonic() - started < max_seconds:
+            x_dispatch = x_service.dispatch_one()
+            if x_dispatch.get('selected'):
+                processed += 1
         def step():
             return (self.step(youtube_only=youtube_only, exclude_youtube=exclude_youtube)
                     if youtube_only or exclude_youtube else self.step())
         while processed < max_jobs and time.monotonic() - started < max_seconds and step():
             processed += 1
         return {"processed": processed, "execution": "hosted-worker", "externalExecution": not isinstance(self.social, DisabledHostedSocial),
-                "youtubeMaintenance": maintenance, "capacityIntervention": getattr(self, 'capacity_intervention', None),
+                "youtubeMaintenance": maintenance, "xDirect": x_dispatch, "capacityIntervention": getattr(self, 'capacity_intervention', None),
                 "budget": {"maxJobs": max_jobs, "maxSeconds": max_seconds}}

@@ -219,13 +219,20 @@ export const channels: Channel[] = [
     slug: 'x',
     name: 'X',
     group: 'hosted',
-    capability: 'assisted',
-    reviewStatus: 'publishing opens after testing',
-    capabilities: { ...identityOnly },
-    description: 'Posts with one image on your X account.',
-    formats: ['Text (280 characters)', 'Single image'],
+    capability: 'unsupported',
+    reviewStatus: 'Direct API release pending',
+    capabilities: {
+      identity: 'Unsupported', publish: 'Unsupported', schedule: 'Unsupported',
+      analytics: 'Unsupported', comments_read: 'Unsupported', reply: 'Unsupported'
+    },
+    description: 'Connect and manage your X account through authorized official X APIs.',
+    formats: ['Text', 'Media', 'Replies'],
     region: 'global',
-    notes: [hostedTesting, 'X charges Rafii for every post and read.']
+    notes: [
+      'X actions become available after provider access, account permissions and release acceptance are verified.',
+      'Your account card shows the Direct capabilities available to your account. Unavailable actions stay disabled.',
+      'X API usage is metered. Publishing and scheduling require your approval.'
+    ]
   },
 
   {

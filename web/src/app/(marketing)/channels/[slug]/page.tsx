@@ -50,7 +50,9 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
   const faq =
     channel.group === 'hosted'
       ? [
-          { q: `Can Rafii publish to ${channel.name} directly today?`, a: `Not yet. ${channel.reviewStatus ?? 'Provider review is pending'}. Until it passes, Rafii prepares the post and you complete the final step; the badge on your channel card says exactly that.` },
+          { q: `Can Rafii publish to ${channel.name} directly today?`, a: channel.slug === 'x'
+            ? 'X Direct API release acceptance is pending. Your connected account will show each verified Direct capability and the reason for any unavailable action.'
+            : `Not yet. ${channel.reviewStatus ?? 'Provider review is pending'}. Until it passes, Rafii prepares the post and you complete the final step; the badge on your channel card says exactly that.` },
           { q: 'What permissions does Rafii ask for?', a: 'Only the scopes for the capability you enable — publishing, analytics, comments or replies — and the connection card lists the ones actually granted.' },
           { q: 'How do I disconnect?', a: 'From Channels → Disconnect. The stored token is wiped and revoked with the provider where supported.' }
         ]
@@ -75,7 +77,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
         }
         description={channel.description}
       >
-        <CapabilityBadge level={channel.capability} size='md' label={channel.reviewStatus ? `${channel.capability === 'assisted' ? 'Assisted' : 'Local'} · ${channel.reviewStatus}` : undefined} />
+        <CapabilityBadge level={channel.capability} size='md' label={channel.reviewStatus ? `${channel.capability === 'assisted' ? 'Assisted' : channel.capability === 'direct' ? 'Direct' : channel.group === 'local' ? 'Local' : 'Unavailable'} · ${channel.reviewStatus}` : undefined} />
         {channel.formats.map((format) => (
           <span key={format} className='rafii-quiet text-foreground inline-flex h-7 items-center rounded-full px-3 text-xs font-medium'>
             {format}
