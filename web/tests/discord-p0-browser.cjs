@@ -139,6 +139,9 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
       assert.equal(await composer.getByRole('button', {name: 'Prepare review', exact: true}).isDisabled(), true);
       await composer.getByRole('combobox', {name: 'Discord server and channel', exact: true}).click();
       await page.getByRole('option', {name: `${first.guildName} · ${first.channelName}`, exact: true}).click();
+      const destinationLabel = (await composer.getByRole('combobox', {name: 'Discord server and channel', exact: true}).innerText()).trim();
+      assert.equal(destinationLabel, `${first.guildName} · ${first.channelName}`, 'The closed destination field must show the selected server and channel.');
+      assert.equal(destinationLabel.includes(first.id), false, 'The authorization ID remains a payload value, never the selected destination label.');
       assert.match(await composer.locator('[data-discord-target]').innerText(), /555555.*7777777/);
       await composer.locator('input[type="datetime-local"]').fill(input.job.manifest.timing.local);
       await composer.getByRole('checkbox', {name: /I have the rights/}).check();
@@ -194,7 +197,7 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
       assert.equal(choices.find(d => d.stableId === first.id).authorizedId, null);
       assert.equal(approvals, 1); assert.equal(dispatches, 1);
       assert.equal(unexpectedMutations, 0); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
-      checks.push({width, explicitDestinationSelection: true, authorizationRefresh: true, explicitHumanApproval: true,
+      checks.push({width, explicitDestinationSelection: true, selectedDestinationLabel: true, authorizationRefresh: true, explicitHumanApproval: true,
         approvalRequests: approvals, syntheticDispatchRequests: dispatches, frozenTargetAfterDefaultEdit: true,
         scheduledReceipt: true, acceptedReceiptPendingVerification: true, verifiedProviderLookupReceipt: true,
         boundPermalinkInspectedWithoutNavigation: true, localDestinationRemoval: true, blockedOffOrigin,
