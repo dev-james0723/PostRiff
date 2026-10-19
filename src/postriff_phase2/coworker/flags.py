@@ -49,6 +49,9 @@ FLAGS = (
     # wave 2 every mapped platform whose draft checks pass. Drafting only; no publishing, OAuth or billing change.
     "RAFII_CREATION_PROJECTION_ENABLED",
     "RAFII_CREATION_ALL_PLATFORMS_ENABLED",
+    # Rafii POC-1 candidate (2026-10-15): strict same-cohort review, immutable weekly report snapshots and their
+    # exports over stored native observations. Read-only over providers and models; off by default.
+    "RAFII_REVIEW_SNAPSHOTS_ENABLED",
 )
 # Flags whose features reach an external service (email, push, the public web). Preview pins them off.
 EGRESS_FLAGS = ("RAFII_NOTIFICATIONS_V2_ENABLED", "RAFII_WEB_PUSH_ENABLED", "RAFII_SMS_ENABLED", "RAFII_SMS_ESCALATION_ENABLED", "RAFII_RESEARCH_BROKER_ENABLED", "RAFII_LISTENING_ENABLED")
