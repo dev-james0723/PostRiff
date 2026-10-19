@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-10-17T16:22:27.109133+00:00",
+  "sources": [
+    {
+      "url": "https://developers.pinterest.com/docs/developer-tools/sandbox/",
+      "finding": "Separate Sandbox entities, tokens and API host; not real live-account/public-visibility proof."
+    },
+    {
+      "url": "https://developers.pinterest.com/docs/key-concepts/access-tiers/",
+      "finding": "Trial supports board reads. Standard is separate. Apps registered on/after2026-09-14 may receive403 PINNER_DATA_ACCESS_DENIED for board/Pin data without authorization for non-business users. App1615884 registration date and actual account entitlement remain unverified."
+    },
+    {
+      "url": "https://developers.pinterest.com/docs/reference/error-codes/",
+      "finding": "403 PINNER_DATA_ACCESS_DENIED is documented for board/Pin/section access; Learn more routes to changelog."
+    },
+    {
+      "url": "https://developers.pinterest.com/docs/getting-started/set-up-authentication-and-authorization/",
+      "finding": "Authorization Code through official consent and server token exchange; no password/cookie authentication."
+    }
+  ],
+  "productionAcceptance": false,
+  "providerRequests": 0
+}

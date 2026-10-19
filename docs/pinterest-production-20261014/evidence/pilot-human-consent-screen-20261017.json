@@ -1,0 +1,23 @@
+{
+  "observedAt": "2026-10-17T17:44:17.293201+00:00",
+  "status": "HUMAN_ACTION_PENDING",
+  "execution": "REAL Pinterest official OAuth consent screen after explicit reconnection",
+  "appId": "1615884",
+  "appName": "Rafii",
+  "origin": "https://www.pinterest.com",
+  "callbackUri": "https://rafii.io/api/oauth/pinterest/callback",
+  "accountDisplay": "James Au",
+  "expectedUsername": "jamesaucreates",
+  "scopes": [
+    "user_accounts:read",
+    "boards:read"
+  ],
+  "visiblePermissions": [
+    "See your public boards, including group boards you join",
+    "See your user accounts and followers"
+  ],
+  "humanControl": "Give access",
+  "operatorClickedGiveAccess": false,
+  "tokensCodesStatesRetained": false,
+  "video": "NOT RUN; no recording claimed"
+}

@@ -289,6 +289,7 @@ def _youtube_requested(text: str, *, analytics=False) -> bool:
 
 
 EXPLICIT_REQUEST: dict[str, Callable[[str], bool]] = {
+    'tool.pinterest_boards': lambda text: __import__('postriff_phase2.pinterest_agent', fromlist=['requested']).requested(text),
     "tool.youtube_plan_context": _youtube_requested,
     "tool.youtube_plan_prepare": _youtube_requested,
     "tool.youtube_recommendations": _youtube_requested,

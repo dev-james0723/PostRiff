@@ -8,13 +8,13 @@
     "lint": "lint",
     "typecheck": "typecheck",
     "build": "build",
-    "test": "test:jcb",
-    "ci": "ci:youtube:jcb",
-    "e2e": "ci:youtube:frontend:jcb"
+    "test": "test:discord:capacity:jcb",
+    "ci": "ci:discord:p0:jcb",
+    "e2e": "e2e:discord:p0:jcb"
   },
   "runner": {
     "validation": "depot-ubuntu-24.04-8",
-    "build": "depot-ubuntu-24.04-16"
+    "build": "depot-ubuntu-24.04-8"
   },
   "outputs": [],
   "envAllowlist": [],
@@ -30,7 +30,14 @@
     "POSTRIFF_API_ORIGIN": "http://127.0.0.1:4438",
     "POSTRIFF_DEV_SSR": "1"
   },
-  "taskArgs": {},
+  "taskArgs": {
+    "test": [
+      "--burst-coordinator-qualification"
+    ],
+    "ci": [
+      "--with-discord-pipeline"
+    ]
+  },
   "inputExcludes": [
     "docs/**",
     "desktop/**",
@@ -42,12 +49,15 @@
     "*.zip",
     ".claude/**",
     ".agents/**",
-    ".token-pilot/**"
+    ".token-pilot/**",
+    ".preview/**",
+    "audio-reactive-fix/**",
+    "PostRiff_Research_2026-09-18/**"
   ],
   "checkoutPersistCredentials": true,
   "framework": "next",
   "transportMode": "remote_patch",
-  "cacheScope": "e408bbcd8242",
+  "cacheScope": "rafii-discord-release-20261015",
   "packageManagerVersion": "11.12.1",
   "lockfile": "package-lock.json",
   "lockfileSha256": "1b300aacc1220cf05699ea08bd92986ebff7c4068fad447be9a0866084f3f0c5",
