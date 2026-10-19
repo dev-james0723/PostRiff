@@ -355,7 +355,11 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               <div className='flex flex-col gap-1.5'>
                 <Label htmlFor='schedule-discord-destination'>Discord server and channel</Label>
                 <Select value={discordDestinationId} onValueChange={(value) => setDiscordDestinationId(String(value))}>
-                  <SelectTrigger id='schedule-discord-destination' className='h-12 w-full'><SelectValue placeholder='Choose an authorized destination' /></SelectTrigger>
+                  <SelectTrigger id='schedule-discord-destination' className='h-12 w-full'>
+                    <SelectValue className='min-w-0' placeholder='Choose an authorized destination'>
+                      {discordDestination ? <span className='truncate'>{discordDestination.guildName} · {discordDestination.channelName}</span> : undefined}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     {discordDestinations.map((d) => <SelectItem key={d.id} value={d.id}>{d.guildName} · {d.channelName}</SelectItem>)}
                     {discordDestinations.length === 0 && <SelectItem value='__none' disabled>Authorize a channel in Connections first</SelectItem>}
