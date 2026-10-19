@@ -53,6 +53,8 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
         guildId: d.guildId, guildName: d.guildName, name: d.channelName, kind: d.kind, selected: d.id === second.id}));
       let authorizations = 0, removals = 0, preparations = 0, approvals = 0, dispatches = 0, unexpectedMutations = 0;
       let approvalClicked = false, dispatchClicked = false, blockedOffOrigin = 0;
+      let activeWorkStartedAt = null, activityRequests = 0; const activitySessions = new Map();
+      const activityUrl = `${base}/api/workspaces/${wid}/time-savings/activity`;
       const page = await context.newPage(); activePage = page; page.setDefaultTimeout(30000);
       stage = 'authorize-channel-' + width;
       await context.route('**/*', async route => {
@@ -60,6 +62,33 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
         if (url.origin !== base) { blockedOffOrigin++; return route.abort(); }
         if (!p.startsWith('/api/')) return route.continue();
         const send = (body, status = 200) => route.fulfill({status, contentType: 'application/json', body: JSON.stringify(body)});
+        const rejectMutation = action => {
+          unexpectedMutations++;
+          console.error('RAFII_DISCORD_UNEXPECTED_MUTATION ' + JSON.stringify({stage, method: request.method(),
+            path: p.replace(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi, ':id').replace(/\/\d+(?=\/|$)/g, '/:id').slice(0, 180),
+            action: action === undefined ? null : typeof action === 'string' && /^[A-Za-z0-9_:-]{1,64}$/.test(action) ? action : '[redacted]'}));
+          return send({error: 'Unexpected synthetic action'}, 400);
+        };
+        if (request.url() === activityUrl && request.method() === 'POST') {
+          // ScheduleDialog closes its draft timer after preparing review. Accept aggregate telemetry only.
+          const beat = request.postDataJSON();
+          assert.ok(beat && typeof beat === 'object' && !Array.isArray(beat));
+          assert.deepEqual(Object.keys(beat).sort(), ['activeSeconds', 'clientSessionKey', 'sequence', 'taskKind', 'workflowKey',
+            ...(Object.hasOwn(beat, 'closed') ? ['closed'] : [])].sort());
+          assert.equal(beat.workflowKey, `variant:${input.variant.id}`); assert.equal(beat.taskKind, 'draft');
+          assert.match(beat.clientSessionKey, /^[A-Za-z0-9_-]{16,64}$/);
+          assert.ok(activeWorkStartedAt !== null);
+          assert.ok(Number.isSafeInteger(beat.activeSeconds) && beat.activeSeconds > 0 && beat.activeSeconds <= 86400);
+          assert.ok(beat.activeSeconds <= Math.ceil((performance.now() - activeWorkStartedAt) / 1000) + 1);
+          assert.ok(Number.isSafeInteger(beat.sequence) && beat.sequence > 0 && beat.sequence <= 1000000);
+          if (Object.hasOwn(beat, 'closed')) assert.equal(beat.closed, true);
+          const previous = activitySessions.get(beat.clientSessionKey);
+          assert.notEqual(previous?.closed, true, 'A closed timer cannot send another beat.');
+          assert.equal(beat.sequence, (previous?.sequence ?? 0) + 1);
+          assert.ok(beat.activeSeconds >= (previous?.activeSeconds ?? 0));
+          activitySessions.set(beat.clientSessionKey, beat); activityRequests++;
+          return send({accepted: true, activeSeconds: beat.activeSeconds, sequence: beat.sequence});
+        }
         if (p === `/api/workspaces/${wid}/channels/${channelId}/destination` && request.method() === 'POST') {
           assert.equal(request.postDataJSON().destinationId, first.channelId); authorizations++;
           channel = {...channel, discordDestinations: [structuredClone(first), structuredClone(second)], defaultDestinationId: first.id};
@@ -90,7 +119,7 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
             // The backend-produced approved job is returned only in response to the real client approval request.
             snapshot.state.phase2.jobs = [structuredClone(input.job)];
           } else {
-            unexpectedMutations++; return send({error: 'Unexpected synthetic action'}, 400);
+            return rejectMutation(action);
           }
           snapshot.revision++; return send(snapshot);
         }
@@ -107,7 +136,7 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
             events: [...scheduled.events, {at: nowSeconds, state: 'provider_accepted', message: 'Synthetic Discord acceptance', execution: 'synthetic'}]}];
           snapshot.revision++; return send({processed: 1, execution: 'dev-synthetic', jobId: input.job.id});
         }
-        if (request.method() !== 'GET') { unexpectedMutations++; return send({error: 'Unexpected synthetic action'}, 400); }
+        if (request.method() !== 'GET') return rejectMutation();
         if (p === '/api/catalog') return send({authMode: 'dev', execution: 'dev-synthetic', phase2: true, templates: [], routes: [], profileMetadata: {}});
         if (p === '/api/me') return send({userId: '00000000-0000-0000-0000-000000000001', displayName: 'Synthetic tester', preferences: {timeZone: 'UTC', locale: 'en'}, mfa: {}});
         if (p === '/api/workspaces') return send({workspaces: [{workspaceId: wid, membership: template.snapshot.membership, name: 'Synthetic Discord', plan: 'studio', memberCounts: {owner: 1}}]});
@@ -128,7 +157,7 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
       await page.getByRole('button').filter({hasText: `${first.guildName} · ${first.channelName} (${first.channelId})`}).click();
       await page.getByText('Channel authorized and set as the default.', {exact: false}).waitFor();
       await page.keyboard.press('Escape'); assert.equal(authorizations, 1);
-      stage = 'prepare-review-' + width;
+      stage = 'prepare-review-' + width; activeWorkStartedAt = performance.now();
       await page.getByRole('link', {name: 'Queue', exact: true}).first().click();
       await page.getByRole('button', {name: 'Schedule a draft', exact: true}).click();
       const composer = page.getByRole('dialog');
@@ -145,8 +174,14 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
       assert.match(await composer.locator('[data-discord-target]').innerText(), /555555.*7777777/);
       await composer.locator('input[type="datetime-local"]').fill(input.job.manifest.timing.local);
       await composer.getByRole('checkbox', {name: /I have the rights/}).check();
+      // Whole active seconds must be positive so cleanup telemetry is covered independent of click speed.
+      await page.waitForTimeout(1100);
+      const activityClosed = page.waitForResponse(response => response.url() === activityUrl &&
+        response.request().method() === 'POST' && response.request().postDataJSON().closed === true);
       await composer.getByRole('button', {name: 'Prepare review', exact: true}).click();
       await page.locator('[data-discord-frozen-target]').first().waitFor(); assert.equal(preparations, 1);
+      assert.equal((await activityClosed).status(), 200);
+      assert.equal(activitySessions.size, 1); assert.equal([...activitySessions.values()][0].closed, true);
       assert.equal(approvals, 0); assert.equal(dispatches, 0); assert.equal(snapshot.state.phase2.jobs.length, 0);
       assert.equal(await page.getByRole('button', {name: 'Publish approved post', exact: true}).count(), 0);
       stage = 'explicit-human-approval-' + width;
@@ -200,7 +235,7 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
       checks.push({width, explicitDestinationSelection: true, selectedDestinationLabel: true, authorizationRefresh: true, explicitHumanApproval: true,
         approvalRequests: approvals, syntheticDispatchRequests: dispatches, frozenTargetAfterDefaultEdit: true,
         scheduledReceipt: true, acceptedReceiptPendingVerification: true, verifiedProviderLookupReceipt: true,
-        boundPermalinkInspectedWithoutNavigation: true, localDestinationRemoval: true, blockedOffOrigin,
+        boundPermalinkInspectedWithoutNavigation: true, localDestinationRemoval: true, activityRequests, closedDraftTimer: true, blockedOffOrigin,
         realDiscordRequests: 0, realDiscordAcceptance: 'NOT_RUN'});
       mkdirSync(join(root, '.depot/discord-p0-evidence'), {recursive: true});
       await page.screenshot({path: join(root, `.depot/discord-p0-evidence/channels-${width}.png`), fullPage: true});
