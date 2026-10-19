@@ -107,7 +107,8 @@
   ],
   "git": {
     "deploymentEnabled": {
-      "codex/rafii-brand-brain-v11": false
+      "codex/rafii-brand-brain-v11": false,
+      "codex/rafii-substack-public-integration-20261018": false
     }
   }
 }

@@ -195,6 +195,8 @@ jobs:
         run: node web/tests/site-agent-browser.cjs --browser=webkit --out=docs/design/site-agent/evidence/ci-browser-webkit
       - name: Rafii style, commands and weather, WebKit
         env:
+          # Capture native process exits without retries or weaker assertions.
+          DEBUG: pw:browser
           RAFII_VOICE_WEB_URL: http://127.0.0.1:4441
           RAFII_VOICE_PG_PORT: '55480'
         run: node web/tests/rafii-live-agent-browser.cjs --browser=webkit --sections=style,style-phone,slash,slash-phone,weather --out=docs/design/rafii-live-agent/evidence/ci-browser-webkit
