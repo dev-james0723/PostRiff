@@ -1622,15 +1622,17 @@ export interface OAuthComplete {
 /* ---------- usage & billing ---------- */
 
 export interface Entitlement {
-  planTermsId: string;
-  writingBatchesRemaining: number;
-  mediaCreditsRemaining: number;
-  connectedAccounts: number;
-  members: number;
-  storageMb: number;
+  planTermsId: string | null;
+  writingBatchesRemaining: number | null;
+  mediaCreditsRemaining: number | null;
+  connectedAccounts: number | null;
+  members: number | null;
+  storageMb: number | null;
   resetsAt: number | null;
   source: string;
   version: number;
+  /** Existing internal operations use budgets instead of customer plan allowances. */
+  unlimited?: boolean;
 }
 
 export interface SubscriptionView {
