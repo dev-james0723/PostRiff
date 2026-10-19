@@ -53,6 +53,7 @@ import type { ConnectRequest } from './connect-sheet';
 import { DestinationPicker } from './destination-picker';
 import { PinterestBoardsSheet } from './pinterest-boards-sheet';
 import { DiscordEngagementPanel } from './discord-engagement-panel';
+import { MastodonAccountControls } from './mastodon-account-controls';
 import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN, STATEFUL_GLASS } from './rafii-materials';
 
 /** Jobs for this account, counted from the workspace snapshot by the page. */
@@ -435,6 +436,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         </Link>
       )}
 
+      {channel.platform === 'Mastodon' && canManage && !disconnected && <MastodonAccountControls connectionId={channel.id} account={channel.account} />}
       <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
         {channel.platform === 'Discord' && !disconnected && <DiscordEngagementPanel channel={channel} />}
         {canManage && channel.platform === 'Instagram' && channel.capabilities.analytics?.level === 'Direct' && (

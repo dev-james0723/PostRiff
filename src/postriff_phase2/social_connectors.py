@@ -18,6 +18,7 @@ from urllib.parse import quote, urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 from .net_guard import assert_public, public_host, pinned_public_json_transport
 from .mastodon_protocol import discover, instance_host
+from .mastodon_release import write_qualified as mastodon_write_qualified
 from .provider_base import OAuthProvider, _credential_shape, default_transport
 
 
@@ -121,10 +122,22 @@ class XProvider(OAuthProvider):
 
 # --- Mastodon ---------------------------------------------------------------------------------------------------
 class MastodonProvider(OAuthProvider):
-    id, platform, capability_version = "mastodon", "Mastodon", 2
+    id, platform, capability_version = "mastodon", "Mastodon", 3
     SCOPES = {"identity": ["read:accounts"],
               "publish": ["read:accounts", "read:statuses", "write:statuses", "write:media"],
-              "schedule": ["read:accounts", "read:statuses", "write:statuses", "write:media"]}
+              "schedule": ["read:accounts", "read:statuses", "write:statuses", "write:media"],
+              "posts_read": ["read:accounts", "read:statuses"],
+              "analytics": ["read:accounts", "read:statuses"],
+              "comments_read": ["read:accounts", "read:statuses", "read:notifications"],
+              "reply": ["read:accounts", "read:statuses", "write:statuses"],
+              "moderate": ["read:accounts", "read:statuses", "read:filters", "write:mutes", "write:blocks", "write:reports", "write:filters"],
+              "profile": ["read:accounts", "write:accounts"],
+              "interactions": ["read:accounts", "read:statuses", "read:follows", "read:lists", "read:bookmarks",
+                               "write:follows", "write:lists", "write:bookmarks", "write:favourites", "write:statuses"],
+              "management": ["read:accounts", "read:statuses", "read:notifications", "read:follows",
+                             "read:lists", "read:bookmarks", "read:favourites", "read:mutes", "read:blocks",
+                             "write:statuses", "write:media", "write:accounts", "write:follows", "write:lists",
+                             "write:bookmarks", "write:favourites", "write:mutes", "write:blocks", "read:filters", "write:filters", "write:reports"]}
     EXPLAIN = {"identity": "Connect your Mastodon account. Rafii registers itself on your server and reads only your profile.",
                "publish": "Rafii will post to this Mastodon account only when you approve each exact post."}
     account_requirement = "An account on any Mastodon server."
@@ -132,6 +145,8 @@ class MastodonProvider(OAuthProvider):
     publish_required = frozenset({"write:statuses"})
     start_input = {"name": "instance", "label": "Mastodon server", "placeholder": "mastodon.social"}
     non_expiring = True
+    server_schedule = True
+    read_scope = "read:statuses"
 
     def __init__(self, website, transport=None, production_reviewed=False, resolver=socket.getaddrinfo):
         self.client_id = self.client_secret = None
@@ -161,6 +176,8 @@ class MastodonProvider(OAuthProvider):
         # Pixelfed has its own compatibility probe and authorization contract.
         capabilities = discover(self.transport, host) if self.id == "mastodon" else None
         supported = (capabilities or {}).get("scopesSupported")
+        if supported is not None and set(scopes) == set(self.SCOPES.get('management', [])):
+            scopes = [s for s in scopes if s in supported]
         if supported is not None and not set(scopes) <= set(supported):
             raise AlphaError("This server does not support the requested permissions. Choose a narrower connection.", 409)
         body = self.application_cache(host, redirect, scopes) if self.application_cache else None
@@ -213,6 +230,11 @@ class MastodonProvider(OAuthProvider):
     def api(self, session, method, path, **kwargs):
         if not isinstance(path, str) or not path.startswith("/api/") or "\\" in path or "#" in path or any(ord(c) < 32 for c in path):
             raise AlphaError("Unsupported Mastodon API path.", 400)
+        # Check again at the actual bearer dispatch, after any earlier grant/read work.
+        # App registration, token exchange and revoke use separate OAuth transports.
+        if self.id == 'mastodon' and method not in ('GET', 'HEAD', 'OPTIONS') and not mastodon_write_qualified(self):
+            raise AlphaError('Mastodon account writes await independent publishing acceptance. Nothing was sent.',
+                             409, code='mastodon_write_release_required')
         host = self._server(session.get("instance"))
         extra = kwargs.pop("headers", {})
         if any(k.lower() in ("authorization", "host") for k in extra):

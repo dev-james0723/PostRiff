@@ -193,9 +193,9 @@ export interface Manifest {
   operation: string;
   variantId: string;
   contentRevision: number;
-  payload: { text: string; language: string };
+  payload: { text: string; language: string; threadParts?: string[] };
   media: (Asset & { alt: string })[];
-  timing: { local: string; timeZone: string; utc: string; timestamp?: number; fold?: number };
+  timing: { local: string; timeZone: string; utc: string; timestamp?: number; fold?: number; nativeProvider?: string; nativePublicationAt?: string };
   voiceRevision?: number | null;
   styleRevision?: number;
   payloadDigest?: string;
@@ -217,12 +217,14 @@ export interface Job {
   nextAt?: number;
   checks?: number;
   scheduleId?: string | null;
+  nativeScheduleChange?: { scheduleId: string; scheduledAt: string; verification: string; accountId: string; connectionId: string; approvalDigest: string };
+  nativeScheduleReceipt?: { state: string; verification?: string; reference?: string; scheduledAt?: string };
   url?: string;
   events: { at: number; state: string; message: string; execution?: string }[];
   attempts: { number: number; startedAt: number; endedAt?: number }[];
   container?: string;
   resultSchema?: string;
-  progress?: { version: number; stage: string };
+  progress?: { version: number; stage: string; threadReferences?: string[]; threadVerified?: number };
   providerReference?: string;
   providerConfirmed?: string;
   nextAction?: string;

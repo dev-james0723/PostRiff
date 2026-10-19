@@ -2,6 +2,7 @@
 
 import { useLocalTimeZone } from '@/hooks/use-local-time-zone';
 import type { Manifest } from '@/lib/api/types';
+import { MastodonPollDetails } from '@/features/queue/mastodon-poll-details';
 import { PostPreview } from './post-preview';
 import { usePreviewPost } from './use-preview-post';
 
@@ -17,8 +18,10 @@ interface ManifestPreviewProps {
 export function ManifestPreview({ manifest, timeZone, scale, className }: ManifestPreviewProps) {
   const localZone = useLocalTimeZone();
   const zone = timeZone ?? localZone;
-  if (!zone) return null;
-  return <ResolvedPreview manifest={manifest} timeZone={zone} scale={scale} className={className} />;
+  return <div className='flex flex-col gap-2'>
+    <MastodonPollDetails manifest={manifest} />
+    {zone && <ResolvedPreview manifest={manifest} timeZone={zone} scale={scale} className={className} />}
+  </div>;
 }
 
 function ResolvedPreview({ manifest, timeZone, scale, className }: ManifestPreviewProps & { timeZone: string }) {

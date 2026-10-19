@@ -134,8 +134,16 @@ def _gbp(options, media):
     return {"gbp": result}
 
 
-def normalize(platform, options, media, text):
+def normalize(platform, options, media, text, *, now=None):
     """The canonical options for the manifest, or None for platforms that need none (their manifests stay unchanged)."""
+    if platform == 'Mastodon':
+        from .mastodon_protocol import status_options
+        # Existing manifests with no options retain the approved public default.
+        if options is None:
+            return None
+        # Native time is frozen into the same exact Queue review as its media
+        # and post settings. No scheduling request is sent before approval.
+        return status_options(options, media, now=now)
     if platform not in PLATFORMS:
         return None
     if not isinstance(options, dict):

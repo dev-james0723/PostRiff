@@ -41,7 +41,7 @@ SAMPLE = [{"text": en, "sourceId": "sample", "fixture": True} for en, _ in gener
 
 class Vocabulary(unittest.TestCase):
     def test_x_is_a_drafting_platform_with_a_280_character_post_limit(self):
-        self.assertEqual(agent_runtime.PLATFORMS, ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu"))
+        self.assertEqual(agent_runtime.PLATFORMS, ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu", "Mastodon"))
         self.assertEqual(generation.PLATFORMS, agent_runtime.PLATFORMS, "the fixture writer drafts every runtime platform")
         self.assertEqual(LIMITS["X"], {"version": "local-conservative-2026-09-24", "characters": 280, "operation": "post"})
         self.assertEqual(LIMITS["Xiaohongshu"]["title"], 20)

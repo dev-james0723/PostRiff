@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "execution": "candidate security repair; synthetic provider responses; real PostgreSQL on Depot",
+  "recordedAt": "2026-10-11T19:04:47.608984+00:00",
+  "baseRevision": "7842f874f9100a98eaef98f68c2839a9368b27e3",
+  "repairSourceRevision": "27ff4437221d9e96269bdae8fbaa268bc42fef41",
+  "sourceFiles": {
+    "src/postriff_phase2/oauth.py": "3479c0f12087815fe9c5097e0baefe3cd48b832bc5d39edaff2a098a7d90c7bc",
+    "src/postriff_phase2/hosted_social.py": "b460157c619334ecca1af7e361366f116aa9aee0b165b10e588fc3c92866c20f",
+    "src/postriff_phase2/hosted_worker.py": "0f3682c6b888df09339cc9b6de5db810d240e71baf930c81da5890a8466deef1",
+    "src/postriff_phase2/mastodon_publishing.py": "a17a4dd76eebf5694996ae9586b2dc6a3f982be2ddb8f10a0f367877f557425a",
+    "tests/phase2/postgres_mastodon_management.py": "0e947e002140cfee04c21fffedb0b5f9d7053212c1f12ee0d16ca4d0065d0955",
+    "tests/test_hosted_wave1_connectors.py": "7fbadcd39275f75d61dfc73e2b1706035d0425aee3f7f36f286798224fd7fb72",
+    "tests/test_mastodon_publishing.py": "7790f795dddffec17db52bea2d8d5091ac62334c17e00071fa14be29b93bd4cb",
+    "scripts/cloud-mastodon-automation.sh": "7635e966758e4b1aeefef9b4911e48f0e7a174519327423109c487da03022702"
+  },
+  "remoteRuns": [
+    {
+      "runId": "qrlbhf0j8x",
+      "exitCode": 1,
+      "sourceHead": "7842f874f9100a98eaef98f68c2839a9368b27e3",
+      "elapsedSeconds": 83.433,
+      "sourceFingerprint": "ed1797d2a60412365ef2369d1bffd8bc6fb6916241bd507dd66b27fcb445ab2d",
+      "patchSha256": "2186818bb6551010d3328988972c51f6a2db3751ba7c1c2390497a29cfa4eb32",
+      "scope": "FAIL: new callback receipt test omitted media_wait; corrected"
+    },
+    {
+      "runId": "1n8ck8fxq6",
+      "exitCode": 1,
+      "sourceHead": "7842f874f9100a98eaef98f68c2839a9368b27e3",
+      "elapsedSeconds": 90.779,
+      "sourceFingerprint": "104f381e6d3e1827440c13d0de549c131c064efbba05f755856e84b801323557",
+      "patchSha256": "11d3f8d1d38b5189714b63f5f1c0631d5760dd4e7d310529baf5cfdd63387f47",
+      "scope": "211 Python PASS; TimeBack and automation SQL PASS; 27 Mastodon SQL had one fixture-isolation failure"
+    },
+    {
+      "runId": "vdtjnq1xs8",
+      "exitCode": 1,
+      "sourceHead": "7842f874f9100a98eaef98f68c2839a9368b27e3",
+      "elapsedSeconds": 86.63,
+      "sourceFingerprint": "3f0ed778309a3c488a9f5a18035e4e7e4b41e790aee049981212cad9a0b8e774",
+      "patchSha256": "fbbaab9c1eb46d74cccb9c7430549a7cdda60a8d80d128e46e4e24063291ff4d",
+      "scope": "FAIL: disposable teardown attempted auth-user deletion before dependent profile; workspace deletion rolled back"
+    },
+    {
+      "runId": "hplrp9v3sn",
+      "exitCode": 0,
+      "sourceHead": "7842f874f9100a98eaef98f68c2839a9368b27e3",
+      "elapsedSeconds": 73.165,
+      "sourceFingerprint": "4a551722f9abcdaec8ff541fe8b98637314f85c57ed26e19186eeb2b58fb1b77",
+      "patchSha256": "ee98f2e6f94d6b2b4de2751fb351df68c347a1181c5beb2dd1d3f4ca5250a18c",
+      "scope": "PASS: SQL-only rerun; 27 Mastodon SQL tests; prior unchanged Python/TimeBack/automation results reused"
+    }
+  ],
+  "localValidation": [
+    "AST syntax PASS for seven changed Python files",
+    "bash syntax PASS for targeted cloud script",
+    "git diff --check PASS"
+  ],
+  "realAcceptance": {
+    "A": "NOT_RUN",
+    "B": "NOT_RUN",
+    "C": "NOT_RUN",
+    "D": "NOT_RUN",
+    "E": "NOT_RUN"
+  },
+  "modelTokenUsage": "UNKNOWN",
+  "attributableModelCostUsd": "UNKNOWN",
+  "cloudCostUsd": "UNKNOWN",
+  "tokenPilotSavings": "UNKNOWN",
+  "comparableBaseline": "UNKNOWN"
+}

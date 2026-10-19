@@ -15,7 +15,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps['theme']}
-      className='toaster group'
+      className='toaster group max-[600px]:w-auto!'
       style={
         {
           '--normal-bg': 'var(--popover)',
@@ -26,7 +26,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          toast: 'bg-[image:var(--rafii-surface-elevated)]! text-foreground shadow-[var(--rafii-shadow-dialog)]! backdrop-blur-[40px] gap-3 p-4',
+          toast: 'bg-[image:var(--rafii-surface-elevated)]! text-foreground shadow-[var(--rafii-shadow-dialog)]! backdrop-blur-[40px] gap-3 p-4 max-[600px]:w-full!',
           title: 'text-sm font-medium',
           description: 'text-muted-foreground! text-sm',
           actionButton: 'rafii-action! text-[var(--rafii-action-fg)]! rounded-[0.625rem]! font-medium',

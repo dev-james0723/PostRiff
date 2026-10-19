@@ -107,7 +107,10 @@
   ],
   "git": {
     "deploymentEnabled": {
-      "codex/rafii-brand-brain-v11": false
+      "codex/rafii-brand-brain-v11": false,
+      "wip/no-vercel/mastodon-connect-production-parity-20261018": false,
+      "wip/no-vercel/mastodon-management-cloud-20261018": false,
+      "wip/no-vercel/mastodon-current-production-parity-20261018": false
     }
   }
 }

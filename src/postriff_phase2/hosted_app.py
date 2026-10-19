@@ -1125,6 +1125,9 @@ class HostedApplication:
                     return self._json(start_response, 200, operations[parts[6]](parts[2], token, parts[4], self._body(environ)))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
+                if len(parts) >= 7 and parts[5] == 'mastodon':
+                    from .mastodon_management import handle as mastodon_handle
+                    return mastodon_handle(self, environ, start_response, service, token, method, parts)
                 if len(parts) == 4 and method == "GET":
                     from .connection_health import annotate_channels, environment
                     return self._json(start_response, 200, annotate_channels(oauth.channels(parts[2], token), parts[2], environment(service)))

@@ -29,8 +29,17 @@ with psycopg.connect(base,autocommit=True) as db:
     wid=db.execute("SELECT public.pr_bootstrap('00000000-0000-0000-0000-000000000011','studio')").fetchone()[0]
     db.execute("UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s",(json.dumps({'recoveryMarker':'繁中保留','approval':{'hash':'immutable-original'}}),wid))
     before=db.execute('SELECT id::text,state,revision FROM public.pr_workspaces').fetchall()
-    upgrade=apply(db)
-    assert [r['name'] for r in upgrade if r['status']=='PENDING']==[p.name for p in paths if int(p.name[:3])>12]
+    # Populate the historical 103 table before the actual Mastodon boundary.
+    prior=[p for p in paths if int(p.name[:3])<113]
+    upgrade=apply(db,prior)
+    assert [r['name'] for r in upgrade if r['status']=='PENDING']==[p.name for p in prior if int(p.name[:3])>12]
+    assert db.execute('SELECT count(*) FROM public.pr_feature_enrollments').fetchone()[0]==0
+    db.execute("INSERT INTO public.pr_feature_enrollments(workspace_id,feature,status,policy_version,enrolled_by) "
+               "VALUES(%s,'growth_measurement','active','acceptance-fixture/v1','00000000-0000-0000-0000-000000000011')",(wid,))
+    enrollment=db.execute('SELECT * FROM public.pr_feature_enrollments').fetchall()
+    mastodon_upgrade=apply(db)
+    assert [r['name'] for r in mastodon_upgrade if r['status']=='PENDING']==[p.name for p in paths if int(p.name[:3])>=113]
+    assert enrollment==db.execute('SELECT * FROM public.pr_feature_enrollments').fetchall()
     assert before==db.execute('SELECT id::text,state,revision FROM public.pr_workspaces').fetchall()
     assert all(r['status']=='APPLIED' for r in apply(db))
     assert db.execute('SELECT count(*) FROM postriff_private.schema_migrations').fetchone()[0]==len(paths)
@@ -41,6 +50,10 @@ with psycopg.connect(base,autocommit=True) as db:
         assert db.execute(f'SELECT count(*) FROM public.{table}').fetchone()[0]==0
     db.execute('RESET ROLE')
     assert db.execute("SELECT has_table_privilege('authenticated','public.pr_research_requests','select')").fetchone()[0] is False
+    for role in ('anon','authenticated'):
+        for operation in ('SELECT','INSERT','UPDATE','DELETE'):
+            assert not db.execute('SELECT has_table_privilege(%s,%s,%s)',(role,'public.pr_feature_enrollments',operation)).fetchone()[0]
+    assert db.execute("SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid='public.pr_feature_enrollments'::regclass").fetchone()[0]
     # Deliberately changed ledger is refused without rewriting history.
     db.execute("UPDATE postriff_private.schema_migrations SET sha256='tampered' WHERE name=%s",(paths[-1].name,))
     try:plan(db)
@@ -57,12 +70,14 @@ with psycopg.connect(base,autocommit=True) as db:
         with psycopg.connect(target,autocommit=True) as restored:
             assert before==restored.execute('SELECT id::text,state,revision FROM public.pr_workspaces').fetchall()
             assert all(r['status']=='APPLIED' for r in plan(restored))
+            assert enrollment==restored.execute('SELECT * FROM public.pr_feature_enrollments').fetchall()
+            assert restored.execute("SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid='public.pr_feature_enrollments'::regclass").fetchone()[0]
             assert restored.execute("SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid='public.pr_campaigns'::regclass").fetchone()[0]
-        print(json.dumps({'status':'PASS','execution':'disposable PostgreSQL only','hostedMigrations':len(paths),'backupBytes':dump.stat().st_size,'backupSeconds':round(backup_seconds,3),'restoreSeconds':round(restore_seconds,3),'RPO':'0 for quiescent synthetic snapshot','productionRPO':'NOT_RUN','objectStorageRestore':'NOT_RUN'}))
+        print(json.dumps({'status':'PASS','execution':'disposable PostgreSQL only','hostedMigrations':len(paths),'mastodonUpgrade':[r['name'] for r in mastodon_upgrade if r['status']=='PENDING'],'historicalEnrollmentPreserved':True,'backupBytes':dump.stat().st_size,'backupSeconds':round(backup_seconds,3),'restoreSeconds':round(restore_seconds,3),'RPO':'0 for quiescent synthetic snapshot','productionRPO':'NOT_RUN','objectStorageRestore':'NOT_RUN'}))
 # Fresh install from no PostRiff schema is independently exercised too.
 with psycopg.connect(DSN,autocommit=True) as admin:admin.execute('CREATE DATABASE migration_fresh')
 with psycopg.connect('host=127.0.0.1 port=55438 dbname=migration_fresh',autocommit=True) as fresh:
     fresh.execute(setup,prepare=False)
     assert all(r['status']=='PENDING' for r in apply(fresh))
     assert all(r['status']=='APPLIED' for r in plan(fresh))
-print('PASS: fresh 001–019 excluding local-only 003; populated upgrade; ledger replay; checksum refusal; restore')
+print('PASS: full fresh hosted sequence excluding local-only 003; populated upgrade through 113–115; ledger replay; checksum refusal; restore')

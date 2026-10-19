@@ -55,6 +55,10 @@ class AuthorityDatabase:
         self.rowcount = 1
         if sql.startswith('SELECT state FROM public.pr_workspaces'):
             self.workspace_locked, self.result = True, (copy.deepcopy(self.state),)
+        elif sql.startswith('SELECT provider FROM public.pr_encrypted_credentials'):
+            assert self.workspace_locked, 'Provider lookup must be authenticated under the workspace lock.'
+            row = self.credentials.get(params[1])
+            self.result = (row['provider'],) if row and not row['revoked'] else None
         elif sql.startswith('SELECT provider,access_ciphertext,key_id'):
             row = self.credentials.get(params[1])
             self.result = (row['provider'], row['access'], 'synthetic-key') if row and not row['revoked'] else None

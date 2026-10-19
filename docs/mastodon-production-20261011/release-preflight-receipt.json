@@ -1,0 +1,451 @@
+{
+  "schema": "rafii.mastodon.release-preflight.v1",
+  "recordedAt": "2026-10-11T19:43:16.024087+00:00",
+  "execution": "READ_ONLY_LIVE_PLATFORM_METADATA; NO REAL A-E; NO RELEASE",
+  "engineeringCandidate": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+  "reviewedSource": "27ff4437221d9e96269bdae8fbaa268bc42fef41",
+  "srcTreeAtBothRevisions": "15427cc9e4a021d5ecb36998f5a8eeacde03891a",
+  "ownerAccounts": [
+    "@jamesaucreates@mastodon.social",
+    "@jamesau0723@mastodon.social"
+  ],
+  "scopedTemporaryActionsAuthorized": true,
+  "secretsThroughChat": false,
+  "crossInstance": {
+    "status": "BLOCKED_NO_VERIFIED_SECOND_INSTANCE_ACCOUNT",
+    "mailboxSearches": {
+      "connectedMailboxes": 2,
+      "queries": [
+        "in:anywhere {from:mastodon from:mstdn subject:mastodon subject:mstdn}",
+        "in:anywhere {mastodon mstdn}"
+      ],
+      "matchingMessages": 0,
+      "paginationComplete": true,
+      "coverageLimit": "Only two connected mailboxes; absence does not prove no independent-server account exists."
+    },
+    "sameInstanceAcceptanceBlockedByCrossInstance": false
+  },
+  "staging": {
+    "status": "BLOCKED_PAID_ORGANIZATION_TARGET_OR_ACCESS",
+    "approvedInfrastructureCapUsd": 1,
+    "approvedLifetimeHours": 24,
+    "ownerChoice": "existing paid organization",
+    "accessibleOrganizations": [
+      {
+        "id": "cqzroammvtzkzfixpmdx",
+        "plan": "free"
+      },
+      {
+        "id": "aotyovtnbdsuattccukm",
+        "plan": "free"
+      },
+      {
+        "id": "gztpsyvraqdcoklwpvdo",
+        "plan": "free"
+      },
+      {
+        "id": "vercel_icfg_tqFVWkEbv1Mq6S4GHeQXLcBK",
+        "plan": "free"
+      }
+    ],
+    "vercelManagedPlan": {
+      "installation": "icfg_tqFVWkEbv1Mq6S4GHeQXLcBK",
+      "id": "free",
+      "name": "Supabase Free Plan",
+      "displayedCost": "$0/month"
+    },
+    "paidOrganizationTarget": "UNKNOWN_OWNER_INPUT_PENDING",
+    "subscriptionUpgradeAuthorized": false,
+    "sharedStagingRestoreAllowed": false,
+    "createdDedicatedDatabase": false,
+    "oauthUrlsCreated": false
+  },
+  "productionBaseline": {
+    "domain": "https://rafii.io",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "domainVerified": true,
+    "deploymentId": "dpl_6NGweKP5ytbqeiRrow8ALq5yTJSv",
+    "deploymentReadyState": "READY",
+    "platformGitSha": "7e993563be9841f7f98758fb0c8c52f158ea7252",
+    "headRequestUtc": "2026-10-11T19:38:04Z",
+    "headHttpStatus": 200,
+    "headPreloadDeploymentIdMatches": true,
+    "releaseByThisMission": false,
+    "releaseSmoke": "NOT_RUN",
+    "managedDatabaseBackups": "NONE_DISPLAYED",
+    "separateBackup": "UNKNOWN",
+    "restoreRehearsal": "NOT_RUN"
+  },
+  "ci": {
+    "runId": 38167373961,
+    "pullRequestHead": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+    "testedMergeSha": "e437a376a80a5345c7db63cf2bfc6e33fe3bd75d",
+    "artifactId": 11712774268,
+    "artifactName": "local-gates-e437a376a80a5345c7db63cf2bfc6e33fe3bd75d",
+    "python": {
+      "name": "ci-python",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_*.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T19:18:49.354179+00:00",
+      "finishedAt": "2026-10-11T19:22:49.634477+00:00",
+      "seconds": 240.28,
+      "exitCode": 0,
+      "head": "e437a376a80a5345c7db63cf2bfc6e33fe3bd75d",
+      "source": "68e5e282a299421331ec8757d1209e5163e20692a5904af07aec430ddb701a09",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-python.log",
+      "totalTests": 5126,
+      "skippedTests": 378,
+      "executedTests": 4748
+    },
+    "postgres": {
+      "status": "FAIL",
+      "passedScripts": 129,
+      "failedScripts": [
+        "tests/phase2/postgres_youtube_workspace_provider_data.py"
+      ],
+      "sourceUnchanged": true,
+      "fingerprint": "68e5e282a299421331ec8757d1209e5163e20692a5904af07aec430ddb701a09",
+      "postgresVersion": "17.11",
+      "mastodonManagement": "PASS",
+      "mastodonAutomation": "PASS",
+      "mastodonScale": "PASS",
+      "migrationUpgradeRestore": "PASS_DISPOSABLE_ONLY",
+      "disposableRestore": {
+        "hostedMigrations": 84,
+        "backupBytes": 1226363,
+        "backupSeconds": 0.164,
+        "restoreSeconds": 1.093,
+        "productionRPO": "NOT_RUN",
+        "objectStorageRestore": "NOT_RUN"
+      }
+    },
+    "checks": [
+      {
+        "link": "https://vercel.com/github",
+        "name": "Vercel Preview Comments",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373926/job/114552689386",
+        "name": "founder",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552631775",
+        "name": "agent-ui-browser",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632021",
+        "name": "agent-ui",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552627734",
+        "name": "library",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373996/job/114552627535",
+        "name": "scenes",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373961/job/114552627433",
+        "name": "local-gates",
+        "state": "FAILURE"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552627566",
+        "name": "document-runtime",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373974/job/114552627494",
+        "name": "native-learning-browser",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373989/job/114552627302",
+        "name": "growth-studio",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632917",
+        "name": "dependency-lock",
+        "state": "SKIPPED"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632292",
+        "name": "generate-assets",
+        "state": "SKIPPED"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552628699",
+        "name": "dependency-lock",
+        "state": "SKIPPED"
+      },
+      {
+        "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/9ZTKqN3E5G18TSL5yUjEvxKCj6yw",
+        "name": "Vercel \u2013 postriff-phase2-private",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/8UbghE1vBToijMBhc8WJipuqHsWG",
+        "name": "Vercel \u2013 rafii-consumer-staging",
+        "state": "SUCCESS"
+      }
+    ],
+    "failureRepair": "Actual revocation-transaction latch repaired; target passes remotely; final committed-head CI required",
+    "targetedFixtureRepair": {
+      "runId": "sxgrpmll3n",
+      "exitCode": 0,
+      "sourceHead": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+      "sourceFingerprint": "c39e4ebb0010a92ae0afd03a55fb2104aa21703bcb408f79311f25c011ed1351",
+      "patchSha256": "6d031e9aa67f6dd1f85ace1d0ff7c2f49c3c6b1e7928cc8d23f311eab7cd042c",
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "status": "PASS",
+      "execution": "cloud PostgreSQL 17; disposable DB; synthetic provider; zero provider requests",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T194802908508Z-test.json",
+      "scope": "YouTube workspace provider-data/disconnect race, privacy retention and tenant-isolation regression",
+      "validatedFiles": {
+        "tests/phase2/postgres_youtube_workspace_provider_data.py": "17648018481a1d47754cf66c1a6ad658080813ef023265129e2e15d2a367b067",
+        "scripts/cloud-mastodon-automation.sh": "f63b0e3031106fad535b32a92883f2f572de04be2300f39f31088f8f7aacc083"
+      },
+      "priorBootstrapFailure": {
+        "runId": "2mfn3b3jct",
+        "exitCode": 1,
+        "sourceHead": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+        "sourceFingerprint": "601cab7fcd8098548d9d4d00ad3f4b69a4aca27d58dfd08fb2badbd5e390059a",
+        "patchSha256": "391aebc1354429fd1836506cd2734934d034ff9f25ece9046da7619689acffb5",
+        "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+        "testExecution": "NOT_RUN",
+        "reason": "Ubuntu base package repository lacks PostgreSQL 17; fixed by the signed official PostgreSQL repository used in GitHub CI"
+      }
+    }
+  },
+  "costs": {
+    "modelTokens": "UNKNOWN",
+    "attributableModelUsd": "UNKNOWN",
+    "attributableInfrastructureUsd": "UNKNOWN",
+    "tokenPilotBaseline": "UNKNOWN",
+    "tokenPilotSavings": "UNKNOWN"
+  },
+  "accountBPublicLookup": {
+    "execution": "READ_ONLY_PUBLIC_PROVIDER_LOOKUP; no OAuth identity or scope proof",
+    "observedAt": "2026-10-11T20:12:46.422678+00:00",
+    "httpStatus": 200,
+    "username": "jamesau0723",
+    "acct": "jamesau0723",
+    "providerAccountId": "117423864221508233",
+    "profileUrl": "https://mastodon.social/@jamesau0723",
+    "instance": "mastodon.social"
+  },
+  "independentSourceChecklistReview": {
+    "status": "PASS_SOURCE_ONLY",
+    "revision": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "srcTree": "15427cc9e4a021d5ecb36998f5a8eeacde03891a",
+    "releaseApproval": "INCOMPLETE"
+  },
+  "migrationLedgerAndCompatibilityReceipt": "migration-preflight-receipt.json",
+  "laterCommittedCI": {
+    "headRevision": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "testedMergeSha": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+    "status": "PASS",
+    "runId": 38169821209,
+    "artifactId": 11714128969,
+    "artifactName": "local-gates-087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+    "artifactLocalPath": "/private/tmp/rafii-mastodon-a567-ci.zip",
+    "checks": [
+      {
+        "link": "https://vercel.com/github",
+        "name": "Vercel Preview Comments",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890591",
+        "name": "library",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890379",
+        "name": "document-runtime",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821155/job/114559890195",
+        "name": "native-learning-browser",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821157/job/114559890088",
+        "name": "scenes",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821209/job/114559890202",
+        "name": "local-gates",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890388",
+        "name": "agent-ui",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821211/job/114559890331",
+        "name": "growth-studio",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890196",
+        "name": "agent-ui-browser",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821149/job/114559889904",
+        "name": "founder",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891407",
+        "name": "generate-assets",
+        "state": "SKIPPED"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559891190",
+        "name": "dependency-lock",
+        "state": "SKIPPED"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891223",
+        "name": "dependency-lock",
+        "state": "SKIPPED"
+      },
+      {
+        "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/CgdSoW2vWvzJSJ7KFL96KmPafo1c",
+        "name": "Vercel \u2013 postriff-phase2-private",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/ECuyPLmvnzfeZcVUSS6qWwwK1p5u",
+        "name": "Vercel \u2013 rafii-consumer-staging",
+        "state": "SUCCESS"
+      }
+    ],
+    "ci-python": {
+      "name": "ci-python",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_*.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T19:53:57.113252+00:00",
+      "finishedAt": "2026-10-11T19:58:36.235991+00:00",
+      "seconds": 279.12,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-python.log"
+    },
+    "pythonSummary": [
+      "Ran 5126 tests in 270.920s",
+      "OK (skipped=378)"
+    ],
+    "ci-postgres": {
+      "name": "ci-postgres",
+      "command": [
+        "python",
+        "scripts/postriff_pg_suite.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T19:58:36.540689+00:00",
+      "finishedAt": "2026-10-11T20:10:05.800108+00:00",
+      "seconds": 689.26,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-postgres.log"
+    },
+    "postgresSummary": {
+      "executed": 130,
+      "passed": 130,
+      "failed": 0
+    },
+    "ci-browser": {
+      "name": "ci-browser",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:14:43.481224+00:00",
+      "finishedAt": "2026-10-11T20:15:26.240746+00:00",
+      "seconds": 42.76,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-browser.log"
+    },
+    "ci-performance": {
+      "name": "ci-performance",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py",
+        "--performance"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:15:26.531224+00:00",
+      "finishedAt": "2026-10-11T20:16:32.113430+00:00",
+      "seconds": 65.58,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-performance.log"
+    },
+    "ci-history-import": {
+      "name": "ci-history-import",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py",
+        "--history-import"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:16:32.406327+00:00",
+      "finishedAt": "2026-10-11T20:16:50.078441+00:00",
+      "seconds": 17.67,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-history-import.log"
+    },
+    "scope": "All applicable protected checks PASS on PR merge snapshot. External provider responses in CI are synthetic; no real A-E or production release."
+  }
+}

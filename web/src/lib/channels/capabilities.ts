@@ -42,7 +42,11 @@ export const CONNECT_CAPABILITY_OPTIONS: readonly ConnectCapabilityDef[] = [
   { key: 'publish', label: 'Publish', description: 'Posts only what you approve.' },
   { key: 'analytics', label: 'Analytics', description: 'Reads available analytics for this account’s own posts. Historical metadata and analytics require a separate confirmed import when available.' },
   { key: 'comments_read', label: 'Comments', description: 'Reads comments and replies.' },
-  { key: 'reply', label: 'Reply', description: 'Replies only with your approval.' }
+  { key: 'reply', label: 'Reply', description: 'Replies only with your approval.' },
+  { key: 'profile', label: 'Profile settings', description: 'Profile changes require your approval.' },
+  { key: 'interactions', label: 'Interactions and lists', description: 'Favourites, boosts, bookmarks, follows and lists require your approval.' },
+  { key: 'moderate', label: 'Mute and block', description: 'Mute or block an account only after you approve it.' },
+  { key: 'management', label: 'Enable full Mastodon management', description: 'Requests supported account permissions. Every external action still needs approval; automatic publishing requires separate authorization.' }
 ];
 
 /** One line per capability level, for hover cards and InfoTips (never inline on the card). */

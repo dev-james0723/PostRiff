@@ -77,6 +77,8 @@ class Database:
             self.state = json.loads(params[0])
         elif sql.startswith('INSERT INTO public.pr_youtube_uploads'):
             self.journal = json.loads(params[-1])
+        elif sql.startswith(('SAVEPOINT verified_hook_', 'ROLLBACK TO SAVEPOINT verified_hook_', 'RELEASE SAVEPOINT verified_hook_')):
+            pass
         elif not sql.startswith('INSERT INTO public.pr_worker_tenants'):
             raise AssertionError('Unexpected SQL: ' + sql)
 

@@ -55,9 +55,9 @@ class Security(unittest.TestCase):
             status = 200
             def __init__(self): self.chunks = iter((b'{}', b''))
             def read1(self, _size): return next(self.chunks)
-            def close(self): pass
             def getheader(self, _key, _default=""): return "application/json"
             def getheaders(self): return []
+            def close(self): pass
 
         class Connection:
             def __init__(self, host, **_kw):

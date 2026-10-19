@@ -46,7 +46,11 @@
     "test:pinterest:agent:jcb": "bash ../scripts/cloud-python-bootstrap.sh python ../tests/pinterest_agent_registration.py",
     "test:pinterest:postgres:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-pinterest-postgres.sh",
     "ci:discord:engagement:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/discord-engagement-cloud.sh",
-    "ci:discord:integrated:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/discord-integrated-validation-cloud.sh"
+    "ci:discord:integrated:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/discord-integrated-validation-cloud.sh",
+    "ci:mastodon:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-validation.sh",
+    "test:mastodon-automation:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-automation.sh",
+    "ci:mastodon-management-after134:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-management-after134.sh",
+    "e2e:mastodon:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-validation.sh frontend"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

@@ -19,6 +19,7 @@ from .provider_candidates import LinkedInCandidate, little_plain
 from .providers import GRAPH_VERSION, http_transport
 from .outcomes import valid_receipt_url
 from .social_connectors import multipart
+from .mastodon_release import write_qualified as mastodon_write_qualified
 from .wave3_connectors import provider_host
 
 WAVE1 = ("Bluesky", "Mastodon", "Telegram", "Discord", "X")
@@ -69,10 +70,10 @@ class HostedSocial:
             pass
 
     def _provider(self, manifest):
-        if manifest['platform'] == 'Mastodon':
-            return None  # Connect-only release; review flags cannot unlock dispatch.
         provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
         if provider is None or not getattr(provider, "execution_enabled", True):
+            return None
+        if manifest['platform'] == 'Mastodon' and not mastodon_write_qualified(provider):
             return None
         # Provider-wide review unlocks public accounts. Instagram Standard Access can also
         # issue a real grant to an app-role owned/managed account before Advanced Access;
@@ -127,7 +128,16 @@ class HostedSocial:
             return {'state': 'held', 'confirmed': 'Discord requires a fenced, destination-bound human approval. Nothing was posted.',
                     'discordDeliveryEvidence': 'not_sent'}
         if manifest['platform'] == 'Mastodon':
-            return {'state': 'held', 'confirmed': 'Mastodon currently supports account connection only. Nothing was posted.'}
+            try:
+                with self.oauth.mastodon_dispatch_fence(manifest['workspaceId'], manifest['channelId']):
+                    return self._submit(manifest, dispatch_context=dispatch_context)
+            except AlphaError as error:
+                if error.code != 'mastodon_dispatch_busy':
+                    raise
+                return {'state': 'held', 'confirmed': str(error)}
+        return self._submit(manifest, dispatch_context=dispatch_context)
+
+    def _submit(self, manifest, *, dispatch_context=None):
         provider = self._provider(manifest)
         if provider is None:
             return {"state": "held", "confirmed": "Publishing to this platform isn't available yet. Nothing was posted."}
@@ -259,11 +269,60 @@ class HostedSocial:
             if polled.get("status") not in (200, 206):
                 break
         if not ready:
-            return None, {"state": "scheduled", "confirmed": "Mastodon is still processing the image; Rafii will try again shortly. Nothing was posted."}
+            return None, {"state": "held", "confirmed": f"Mastodon media {media_id} is still processing. No post was sent; automatic re-upload is stopped pending review."}
         return media_id, None
 
     def _submit_mastodon(self, manifest, provider, token):
-        return {'state': 'held', 'confirmed': 'Mastodon currently supports account connection only. Nothing was posted.'}
+        from .mastodon_protocol import discover, validate_status
+        session = provider.session(token)
+        capabilities = discover(provider.transport, session['instance'])
+        attachments = manifest.get('media') or []
+        body = validate_status(manifest['payload']['text'], manifest.get('publishOptions') or {}, attachments, capabilities)
+        media_ids = []
+        for asset in attachments:
+            if self.assets is None:
+                return {'state': 'held', 'confirmed': 'Media storage unavailable. Nothing was posted.'}
+            mime = str(asset.get('mime') or '')
+            supported = capabilities.get('media', {}).get('supported_mime_types')
+            if supported is not None and mime not in supported:
+                return {'state': 'failed', 'confirmed': 'This Mastodon server does not support the approved media format. Nothing was posted.'}
+            if not mime.startswith(('image/', 'video/', 'audio/')):
+                return {'state': 'failed', 'confirmed': 'Unsupported Mastodon media. Nothing was posted.'}
+            from .mastodon_publishing import approved_bytes
+            raw = approved_bytes(self, manifest, asset)
+            if len(raw) != asset.get('bytes') or hashlib.sha256(raw).hexdigest() != asset.get('hash'):
+                return {'state': 'held', 'confirmed': 'The stored media changed after approval. Nothing was uploaded or posted.'}
+            limits = capabilities.get('media', {})
+            maximum = limits.get('image_size_limit' if mime.startswith('image/') else 'audio_size_limit' if mime.startswith('audio/') else 'video_size_limit', 40_000_000)
+            if type(maximum) is not int or len(raw) > maximum:
+                return {'state': 'failed', 'confirmed': 'This attachment exceeds the Mastodon server media limit. Nothing was posted.'}
+            media_id, outcome = self._mastodon_media(provider, session, (raw, mime, str(asset.get('alt') or '')))
+            if outcome:
+                return outcome
+            media_ids.append(media_id)
+        # Mastodon keeps an Idempotency-Key for an hour, so a retried request returns the same status.
+        response = provider.api(session, "POST", "/api/v1/statuses", headers={"Idempotency-Key": hashlib.sha256(manifest["idempotencyKey"].encode()).hexdigest()},
+                                body={**body, 'media_ids': media_ids})
+        status_id = str(response.get("body", {}).get("id", "")) if isinstance(response.get("body"), dict) else ""
+        if response.get("status") == 200 and status_id.isdigit():
+            return {"state": "provider_accepted", "reference": status_id, "confirmed": "Mastodon created the post; read-back pending"}
+        early = self._classify_status(response.get("status"), response.get("body"), "Mastodon")
+        if early:
+            return early
+        return _uncertain("No conclusive Mastodon create response; do not resubmit")
+
+    def advance_mastodon(self, manifest, job, checkpoint, clock=time.time):
+        from .mastodon_publishing import advance, LocalCooldown
+        try:
+            with self.oauth.mastodon_dispatch_fence(manifest['workspaceId'], manifest['channelId']):
+                return advance(self, manifest, job, checkpoint, clock)
+        except LocalCooldown as wait:
+            return wait.receipt
+        except AlphaError as error:
+            if error.code != 'mastodon_dispatch_busy':
+                raise
+            return {'state': 'held', 'confirmed': str(error),
+                    **({'progress': job['progress']} if job.get('progress') else {})}
 
     def _submit_telegram(self, manifest, provider, token):
         refusal = self._unsupported_media(manifest)
@@ -534,6 +593,22 @@ class HostedSocial:
             text = text.replace(short, "" if media else str(expanded or short), 1)
         return html.unescape(text).strip()
 
+    def reconcile_mastodon_thread(self, manifest, job, checkpoint, clock=time.time):
+        from .mastodon_publishing import checked_progress
+        from .mastodon_threads import reconcile
+        provider = self._provider(manifest)
+        if provider is None: return {'state': 'held', 'confirmed': 'Mastodon is unavailable; saved thread IDs were retained.'}
+        try:
+            grant = self.oauth.token_for_worker(manifest['workspaceId'], manifest['channelId'])
+        except AlphaError as error:
+            from .mastodon_publishing import grant_retry
+            result = grant_retry(manifest, job, clock(), error)
+            if result.get('progress'): checkpoint(result['progress'], before_external=False)
+            return result
+        if grant.get('providerAccountId') != manifest.get('providerAccountId'):
+            return {'state': 'held', 'confirmed': 'The connected thread account changed. Reconnect and inspect saved IDs.'}
+        return reconcile(provider, grant, manifest, checked_progress(job['progress'], manifest), checkpoint, clock)
+
     def _reconcile_wave1(self, manifest, provider, token, reference, job=None):
         platform, text = manifest["platform"], manifest["payload"]["text"]
         if not reference:
@@ -550,14 +625,38 @@ class HostedSocial:
                         "confirmed": "Bluesky read-back matched the approved text and account", "verification": "provider_lookup"}
             return _uncertain("Bluesky read-back did not match the exact approved post")
         if platform == "Mastodon":
+            if (job or {}).get('progress', {}).get('version') == 3 and job['progress'].get('stage') == 'native_scheduled':
+                from .mastodon_publishing import native_reconcile
+                return native_reconcile(provider, token, manifest, job, self.oauth.clock() if hasattr(self.oauth, 'clock') else time.time())
+            from .mastodon_protocol import ID
+            if not isinstance(reference, str) or not ID.fullmatch(reference):
+                return _uncertain('Invalid Mastodon post reference; do not resubmit')
             session = provider.session(token)
             response = provider.api(session, "GET", "/api/v1/statuses/" + quote(reference))
             body = response.get("body") if isinstance(response.get("body"), dict) else {}
             account = str((body.get("account") or {}).get("id", ""))
             # Tags go before entities are decoded, so literal "<" typed in a post survives the comparison.
             plain = " ".join(html.unescape(re.sub(r"<[^>]+>", "", re.sub(r"<br\s*/?>|</p>\s*<p>", " ", str(body.get("content") or "")))).split())
-            if response.get("status") == 200 and f"{account}@{session['instance']}" == manifest["providerAccountId"] and plain == " ".join(text.split()):
-                return {"state": "verified", "reference": reference, "confirmed": "Mastodon read-back matched the approved text and account", "verification": "provider_lookup"}
+            options = manifest.get('publishOptions') or {}
+            visibility_matches = body.get('visibility', 'public') == options.get('visibility', 'public')
+            warning_matches = body.get('spoiler_text', '') == options.get('spoiler_text', '')
+            sensitive_matches = body.get('sensitive', False) == options.get('sensitive', False)
+            reply_matches = not options.get('in_reply_to_id') or str(body.get('in_reply_to_id')) == options['in_reply_to_id']
+            progress = (job or {}).get('progress') or {}
+            media_matches = progress.get('version') != 3 or [str(a.get('id')) for a in body.get('media_attachments') or [] if isinstance(a, dict)] == [a.get('id') for a in progress.get('attachments', [])]
+            exact_matches = (str(body.get('id')) == reference
+                    and f"{account}@{session['instance']}" == manifest['providerAccountId']
+                    and plain == ' '.join(text.split())
+                    and visibility_matches and warning_matches and sensitive_matches and reply_matches and media_matches)
+            if progress.get('version') == 3:
+                from .mastodon_threads import matches
+                exact_matches = matches(body, manifest, [reference], 0, session['instance'], progress.get('attachments', []))
+            if response.get('status') == 200 and exact_matches:
+                result = {"state": "verified", "reference": reference, "confirmed": "Mastodon read-back matched the approved text, visibility, warning and account", "verification": "provider_lookup"}
+                url = body.get('url')
+                if isinstance(url, str) and url.startswith('https://' + session['instance'] + '/'):
+                    result['url'] = url
+                return result
             return _uncertain("Mastodon read-back did not match the exact approved post")
         if platform == 'Discord':
             return self.reconcile_discord(manifest, {**(job or {}), 'providerReference': reference})
@@ -994,6 +1093,9 @@ class HostedSocial:
         try:
             grant = self.oauth.token_for_worker(manifest["workspaceId"], manifest["channelId"])
         except AlphaError as error:
+            if manifest['platform'] == 'Mastodon':
+                from .mastodon_publishing import grant_retry
+                return grant_retry(manifest, job, self.oauth.clock() if hasattr(self.oauth, 'clock') else time.time(), error)
             return _uncertain(f"Cannot reconcile without a valid grant: {error}")
         token, reference = grant["accessToken"], job.get("providerReference")
         try:
