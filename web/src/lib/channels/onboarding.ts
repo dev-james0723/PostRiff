@@ -6,6 +6,7 @@ export function defaultConnectCapability(provider: ProviderView | undefined, wan
   // A Trial reconnect must retain the approved board-read scope instead of dropping to profile-only.
   if (provider?.id === 'pinterest' && provider.trialReadonly && provider.capabilities.boards_read && (!wanted || wanted === 'identity')) return 'boards_read';
   if (wanted && provider?.capabilities[wanted]) return wanted;
+  if (provider?.id === 'mastodon' && provider.capabilities.identity) return 'identity';
   const order: ConnectCapability[] = ['boards_read', 'posts_read', 'identity', 'publish', 'analytics', 'comments_read', 'reply'];
   return order.find((key) => provider?.capabilities[key]) ?? 'identity';
 }
