@@ -183,6 +183,16 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
       assert.match(await composer.locator('[data-review-time]').innerText(), new RegExp(input.job.manifest.timing.local.replace('T', ' ')));
       assert.equal(await composer.locator('[data-review-time] time').getAttribute('datetime'), new Date(input.job.manifest.timing.timestamp * 1000).toISOString());
       assert.equal(await composer.getByRole('button', {name: 'Prepare review', exact: true}).isEnabled(), true);
+      // Keep the field unchanged while its deadline passes, and click before the timer can render.
+      await page.evaluate(now => {
+        Date.now = () => now;
+        document.querySelector('[data-tour="schedule-prepare"]').click();
+      }, (input.job.manifest.timing.timestamp + 1) * 1000);
+      assert.equal(preparations, 0, 'The immediate submission guard refuses a just-expired form.');
+      await page.waitForFunction(() => document.querySelector('[data-tour="schedule-prepare"]')?.disabled === true);
+      assert.equal(await timeField.inputValue(), input.job.manifest.timing.local, 'Expiry does not silently change the proposed time.');
+      await page.evaluate(now => { Date.now = () => now; }, (input.job.manifest.timing.timestamp - 60) * 1000);
+      await page.waitForFunction(() => document.querySelector('[data-tour="schedule-prepare"]')?.disabled === false);
       // Whole active seconds must be positive so cleanup telemetry is covered independent of click speed.
       await page.waitForTimeout(1100);
       const activityClosed = page.waitForResponse(response => response.url() === activityUrl &&
