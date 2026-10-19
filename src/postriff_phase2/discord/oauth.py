@@ -21,6 +21,13 @@ def fail(message='Reconnect Discord and authorize the server and channel again.'
     raise AlphaError(message, status, code='discord_connection_required')
 
 
+def identity_capabilities():
+    """An identity proves the authorizer, never authority to send a message."""
+    return {'connectionKind': 'identity', 'senderKind': 'none', 'canPublish': False,
+            'canSchedule': False, 'postAsPersonalUser': False,
+            'capabilityReason': 'discord_identity_only'}
+
+
 def stable_id(kind, workspace, application, account, actor=''):
     return 'discord-' + kind + '-' + str(uuid.uuid5(uuid.NAMESPACE_URL,
         'rafii:discord:' + digest([kind, workspace, application, account, actor])))
@@ -205,7 +212,7 @@ class DiscordConnections:
             params.update(permissions=str(adapter.PERMISSIONS), integration_type='0', guild_id=inputs['guildId'], disable_guild_select='true')
         return {'transactionId': transaction, 'provider': 'discord', 'platform': 'Discord', 'capability': capability,
                 'discordPurpose': purpose, 'scopes': scopes, 'expiresAt': self.oauth.clock() + 600,
-                'permissionExplanation': 'Link your Discord identity and selected server permissions.' if purpose == 'identity' else 'Install Rafii’s bot in the selected server. Authorize each channel separately.',
+                'permissionExplanation': ('Link your personal Discord profile' + (' and server list' if discover else ' only') + '. This does not authorize publishing as you. It does not install a bot.') if purpose == 'identity' else 'Install Rafii’s bot in the selected server. Messages are sent by the bot, not your personal account. Authorize each channel separately.',
                 'authorizeUrl': adapter.AUTH + '?' + urlencode(params)}
 
     def complete(self, workspace, token, state_value, code, error=None):
@@ -311,7 +318,7 @@ class DiscordConnections:
             else:
                 links.append(record)
             self.save_state(cur, workspace, state)
-        return {'connected': True, 'connectionId': connection, 'account': record['account'], 'discordPurpose': 'identity', 'missingScopes': []}
+        return {'connected': True, 'connectionId': connection, 'account': record['account'], 'discordPurpose': 'identity', 'missingScopes': [], **identity_capabilities()}
 
     def save_installation(self, workspace, token, context, envelope, scopes, guild):
         with self.local(workspace, token) as (cur, state, actor):
@@ -439,10 +446,14 @@ class DiscordConnections:
         return {'identityConnectionId': connection, 'guilds': self.user_guilds(self._fresh_identity(workspace, token, connection))}
 
     def public_identities(self, workspace, token):
+        if token is None:
+            fail('Sign in to manage Discord connections.', 401)
         with self.oauth.repository.transaction(token, workspace) as (_, row, actor):
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
-            return [{k: x[k] for k in ('id', 'account', 'userId', 'status', 'expiresAt', 'discoverGuilds') if k in x}
-                    for x in state.get('phase2', {}).get('discordIdentityLinks', []) if x.get('authorizedBy') == actor]
+            return [{**{k: x[k] for k in ('id', 'account', 'userId', 'status', 'expiresAt', 'discoverGuilds') if k in x},
+                     **identity_capabilities()}
+                    for x in state.get('phase2', {}).get('discordIdentityLinks', [])
+                    if isinstance(x, dict) and x.get('workspaceId') == workspace and x.get('authorizedBy') == actor]
 
     def installation_identity(self, workspace, connection):
         with self.local(workspace, None) as (cur, _, _):

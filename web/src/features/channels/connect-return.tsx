@@ -12,6 +12,7 @@ import { keys } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { OAuthComplete } from '@/lib/api/types';
 import { takeExpectedReconnect } from '@/lib/channels/connect-expect';
+import { missingScopePublishingMessage } from '@/lib/channels/discord-personal-account';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
 /**
@@ -49,9 +50,9 @@ export function ConnectReturn() {
         void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
         await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
         if (value.connected && connectionId) {
-          if ((value as { discordPurpose?: string }).discordPurpose === 'identity') toast.success('Discord identity linked', { description: 'Authorize a server and channel from Channels before approving a post.' });
+          if (value.discordPurpose === 'identity') toast.success('Personal Discord account connected', { description: 'This does not authorize publishing as you. Authorize a server and channel separately for bot publishing.' });
           if (value.missingScopes?.length) {
-            toast.warning('Some permissions weren’t granted', { description: `Missing: ${value.missingScopes.join(', ')}. Publishing stays Assisted.` });
+            toast.warning('Some permissions weren’t granted', { description: `Missing: ${value.missingScopes.join(', ')}. ${missingScopePublishingMessage(provider)}` });
           }
           if (expected && expected.channelId !== connectionId) {
             toast.warning(`Different account connected. ${expected.account} still needs reconnecting.`);
@@ -81,7 +82,7 @@ export function ConnectReturn() {
             <StateMessage
               kind='success'
               title={`Connected ${result.account ?? ''}`.trim()}
-              description={result.missingScopes?.length ? `Missing permissions: ${result.missingScopes.join(', ')}. Publishing stays Assisted.` : undefined}
+              description={result.missingScopes?.length ? `Missing permissions: ${result.missingScopes.join(', ')}. ${missingScopePublishingMessage(provider)}` : undefined}
               action={back}
             />
           ) : (

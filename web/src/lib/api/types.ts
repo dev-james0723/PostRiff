@@ -1607,6 +1607,7 @@ export interface OAuthStart {
 }
 
 export interface OAuthComplete {
+  discordPurpose?: 'identity' | 'installation';
   connectionId?: string;
   connected: boolean;
   /** Bot-code connections before the code has been seen in a channel. */
@@ -2132,4 +2133,11 @@ export interface DiscordIdentity {
   id: string; account: string; userId: string;
   status: 'linked' | 'reconnect_required' | 'disconnected';
   expiresAt: number; discoverGuilds: boolean;
+  /** Identity linking never grants publication authority. Optional for older API responses. */
+  connectionKind?: 'identity';
+  senderKind?: 'none';
+  canPublish?: false;
+  canSchedule?: false;
+  postAsPersonalUser?: false;
+  capabilityReason?: 'discord_identity_only';
 }

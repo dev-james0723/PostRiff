@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
@@ -20,6 +20,7 @@ import { CONNECT_CAPABILITY_OPTIONS } from '@/lib/channels/capabilities';
 import { historyImportCopy } from '@/lib/channels/history-import-copy';
 import { usePreferences } from '@/lib/preferences';
 import { defaultConnectCapability } from '@/lib/channels/onboarding';
+import { discordDiscoveryState } from '@/lib/channels/discord-personal-account';
 import { rememberExpectedReconnect } from '@/lib/channels/connect-expect';
 import { CONNECT_CAPABILITIES, type ConnectCapability } from '@/lib/channels/state';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -32,6 +33,8 @@ import { YouTubePolicyAcceptance } from '@/features/youtube/policy-acceptance';
 export interface ConnectRequest {
   providerId?: string;
   capability?: ConnectCapability;
+  /** Manage this actor-owned identity; never a publishing-channel reconnect. */
+  discordIdentityId?: string;
   /** Reconnect mode: the account this grant has to land on. */
   reconnect?: { channelId: string; account: string };
 }
@@ -60,17 +63,20 @@ function ProviderReadiness({ provider }: { provider: ProviderView }) {
 function ProviderTile({
   provider,
   selected,
-  onSelect
+  onSelect,
+  disabled = false
 }: {
   provider: ProviderView;
   selected: boolean;
   onSelect: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       type='button'
       data-tour='connect-platform' data-guide-safe
       aria-pressed={selected}
+      disabled={disabled}
       onClick={onSelect}
       className={cn(
         'rafii-focus flex min-h-14 items-center gap-3 rounded-[var(--rafii-radius-control)] p-3 text-left transition-colors',
@@ -122,6 +128,7 @@ export function ConnectSheet({
   const [discordGuild, setDiscordGuild] = useState('');
   const [discordGuilds, setDiscordGuilds] = useState<{ id: string; name: string }[]>([]);
   const [discoverGuilds, setDiscoverGuilds] = useState(false);
+  const discordRequestGeneration = useRef(0);
   const [notSeenYet, setNotSeenYet] = useState(false);
   const { user } = useAuth();
   const policyContext = `${workspaceId}:${user?.id}:${providerId}:${capability}`;
@@ -144,6 +151,7 @@ export function ConnectSheet({
   // must not reset an in-progress choice, so depend on the stable provider id signature.
   const providerSignature = providers.map((provider) => provider.id).join('|');
   useEffect(() => {
+    discordRequestGeneration.current += 1;
     if (!open) return;
     const search = new URLSearchParams(window.location.search);
     const urlProviderId = search.get('connect') ?? undefined;
@@ -156,15 +164,20 @@ export function ConnectSheet({
     setProviderId(initial?.id ?? '');
     setCapability(defaultCapability(initial, requestedCapability));
     setDiscordPurpose(requestedCapability === 'publish' ? 'installation' : 'identity');
-    setDiscordIdentity(''); setDiscordGuild(''); setDiscordGuilds([]); setDiscoverGuilds(false);
+    const managedIdentity = discordIdentities.find(identity => identity.id === request?.discordIdentityId);
+    setDiscordIdentity(managedIdentity?.id ?? ''); setDiscordGuild(''); setDiscordGuilds([]); setDiscoverGuilds(managedIdentity?.discoverGuilds === true);
     setPending(null);
     setError(null);
     setBusy(false);
     setInputValue('');
     setNotSeenYet(false);
-  }, [open, providerSignature, request?.providerId, request?.capability]);
+  }, [open, workspaceId, providerSignature, request?.providerId, request?.capability, request?.discordIdentityId]);
 
   function choosePlatform(id: string) {
+    if (busy) return;
+    if (id === providerId) return;
+    discordRequestGeneration.current += 1;
+    setDiscordIdentity(''); setDiscordGuild(''); setDiscordGuilds([]); setDiscoverGuilds(false); setDiscordPurpose('identity');
     const next = providers.find((p) => p.id === id);
     setProviderId(id);
     setCapability(defaultCapability(next, capability));
@@ -173,7 +186,8 @@ export function ConnectSheet({
   }
 
   async function start() {
-    if (!provider) return;
+    if (!provider || busy) return;
+    const generation = ++discordRequestGeneration.current;
     setBusy(true);
     setError(null);
     try {
@@ -186,15 +200,16 @@ export function ConnectSheet({
       }
       const selectedCapability = provider.discordConnectionsV2 ? discordPurpose === 'identity' ? 'identity' : 'publish' : capability;
       const started = await api.oauthStart(workspaceId, provider.id, selectedCapability, input);
+      if (generation !== discordRequestGeneration.current) return;
       if (reconnect) {
         rememberExpectedReconnect({ channelId: reconnect.channelId, account: reconnect.account, transactionId: started.transactionId });
       }
       setPending(started);
     } catch (err) {
-      // Shown inline above the choices; no toast on top of it.
-      setError(err instanceof ApiError ? err.message : 'Try again in a moment.');
+      // Ignore a completion belonging to a closed or changed connection context.
+      if (generation === discordRequestGeneration.current) setError(err instanceof ApiError ? err.message : 'Try again in a moment.');
     } finally {
-      setBusy(false);
+      if (generation === discordRequestGeneration.current) setBusy(false);
     }
   }
 
@@ -223,11 +238,29 @@ export function ConnectSheet({
     }
   }
 
+  function prepareDiscordReconnect(identity: DiscordIdentity, requestGuilds = identity.discoverGuilds === true) {
+    if (busy) return;
+    discordRequestGeneration.current += 1;
+    setDiscordPurpose('identity'); setDiscordIdentity(identity.id); setDiscoverGuilds(requestGuilds);
+    setDiscordGuild(''); setDiscordGuilds([]); setError(null);
+  }
+
   async function loadDiscordGuilds() {
+    const identity = discordIdentities.find(link => link.id === discordIdentity);
+    if (busy || discordDiscoveryState(identity) !== 'ready') return;
+    const generation = ++discordRequestGeneration.current;
     setBusy(true); setError(null);
-    try { const value = await api.discordGuilds(workspaceId, discordIdentity); setDiscordGuilds(value.guilds); setDiscordGuild(''); }
-    catch (err) { setError(err instanceof ApiError ? err.message : 'Could not load Discord servers.'); }
-    finally { setBusy(false); }
+    try {
+      const value = await api.discordGuilds(workspaceId, discordIdentity);
+      if (generation !== discordRequestGeneration.current) return;
+      if (value.identityConnectionId !== discordIdentity) {
+        setError('Discord returned a different identity. Reload this connection.');
+        return;
+      }
+      setDiscordGuilds(value.guilds); setDiscordGuild('');
+    } catch (err) {
+      if (generation === discordRequestGeneration.current) setError(err instanceof ApiError ? err.message : 'Could not load Discord servers.');
+    } finally { if (generation === discordRequestGeneration.current) setBusy(false); }
   }
   async function disconnectIdentity(id: string) {
     setBusy(true); setError(null);
@@ -241,6 +274,8 @@ export function ConnectSheet({
     } catch (err) { setError(err instanceof ApiError ? err.message : 'Could not disconnect the identity.'); }
     finally { setBusy(false); }
   }
+  const selectedDiscordIdentity = discordIdentities.find(link => link.id === discordIdentity);
+  const discoveryState = discordDiscoveryState(selectedDiscordIdentity);
   const discordNeedsSelection = provider?.discordConnectionsV2 && discordPurpose === 'installation' && (!discordIdentity || !discordGuild || !discordIdentities.some(x => x.id === discordIdentity && x.status === 'linked'));
   const needsInput = Boolean(provider?.startInput) && inputValue.trim().length === 0;
   const title = reconnect ? `Reconnect ${reconnect.account}` : 'Connect account';
@@ -344,7 +379,7 @@ export function ConnectSheet({
                   </h3>
                   <div className='grid gap-2 sm:grid-cols-2'>
                     {providers.map((p) => (
-                      <ProviderTile key={p.id} provider={p} selected={p.id === providerId} onSelect={() => choosePlatform(p.id)} />
+                      <ProviderTile key={p.id} provider={p} selected={p.id === providerId} disabled={busy} onSelect={() => choosePlatform(p.id)} />
                     ))}
                   </div>
                 </section>
@@ -401,35 +436,42 @@ export function ConnectSheet({
               )}
               {provider?.discordConnectionsV2 && (
                 <section className='flex flex-col gap-3' aria-label='Discord connection steps'>
-                  <p className='text-sm'>Link identity → Authorize server → Authorize channel → Preview and approve each post.</p>
+                  <p className='text-sm'>Connect your personal account without installing a bot. This does not authorize publishing as you.</p>
+                  <p className='text-muted-foreground text-xs'>For publishing: authorize a server and channel, then approve each message. Rafii’s bot is the sender.</p>
                   <div className='flex flex-wrap gap-2'>
-                    <Button variant='glass' aria-pressed={discordPurpose === 'identity'} onClick={() => setDiscordPurpose('identity')}>Link Discord identity</Button>
-                    <Button variant='glass' aria-pressed={discordPurpose === 'installation'} onClick={() => setDiscordPurpose('installation')}>Authorize Discord server</Button>
+                    <Button variant='glass' disabled={busy} aria-pressed={discordPurpose === 'identity'} onClick={() => { setDiscordPurpose('identity'); setError(null); }}>Connect personal Discord account</Button>
+                    <Button variant='glass' disabled={busy} aria-pressed={discordPurpose === 'installation'} onClick={() => { setDiscordPurpose('installation'); setError(null); }}>Authorize Discord server</Button>
                   </div>
                   {discordIdentities.map(link => (
                     <div key={link.id} className='rafii-quiet flex flex-wrap items-center gap-2 rounded-md p-2 text-sm'>
                       <span className='min-w-0 break-words'>{link.account} · {link.userId} · {link.status.replaceAll('_', ' ')}</span>
-                      <Button size='sm' variant='glass' disabled={busy} onClick={() => { setDiscordPurpose('identity'); setDiscordIdentity(link.id); setDiscoverGuilds(link.discoverGuilds); }}>Reconnect identity</Button>
+                      <Button size='sm' variant='glass' disabled={busy} onClick={() => prepareDiscordReconnect(link)}>Reconnect identity</Button>
                       {link.status !== 'disconnected' && <Button size='sm' variant='glass' disabled={busy} onClick={() => void disconnectIdentity(link.id)}>Disconnect identity from workspace</Button>}
                     </div>
                   ))}
                   {discordPurpose === 'identity' ? (
                     <label className='flex items-start gap-2 text-sm'>
                       <input type='checkbox' aria-label='Allow Rafii to list servers I manage for server selection'
-                        checked={discoverGuilds} onChange={e => setDiscoverGuilds(e.target.checked)} />
+                        checked={discoverGuilds} disabled={busy} onChange={e => setDiscoverGuilds(e.target.checked)} />
                       Allow Rafii to list servers I manage for server selection
                     </label>
                   ) : (
                     <>
                       <label className='flex flex-col gap-1 text-sm'>Discord identity
-                        <select aria-label='Discord identity' value={discordIdentity} onChange={e => { setDiscordIdentity(e.target.value); setDiscordGuild(''); setDiscordGuilds([]); }} className='rafii-quiet rounded-md p-2'>
+                        <select aria-label='Discord identity' value={discordIdentity} disabled={busy} onChange={e => { discordRequestGeneration.current += 1; setDiscordIdentity(e.target.value); setDiscordGuild(''); setDiscordGuilds([]); setError(null); }} className='rafii-quiet rounded-md p-2'>
                           <option value=''>Select a linked identity</option>
                           {discordIdentities.filter(x => x.status === 'linked').map(x => <option key={x.id} value={x.id}>{x.account} · {x.userId}</option>)}
                         </select>
                       </label>
-                      <Button variant='glass' disabled={!discordIdentity || busy} onClick={() => void loadDiscordGuilds()}>Load permitted Discord servers</Button>
+                      {discoveryState === 'scope_required' && <div className='rafii-quiet flex flex-col gap-2 rounded-md p-3 text-sm'>
+                        <p>Server-list permission is needed to choose a server. Your personal account is already linked.</p>
+                        <Button variant='glass' disabled={busy} onClick={() => { if (selectedDiscordIdentity) prepareDiscordReconnect(selectedDiscordIdentity, true); }}>Reconnect with server-list permission</Button>
+                        <p className='text-muted-foreground text-xs'>You will review and authorize this extra permission on Discord. Nothing is granted automatically.</p>
+                      </div>}
+                      {discoveryState === 'reconnect_required' && <p className='text-muted-foreground text-sm'>Reconnect this personal account before choosing a server.</p>}
+                      <Button variant='glass' disabled={discoveryState !== 'ready' || busy} onClick={() => void loadDiscordGuilds()}>Load permitted Discord servers</Button>
                       <label className='flex flex-col gap-1 text-sm'>Discord server
-                        <select aria-label='Discord server' value={discordGuild} onChange={e => setDiscordGuild(e.target.value)} className='rafii-quiet rounded-md p-2'>
+                        <select aria-label='Discord server' value={discordGuild} disabled={busy} onChange={e => setDiscordGuild(e.target.value)} className='rafii-quiet rounded-md p-2'>
                           <option value=''>Select the exact server</option>
                           {discordGuilds.map(x => <option key={x.id} value={x.id}>{x.name} · {x.id}</option>)}
                         </select>
@@ -437,6 +479,7 @@ export function ConnectSheet({
                       <p className='text-muted-foreground text-xs'>A server installation grants no channel approval. Select and authorize each channel after returning from Discord.</p>
                     </>
                   )}
+                  <p className='text-muted-foreground text-xs'>Reconnecting requires server and channel authorization again before dependent posts can send.</p>
                   <p className='text-muted-foreground text-xs'>Disconnecting locally holds dependent posts. The shared bot stays installed.</p>
                 </section>
               )}
