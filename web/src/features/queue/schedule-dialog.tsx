@@ -8,7 +8,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { now as zonedNow, parseDateTime, toCalendarDateTime, toZoned } from '@internationalized/date';
 import { toast } from 'sonner';
-import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -16,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
@@ -186,10 +185,16 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const [fold, setFold] = useState<0 | 1>(0);
   // The server's own word that the time occurs twice, for a zone rule this browser resolves differently.
   const [serverAsksFold, setServerAsksFold] = useState(false);
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [open]);
   const wallTime = useMemo(() => resolveWallTime(localTime, timeZone), [localTime, timeZone]);
   const askFold = wallTime.kind === 'ambiguous' || serverAsksFold;
   const chosenAt = wallTime.kind === 'exact' ? wallTime.at : wallTime.kind === 'ambiguous' ? (fold === 0 ? wallTime.first : wallTime.second) : null;
-  const timePassed = chosenAt !== null && chosenAt <= Date.now();
+  const timePassed = chosenAt !== null && chosenAt <= clock;
 
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
   const needsVideo = ['YouTube', 'TikTok', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '');
@@ -200,6 +205,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
+  const [discordDestinationId, setDiscordDestinationId] = useState('');
+  useEffect(() => { setDiscordDestinationId(''); }, [channelId]);
   const asset: Asset | undefined = assets.find((a) => a.id === assetId);
   // The draft's own post-role media is the default, unless the dialog was opened for a specific asset.
   const defaultAsset = preselectedAsset ? null : needsVideo
@@ -209,13 +216,16 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
     if (defaultAsset) setAssetId(defaultAsset);
   }, [variant?.id, defaultAsset]);
   const channel = channelsForVariant.find((c) => c.id === channelId);
+  const discordDestinations = channel?.discordDestinations?.filter((d) => d.status === 'authorized' && d.authorizationGeneration === channel.discordAuthorizationGeneration) ?? [];
+  const discordDestination = discordDestinations.find((d) => d.id === discordDestinationId);
   const needsOptions = Boolean(channel && NEEDS_OPTIONS.has(channel.platform));
   const youtubeNow = channel?.platform === 'YouTube' && publishOptions?.publicationMode === 'now';
   const steps = editSteps(variant, activeVoice, canEdit);
   const ready = Boolean(
     variant &&
       channel &&
-      (youtubeNow || localTime) &&
+      (channel.platform !== 'Discord' || Boolean(discordDestination)) &&
+      (youtubeNow || (chosenAt !== null && !timePassed)) &&
       rights &&
       (!assetId || Boolean(asset)) &&
       (!needsVideo || Boolean(asset)) &&
@@ -228,7 +238,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   );
 
   async function submit() {
-    if (!variant) return;
+    // A form may stay open across its proposed time; refuse even before the next clock render.
+    if (!variant || !ready || !canPrepare || act.isPending || (!youtubeNow && (chosenAt === null || chosenAt <= Date.now()))) return;
     try {
       let currentRevision = revision;
       let current: SnapshotVariant = variant;
@@ -257,6 +268,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
         payload: {
           variantId: current.id,
           channelId,
+          destinationId: channel?.platform === 'Discord' ? discordDestinationId : undefined,
           assetId: asset?.id,
           alt: alt.trim(),
           rightsConfirmed: rights,
@@ -326,25 +338,21 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           )}
           <div className='flex flex-col gap-1.5' data-tour='schedule-draft'>
             <Label htmlFor='schedule-draft'>Draft</Label>
-            <Select value={variantId || preselected || ''} onValueChange={(value) => { setVariantId(String(value)); setChannelId(''); setAssetId(''); setPublishOptions(null); }}>
-              <SelectTrigger id='schedule-draft' className='h-12 w-full text-base'>
-                {/* The draft's language exactly as stored, never folded into a two-language label. One line, cut to the field's width. */}
-                <SelectValue className='min-w-0'>
-                  <span className='truncate'>{variant ? `${variant.platform} · ${languageLabel(variant.language)} — ${variant.text.slice(0, 40)}…` : 'Choose a draft'}</span>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {drafts.length === 0 && <SelectItem value='__none' disabled>No drafts yet</SelectItem>}
-                {drafts.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    <span className='flex items-center gap-2'>
-                      <ChannelIcon platform={d.platform} name={d.platform} size='xs' />
-                      {d.platform} · {languageLabel(d.language)} — {d.text.slice(0, 48)}…
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <NativeSelect id='schedule-draft' className='w-full [&>select]:h-12 [&>select]:text-base' value={variantId || preselected || ''} onChange={(event) => { setVariantId(event.target.value); setChannelId(''); setAssetId(''); setPublishOptions(null); }}>
+              <NativeSelectOption value='' disabled>{drafts.length === 0 ? 'No drafts yet' : 'Choose a draft'}</NativeSelectOption>
+              {drafts.map((d) => <NativeSelectOption key={d.id} value={d.id}>{d.platform} · {languageLabel(d.language)} — {d.text.slice(0, 48)}…</NativeSelectOption>)}
+            </NativeSelect>
+            {channel?.platform === 'Discord' && (
+              <div className='flex flex-col gap-1.5'>
+                <Label htmlFor='schedule-discord-destination'>Discord server and channel</Label>
+                <NativeSelect id='schedule-discord-destination' className='w-full [&>select]:h-12' value={discordDestinationId} onChange={(event) => setDiscordDestinationId(event.target.value)}>
+                  <NativeSelectOption value='' disabled>{discordDestinations.length === 0 ? 'Authorize a channel in Connections first' : 'Choose an authorized destination'}</NativeSelectOption>
+                  {discordDestinations.map((d) => <NativeSelectOption key={d.id} value={d.id}>{d.guildName} · {d.channelName}</NativeSelectOption>)}
+                </NativeSelect>
+                {discordDestination && <p className='text-muted-foreground text-xs' data-discord-target>{discordDestination.guildName} ({discordDestination.guildId}) · {discordDestination.channelName} ({discordDestination.channelId})</p>}
+                <p className='text-muted-foreground text-xs'>The preview freezes this destination. Changing the connection default will keep approved posts on their original channel.</p>
+              </div>
+            )}
             {steps.updateWaiting && canEdit && <p className='text-muted-foreground text-xs'>Uses the updated version in your current voice.</p>}
             {steps.updateWaiting && !canEdit && !steps.blocked && <p className='text-muted-foreground text-xs'>Uses the draft as it is; an editor can accept the update.</p>}
             {canPrepare && steps.blocked && (
@@ -365,24 +373,10 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
 
           <div className='flex flex-col gap-1.5' data-tour='schedule-account'>
             <Label htmlFor='schedule-channel'>Account</Label>
-            <Select value={channelId} onValueChange={(value) => setChannelId(String(value))}>
-              <SelectTrigger id='schedule-channel' disabled={!variant || Boolean(variant.channelId)} className='h-12 w-full text-base'>
-                <SelectValue className='min-w-0'>
-                  <span className='truncate'>{channelsForVariant.find((c) => c.id === channelId)?.account ?? (variant ? `Choose ${withArticle(variant.platform)} account` : 'Choose a draft first')}</span>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {channelsForVariant.length === 0 && <SelectItem value='__none' disabled>{variant?.channelId ? `The ${variant.platform} account this draft was written for is not connected` : `No ${variant?.platform ?? ''} account connected`}</SelectItem>}
-                {channelsForVariant.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    <span className='flex items-center gap-2'>
-                      <ChannelIcon platform={c.platform} name={c.platform} size='xs' />
-                      {c.platform} · {c.account}{c.displayState ? ` · ${c.displayState}` : ''}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <NativeSelect id='schedule-channel' className='w-full [&>select]:h-12 [&>select]:text-base' value={channelId} onChange={(event) => setChannelId(event.target.value)} disabled={!variant || Boolean(variant.channelId)}>
+              <NativeSelectOption value='' disabled>{!variant ? 'Choose a draft first' : channelsForVariant.length === 0 ? `No ${variant.platform} account connected` : `Choose ${withArticle(variant.platform)} account`}</NativeSelectOption>
+              {channelsForVariant.map((c) => <NativeSelectOption key={c.id} value={c.id}>{c.platform} · {c.account}{c.displayState ? ` · ${c.displayState}` : ''}</NativeSelectOption>)}
+            </NativeSelect>
             {variant && channelsForVariant.length === 0 && (
               <Link href='/app/channels' className='text-muted-foreground hover:text-foreground w-fit text-xs underline underline-offset-2' onClick={() => onOpenChange(false)}>
                 Connect {withArticle(variant.platform)} account
@@ -407,13 +401,15 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 id='schedule-time'
                 type='datetime-local'
                 className='text-base md:text-sm'
+                aria-describedby='schedule-time-zone schedule-time-preview'
                 value={localTime}
                 onChange={(e) => {
                   setLocalTime(e.target.value);
                   setServerAsksFold(false);
                 }}
               />
-              <span className='text-muted-foreground text-xs'>{timeZone}</span>
+              <span id='schedule-time-zone' className='text-muted-foreground text-xs'>{timeZone}</span>
+              {chosenAt !== null && <p id='schedule-time-preview' data-review-time className='text-muted-foreground text-xs'><time dateTime={new Date(chosenAt).toISOString()}>{localTime.replace('T', ' ')} ({timeZone}) · {new Date(chosenAt).toISOString()}</time></p>}
               {timePassed && <Note>Pick a future time.</Note>}
               {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
             </div>}
