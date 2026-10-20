@@ -18,6 +18,7 @@ import json
 import mimetypes
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -358,7 +359,7 @@ def start_postgres(port=PORT_PG):
     data, log = Path(tmp) / "data", Path(tmp) / "postgres.log"
     subprocess.run([str(PG / "initdb"), "-D", str(data), "-A", "trust", "--no-locale", "-E", "UTF8"], check=True, stdout=subprocess.DEVNULL)
     try:
-        subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port}", "-w", "start"], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port} -k {shlex.quote(tmp)}", "-w", "start"], check=True, stdout=subprocess.DEVNULL)
     except subprocess.CalledProcessError:
         # This database contains only disposable fixtures. Preserve the actual
         # startup failure before the CI runner removes its temporary directory.
