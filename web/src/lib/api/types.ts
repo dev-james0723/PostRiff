@@ -236,12 +236,6 @@ export interface Job {
   nextAction?: string;
   cancelRequested: boolean;
   verification?: { method: string; at: number } | null;
-  workerBinding?: WorkerBinding;
-  previewDispatchPending?: boolean;
-  leaseUntil?: number;
-  providerUpload?: unknown;
-  providerAssets?: unknown;
-  providerThread?: unknown;
 }
 
 export interface Review {
@@ -813,7 +807,6 @@ export interface Snapshot {
   state: SnapshotState;
   membership?: Membership;
   runtimeResult?: Record<string, unknown>;
-  workerBinding?: WorkerBinding | null;
 }
 
 export interface Bootstrap extends Snapshot {
@@ -1665,8 +1658,6 @@ export interface Entitlement {
   resetsAt: number | null;
   source: string;
   version: number;
-  /** Existing internal operations use budgets instead of customer plan allowances. */
-  unlimited?: boolean;
 }
 
 export interface SubscriptionView {
