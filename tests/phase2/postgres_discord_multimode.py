@@ -243,6 +243,17 @@ with patch('postriff_phase2.billing.require_publishing', return_value=None), pat
         else:
             worker.tick_discord(max_jobs=1)
         worker.tick_discord(max_jobs=1)
+        if scenario == 'concurrent':
+            # The first durable result is provider_accepted, not verified.
+            # A real GET reconciliation is scheduled five seconds later.
+            # Do not accelerate the worker clock or weaken the receipt test.
+            awaiting = actual_job(f, approved)
+            assert awaiting['state'] == 'provider_accepted', awaiting['state']
+            assert transport.post_count == 1, 'concurrent workers must create only once'
+            due = awaiting.get('nextAt')
+            assert isinstance(due, (int, float)) and 0 < due - time.time() < 8, due
+            time.sleep(max(0, due - time.time() + 0.35))
+            worker.tick_discord(max_jobs=1)
         saved = actual_job(f, approved)
         assert saved['manifest'] == approved['manifest'] and saved['approvalDigest'] == approved['approvalDigest']
         if scenario == 'concurrent':
