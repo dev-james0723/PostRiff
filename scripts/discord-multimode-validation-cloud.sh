@@ -19,7 +19,7 @@ multimode_gate() {
   if [ "$code" -ne 0 ]; then result=1; fi
 }
 multimode_gate discord-python python -m unittest discover -s tests -p 'test_discord*.py' -v
-multimode_gate discord-postgres python scripts/postriff_disposable_postgres.py tests/phase2/postgres_discord_multimode.py
+multimode_gate discord-postgres bash scripts/discord-multimode-sql-cases-cloud.sh
 multimode_gate browser-fixture python tests/discord_ui_fixture.py .depot/discord-p0-ui.json
 cd web
 multimode_gate web-unit node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs

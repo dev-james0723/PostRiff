@@ -218,11 +218,14 @@ def close_case(f, job):
 
 sql_worker_cases = []
 with patch('postriff_phase2.billing.require_publishing', return_value=None), patch('postriff_phase2.billing.require_plan_capacity', return_value=None):
-    # One disposable SQL cluster intentionally preserves global rate/failure
-    # history. Exercise unknown-create before permanent permission removal and
-    # shared 429 cooldown; otherwise the denial may correctly hold an unsent
-    # fixture and never exercise the unknown transport branch.
-    for scenario in ('concurrent', 'canceled', 'revoked', 'unknown', '429', 'permission_removed'):
+    # A fresh disposable PostgreSQL cluster per scenario prevents a deliberate
+    # Discord 404 or 429 in one test from holding another test's approved POST.
+    # Never delete immutable admissions just to reset a shared test budget.
+    cases = ('concurrent', 'canceled', 'revoked', 'unknown', 'permission_removed', '429')
+    selected = os.environ.get('RAFII_DISCORD_SQL_SCENARIO')
+    if selected not in cases:
+        raise SystemExit('Select one owned isolated SQL scenario via RAFII_DISCORD_SQL_SCENARIO.')
+    for scenario in (selected,):
         f, transport, approved = webhook_worker_fixture(scenario)
         worker = base['PostgresWorker'](worker_connection, f.social, clock=time.time,
                                        worker_id='multimode-sql-'+scenario, discord_workers=True)

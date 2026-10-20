@@ -16,7 +16,7 @@ def manifest(root):
     paths.update(p.relative_to(root).as_posix() for p in (root / 'web/tests').rglob('*') if p.is_file() and p.suffix in ('.cjs', '.mjs', '.json'))
     paths.update({'tests/test_discord_personal_account_contract.py', 'tests/test_discord_multimode.py', 'tests/test_discord_interactions.py',
         'tests/phase2/postgres_discord_multimode.py', 'tests/discord_ui_fixture.py',
-        'scripts/discord_user_install_config.py', 'scripts/discord-multimode-validation-cloud.sh',
+        'scripts/discord_user_install_config.py', 'scripts/discord-multimode-validation-cloud.sh', 'scripts/discord-multimode-sql-cases-cloud.sh',
         'scripts/discord_multimode_sources.py', 'tests/test_discord_multimode_ci_wiring.py',
         '.github/workflows/discord-multimode-qualification.yml',
         'web/package-lock.json', 'web/tsconfig.json', 'web/next.config.ts',

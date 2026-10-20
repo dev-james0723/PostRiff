@@ -19,6 +19,17 @@ class MultimodeCIWiring(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'discord-multimode-validation-cloud.sh'):
             RUNNER.select_scripts([ROOT / 'tests/phase2/postgres_discord_multimode.py'], ['postgres_discord_multimode'])
 
+    def test_each_worker_scenario_uses_fresh_owned_postgres_cluster(self):
+        runner = ROOT / 'scripts/discord-multimode-sql-cases-cloud.sh'
+        self.assertTrue(runner.is_file())
+        body = runner.read_text()
+        for scenario in ('concurrent','canceled','revoked','permission_removed','unknown','429'):
+            self.assertIn(scenario, body)
+        self.assertIn('RAFII_DISCORD_SQL_SCENARIO=', body)
+        self.assertIn('postriff_disposable_postgres.py', body)
+        fixture = (ROOT / 'tests/phase2/postgres_discord_multimode.py').read_text()
+        self.assertIn("os.environ.get('RAFII_DISCORD_SQL_SCENARIO')", fixture)
+
     def test_cloud_workflow_executes_source_pinned_multimode_without_deploy(self):
         path = ROOT / '.github/workflows/discord-multimode-qualification.yml'
         self.assertTrue(path.is_file(), 'No actual cloud route for the multi-mode acceptance script')
