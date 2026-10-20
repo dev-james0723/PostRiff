@@ -263,7 +263,10 @@ with patch('postriff_phase2.billing.require_publishing', return_value=None), pat
             assert transport.post_count == 0, scenario
             assert saved['state'] in ('canceled','held'), (scenario,saved['state'])
         elif scenario == 'unknown':
-            assert transport.post_count == 1 and saved['state'] == 'uncertain', (scenario,saved['state'])
+            assert transport.post_count == 1 and saved['state'] == 'uncertain', {
+                'scenario': scenario, 'state': saved['state'], 'posts': transport.post_count,
+                'confirmed': saved.get('providerConfirmed'), 'nextAction': saved.get('nextAction'),
+                'intentCount': len(saved.get('discordDispatchIntents', []))}
         else:
             assert transport.post_count == 1, (scenario,transport.post_count,saved['state'])
             assert saved['state'] != 'verified'

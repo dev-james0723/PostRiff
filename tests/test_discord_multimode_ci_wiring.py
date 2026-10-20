@@ -26,6 +26,7 @@ class MultimodeCIWiring(unittest.TestCase):
         self.assertIn('ubuntu-24.04', text)
         self.assertIn('codex/discord-personal-account-20261019', text)
         self.assertIn('discord-multimode-validation-cloud.sh', text)
+        self.assertIn('Fail-fast fenced multi-mode PostgreSQL acceptance', text)
         self.assertIn('github.sha', text)
         for forbidden in ('vercel deploy', 'vercel --prod', 'workflow_run:', 'pull_request_target:', 'actions/upload-artifact', 'cache: npm', 'depot.dev', 'secrets.'):
             self.assertNotIn(forbidden, text)

@@ -62,6 +62,11 @@ jobs:
           sudo mkdir -p /var/run/postgresql
           sudo chmod 1777 /var/run/postgresql
           (cd web && npx --no-install playwright install --with-deps chromium)
+      - name: Fail-fast fenced multi-mode PostgreSQL acceptance
+        env:
+          RAFII_DISCORD_SYNTHETIC_FENCE: '1'
+        run: |
+          PYTHONPATH=scripts/linkedin_test_fence:src:tests python scripts/postriff_disposable_postgres.py tests/phase2/postgres_discord_multimode.py
       - name: Full Python domain and security suite
         id: python
         continue-on-error: true
