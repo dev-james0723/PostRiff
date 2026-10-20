@@ -62,3 +62,7 @@ Review is a self-review in this environment; it does not replace an independent 
 5. Unsupported or unverified capabilities stay disabled with their actual reason. This media implementation does not establish all 101 catalogue entries as generally available X features.
 
 Official contracts consulted: `https://docs.x.com/openapi.json` (OpenAPI 2.172), the X media upload/initialize/append/finalize/status/metadata reference pages, and `https://docs.x.com/x-api/getting-started/pricing`. Application capability restrictions must be rechecked at release, not inferred from synthetic fixtures.
+
+## CI checkout compatibility
+
+The repository contains an existing vendor gitlink without a corresponding `.gitmodules` entry. The pinned checkout action's credential-removal traversal fails on that unrelated entry. X acceptance therefore performs a public anonymous Git fetch of the exact validated 40-character commit SHA, verifies checked-out HEAD, disables credential helpers and automatic submodule recursion, and asserts no local credential/header configuration. It does not edit or delete vendor content, initialize submodules, persist a token, or substitute branch-tip source for the requested commit.

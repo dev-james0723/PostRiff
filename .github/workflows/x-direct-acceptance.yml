@@ -33,10 +33,24 @@ jobs:
       POSTRIFF_LOCAL_CLI: '0'
       POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
+      - name: Fetch exact public source without credentials
+        # checkout v7 auth cleanup traverses an existing unrelated orphan gitlink.
+        # Do not alter that vendor, persist tokens or initialize submodules.
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'dev-james0723/PostRiff' || exit 64
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 64
+          test ! -e .git || exit 64
+          export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
+          git -c credential.helper= -c core.hooksPath=/dev/null init .
+          git remote add origin https://github.com/dev-james0723/PostRiff.git
+          git -c credential.helper= -c http.extraHeader= -c submodule.recurse=false fetch --no-tags --no-recurse-submodules --depth=1 origin "$EXPECTED_SHA"
+          git -c core.hooksPath=/dev/null -c submodule.recurse=false checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA" || exit 65
+          test -z "$(git config --local --get-regexp 'credential\.|extraheader|includeIf' || true)" || exit 65
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version-file: .python-version
