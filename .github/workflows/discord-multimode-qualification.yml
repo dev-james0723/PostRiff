@@ -23,10 +23,17 @@ jobs:
       NEXT_PUBLIC_SENTRY_DISABLED: '1'
       DO_NOT_TRACK: '1'
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
+      # The repository has a historical gitlink without a .gitmodules entry.
+      # Generic checkout performs submodule cleanup and fails before setup.
+      - name: Exact SHA checkout without submodule recursion
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          git init .
+          git remote add origin https://github.com/dev-james0723/PostRiff.git
+          git -c protocol.version=2 fetch --depth=1 origin "$SOURCE_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version-file: .python-version
@@ -34,6 +41,7 @@ jobs:
         with:
           node-version-file: .node-version
       - name: Exact source and pinned dependency preparation
+        id: prep
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
@@ -45,6 +53,7 @@ jobs:
           mkdir -p .depot docs/discord-personal-account-20261019/evidence
           python scripts/discord_multimode_sources.py docs/discord-personal-account-20261019/evidence/hybrid-ci-before.json
       - name: Isolated Linux database and document prerequisites
+        id: prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-common
@@ -59,16 +68,16 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py'
       - name: Multi-mode database, web and real isolated browser gates
         id: multimode
-        if: ${{ !cancelled() }}
+        if: ${{ steps.prep.outcome == 'success' && steps.prerequisites.outcome == 'success' }}
         continue-on-error: true
         run: bash scripts/discord-multimode-validation-cloud.sh
       - name: Next production build without a deployment
         id: build
-        if: ${{ !cancelled() }}
+        if: ${{ steps.prep.outcome == 'success' && steps.prerequisites.outcome == 'success' }}
         continue-on-error: true
         run: npm --prefix web run build
       - name: Exact source preservation and aggregate verdict
-        if: ${{ !cancelled() }}
+        if: ${{ steps.prep.outcome == 'success' && steps.prerequisites.outcome == 'success' }}
         env:
           PYTHON_RESULT: ${{ steps.python.outcome }}
           MULTIMODE_RESULT: ${{ steps.multimode.outcome }}

@@ -31,5 +31,15 @@ class MultimodeCIWiring(unittest.TestCase):
             self.assertNotIn(forbidden, text)
 
 
+
+class CheckoutSafetyRegressions(unittest.TestCase):
+    def test_broken_legacy_gitlink_cannot_break_exact_sha_checkout(self):
+        content=(ROOT / '.github/workflows/discord-multimode-qualification.yml').read_text()
+        self.assertNotIn('actions/checkout@', content)
+        self.assertIn('git init .', content)
+        self.assertIn('git -c protocol.version=2 fetch --depth=1 origin "$SOURCE_SHA"', content)
+        self.assertIn('git checkout --detach FETCH_HEAD', content)
+        self.assertIn('test "$(git rev-parse HEAD)" = "$SOURCE_SHA"', content)
+
 if __name__ == '__main__':
     unittest.main()
