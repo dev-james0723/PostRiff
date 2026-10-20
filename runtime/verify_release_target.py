@@ -41,6 +41,32 @@ def binding_diagnostics(values):
     }
 
 
+SAFE_WITNESS_PATHS = (
+    'api/index.py', 'requirements.txt', 'runtime/stamp_release_source.py',
+    'runtime/verify_release_target.py', 'src/postriff_phase2/deployment.py',
+    'src/postriff_phase2/hosted_app.py', 'src/postriff_phase2/hosted_worker.py',
+    'src/postriff_phase2/linkedin_fleet.py', 'src/postriff_phase2/official_social.py',
+    'src/postriff_phase2/providers.py', 'src/postriff_phase2/release_provenance.py',
+    'vercel.json',
+)
+
+
+def source_witness_diagnostics():
+    """Only fixed filenames and booleans; never reveal file content or secrets."""
+    import hashlib
+    root=Path(__file__).resolve().parents[1]
+    try:
+        from postriff_phase2.release_provenance import read_regular, MANIFEST_PATH
+        manifest=json.loads(read_regular(root,MANIFEST_PATH,65536))
+        files=manifest.get('files',{})
+        if not isinstance(files,dict):raise ValueError('Invalid receipt')
+        return {name:bool(isinstance(files.get(name),str) and
+                    hashlib.sha256(read_regular(root,name,8*1024*1024)).hexdigest()==files[name])
+                if name in files else False for name in SAFE_WITNESS_PATHS}
+    except (OSError,ValueError,TypeError,KeyError,RuntimeError,ImportError):
+        return {name:False for name in SAFE_WITNESS_PATHS}
+
+
 def source_diagnostics(values):
     """Bounded, redacted source-proof state. Never infer permission to build."""
     root=Path(__file__).resolve().parents[1]
@@ -63,6 +89,7 @@ def source_diagnostics(values):
         'gitPathPresent':os.path.lexists(root/'.git'),
         'gitMetadataPresent':present,
         'gitMetadataMatchesReceipt':bool(present and isinstance(revision,str) and supplied==revision),
+        'witnessMatches':source_witness_diagnostics(),
     }
 
 

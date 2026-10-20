@@ -75,7 +75,7 @@ class ReleaseGuardDiagnostics(unittest.TestCase):
         self.assertFalse(result['gitMetadataMatchesReceipt'])
         self.assertNotIn(sha,json.dumps(result))
         self.assertNotIn('SECRET_VALUE',json.dumps(result))
-        self.assertEqual(set(result),{'receiptStatus','gitPathPresent','gitMetadataPresent','gitMetadataMatchesReceipt'})
+        self.assertEqual(set(result),{'receiptStatus','gitPathPresent','gitMetadataPresent','gitMetadataMatchesReceipt','witnessMatches'})
 
     def test_source_diagnostics_untrusted_status_is_redacted(self):
         with patch.object(self.module.runpy,'run_path',return_value={'release_source_proof':lambda *args,**kwargs:{'status':'SECRET_LEAK','sourceRevision':'SECRET_LEAK'}}):
@@ -91,3 +91,15 @@ class ReleaseGuardDiagnostics(unittest.TestCase):
 
 if __name__=='__main__':
     unittest.main()
+
+class WitnessDiagnosticSafety(unittest.TestCase):
+    def test_source_witness_diagnostics_exposes_only_fixed_path_booleans(self):
+        from unittest.mock import patch
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('guard_under_test',ROOT/'runtime/verify_release_target.py')
+        mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+        self.assertTrue(hasattr(mod,'source_witness_diagnostics'))
+        result=mod.source_witness_diagnostics()
+        self.assertEqual(set(result),set(mod.SAFE_WITNESS_PATHS))
+        self.assertTrue(all(type(value) is bool for value in result.values()))
+        self.assertNotIn('SECRET_VALUE',json.dumps(result))
