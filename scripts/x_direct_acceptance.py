@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -39,11 +40,25 @@ def free_port():
         s.bind(('127.0.0.1', 0)); return s.getsockname()[1]
 
 
-def wait_http(url, child, seconds=180):
+def wait_http(url, child, seconds=180, log_path=None):
     started = time.monotonic()
     while time.monotonic() - started < seconds:
         if child.poll() is not None:
-            raise RuntimeError('Fixture server exited before readiness; read its bounded log.')
+            message = 'Fixture server exited before readiness.'
+            if log_path is not None:
+                try:
+                    # Only a synthetic fixture log; never stream raw data into public CI.
+                    lines = Path(log_path).read_text(errors='replace').splitlines()[-20:]
+                    diagnostics = []
+                    for line in lines:
+                        if re.search(r'(?i)secret|token|password|authorization|bearer|cookie|api[_-]?key|(?:state|code)=', line):
+                            diagnostics.append('[redacted potentially sensitive line]')
+                        else:
+                            diagnostics.append(re.sub(r'[\x00-\x08\x0b-\x1f\x7f]', '?', line)[:300])
+                    message += '\nSynthetic fixture startup diagnostics (redacted):\n' + '\n'.join(diagnostics)[-3000:]
+                except (OSError, UnicodeError):
+                    message += ' Synthetic fixture log unavailable.'
+            raise RuntimeError(message)
         try:
             with urlopen(url, timeout=3) as response:
                 if response.status == 200: return
@@ -114,7 +129,7 @@ def main():
         control = out / ('fixture-control-' + str(os.getpid()) + '.json')
         api = server('api', [sys.executable, 'scripts/x_direct_browser_fixture.py', '--port', str(api_port), '--pg-port', str(pg_port)], ROOT,
             {'POSTRIFF_DEV_WEB_ORIGIN': base, 'RAFII_X_FIXTURE_CONTROL_FILE': str(control)})
-        wait_http(f'http://127.0.0.1:{api_port}/api/auth/config', api)
+        wait_http(f'http://127.0.0.1:{api_port}/api/auth/config', api, log_path=out / 'api.log')
         # Local-only build with loopback routing. NEVER deploy this test artifact.
         web_env = {'POSTRIFF_API_ORIGIN': f'http://127.0.0.1:{api_port}'}
         run('production-build-local-fixture', [node, 'node_modules/next/dist/bin/next', 'build'], cwd=web, overrides=web_env)
