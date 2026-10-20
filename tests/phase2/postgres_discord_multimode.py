@@ -193,7 +193,7 @@ def webhook_worker_fixture(label):
     with connection() as db:
         now = float(db.execute('SELECT extract(epoch from clock_timestamp())').fetchone()[0])
     policy = synthetic_policy(now)
-    policy.update(app_capacity=1000,invalid_capacity=100,failure_threshold=5,permit_ttl_seconds=15,
+    policy.update(app_capacity=1000,invalid_capacity=100,failure_threshold=5,permit_ttl_seconds=5,
                   revision='synthetic-webhook-sql-'+label,egress_scope='synthetic-webhook-sql-'+label)
     f.provider.rate_limiter = SharedPostgresBudget(worker_connection, APP, policy=policy)
     f.provider.rate_v1_enabled = True

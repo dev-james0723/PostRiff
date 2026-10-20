@@ -168,7 +168,16 @@ class CommandCliTests(unittest.TestCase):
         run = subprocess.run([sys.executable, 'scripts/discord_user_install_config.py'], cwd=root,
                              capture_output=True, text=True, timeout=5)
         self.assertEqual(run.returncode, 0, run.stderr[-1000:])
-        value = json.loads(run.stdout)
+        # The opt-in provider fence appends a separate zero-I/O receipt.
+        # A dry-run command has exactly one JSON result plus that known receipt.
+        text = run.stdout.lstrip()
+        value, end = json.JSONDecoder().raw_decode(text)
+        suffix = text[end:].strip()
+        if suffix:
+            self.assertTrue(suffix.startswith('RAFII_SYNTHETIC_FENCE_JSON '), suffix[:120])
+            witness = json.loads(suffix.removeprefix('RAFII_SYNTHETIC_FENCE_JSON '))
+            self.assertEqual(witness['unexpectedTransportAttempts'], 0)
+            self.assertEqual(witness['realProviderRequests'], 0)
         self.assertEqual(value['execution'], 'dry-run')
         self.assertFalse(value['liveRegistered']); self.assertFalse(value['qualified'])
 

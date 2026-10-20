@@ -32,3 +32,11 @@ Real provider OAuth, exact message sending, scheduled production execution and p
 - Its exact-source checkout **failed before dependencies or tests**: historical tracked gitlink `vendor/xiaohongshu-mcp-v2.5.0-login-fix` lacks the corresponding `.gitmodules` URL. Later Node/build failures are dependent effects, not test results on installed dependencies.
 - Repair keeps that unrelated vendor path untouched and replaces `actions/checkout` with an explicit detached exact-SHA fetch/checkout, consistent with existing repository workflows. Downstream validation steps are now conditional on successful preparation.
 - New local RED→GREEN checkout-contract regression observed one failure on the original workflow and four passes after the targeted fix. Fresh Linux acceptance for this new source is still required.
+
+## 2026-10-20 Linux CI attempt 2
+- Exact source `70b4d9aecaee16d2572304697a51bdea80e41b2d`, [run 39357012255](https://github.com/dev-james0723/PostRiff/actions/runs/39357012255), overall **FAIL** despite UI "success" on continue-on-error steps.
+- Failing Python test: catalog asserted the old exact guarded fixture set and omitted `postgres_discord_multimode.py`; leave its separate guarded route intact and extend the expected list.
+- Separate fenced Python subprocess wrote a `RAFII_SYNTHETIC_FENCE_JSON` receipt after one dry-run JSON result; verify both instead of treating the safety receipt as malformed CLI content.
+- New SQL fixture set `permit_ttl_seconds=15` while the safety policy enforces a maximum of 10 seconds. Narrow the synthetic fixture to five seconds; do not relax the actual limiter.
+- Browser 390px callback stage observed four OAuth POSTs for two one-use callbacks. Introduce a bounded, per-tab in-memory Discord-only single-flight exchange keyed by exact actor/workspace/callback and wait for auth hydration; preserve back-end single-use protection and the strict existing browser assertion of exactly two calls.
+- Verified gates: Next.js production BUILD 0, TypeScript 0, lint 0 errors/37 warnings, web unit 0, source fingerprint unchanged. Full Python had one failure, guarded multi-mode PostgreSQL and Browser each failed, so still **NO-GO**. No provider or production effects.

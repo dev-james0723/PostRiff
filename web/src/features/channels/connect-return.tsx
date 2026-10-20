@@ -22,6 +22,24 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
  * Handles the platform's return (`/channels/connect?provider&state&code`) with the authenticated exchange.
  * Only the Rafii-owned surfaces are styled here; the exchange, its query handling and redirects are untouched.
  */
+/** One-use Discord OAuth must not exchange again if Next re-mounts this view.
+ * Only public account metadata is retained by these bounded in-memory promises.
+ * The cache is per browser JS runtime and scoped to the exact signed-in actor,
+ * workspace, provider and OAuth callback response; it is never persisted.
+ */
+const discordOAuthExchanges = new Map<string, Promise<OAuthComplete>>();
+function discordSingleFlight(key: string, start: () => Promise<OAuthComplete>): Promise<OAuthComplete> {
+  const previous = discordOAuthExchanges.get(key);
+  if (previous) return previous;
+  const request = start();
+  discordOAuthExchanges.set(key, request);
+  if (discordOAuthExchanges.size > 32) {
+    const oldest = discordOAuthExchanges.keys().next().value;
+    if (oldest) discordOAuthExchanges.delete(oldest);
+  }
+  return request;
+}
+
 export function ConnectReturn() {
   const params = useSearchParams();
   const dc = discordCopy(usePreferences().locale);
@@ -29,7 +47,7 @@ export function ConnectReturn() {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const handled = useRef(false);
-  const { user } = useAuth();
+  const { user, status: authStatus } = useAuth();
   const activeDiscordContext = useRef('');
   const startedDiscordContext = useRef('');
   const [result, setResult] = useState<OAuthComplete | null>(null);
@@ -41,6 +59,12 @@ export function ConnectReturn() {
   activeDiscordContext.current = discordContext;
 
   useEffect(() => {
+    // Do not consume a single-use OAuth code before authentication is ready.
+    if (provider === 'discord' && (authStatus === 'loading' || !workspaceId)) return;
+    if (provider === 'discord' && authStatus !== 'signed-in') {
+      setError('Sign in to finish connecting your Discord account.');
+      return;
+    }
     if (handled.current) {
       if (provider === 'discord' && startedDiscordContext.current !== discordContext) setError(dc.callbackContextChanged);
       return;
@@ -52,10 +76,13 @@ export function ConnectReturn() {
       setError('This link is incomplete. Start again from Channels.');
       return;
     }
-    api
-      // `iss` names the authorization server that answered (including Discord); the API checks it against the one it started with.
-      .oauthComplete(workspaceId, provider, state, params.get('code') ?? undefined, params.get('error') ?? undefined, params.get('iss') ?? undefined)
-      .then(async (value) => {
+    // The server independently verifies `iss` and the exact OAuth transaction.
+    const start = () => api.oauthComplete(workspaceId, provider, state, params.get('code') ?? undefined,
+      params.get('error') ?? undefined, params.get('iss') ?? undefined);
+    const exchange = provider === 'discord'
+      ? discordSingleFlight(JSON.stringify([discordContext, params.get('code'), params.get('error'), params.get('iss')]), start)
+      : start();
+    void exchange.then(async (value) => {
         if (staleDiscord()) return;
         // A reconnect parked the account it was meant for; read it once whatever the outcome.
         const expected = takeExpectedReconnect();
@@ -81,7 +108,7 @@ export function ConnectReturn() {
         setResult(value);
       })
       .catch((err) => { if (!staleDiscord()) setError(err instanceof ApiError ? err.message : 'Start again from Channels.'); });
-  }, [api, client, params, provider, router, state, workspaceId, dc, discordContext]);
+  }, [api, client, params, provider, router, state, workspaceId, dc, discordContext, authStatus]);
 
   const back = (
     <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
