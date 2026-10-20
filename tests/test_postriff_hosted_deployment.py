@@ -43,6 +43,14 @@ class HostedDeploymentPreparationTests(unittest.TestCase):
         self.assertEqual(by_name["production-cron-candidate"], "pass")
         self.assertEqual(by_name["phone-media-duration"], "pass")
 
+    def test_source_upload_boundary_allows_only_reviewed_receipt_exception(self):
+        rules=(ROOT/'.vercelignore').read_text().splitlines()
+        self.assertTrue(hasattr(PREFLIGHT,'source_upload_boundary'))
+        self.assertTrue(PREFLIGHT.source_upload_boundary(rules))
+        for unsafe in ('!.env.local', '!broker.key', '!/tests/private.py', '!src/james_au_social/private.py', '!*'):
+            with self.subTest(unsafe=unsafe):
+                self.assertFalse(PREFLIGHT.source_upload_boundary([*rules, unsafe]))
+
     def test_media_entrypoint_import_and_disabled_upgrade_need_no_credentials(self):
         with patch.dict(os.environ, {}, clear=True), patch(
             'postriff_phase2.hosted_app.runtime_from_environment',
