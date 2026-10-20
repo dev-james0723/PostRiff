@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { useChannels } from '@/lib/api/hooks';
+import { disconnectedByCustomer } from '@/lib/channels/state';
 import type { XActionInput, XFieldSpec, XOperation, XOverview } from '@/lib/api/x-types';
 
 type Bag = Record<string, unknown>;
@@ -60,13 +61,13 @@ function Field({ name, field, value, change }: { name: string; field: XFieldSpec
     const active = field.required || value !== undefined;
     return <fieldset className='space-y-3 rounded-lg border p-3'>
       <legend className='px-1 text-sm font-medium'>{label(name)}</legend>
-      {!field.required && <label className='flex min-h-11 items-center gap-2 text-sm'><input type='checkbox' checked={!!active}
+      {!field.required && <label className='flex min-h-11 items-center gap-2 text-sm'><input aria-label={'Include ' + label(name)} type='checkbox' checked={!!active}
         onChange={e => change(e.target.checked ? {} : undefined)} />Include {label(name)}</label>}
       {active && Object.entries(schema).map(([key, child]) => <Field key={key} name={key} field={child} value={bag(value)[key]}
         change={next => change({ ...bag(value), [key]: next })} />)}
     </fieldset>;
   }
-  const common = { className: control, required: !!field.required };
+  const common = { className: control, required: !!field.required, 'aria-label': label(name) };
   return <label className='block space-y-1 text-sm'>
     <span className='font-medium'>{label(name)}{field.required ? ' *' : ''}</span>
     {field.kind === 'bool' ? <select {...common} value={value === undefined ? '' : String(value)} onChange={e => change(e.target.value === '' ? undefined : e.target.value === 'true')}>
@@ -111,7 +112,7 @@ function receiptUrl(receipt: unknown) {
 export function XManagementView() {
   const { api, workspaceId } = useWorkspace();
   const channels = useChannels();
-  const accounts = useMemo(() => (channels.data?.channels ?? []).filter(c => c.platform === 'X' && !c.revoked), [channels.data]);
+  const accounts = useMemo(() => (channels.data?.channels ?? []).filter(c => c.platform === 'X' && !disconnectedByCustomer(c)), [channels.data]);
   const [connectionId, setConnectionId] = useState('');
   const [operationId, setOperationId] = useState('');
   const [body, setBody] = useState<Bag>({});
@@ -191,9 +192,27 @@ export function XManagementView() {
   const ready = !!(data?.directOnly && data.costReady && data.journalReady && decision?.ready_for_preview);
   const accountName = accounts.find(a => a.id === connectionId)?.account ?? connectionId;
   const expired = !!draft?.expiresAt && draft.expiresAt <= Date.now() / 1000;
-  const cost = draft?.request.estimatedCostMicros;
+  const cost = draft?.request.estimatedMaxCostMicros;
   const verifiedCost = typeof cost === 'number' && Number.isSafeInteger(cost) && cost >= 0;
   const canSchedule = capability && ['posts.create', 'posts.reply', 'posts.quote', 'posts.thread'].includes(capability.id);
+  function addImage(file?: File) {
+    if (!file || !workspaceId) return;
+    if (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      setError('Choose a JPEG or PNG image of at most 8 MB. The server verifies its contents.'); return;
+    }
+    const targetWorkspace = workspaceId;
+    void act(async () => {
+      const encoded = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.addEventListener('load', () => resolve(String(reader.result).split(',')[1] || ''), { once: true });
+        reader.addEventListener('error', () => reject(new Error('Could not read the selected image.')), { once: true });
+        reader.readAsDataURL(file);
+      });
+      const snapshot = await api.snapshot(targetWorkspace);
+      return api.act(targetWorkspace, snapshot.revision, 'p2_media_upload', { data: encoded });
+    }, () => { setDraft(null); setConfirmed(false); setNotice('Image saved privately to this workspace. Review and approve its X upload separately.'); });
+  }
+
 
   return <main className='mx-auto max-w-6xl space-y-6 p-4 text-foreground sm:p-8'>
     <header className='flex flex-wrap items-center justify-between gap-3'>
@@ -206,7 +225,7 @@ export function XManagementView() {
     </div>}
     {notice && <p role='status' className='rounded-lg bg-muted p-3 text-sm'>{notice}</p>}
     <section className={card}><label className='block max-w-xl space-y-2 text-sm font-medium'>Connected X account
-      <select className={control} value={connectionId} disabled={busy || !accounts.length} onChange={e => setConnectionId(e.target.value)}>
+      <select aria-label='Connected X account' className={control} value={connectionId} disabled={busy || !accounts.length} onChange={e => setConnectionId(e.target.value)}>
         {!accounts.length && <option value=''>No connected X account</option>}
         {accounts.map(a => <option key={a.id} value={a.id}>{a.account}</option>)}
       </select></label>
@@ -217,22 +236,51 @@ export function XManagementView() {
     {data && <div className='grid items-start gap-6 lg:grid-cols-2'>
       <section className={card}><h2 className='mb-4 text-lg font-semibold'>Choose an action</h2>
         <form onSubmit={submit} className='space-y-4'><fieldset disabled={busy} className='space-y-4'>
-          <label className='block space-y-1 text-sm font-medium'>Action<select className={control} value={operationId} onChange={e => setOperationId(e.target.value)}>
+          <label className='block space-y-1 text-sm font-medium'>Action<select aria-label='Action' className={control} value={operationId} onChange={e => setOperationId(e.target.value)}>
             <option value=''>Choose an available action…</option>{data.capabilities.map(d => <option key={d.capability.id} value={d.capability.id} disabled={!d.ready_for_preview}>
               {d.capability.title}{d.ready_for_preview ? '' : ' — Unavailable'}</option>)}
           </select></label>
           {capability?.input_path_params.map(name => <Field key={name} name={name} field={{ kind: name === 'username' || name === 'dm_conversation_id' ? 'token' : 'id', required: true }}
             value={paths[name]} change={v => changed(() => setPaths(p => ({ ...p, [name]: String(v ?? '') })))} />)}
-          {capability && Object.entries(capability.body_schema).map(([name, field]) => <Field key={name} name={name} field={field} value={body[name]} change={v => changed(() => setBody(p => ({ ...p, [name]: v })))} />)}
+          {capability?.id === 'media.upload' && <div className='space-y-2 rounded-lg border p-3 text-sm'>
+            <label className='block space-y-1'>Add image to this workspace
+              <input aria-label='Add image to this workspace' className='block w-full min-w-0 text-sm' type='file' accept='image/jpeg,image/png' disabled={busy}
+                onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; addImage(file); }} />
+            </label>
+            <p className='text-xs text-muted-foreground'>Private preparation only. Nothing is sent to X until you approve the exact upload. Images: 320–4096 pixels per side.</p>
+            <Link className='underline' href='/app/library'>Prepare videos in your Library</Link>
+          </div>}
+          {capability && Object.entries(capability.body_schema).map(([name, field]) =>
+            capability.id === 'media.upload' && name === 'asset_id' ? <label key={name} className='block space-y-1 text-sm'>Workspace media asset
+              <select aria-label='Workspace media asset' className={control} required value={String(body.asset_id ?? '')}
+                onChange={e => changed(() => setBody(p => ({ ...p, asset_id: e.target.value })))}>
+                <option value=''>Choose verified workspace media…</option>
+                {(data.mediaAssets ?? []).map(asset => <option key={asset.id} value={asset.id}>{asset.mime} · {Math.ceil(asset.bytes / 1024)} KB · {asset.id.slice(0, 8)}</option>)}
+              </select>
+            </label> : name === 'media' && field.kind === 'post_media' ? <fieldset key={name} className='space-y-2 rounded-lg border p-3'>
+              <legend className='px-1 text-sm font-medium'>Media attachments</legend>
+              {!(data.uploadedMedia ?? []).length && <p className='text-xs text-muted-foreground'>Upload and approve media first. Expired or unverified uploads cannot be attached.</p>}
+              {(data.uploadedMedia ?? []).map(upload => {
+                const selected = String(bag(body.media).media_ids ?? '').split(/[\s,]+/).filter(Boolean);
+                return <label key={upload.id} className='flex min-h-11 items-start gap-2 text-sm'>
+                  <input aria-label={'Attach uploaded media ' + upload.id} className='mt-1' type='checkbox' checked={selected.includes(upload.id)}
+                    onChange={event => changed(() => {
+                      const ids = event.target.checked ? [...selected, upload.id] : selected.filter(id => id !== upload.id);
+                      setBody(p => ({ ...p, media: ids.length ? { media_ids: ids.join(',') } : undefined }));
+                    })} />
+                  <span className='min-w-0 break-words'>{upload.mime} · {upload.id}<span className='block text-xs text-muted-foreground'>Expires {date(upload.expiresAt)}{upload.altText ? ' · ' + upload.altText : ''}</span></span>
+                </label>;
+              })}
+            </fieldset> : <Field key={name} name={name} field={field} value={body[name]} change={v => changed(() => setBody(p => ({ ...p, [name]: v })))} />)}
           {capability && Object.keys(capability.query_schema).length > 0 && <details className='rounded-lg border p-3' open={!capability.mutates}>
             <summary className='cursor-pointer text-sm font-medium'>Read options</summary><div className='mt-3 space-y-3'>
               {Object.entries(capability.query_schema).map(([name, field]) => <Field key={name} name={name} field={field} value={query[name]} change={v => changed(() => setQuery(p => ({ ...p, [name]: v })))} />)}
             </div></details>}
           {capability && !capability.mutates && <label className='block space-y-1 text-sm'>Maximum billable resources
-            <input className={control} type='number' min={1} max={10000} required value={resources} onChange={e => changed(() => setResources(Number(e.target.value)))} />
+            <input aria-label='Maximum billable resources' className={control} type='number' min={1} max={10000} required value={resources} onChange={e => changed(() => setResources(Number(e.target.value)))} />
             <span className='block text-xs text-muted-foreground'>Must cover the requested results. The server also checks your admitted budget.</span>
           </label>}
-          {canSchedule && <label className='block space-y-1 text-sm'>Schedule, optional — your local time<input className={control} type='datetime-local' value={schedule} onChange={e => changed(() => setSchedule(e.target.value))} /></label>}
+          {canSchedule && <label className='block space-y-1 text-sm'>Schedule, optional — your local time<input aria-label='Schedule in your local time' className={control} type='datetime-local' value={schedule} onChange={e => changed(() => setSchedule(e.target.value))} /></label>}
           <button className={button} type='submit' disabled={!ready || busy}>{busy ? 'Working…' : capability?.mutates ? 'Preview exact action' : 'Read X data'}</button>
           {capability && <p className='text-xs text-muted-foreground'>{capability.mutates ? 'Preview creates a review. Approve it separately to authorize execution.' : 'This button runs a billable official X API read within the admitted budget.'}</p>}
         </fieldset></form>
@@ -245,12 +293,12 @@ export function XManagementView() {
         {draft && <section className={card}><h2 className='text-lg font-semibold'>Review exact action</h2>
           <p className='mt-1 text-sm'>{label(draft.operation)} · {accountName}</p>
           <div className='my-4'><Values value={{ target: draft.request.path, content: draft.request.body, options: draft.request.query }} /></div>
-          <dl className='space-y-2 border-t pt-3 text-sm'><div className='flex justify-between gap-3'><dt>Conservative action estimate</dt><dd className='font-medium'>{money(cost)}</dd></div>
+          <dl className='space-y-2 border-t pt-3 text-sm'><div className='flex justify-between gap-3'><dt>Maximum estimated workflow usage</dt><dd className='font-medium'>{money(cost)}</dd></div>
             <div><dt className='text-muted-foreground'>Timing</dt><dd>{draft.request.scheduleAt ? date(draft.request.scheduleAt) : 'Dispatch after approval'}</dd></div>
             <div><dt className='text-muted-foreground'>Preview expires</dt><dd>{date(draft.expiresAt)}</dd></div></dl>
-          <p className='mt-3 text-xs text-muted-foreground'>Provider readback and permitted retries also use the admitted X budget. Estimates and request limits are not a guaranteed provider invoice cap.</p>
+          <p className='mt-3 text-xs text-muted-foreground'>This approval includes up to {draft.request.maximumApiRequests} API requests, covering permitted retries and post readback. Estimates and request limits are not a guaranteed provider invoice cap.</p>
           {expired && <p className='mt-3 text-sm text-destructive'>This preview expired. Create a new preview.</p>}
-          <label className='mt-4 flex min-h-11 items-start gap-3 text-sm'><input className='mt-1' type='checkbox' checked={confirmed} disabled={busy || expired}
+          <label className='mt-4 flex min-h-11 items-start gap-3 text-sm'><input aria-label='Approve this exact action and estimated usage' className='mt-1' type='checkbox' checked={confirmed} disabled={busy || expired}
             onChange={e => setConfirmed(e.target.checked)} /><span>I approve this exact action, account, target, content, timing and estimated usage.</span></label>
           <button type='button' className={button + ' mt-4'} disabled={busy || !confirmed || expired || !verifiedCost || !data.costReady || !data.journalReady}
             onClick={() => void act(() => api.xApprove(workspaceId!, connectionId, draft.id, { digest: draft.digest, confirmed: true }), value => {
@@ -260,7 +308,7 @@ export function XManagementView() {
         {readResult !== undefined && <section className={card}><h2 className='mb-4 text-lg font-semibold'>X API read result</h2><div className='max-h-[36rem] overflow-auto'><Values value={readResult} /></div></section>}
         <section className={card}><h2 className='mb-4 text-lg font-semibold'>Actions and provider evidence</h2>
           {!data.operations.length && <p className='text-sm text-muted-foreground'>No Direct actions recorded for this account.</p>}
-          <ol className='space-y-5'>{data.operations.map(o => <li key={o.id} className='space-y-2 border-b pb-4 last:border-0'>
+          <ol className='space-y-5'>{data.operations.map(o => <li key={o.id} data-x-operation={o.id} data-x-state={o.state} className='space-y-2 border-b pb-4 last:border-0'>
             <div className='flex flex-wrap justify-between gap-2'><strong className='text-sm'>{label(o.operation)}</strong><span className='rounded bg-muted px-2 py-1 text-xs'>{label(o.state)}</span></div>
             <p className='text-xs text-muted-foreground'>{date(o.createdAt)}{o.request.scheduleAt ? ' · Scheduled ' + date(o.request.scheduleAt) : ''}</p>
             {o.reason && <p className='text-sm'>{o.reason}</p>}

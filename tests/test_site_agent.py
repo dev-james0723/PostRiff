@@ -259,12 +259,12 @@ class ToolTest(unittest.TestCase):
     def test_catalogue_pin(self):
         # Deliberate pin: chat-context adds workspace.search, the live agent adds its UI actions,
         # and the Library adds two read-only source tools. Adding a tool changes the release digest.
-        self.assertEqual(len(tools.CATALOG), 37)
+        self.assertEqual(len(tools.CATALOG), 40)
         self.assertEqual(tools.CATALOG["workspace.search"]["effect"], "read")
         self.assertEqual(tools.CATALOG["library.search"]["effect"], "read")
         self.assertEqual(tools.CATALOG["library.read"]["effect"], "read")
         self.assertEqual(sorted(t for t, spec in tools.CATALOG.items() if spec["effect"] != "read"),
-                         ["automation.patch_propose", "ui.guide", "ui.navigate", "ui.show_help", "ui.voice"])
+                         ["automation.patch_propose", "ui.guide", "ui.navigate", "ui.show_help", "ui.voice", "x.action.propose"])
 
     def test_unknown_tools_and_bad_input_fail_closed(self):
         record, result = tools.run("publish.now", {}, ctx())
@@ -324,7 +324,7 @@ class ToolTest(unittest.TestCase):
         self.assertEqual((rows["li"]["canPublish"], rows["li"]["publishCode"]), (True, "ok"))
         self.assertEqual((rows["th"]["canPublish"], rows["th"]["publishCode"]), (False, "disconnected"))
         _, result = tools.run("channels.capabilities", {"platform": "X"}, ctx(service=service))
-        self.assertEqual(result["data"]["unconnected"]["publishCode"], "not_configured")  # hosted X route, no X adapter on this server
+        self.assertEqual(result["data"]["unconnected"]["publishCode"], "x_direct_management_review_required")  # X uses its exact-approval Direct journal.
 
     def test_draft_check(self):
         _, result = tools.run("draft.get", {"draftId": "v3"}, ctx())

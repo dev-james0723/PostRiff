@@ -423,7 +423,7 @@ class OAuthCallSiteTests(unittest.TestCase):
         script = Script()
         service = self.service(script, state)
         ciphertext, key_id = self.vault.encrypt("AT")
-        script.answers = [("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials", [("mastodon", ciphertext, key_id)])]
+        script.answers = [("SELECT provider,access_ciphertext,key_id,refresh_ciphertext FROM public.pr_encrypted_credentials", [("mastodon", ciphertext, key_id, None)])]
         with mock.patch("postriff_phase2.growth.history_import.mark_for_purge", lambda *a: None), \
              mock.patch("postriff_phase2.growth.history_import.purge_after_disconnect", lambda *a: None):
             result = service.disconnect(WS, "token", connection)

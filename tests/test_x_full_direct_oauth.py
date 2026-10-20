@@ -1,7 +1,8 @@
 """Synthetic Direct-only authorization gates; no provider acceptance claims."""
 import unittest
 from urllib.parse import parse_qs, urlparse
-from test_x_connect_only_p0 import ConnectP0, PILOT, CONFIG
+import test_x_connect_only_p0 as connect_fixture
+from test_x_connect_only_p0 import PILOT, CONFIG
 from test_hosted_wave1_connectors import Wire
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.channels import assisted_matrix, direct_only_matrix
@@ -18,7 +19,7 @@ PUBLIC = {
 
 class DirectOAuth(unittest.TestCase):
     def service(self, values):
-        fixture = ConnectP0()
+        fixture = connect_fixture.ConnectP0()
         service = fixture.service(values, Wire([]))
         return fixture, service
 
@@ -70,10 +71,17 @@ class DirectOAuth(unittest.TestCase):
         adapter.cost_admission_ready = False
         matrix = OAuthService._capabilities(adapter, 'publish', granted, [], 100)
         self.assertEqual(matrix['publish']['level'], 'Unsupported')
+        self.assertEqual(matrix['publish']['reasonCode'], 'x_app_access_unverified')
+        adapter.x_access_evidence = {'entitlements': frozenset({'x_api_v2'}),
+            'expiresAt': 200, 'evidenceRef': 'synthetic:unit-test', 'publicCustomerVerified': False}
+        matrix = OAuthService._capabilities(adapter, 'publish', granted, [], 100, workspace_id='workspace')
         self.assertEqual(matrix['publish']['reasonCode'], 'x_cost_admission_required')
         self.assertNotIn('Assisted', str(matrix))
         adapter.cost_admission_ready = True
-        matrix = OAuthService._capabilities(adapter, 'publish', granted, [], 100)
+        matrix = OAuthService._capabilities(adapter, 'publish', granted, [], 100, workspace_id='workspace')
+        self.assertEqual(matrix['publish']['reasonCode'], 'x_cost_admission_required')
+        adapter.cost_capability_ready = lambda ws, cap: ws == 'workspace' and cap in ('publish', 'schedule')
+        matrix = OAuthService._capabilities(adapter, 'publish', granted, [], 100, workspace_id='workspace')
         self.assertEqual(matrix['publish']['level'], 'Direct')
         self.assertEqual(matrix['analytics']['level'], 'Unsupported')
 

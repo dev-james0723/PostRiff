@@ -62,13 +62,14 @@
     },
     "regexp/emoji-test.txt": {
       "originalSha256": "93b5476b4d3b5381a57336c138bcabb1a53a4288d604249535b0a694a0030db7",
-      "sha256": "93b5476b4d3b5381a57336c138bcabb1a53a4288d604249535b0a694a0030db7",
-      "bytes": 394898
+      "sha256": "8f3735cda1f92a779d78af67cf86066bb1f07143dc22f2ac29394d9bc57ab21a",
+      "bytes": 671655,
+      "source": "https://www.unicode.org/Public/18.0.0/emoji/emoji-test.txt"
     },
     "regexp/emoji.py": {
       "originalSha256": "33fcb3e929dc532f00980c67498f774825eb647b785f4f0d14e15f67c97ab60f",
-      "sha256": "4806d1c6813e015ada18b519178a318a265d53c294c42858c5f91f6c6401cb75",
-      "bytes": 5707
+      "sha256": "2f810d08e77405ba6f887a1480df07dfaf5411051dd3cc8ddb9802e0a2715e74",
+      "bytes": 5750
     },
     "regexp/extract_url.py": {
       "originalSha256": "e3dff688ea2c371ad8f88e797290f92132b9d7eb9b7d8f17c47e9a528b68a279",
@@ -199,11 +200,17 @@
       "originalSha256": "74b539462258504bb88436b57f4c917d87885b5a0b0d914d79c27891affb2bbe",
       "sha256": "74b539462258504bb88436b57f4c917d87885b5a0b0d914d79c27891affb2bbe",
       "bytes": 1073
+    },
+    "UNICODE-LICENSE.txt": {
+      "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+      "bytes": 1995,
+      "source": "https://www.unicode.org/license.txt"
     }
   },
   "patches": {
     "__init__.py": "Package-relative imports",
-    "regexp/emoji.py": "Replace pkg_resources resource_string with stdlib importlib.resources.files; preserve original bytes/decode"
+    "regexp/emoji.py": "Replace pkg_resources resource_string with stdlib importlib.resources.files; preserve original bytes/decode; parse all data header lines instead of fixed32-line skip for versioned Unicode tables",
+    "regexp/emoji-test.txt": "Refresh Unicode Emoji12.0 data to version18.0 per X documented weight2 for all emoji sequences; preserve parser and v3 config."
   },
   "runtimeImports": [
     "collections",
@@ -213,5 +220,6 @@
     "re",
     "typing",
     "unicodedata"
-  ]
+  ],
+  "unicodeVersion": "18.0"
 }

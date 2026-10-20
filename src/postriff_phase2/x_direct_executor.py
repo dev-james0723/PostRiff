@@ -2,6 +2,7 @@
 import hashlib
 import html
 import json
+import math
 import re
 import unicodedata
 from collections.abc import Mapping
@@ -209,12 +210,34 @@ def _accepted_receipt(request,evidence):
         and re.fullmatch(r"[0-9a-f]{64}",evidence["responseSha256"]) is not None
         and valid_id(evidence.get("resourceId")))
 
+def attachment_keys(request, grant, now=None):
+    media = request.body.get('media')
+    if not media:
+        return []
+    ids = media.get('media_ids')
+    proofs = grant.get('verifiedMedia')
+    if not isinstance(proofs, dict) or not ids or set(proofs) != set(ids):
+        raise AlphaError('Exact account-bound X upload evidence is required.', 409, code='x_media_ownership_required')
+    keys = []
+    for rid in ids:
+        proof = proofs.get(rid)
+        if (not isinstance(proof, dict) or not valid_id(rid) or not isinstance(proof.get('mediaKey'), str)
+                or not re.fullmatch(r'[1-9][0-9]{0,3}_' + re.escape(rid), proof['mediaKey'])
+                or type(proof.get('expiresAt')) not in (int, float) or not math.isfinite(proof['expiresAt'])
+                or (now is not None and proof['expiresAt'] <= now + 30)):
+            raise AlphaError('The X attachment expired or changed.', 409, code='x_media_ownership_required')
+        keys.append(proof['mediaKey'])
+    return keys
+
+
 def execute(request,provider,grant, *, now, thread_context=None):
     _execution_contract(request,grant,thread_context)
     if request.operation_id not in IMPLEMENTED_OPERATIONS or getattr(provider,'id',None)!='x':
         raise AlphaError('Unavailable — no verified X execution handler exists for this operation.',409,code='x_handler_unavailable')
     if (request.operation_id in READ_OPERATIONS)!=(request.method=='GET'):
         raise AlphaError('Invalid X execution contract.',503,code='x_contract_mismatch')
+    if request.operation_id in POST_OPERATIONS:
+        attachment_keys(request, grant, now)
     query=plain(request.query or {})
     if query.get('expansions'):
         raise AlphaError('Unavailable — expanded X resource billing has not been admitted.',409,code='x_expansion_cost_unverified')
@@ -331,27 +354,38 @@ def expanded_text(data):
 
 
 
-def _matching_post_text(data,expected):
-    actual=normalized_text(expanded_text(data))
-    approved=normalized_text(expected.get("text",""))
-    if actual==approved:
+def _matching_post_text(data, expected, verified_media_keys=()):
+    actual = normalized_text(expanded_text(data))
+    approved = normalized_text(expected.get("text", ""))
+    if actual == approved:
         return True
-    target=expected.get("quote_tweet_id")
-    if not valid_id(target):
-        return False
-    # X can append the exact quote's t.co URL. Remove only this evidenced suffix.
-    for entity in (data.get("entities") or {}).get("urls",[]):
-        expanded=entity.get("expanded_url")
-        if not isinstance(expanded,str):
+    # Provider-appended URLs are removable only at exact, evidenced suffixes:
+    # the quoted post or THIS post's attachment with the approved media key.
+    allowed = set()
+    target = expected.get("quote_tweet_id")
+    own = data.get('id')
+    for entity in (data.get("entities") or {}).get("urls", []):
+        expanded = entity.get("expanded_url")
+        if not isinstance(expanded, str):
             continue
-        parsed=urlsplit(expanded)
-        pattern=r"/(?:[A-Za-z0-9_]{1,15}/status|i/web/status)/"+re.escape(target)
-        if (parsed.scheme=="https" and parsed.netloc in ("x.com","twitter.com")
-                and not parsed.query and not parsed.fragment and re.fullmatch(pattern,parsed.path)):
-            suffix=" "+expanded
-            if actual.endswith(suffix) and actual[:-len(suffix)]==approved:
-                return True
-    return False
+        parsed = urlsplit(expanded)
+        if (parsed.scheme != "https" or parsed.netloc not in ("x.com", "twitter.com")
+                or parsed.query or parsed.fragment):
+            continue
+        quote_path = (r"/(?:[A-Za-z0-9_]{1,15}/status|i/web/status)/" + re.escape(target)) if valid_id(target) else None
+        media_path = (r"/(?:[A-Za-z0-9_]{1,15}/status|i/web/status)/" + re.escape(own)
+                      + r"/(?:photo|video)/[1-4]") if valid_id(own) else None
+        if ((quote_path and re.fullmatch(quote_path, parsed.path)) or
+                (media_path and re.fullmatch(media_path, parsed.path)
+                 and entity.get('media_key') in verified_media_keys)):
+            allowed.add(expanded)
+    if not allowed:
+        return False
+    prefix = approved + ' ' if approved else ''
+    if not actual.startswith(prefix):
+        return False
+    suffixes = actual[len(prefix):].split(' ')
+    return bool(suffixes and len(set(suffixes)) == len(suffixes) and all(url in allowed for url in suffixes))
 
 
 def reconcile_post(request,provider,grant,accepted_receipt, *, now, thread_context=None):
@@ -392,13 +426,17 @@ def reconcile_post(request,provider,grant,accepted_receipt, *, now, thread_conte
         if reply: wanted.add(('replied_to',reply))
         if quote: wanted.add(('quoted',quote))
         previous=(expected.get('edit_options') or {}).get('previous_post_id')
+        expected_keys = attachment_keys(request, grant)
         mismatch=(data.get('id')!=post_id or data.get('author_id')!=grant['providerAccountId']
-            or not _matching_post_text(data,expected)
+            or not _matching_post_text(data,expected,expected_keys)
             or references!=wanted
             or (previous and previous not in data.get('edit_history_tweet_ids',[])))
         attachments=data.get('attachments') or {}
-        if not isinstance(attachments,dict) or attachments.get('media_keys') or attachments.get('poll_ids') or expected.get('media') or expected.get('poll'):
-            raise ValueError('Attachment verification is unavailable')
+        actual_keys = attachments.get('media_keys', []) if isinstance(attachments, dict) else None
+        if (not isinstance(actual_keys, list) or len(actual_keys) != len(expected_keys)
+                or any(not isinstance(key, str) for key in actual_keys)
+                or set(actual_keys) != set(expected_keys) or attachments.get('poll_ids') or expected.get('poll')):
+            raise ValueError('The exact approved attachment keys were not verified')
         if mismatch:
             raise ValueError('Post content or actor does not match')
     except (ValueError,TypeError,KeyError):
@@ -406,4 +444,6 @@ def reconcile_post(request,provider,grant,accepted_receipt, *, now, thread_conte
                 'reason':'X readback does not match the approved account, exact content or references.'}
     evidence={**accepted_receipt,'method':'GET','path':path,'responseSha256':response_hash(body),
         'httpStatus':200,'partial':False,'readbackVerified':True,'authorId':data['author_id'],'dialect':LOOKUP_DIALECT}
+    if expected_keys:
+        evidence['mediaKeys'] = expected_keys
     return {'state':'verified','receipt':evidence,'reason':'The exact post was verified through the authorized official X API.'}

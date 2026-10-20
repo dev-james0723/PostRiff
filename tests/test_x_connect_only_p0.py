@@ -2,6 +2,8 @@
 import hashlib
 import json
 import unittest
+from types import SimpleNamespace
+from postriff_phase2.x_direct_cost import bind_x_cost_context
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
@@ -49,6 +51,12 @@ class ConnectP0(unittest.TestCase):
         self.repo = Repository(lambda: self.now)
         self.svc = OAuthService(self.repo, HostedPhase2Commands(lambda: self.now),
                                 CredentialVault(CredentialVault.generate_key()), registry, BASE, clock=lambda: self.now)
+        self.cost_requests = []
+        def reserve(request):
+            self.cost_requests.append(request)  # Synthetic only; production uses durable PG admission.
+            return request.request_id
+        self.svc.x_direct = SimpleNamespace(request_context=lambda ws, conn, op:
+            bind_x_cost_context(workspace_id=ws, connection_id=conn, operation=op, reserve=reserve))
         return self.svc
 
     def test_default_off_requires_operator_and_bounded_allowance(self):
@@ -176,7 +184,7 @@ class ConnectP0(unittest.TestCase):
 
     @patch("postriff_phase2.billing.require_plan_capacity",lambda *a,**k:None)
     def test_missing_scopes_or_refresh_never_persists(self):
-        for wire in (xwire(scopes="users.read offline.access"),xwire(refresh=None)):
+        for wire, calls in ((xwire(scopes="users.read offline.access"),1),(xwire(refresh=None),2)):
             with self.subTest(calls=len(wire.calls)):
                 svc=self.service(wire=wire)
                 state=state_of(svc.start("workspace","session","x","identity"))
@@ -184,10 +192,10 @@ class ConnectP0(unittest.TestCase):
                     svc.complete("workspace","session","x",state,"CODE")
                 self.assertEqual(caught.exception.status,409)
                 self.assertEqual(self.repo.db.credentials,{})
-                self.assertEqual(len(self.wire.calls),2)
+                self.assertEqual(len(self.wire.calls),calls)
                 with self.assertRaises(AlphaError):
                     svc.complete("workspace","session","x",state,"CODE")
-                self.assertEqual(len(self.wire.calls),2)
+                self.assertEqual(len(self.wire.calls),calls)
 
     def test_wrong_reconnect_connection_not_found_before_network(self):
         svc=self.service(wire=Wire([]))
@@ -242,21 +250,27 @@ class ConnectP0(unittest.TestCase):
         self.assertEqual(self.wire.calls,[])
 
     @patch("postriff_phase2.billing.require_plan_capacity",lambda *a,**k:None)
-    def test_disconnect_does_not_contact_x_and_locally_revokes_credentials(self):
+    def test_disconnect_uses_official_revoke_and_erases_local_authority(self):
         svc=self.service()
         start=svc.start("workspace","session","x","identity")
         done=svc.complete("workspace","session","x",state_of(start),"CODE")
         before=len(self.wire.calls)
-        with patch("postriff_phase2.growth.history_import.mark_for_purge",return_value=None), patch(
+        self.wire.responses.extend([ok({}), ok({})])  # Official refresh + access revoke acknowledgements.
+        with patch("postriff_phase2.x_resource_evidence.purge_connection",return_value=0) as purge, patch(
+            "postriff_phase2.growth.history_import.mark_for_purge",return_value=None), patch(
             "postriff_phase2.growth.history_import.purge_after_disconnect",return_value=None), patch(
             "postriff_phase2.account_pictures.guarded",return_value=None), patch(
             "postriff_phase2.product_events.record",return_value=None):
             result=svc.disconnect("workspace","session",done["connectionId"])
         self.assertTrue(result["disconnected"])
-        self.assertFalse(result["remoteRevoked"])
-        self.assertIn("X Connected Apps",result["note"])
+        self.assertTrue(result["remoteRevoked"])
+        self.assertNotIn("X Connected Apps",result["note"])
+        purge.assert_called_once()
         self.assertTrue(self.repo.db.credentials[done["connectionId"]]["revoked"])
-        self.assertEqual(len(self.wire.calls),before)
+        self.assertEqual(len(self.wire.calls),before+2)
+        self.assertTrue(all(call["url"] == XProvider.REVOKE for call in self.wire.calls[before:]))
+        self.assertEqual(self.repo.db.credentials[done["connectionId"]]["access"], "")
+        self.assertIsNone(self.repo.db.credentials[done["connectionId"]]["refresh"])
 
     def test_public_callback_no_host_header_redirect(self):
         target=OAuthService.callback_redirect(BASE,"x",{"state":"foo","code":"bar","to":"https://attacker.invalid"})

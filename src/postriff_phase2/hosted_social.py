@@ -47,7 +47,6 @@ def _uncertain(message):
 
 class HostedSocial:
     """Mounted only when at least one production-reviewed provider is registered."""
-    X_RECONCILE_LIMIT = 3  # billed reads before X reconciliation stops and asks a person
     MASTODON_MEDIA_POLLS, MASTODON_MEDIA_WAIT = 5, 2.0
 
     def __init__(self, oauth, providers, assets=None, transport=None, sleep=time.sleep):
@@ -318,18 +317,6 @@ class HostedSocial:
         return {'state': 'held', 'confirmed': 'X actions require Direct Management approval.',
                 'reasonCode': 'x_direct_management_review_required'}
 
-    def _x_expanded(data):
-        """X's stored text as the author wrote it: entities decoded, t.co links expanded, the attached-media link dropped."""
-        text = str(data.get("text") or "")
-        urls = ((data.get("entities") or {}).get("urls") or []) if isinstance(data.get("entities"), dict) else []
-        for entity in sorted((u for u in urls if isinstance(u, dict)), key=lambda u: -int(u.get("start") or 0)):
-            short, expanded = entity.get("url"), entity.get("expanded_url")
-            if not isinstance(short, str) or short not in text:
-                continue
-            media = entity.get("media_key") or re.search(r"/status/\d+/(photo|video)/\d+$", str(expanded or ""))
-            text = text.replace(short, "" if media else str(expanded or short), 1)
-        return html.unescape(text).strip()
-
     def _reconcile_wave1(self, manifest, provider, token, reference, job=None):
         platform, text = manifest["platform"], manifest["payload"]["text"]
         if not reference:
@@ -365,26 +352,14 @@ class HostedSocial:
                         "confirmed": "Discord read-back matched the approved text and channel", "verification": "provider_lookup"}
             return _uncertain("Discord read-back did not match the exact approved message")
         if platform == "X":
-            # Every X read is billed: after a few inconclusive checks, stop reading and leave it to a person.
-            if (job or {}).get("checks", 0) > self.X_RECONCILE_LIMIT:
-                return _uncertain("X read-back stopped after repeated inconclusive checks (each read is billed); check the account manually; do not resubmit")
-            response = provider.api(token, "GET", f"/2/tweets/{quote(reference)}?" + urlencode({"tweet.fields": "author_id,text,entities"}))
-            data = response.get("body", {}).get("data") if isinstance(response.get("body"), dict) else None
-            if response.get("status") == 200 and isinstance(data, dict) and str(data.get("author_id")) == manifest["providerAccountId"] and self._x_expanded(data) == text.strip():
-                result = {"state": "verified", "reference": reference, "confirmed": "X read-back matched the approved text and account", "verification": "provider_lookup"}
-                username = str(manifest.get("account") or "").lstrip("@")
-                if re.fullmatch(r"[A-Za-z0-9_]{1,15}", username):
-                    result["url"] = f"https://x.com/{username}/status/{reference}"
-                return result
-            return _uncertain("X read-back did not match the exact approved post")
+            return {'state': 'held', 'reasonCode': 'x_direct_management_review_required',
+                    'confirmed': 'X receipt verification requires the exact approved Direct operation.'}
         # Telegram receipts are verified at submission; a job only reaches here when that receipt was inconclusive.
         return _uncertain("Telegram bots cannot read messages back; check the channel; do not resubmit")
 
     def _classify_status(self, status, body=None, platform=None):
         """Answers that prove nothing was posted. Anything else is left for the caller to judge, never guessed."""
         reason = _provider_reason(body)
-        if platform == "X" and status == 403 and "duplicate" in reason.lower():
-            return {"state": "failed", "confirmed": "Duplicate content: X already has an identical post on this account and created nothing new. Change the text before approving it again."}
         if status in (400, 422):
             return {"state": "failed", "confirmed": f"{platform or 'The provider'} rejected the post; nothing was published" + (f": {reason}" if reason else ".")}
         if status in (401, 403):

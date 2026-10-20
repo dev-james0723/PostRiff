@@ -198,7 +198,7 @@ class XProvider(OAuthProvider):
         body = self._ok(self.api(access_token, "GET", "/2/users/me",
             query={"user.fields": "profile_image_url"}, max_resources=1), "data")
         data = body["data"] if isinstance(body["data"], dict) else {}
-        if not re.fullmatch(r"[1-9][0-9]{0,18}", str(data.get("id", ""))):
+        if body.get("errors") or not isinstance(data.get("id"), str) or not re.fullmatch(r"[1-9][0-9]{0,18}", data["id"]):
             raise AlphaError("The provider did not complete this authorization step.", 502)
         username = data.get("username") if isinstance(data.get("username"), str) else None
         return {"providerAccountId": str(data["id"]),

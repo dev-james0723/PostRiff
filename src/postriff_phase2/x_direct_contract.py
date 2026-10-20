@@ -264,7 +264,10 @@ _add("dm.group.create", "POST", "/2/dm_conversations", "dm.write", body={"conver
 _add("dm.delete", "DELETE", "/2/dm_events/{event_id}", "dm.write", price="interaction_delete", notes="Removes only the authenticated user's copy; not an unsend promise.")
 _add("dm.block", "POST", "/2/users/{id}/dm/block", "dm.write", notes="id is the target account; price and response verification pending.")
 _add("dm.unblock", "POST", "/2/users/{id}/dm/unblock", "dm.write", notes="DM blocks are distinct from Enterprise account blocks.")
-_add("media.upload", "POST", "/2/media/upload", scopes=frozenset({"media.write"}), kind="multipart", confirm="id")
+_add("media.upload", "POST", "/2/media/upload", scopes=frozenset({"media.write"}), kind="workflow", confirm="id",
+     body={"asset_id": F("string", True, 32), "alt_text": F("string", maximum=1000)},
+     price="server_evidenced_media", title="Upload approved workspace media",
+     notes="Upload a private workspace asset. Exact approval, independently evidenced upload prices, ownership and expiry are required; uploading does not publish a post.")
 _add("media.initialize", "POST", "/2/media/upload/initialize", scopes=frozenset({"media.write"}), kind="workflow", confirm="id")
 _add("media.append", "POST", "/2/media/upload/{id}/append", scopes=frozenset({"media.write"}), kind="multipart")
 _add("media.finalize", "POST", "/2/media/upload/{id}/finalize", scopes=frozenset({"media.write"}), kind="workflow", confirm="id")
@@ -361,7 +364,13 @@ def _value(value, spec, name):
             _invalid(f"{name} must not be empty.")
         if len(value) > (spec.maximum or (2048 if kind == "token" else 4096)):
             _invalid(f"{name} exceeds the implemented length limit.")
-        return unicodedata.normalize("NFC", value).replace("\r\n", "\n").replace("\r", "\n") if kind == "text" else value
+        if kind == "text":
+            from .x_text import normalize_text
+            try:
+                return normalize_text(value)
+            except (ValueError, UnicodeError):
+                _invalid(f"{name} must contain valid UTF-8 text without prohibited characters.")
+        return value
     if kind == "bool":
         if type(value) is not bool:
             _invalid(f"{name} must be a JSON boolean.")
@@ -588,7 +597,7 @@ def _availability(spec, context):
         return _deny(spec, "x_provider_restriction", "Unavailable — X API restriction: " + spec.restriction_reason)
     if spec.method is None or spec.path is None:
         return _deny(spec, "x_endpoint_unverified", spec.notes or "No executable endpoint contract verified.")
-    if spec.execution_kind != "http" and spec.id != "posts.thread":
+    if spec.execution_kind != "http" and spec.id not in ("posts.thread", "media.upload"):
         return _deny(spec, "x_not_implemented", "Unavailable — this specialized capability needs a dedicated Rafii workflow and receipt handler. " + spec.notes)
     if spec.id not in context.implemented_operations:
         return _deny(spec, "x_not_implemented", "Unavailable — Rafii has not bound an execution and response-verification handler.")
@@ -616,20 +625,29 @@ def _conditional_access(spec, context, request):
     if spec.id in {"posts.create","posts.reply","posts.quote","posts.edit","posts.thread"}:
         for body in bodies:
             eligibility = text_eligibility(body.get("text", ""))
+            if eligibility == "invalid":
+                return _deny(spec, "x_invalid_text", "The approved text is invalid under X text rules.", request)
             if eligibility == "unverified" and "long_posts" not in context.verified_entitlements:
                 return _deny(spec, "x_text_validation_unverified",
                     "Unavailable — Rafii must verify this text's weighted URL/emoji length before execution.", request)
             if eligibility == "long":
                 required.add("long_posts")
-            if "enterprise" not in context.verified_entitlements and len(re.findall(r"(?<![\\w$])\\$[A-Za-z][A-Za-z0-9_]*", body.get("text", ""))) > 1:
+            if "enterprise" not in context.verified_entitlements and len(re.findall(r"(?<![\w$])\$[A-Za-z][A-Za-z0-9_]*", body.get("text", ""))) > 1:
                 return _deny(spec, "x_provider_restriction", "Unavailable — X API restriction: self-serve posts allow at most one cashtag.", request)
             if body.get("for_super_followers_only"):
                 required.add("subscriptions")
             if "community_id" in body:
                 required.add("community_posting:" + body["community_id"])
-            if body.get("media") or body.get("poll"):
+            if body.get("poll"):
                 return _deny(spec, "x_content_verification_unavailable",
-                    "Unavailable — uploaded-media ownership, billing and attachment/poll readback must be verified before this content can execute.", request)
+                    "Unavailable — Rafii has not verified poll creation and exact poll readback.", request)
+            if body.get("media"):
+                if "media.write" not in context.granted_scopes:
+                    return _deny(spec, "x_missing_scopes", "Reconnect through official X consent to grant media.write.", request)
+                if body["media"].get("tagged_user_ids"):
+                    return _deny(spec, "x_content_verification_unavailable",
+                        "Unavailable — Rafii has not verified tagged-user media readback.", request)
+                required.update("uploaded_media:" + rid for rid in body["media"]["media_ids"])
     missing = required - context.verified_entitlements
     if missing:
         reason = "Unavailable — account/resource eligibility must be verified for: " + ", ".join(sorted(missing)) + "."

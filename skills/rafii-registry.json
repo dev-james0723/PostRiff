@@ -2044,9 +2044,9 @@
   },
   {
    "id": "postriff-channel-x",
-   "version": "1.1.0",
+   "version": "2.0.1",
    "kind": "knowledge",
-   "sha256": "sha256:2f59dec0c18e30a26298e61ba47ea4165b1648df1a898bf85e54e9b6e7e35e9c",
+   "sha256": "sha256:071e6b2d89df7fcfa87d8bade779ea420a74b43d4843564872589bb77ad7eef6",
    "description": "Prepare X drafts and propose exact customer-approved actions through Rafii's official X API connector.",
    "intents": [
     "*"
@@ -2100,7 +2100,7 @@
      "version": "^1.0.0"
     }
    ],
-   "lockedVersion": "1.1.0"
+   "lockedVersion": "2.0.1"
   },
   {
    "id": "postriff-channel-xiaohongshu",

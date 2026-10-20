@@ -48,7 +48,10 @@ class JournalPostgres(unittest.TestCase):
 
     def setUp(self):
         self.workspace, self.foreign, self.actor = (str(uuid.uuid4()) for _ in range(3))
-        self.now = time.time()
+        # Fixed application clock must round-trip exactly through PostgreSQL's
+        # microsecond timestamps; otherwise a frozen test instant can precede
+        # the rounded next_at by a fraction of a microsecond.
+        self.now = float(int(time.time()))
         with self.psycopg.connect(self.dsn) as db:
             db.execute('INSERT INTO public.pr_workspaces(id) VALUES(%s),(%s)', (self.workspace, self.foreign))
             db.execute('INSERT INTO public.pr_encrypted_credentials VALUES(%s,%s)', (self.workspace, 'connection'))
@@ -71,6 +74,14 @@ class JournalPostgres(unittest.TestCase):
         with self.psycopg.connect(self.dsn) as db, db.cursor() as cur:
             cur.execute('SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (self.workspace,))
             return journal.claim(cur, self.workspace, operation, **args)
+
+    def test_future_timestamp_does_not_dispatch_until_its_database_instant(self):
+        with self.psycopg.connect(self.dsn) as db, db.cursor() as cur:
+            item = self.create(cur, request_key=uuid.uuid4().hex,
+                request={'body': {'text': 'Scheduled fixture'}, 'scheduleAt': self.now + 60.0000007})
+            item = journal.approve(cur, self.workspace, item['id'], self.actor, item['digest'], True, self.now)
+        self.assertIsNone(self.claim(item['id'], now=self.now))
+        self.assertIsNotNone(self.claim(item['id'], now=item['next_at']))
 
     def test_tenant_isolation_and_idempotency_conflict(self):
         with self.psycopg.connect(self.dsn) as db, db.cursor() as cur:

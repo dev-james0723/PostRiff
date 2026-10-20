@@ -10,7 +10,8 @@ Emoji = namedtuple('Emoji', ('group', 'sub_group', 'name', 'status', 'codepoint'
 def parse_emoji_list(text: str) -> List[Emoji]:
     emoji_entries = []
 
-    for line in text.splitlines()[32:]:  # skip the explanation lines
+    group = subgroup = None
+    for line in text.splitlines():  # Unicode headers vary; parse all metadata lines
         if line == '# Status Counts':  # the last line in the document
             break
         if 'subtotal:' in line:  # these are lines showing statistics about each group, not needed

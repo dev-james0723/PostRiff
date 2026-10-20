@@ -14,11 +14,13 @@ export type XActionInput = {
 };
 export type XOperation = {
   id: string; connectionId: string; accountId: string; operation: string;
-  request: Omit<XActionInput, 'requestKey'> & { normalizedFingerprint: string; estimatedCostMicros: number | null };
+  request: Omit<XActionInput, 'requestKey'> & { normalizedFingerprint: string; estimatedCostMicros: number | null; estimatedMaxCostMicros: number | null; maximumApiRequests: number };
   digest: string; state: string; createdAt: number; expiresAt?: number | null; scheduledAt?: number | null;
   receipts: unknown[]; reason?: string | null; reasonCode?: string | null; cancelRequested: boolean;
 };
 export type XOverview = {
   connectionId: string; accountId: string; capabilities: XDecision[]; operations: XOperation[];
   costReady: boolean; journalReady: boolean; directOnly: boolean;
+  mediaAssets?: { id: string; mime: string; bytes: number }[];
+  uploadedMedia?: { id: string; mediaKey: string; mime: string; expiresAt: number; altText: string }[];
 };

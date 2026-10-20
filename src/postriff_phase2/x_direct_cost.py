@@ -26,7 +26,9 @@ PRICES = {
     "bookmark": 5000, "list_create": 10000, "list_manage": 5000,
     "media_metadata": 5000, "dm_create": 15000,
 }
-CATALOG_VERSION = "x-ordinary-customer-2026-10-19-v1"
+# Upload prices are NOT inferred from metadata prices or from a request counter.
+MEDIA_PRICE_KEYS = frozenset(('media_upload', 'media_initialize', 'media_append', 'media_finalize', 'media_status'))
+CATALOG_VERSION = "x-ordinary-customer-2026-10-20-media-v2"
 MAX_INTEGER = 10**15
 MAX_RESOURCES = 10000
 
@@ -79,6 +81,16 @@ class XCostPolicy:
     app_request_limit: int = 0
     workspace_request_limit: int = 0
     allowed_price_keys: frozenset[str] = frozenset()
+    # Explicit, evidenced per-request upper bounds. No defaults for media transfers.
+    media_prices: tuple[tuple[str, int], ...] = ()
+
+    @property
+    def unit_prices(self):
+        extra = dict(self.media_prices)
+        if (len(extra) != len(self.media_prices) or not extra.keys() <= MEDIA_PRICE_KEYS
+                or any(type(value) is not int or not 0 < value <= MAX_INTEGER for value in extra.values())):
+            raise XCostAdmissionError("Invalid evidenced X media price ceilings.")
+        return {**PRICES, **extra}
 
     @classmethod
     def from_environment(cls, values: Mapping):
@@ -89,7 +101,11 @@ class XCostPolicy:
             if not isinstance(raw, str):
                 raise ValueError("price keys must be a comma separated string")
             allowed = frozenset(part.strip() for part in raw.split(","))
-            if not allowed or not allowed <= PRICES.keys():
+            extra = json.loads(values.get("RAFII_X_COST_MEDIA_PRICE_CEILINGS_JSON", "{}"))
+            if (not isinstance(extra, dict) or not extra.keys() <= MEDIA_PRICE_KEYS
+                    or any(type(value) is not int or not 0 < value <= MAX_INTEGER for value in extra.values())):
+                raise ValueError("invalid media price evidence")
+            if not allowed or not allowed <= (PRICES.keys() | extra.keys()):
                 raise ValueError("unknown or missing allowed price key")
             return cls(
                 configured=True, reason="configured",
@@ -103,12 +119,14 @@ class XCostPolicy:
                 app_request_limit=_integer(get("APP_REQUEST_LIMIT")),
                 workspace_request_limit=_integer(get("WORKSPACE_REQUEST_LIMIT")),
                 allowed_price_keys=allowed,
+                media_prices=tuple(sorted(extra.items())),
             )
         except (KeyError, ValueError, TypeError, XCostAdmissionError):
             return cls()
 
     def active(self, now):
         return bool(self.configured and self.allowed_price_keys
+            and self.allowed_price_keys <= self.unit_prices.keys()
             and self.approval_expires_at is not None and self.price_evidence_expires_at is not None
             and now < self.approval_expires_at and now < self.price_evidence_expires_at)
 
@@ -122,7 +140,7 @@ class XCostPolicy:
             "prices_expires": self.price_evidence_expires_at.isoformat() if self.price_evidence_expires_at else None,
             "app_micros": self.app_budget_micros, "workspace_micros": self.workspace_budget_micros,
             "app_requests": self.app_request_limit, "workspace_requests": self.workspace_request_limit,
-            "allowed": {key: PRICES[key] for key in sorted(self.allowed_price_keys)},
+            "allowed": {key: self.unit_prices[key] for key in sorted(self.allowed_price_keys)},
         }
         return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -139,7 +157,7 @@ class XCostPolicy:
     def evidence_hash(self):
         value = {"evidence_ref":self.price_evidence_ref,
             "expires_at":self.price_evidence_expires_at.astimezone(timezone.utc).isoformat(),
-            "catalog_version":CATALOG_VERSION,"unit_prices":PRICES}
+            "catalog_version":CATALOG_VERSION,"unit_prices":self.unit_prices}
         return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":")).encode()).hexdigest()
 
 
@@ -162,16 +180,23 @@ class _Context:
     connection_id: str
     operation: str
     reserve: Callable[[XCostRequest], str]
+    price_book: Mapping[str, int]
 
 
 _context: ContextVar[_Context | None] = ContextVar("x_direct_cost_context", default=None)
 
 
 @contextmanager
-def bind_x_cost_context(*, workspace_id, connection_id, operation, reserve):
+def bind_x_cost_context(*, workspace_id, connection_id, operation, reserve, price_book=None):
     if not callable(reserve):
         raise XCostAdmissionError("X API durable reservation callback is unavailable.")
-    value = _Context(_identifier(workspace_id), _identifier(connection_id), _identifier(operation), reserve)
+    from types import MappingProxyType
+    prices = dict(PRICES if price_book is None else price_book)
+    if (any(prices.get(key) != value for key, value in PRICES.items())
+            or not prices.keys() <= (PRICES.keys() | MEDIA_PRICE_KEYS)
+            or any(type(value) is not int or not 0 < value <= MAX_INTEGER for value in prices.values())):
+        raise XCostAdmissionError("X API price evidence is invalid.")
+    value = _Context(_identifier(workspace_id), _identifier(connection_id), _identifier(operation), reserve, MappingProxyType(prices))
     token = _context.set(value)
     try:
         yield
@@ -231,6 +256,20 @@ def _classify(method, path, body, query, max_resources):
             raise XCostAdmissionError("X API list requests need an explicit provider resource bound.") from exc
         return finish(key, endpoint, units)
 
+    if method == "GET" and concrete == "/2/media/upload":
+        if (_scalar(params.get("command")) != "STATUS" or
+                not re.fullmatch(r"[1-9][0-9]{0,18}", str(_scalar(params.get("media_id", ""))))):
+            raise XCostAdmissionError("X media status requires one exact uploaded media ID.")
+        return finish("media_status", "/2/media/upload")
+    if method == "POST":
+        if concrete == "/2/media/upload":
+            return finish("media_upload", concrete)
+        if concrete == "/2/media/upload/initialize":
+            return finish("media_initialize", concrete)
+        if re.fullmatch(r"/2/media/upload/[1-9][0-9]{0,18}/append", concrete):
+            return finish("media_append", "/2/media/upload/:id/append")
+        if re.fullmatch(r"/2/media/upload/[1-9][0-9]{0,18}/finalize", concrete):
+            return finish("media_finalize", "/2/media/upload/:id/finalize")
     if method == "GET":
         if concrete == "/2/users/me":
             return finish("identity_read", "/2/users/me")
@@ -298,8 +337,40 @@ def _classify(method, path, body, query, max_resources):
     raise XCostAdmissionError("Unavailable — X API pricing evidence is missing for this endpoint.")
 
 
+def operation_budget(request, price_book=None):
+    """Conservative complete workflow estimate; every actual attempt reserves separately."""
+    if request.operation_id == "media.upload":
+        from .x_direct_media import media_budget
+        return media_budget(request, PRICES if price_book is None else price_book)
+    if request.operation_id == "posts.thread":
+        posts = request.body.get("posts")
+        count, amount = request.max_billable_resources, request.estimated_cost_micros
+        if (not isinstance(posts,(tuple,list)) or not 2<=len(posts)<=25
+                or type(count) is not int or count!=len(posts)*4 or type(amount) is not int
+                or amount!=len(posts)*(PRICES["post_write_url"]+3*PRICES["post_read"])):
+            raise XCostAdmissionError("The complete thread cost envelope is inconsistent.")
+        return {"maximumApiRequests":count, "estimatedMaxCostMicros":amount,
+                "priceKeys":frozenset(("post_write_url","post_read"))}
+    key,_,units = _classify(request.method,request.path,request.body,request.query,request.max_billable_resources)
+    single = units*PRICES[key]
+    if type(request.estimated_cost_micros) is not int or request.estimated_cost_micros!=single:
+        raise XCostAdmissionError("The request cost estimate is inconsistent.")
+    # The durable journal permits at most three definite-refusal write attempts.
+    # Accepted post IDs permit at most three separately billed readback attempts.
+    count = 1 if request.method=="GET" else 3
+    amount, keys = count*single, {key}
+    if request.method=="POST" and request.path=="/2/tweets":
+        amount += 3*PRICES["post_read"]
+        count += 3
+        keys.add("post_read")
+    return {"maximumApiRequests":count, "estimatedMaxCostMicros":amount,
+            "priceKeys":frozenset(keys)}
+
+
 def estimate_request_cost_micros(*, method, path, body=None, query=None, max_resources=None):
     key, _endpoint, units = _classify(method, path, body, query, max_resources)
+    if key not in PRICES:
+        raise XCostAdmissionError("Unavailable — X media upload pricing requires explicit server evidence.")
     return units * PRICES[key]
 
 
@@ -311,8 +382,10 @@ def admit_x_request(*, method, path, body=None, query=None, max_resources=None):
         key, endpoint, units = _classify(method, path, body, query, max_resources)
     except (ValueError, TypeError, OverflowError) as exc:
         raise XCostAdmissionError("X API request pricing inputs are invalid.") from exc
+    if key not in context.price_book:
+        raise XCostAdmissionError("Unavailable — X media upload pricing evidence has not been configured.")
     request = XCostRequest(str(uuid4()), context.workspace_id, context.connection_id, context.operation,
-        str(method).upper(), endpoint, key, units, units * PRICES[key])
+        str(method).upper(), endpoint, key, units, units * context.price_book[key])
     try:
         reservation_id = context.reserve(request)
     except XCostAdmissionError:
@@ -370,7 +443,7 @@ class XCostController:
 
     def context(self, workspace_id, connection_id, operation):
         return bind_x_cost_context(workspace_id=workspace_id,connection_id=connection_id,
-                                   operation=operation,reserve=self.reserve)
+                                   operation=operation,reserve=self.reserve,price_book=self.policy.unit_prices)
 
     @contextmanager
     def _transaction(self, readonly=False):
@@ -422,7 +495,7 @@ class XCostController:
             and row["active_price_evidence_hash"]==p.evidence_hash
             and row["evidence_ref"]==p.price_evidence_ref
             and row["evidence_expires_at"]==p.price_evidence_expires_at
-            and isinstance(row["unit_prices"],dict) and row["unit_prices"]==PRICES
+            and isinstance(row["unit_prices"],dict) and row["unit_prices"]==p.unit_prices
             and all(type(v) is int for v in row["unit_prices"].values())
             and p.active(row["db_now"]) and self.ready)
 
@@ -470,7 +543,7 @@ class XCostController:
             cur.execute("""INSERT INTO postriff.x_cost_price_evidence
                 (app_key,evidence_hash,evidence_ref,expires_at,unit_prices)
                 VALUES(%s,%s,%s,%s,%s::jsonb) ON CONFLICT DO NOTHING""",
-                (self.app_key,p.evidence_hash,p.price_evidence_ref,p.price_evidence_expires_at,json.dumps(PRICES,sort_keys=True)))
+                (self.app_key,p.evidence_hash,p.price_evidence_ref,p.price_evidence_expires_at,json.dumps(p.unit_prices,sort_keys=True)))
             generation=active["generation"]+1
             cur.execute("""UPDATE postriff.x_cost_app_activation SET active_approval_ref=%s,
                 active_price_evidence_hash=%s,activation_ref=%s,generation=%s WHERE app_key=%s""",
@@ -499,17 +572,10 @@ class XCostController:
 
     def eligible_request(self,request,workspace_id):
         try:
-            if request.operation_id=="posts.thread":
-                count,amount=request.max_billable_resources,request.estimated_cost_micros
-                posts=request.body.get("posts")
-                if (type(count) is not int or count%4 or not isinstance(posts,(tuple,list))
-                        or not 2<=len(posts)<=25 or count!=len(posts)*4 or type(amount) is not int
-                        or amount!=len(posts)*(PRICES["post_write_url"]+3*PRICES["post_read"])):
-                    return False
-                return ({"post_write_url","post_read"}<=self.policy.allowed_price_keys
-                    and self.eligible(amount,workspace_id,request_count=count))
-            key,_,units=_classify(request.method,request.path,request.body,request.query,request.max_billable_resources)
-            return key in self.policy.allowed_price_keys and self.eligible(units*PRICES[key],workspace_id)
+            envelope = operation_budget(request, self.policy.unit_prices)
+            return (envelope["priceKeys"] <= self.policy.allowed_price_keys
+                and self.eligible(envelope["estimatedMaxCostMicros"], workspace_id,
+                    request_count=envelope["maximumApiRequests"]))
         except Exception:
             return False
 
@@ -519,10 +585,10 @@ class XCostController:
         p=self.policy
         for value in (request.request_id,request.workspace_id,request.connection_id,request.operation):
             _identifier(value)
-        if (request.price_key not in p.allowed_price_keys or request.price_key not in PRICES
+        if (request.price_key not in p.allowed_price_keys or request.price_key not in p.unit_prices
                 or type(request.estimated_units) is not int or not 0<request.estimated_units<=MAX_RESOURCES
                 or type(request.estimated_micros) is not int or not 0<request.estimated_micros<=MAX_INTEGER
-                or request.estimated_micros!=request.estimated_units*PRICES[request.price_key]):
+                or request.estimated_micros!=request.estimated_units*p.unit_prices[request.price_key]):
             raise XCostAdmissionError("X request pricing is unknown, disallowed, or inconsistent.")
         scope=(self.app_key,p.approval_ref,request.workspace_id)
         with self._transaction() as cur:
