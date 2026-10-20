@@ -55,6 +55,32 @@ class VercelBuilderTransformTests(unittest.TestCase):
         (self.root/'vercel.json').write_bytes(json.dumps(CONFIG,sort_keys=True,separators=(',',':')).encode())
         self.assertEqual(self.proof()['status'],'verified')
 
+    def test_builder_can_add_only_identical_metadata_mirrors(self):
+        copied_command=CONFIG['services']['postriff_api']['buildCommand']
+        copied_framework=CONFIG['services']['postriff_web']['framework']
+        for additional in (
+            {'version': 2},
+            {'buildCommand':copied_command},
+            {'framework':copied_framework},
+            {'version':2,'buildCommand':copied_command,'framework':copied_framework},
+        ):
+            with self.subTest(keys=tuple(additional)):
+                (self.root/'vercel.json').write_text(json.dumps({**CONFIG,**additional}))
+                self.assertEqual(self.proof()['status'],'verified')
+
+    def test_builder_rejects_dangerous_or_incorrect_extra_config(self):
+        for additional in (
+            {'version':3},{'version':True},
+            {'buildCommand':'echo skip-release-guard'},
+            {'framework':'static'},
+            {'env':{'DATABASE_URL':'unexpected'}},
+            {'functions':{'api/index.py':{'maxDuration':1}}},
+            {'routes':[{'src':'/(.*)','dest':'https://example.invalid'}]},
+        ):
+            with self.subTest(keys=tuple(additional)):
+                (self.root/'vercel.json').write_text(json.dumps({**CONFIG,**additional}))
+                self.assertFalse(self.proof()['verifiedSelectedRuntimeFiles'])
+
     def test_builder_cannot_change_route_or_release_command(self):
         for key, value in [('rewrites',[{'source':'/api/(.*)','destination':'https://evil.invalid'}]),
                            ('services',{'postriff_api':{'runtime':'python','buildCommand':'echo skip'}}),
@@ -112,6 +138,7 @@ class ReleaseConfigFailureDiagnosticsTests(unittest.TestCase):
             path.write_text(json.dumps(changed))
             report=module.source_config_diagnostics(root)
             self.assertFalse(report['semanticallyEqual'])
-            self.assertFalse(report['git'])
+            self.assertTrue(report['git']==False)
             self.assertTrue(report['rewrites'])
+            self.assertTrue(all(type(v) is bool for v in report.values()))
             self.assertNotIn('SECRET_VALUE',json.dumps(report))

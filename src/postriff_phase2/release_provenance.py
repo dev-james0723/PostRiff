@@ -109,6 +109,43 @@ def _empty(status: str) -> dict:
 
 
 
+
+def approved_builder_transform(source: dict, effective: dict) -> bool:
+    """Only Vercel's identical metadata mirrors may supplement reviewed source.
+
+    Unknown top-level keys and any change/removal to the reviewed config are
+    always refused. In particular routes, functions, env and services cannot be
+    added or redefined through a transformed build config.
+    """
+    if type(source) is not dict or type(effective) is not dict:
+        return False
+    if any(key not in effective or effective[key] != value
+           for key, value in source.items()):
+        return False
+    extras = set(effective) - set(source)
+    if not extras.issubset({'version', 'buildCommand', 'framework'}):
+        return False
+    if 'version' in extras and (type(effective['version']) is not int
+                                or effective['version'] != 2):
+        return False
+    services = source.get('services')
+    if not isinstance(services, dict):
+        return not extras
+    if 'buildCommand' in extras:
+        api = services.get('postriff_api')
+        if (not isinstance(api, dict)
+                or effective['buildCommand'] != api.get('buildCommand')
+                or not isinstance(effective['buildCommand'], str)):
+            return False
+    if 'framework' in extras:
+        web = services.get('postriff_web')
+        if (not isinstance(web, dict)
+                or effective['framework'] != web.get('framework')
+                or effective['framework'] != 'nextjs'):
+            return False
+    return True
+
+
 def witness_bytes(root: Path, name: str, manifest: dict, limit: int = _MAX_WITNESS) -> bytes:
     """Match exact original config evidence while refusing changed effective policy.
 
@@ -139,7 +176,7 @@ def witness_bytes(root: Path, name: str, manifest: dict, limit: int = _MAX_WITNE
         return actual
     source = json.loads(original, object_pairs_hook=_unique_object)
     effective = json.loads(actual, object_pairs_hook=_unique_object)
-    if type(source) is not dict or type(effective) is not dict or source != effective:
+    if not approved_builder_transform(source, effective):
         raise ValueError('Vercel changed security-relevant deployment settings')
     return original
 

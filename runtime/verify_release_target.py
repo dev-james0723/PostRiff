@@ -71,9 +71,14 @@ def source_witness_diagnostics():
 def source_config_diagnostics(root: Path) -> dict:
     """Fixed-name booleans only, never config values or personal environment."""
     import base64
-    from postriff_phase2.release_provenance import read_regular, MANIFEST_PATH, _unique_object
+    from postriff_phase2.release_provenance import read_regular, MANIFEST_PATH, _unique_object, approved_builder_transform
     keys=('$schema','services','rewrites','headers','crons','git')
-    empty={**{k:False for k in keys},'rootKeysEqual':False,'semanticallyEqual':False}
+    possible=('version','framework','buildCommand','routes','functions','env',
+              'projectSettings','outputDirectory','regions','builds','name',
+              'installCommand','ignoreCommand','cleanUrls','trailingSlash','scope')
+    empty={**{k:False for k in keys},'rootKeysEqual':False,
+           'semanticallyEqual':False,'approvedBuilderTransform':False,
+           **{'added_'+k:False for k in possible},'addedOther':False}
     try:
         root=Path(root)
         receipt=json.loads(read_regular(root, MANIFEST_PATH, 65536), object_pairs_hook=_unique_object)
@@ -84,9 +89,13 @@ def source_config_diagnostics(root: Path) -> dict:
         active=json.loads(read_regular(root, 'vercel.json', 8*1024*1024), object_pairs_hook=_unique_object)
         if type(source) is not dict or type(active) is not dict:
             return empty
+        added=set(active)-set(source)
         return {**{k:source.get(k)==active.get(k) for k in keys},
                 'rootKeysEqual':set(source)==set(active),
-                'semanticallyEqual':source==active}
+                'semanticallyEqual':source==active,
+                'approvedBuilderTransform':approved_builder_transform(source,active),
+                **{'added_'+k:k in added for k in possible},
+                'addedOther':bool(added-set(possible))}
     except (OSError,ValueError,TypeError,KeyError,UnicodeError,RuntimeError,RecursionError,base64.binascii.Error):
         return empty
 
