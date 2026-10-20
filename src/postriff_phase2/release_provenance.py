@@ -123,7 +123,10 @@ def approved_builder_transform(source: dict, effective: dict) -> bool:
            for key, value in source.items()):
         return False
     extras = set(effective) - set(source)
-    if not extras.issubset({'version', 'buildCommand', 'framework'}):
+    if not extras.issubset({'version', 'name', 'buildCommand', 'framework'}):
+        return False
+    if 'name' in extras and (type(effective['name']) is not str
+                             or effective['name'] != 'postriff-phase2-private'):
         return False
     if 'version' in extras and (type(effective['version']) is not int
                                 or effective['version'] != 2):

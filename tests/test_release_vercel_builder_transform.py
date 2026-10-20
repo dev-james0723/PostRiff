@@ -81,6 +81,19 @@ class VercelBuilderTransformTests(unittest.TestCase):
                 (self.root/'vercel.json').write_text(json.dumps({**CONFIG,**additional}))
                 self.assertFalse(self.proof()['verifiedSelectedRuntimeFiles'])
 
+    def test_builder_adds_only_the_canonical_project_name(self):
+        for extra in ({'name':'postriff-phase2-private'},
+                      {'name':'postriff-phase2-private','version':2}):
+            with self.subTest(extra=extra):
+                (self.root/'vercel.json').write_text(json.dumps({**CONFIG,**extra}))
+                self.assertEqual(self.proof()['status'],'verified')
+
+    def test_builder_wrong_project_name_still_fails_closed(self):
+        for invalid in ('postriff-staging','',True,'postriff-phase2-private-other'):
+            with self.subTest(name=invalid):
+                (self.root/'vercel.json').write_text(json.dumps({**CONFIG,'name':invalid}))
+                self.assertFalse(self.proof()['verifiedSelectedRuntimeFiles'])
+
     def test_builder_cannot_change_route_or_release_command(self):
         for key, value in [('rewrites',[{'source':'/api/(.*)','destination':'https://evil.invalid'}]),
                            ('services',{'postriff_api':{'runtime':'python','buildCommand':'echo skip'}}),
