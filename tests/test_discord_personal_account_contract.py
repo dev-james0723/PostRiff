@@ -1,6 +1,7 @@
 """Personal identity presentation and consent, with synthetic in-memory custody."""
 import copy
 import json
+from secrets import token_urlsafe
 import unittest
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -66,7 +67,7 @@ class PersonalAccountContract(unittest.TestCase):
         s, _, _ = readable([linked(access_token='synthetic-access-private',
             refresh_token='synthetic-refresh-private', at='synthetic-bearer-private',
             key_id='synthetic-key-private', authorizationGeneration='private-generation',
-            refreshClaim='private-claim', envelope={'secret': 'private'})])
+            refreshClaim='private-claim', envelope={'secret': token_urlsafe(32)})])
         result, = s.public_identities(WORKSPACE, 'synthetic-session')
         self.assertEqual(set(result), {'id', 'account', 'userId', 'status', 'expiresAt',
             'discoverGuilds', *CAPABILITIES})

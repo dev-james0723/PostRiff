@@ -69,3 +69,14 @@
 **After any future expressly approved migration:** disable only the new Discord feature flags and admission; let existing bot/other-platform queues proceed. Preserve `pr_discord_interaction_links`, `pr_discord_interaction_replays`, authorization grants and immutable ambiguous-send records during forensic/reconciliation review. Do **not** blindly drop migration 131 tables, undo old bot credentials, clear rate-limit history, replay unknown publishes or roll back unrelated platform schema. Review actual in-flight leases and affected pending requests first. Rollback should be approval-specific and evidence-based.
 
 **Overall:** two confirmed P1 security findings repaired in an isolated branch, no production effects. Engineering-review requalification is required; Public Production **NO-GO** until human/release gates and real provider acceptance.
+
+
+## P2-SEC-CI-04: synthetic credential literals tripped the offline source secret scan
+
+Both public-repository release-gate runs on prior source (including `ee47c136` and `5a72d6d5`) identified exactly two unexpected `Secret Keyword` matches in test-only source: `tests/test_discord_multimode.py:16` and `tests/test_discord_personal_account_contract.py:69`. Downloaded CI artifacts contained **paths, line numbers, detector names and hashes**, not exposed real credentials. The values were synthetic test literals, not a live Discord OAuth token, Webhook grant or API credential.
+
+**Fix, without scanner exceptions or allowlists:** Generate the synthetic Webhook credential with `secrets.token_urlsafe(32)` at test runtime and populate the account-custody projection test's nested private-secret field with a separate runtime synthetic token. Test behavior and token-exclusion assertions are retained; the static source no longer stores literal test credentials.
+
+**RED→GREEN:** New `tests/test_discord_fixture_secret_scan.py` invokes the pinned `detect-secrets` engine against both exact fixture files. Observed two expected RED `Secret Keyword` findings in `evidence/SECURITY-REVIEW-RED-SECRET-SCAN.txt`, followed by zero findings in `evidence/SECURITY-REVIEW-GREEN-SECRET-SCAN.txt`. All 308 Discord Python tests pass in `evidence/SECURITY-REVIEW-GREEN-DISCORD-PYTHON-SECRET-FIX.txt`. The **full-repository offline scanner** and exact-source Linux CI are not marked fixed until fresh GitHub runs prove the new SHA; no global secret-scanning rule was weakened.
+
+**Separate CI status:** The `Rafii browser scenes` WebKit Site Agent Journey failed when its isolated browser context closed after earlier successful unrelated Site Agent checks. The previous Discord-head baseline `ee47c136` had passed this separate workflow. That failure is not evidence of a Discord OAuth/Webhook security bypass, and it has not been claimed as repaired. Retain this distinct downstream evidence and reverify on the next exact-source CI run, without rewriting Site Agent or unrelated browser components.

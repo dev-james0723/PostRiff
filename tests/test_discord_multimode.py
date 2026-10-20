@@ -1,6 +1,7 @@
 """Synthetic real review/approval/transport boundaries; never uses live Discord."""
 import copy
 import json
+from secrets import token_urlsafe
 import unittest
 from types import SimpleNamespace
 from urllib.parse import urlsplit
@@ -13,7 +14,8 @@ from postriff_phase2.social_connectors import DiscordProvider
 from test_discord_publish_authorization import fixture, review, approve, APP, USER, GUILD, FIRST, NOW, WORKSPACE, ACTOR, GENERATION
 
 HOOK = '66112233'
-SECRET = 'synthetic_webhook_secret_123456789'
+# Generated only in the synthetic process: never commit a token-shaped literal.
+SECRET = token_urlsafe(32)
 
 
 def webhook_fixture():
