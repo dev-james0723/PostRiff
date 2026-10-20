@@ -337,6 +337,15 @@ def registry_from_environment(values, transport=None):
         adapter.execution_enabled = (not operator_disabled
                                      and (enabled or not getattr(cls, "feature_flag_required", False))
                                      and (provider_verified or not getattr(cls, "provider_approval_required", False)))
+        if provider_id == 'pinterest':
+            # Read-only account-bound Trial pilot is distinct from public customer connections.
+            # Supplying credentials alone must never open public OAuth before release approval.
+            trial = getattr(adapter, 'trial_readonly', False) or getattr(adapter, 'private_trial', False)
+            if getattr(adapter, 'private_trial', False):
+                adapter.production_reviewed = False
+            policy_approved = str(values.get(prefix + 'POLICY_APPROVED', '')).lower() == 'true'
+            adapter.execution_enabled = not operator_disabled and (trial or (enabled and provider_verified and adapter.production_reviewed and policy_approved))
+            adapter.quota_required = True
         approved_scopes = [scope for scope in re.split(r"[\s,]+", str(values.get(prefix + "APPROVED_SCOPES", "")).strip()) if scope]
         registry.diagnostics[provider_id].update({
             "featureFlagEnabled": enabled if getattr(cls, "feature_flag_required", False) else True,
@@ -357,5 +366,9 @@ def registry_from_environment(values, transport=None):
         if provider_id == "linkedin":
             # Allows requesting the restricted scope, never substitutes for a real grant.
             adapter.history_approved = str(values.get(prefix + "HISTORY_APPROVED", "")).lower() == "true"
+        if provider_id == 'pinterest':
+            registry.diagnostics[provider_id]['productionEnabled'] = not trial and adapter.execution_enabled
+            registry.diagnostics[provider_id]['policyReviewRecorded'] = policy_approved
+            registry.diagnostics[provider_id]['trialApiEnvironment'] = getattr(adapter, 'trial_api_environment', None)
         registry[provider_id] = adapter
     return registry

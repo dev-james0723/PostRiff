@@ -679,7 +679,14 @@ def reach(surface_name: str, grants=None) -> frozenset:
 
 # --- the permissions UI's view (CF-1 §11) ---------------------------------------------------------------------------------
 def copy_table() -> dict:
-    return json.loads(_COPY_PATH.read_text(encoding="utf-8"))
+    copy = json.loads(_COPY_PATH.read_text(encoding='utf-8'))
+    from . import tool_adapter
+    # Optional extension titles are active only when their actual tool is
+    # registered. Missing titles and stale regular capabilities still fail lint.
+    for ident, title in (copy.get('optionalCapabilities') or {}).items():
+        if ident.startswith('tool.') and ident[5:] in tool_adapter.REGISTRY:
+            copy['capabilities'][ident] = title
+    return copy
 
 
 def _provider_key(scope: ProviderScope) -> str:

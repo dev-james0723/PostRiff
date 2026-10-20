@@ -144,7 +144,34 @@ async function main() {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No horizontal overflow.');
       assert.deepEqual(errors, []); assert.deepEqual(blocked, [], 'No external browser requests are allowed.');
       await page.screenshot({ path: path.join(out, `SYNTHETIC-X-${name}-${width}.png`), fullPage: true });
-      results.push({ name, width, authenticated: 'synthetic Rafii session', oauth: 'real PKCE/SQL with synthetic X consent', mediaUpload: 'verified synthetic response', altText: true, postReadback: true, scheduleCanceled: true, foreignTenantDenied: true, noOverflow: true, errors, realProviderCalls: 0 });
+      // A real SQL pending OAuth row must not make disconnect fail or resurrect consent.
+      const pendingConsent = await api('POST', `/api/workspaces/${wid}/channels/x/oauth/start`, { capability: 'publish' }, 201);
+      const pendingState = new URL(pendingConsent.authorizeUrl).searchParams.get('state');
+      const consentResponse = await context.request.post(base + '/dev/x/consent', {
+        headers: { Origin: base }, form: { state: pendingState, decision: 'allow' }, maxRedirects: 0
+      });
+      assert.equal(consentResponse.status(), 302);
+      const oldCallback = Object.fromEntries(new URL(consentResponse.headers().location).searchParams);
+      const disconnected = await api('DELETE', `/api/workspaces/${wid}/channels/${cid}`, {});
+      assert.equal(disconnected.disconnected, true);
+      assert.equal(disconnected.remoteRevoked, true);
+      const stale = await context.request.post(base + `/api/workspaces/${wid}/channels/x/oauth/complete`, { headers, data: oldCallback });
+      assert.ok([403, 404, 409].includes(stale.status()), 'Disconnect must invalidate an already issued callback.');
+      await page.goto(base + '/app/x');
+      await page.getByLabel('Connected X account', { exact: true }).getByRole('option', { name: 'No connected X account' }).waitFor({ state: 'attached' });
+      assert.equal(await page.getByRole('button', { name: 'Approve this action', exact: true }).count(), 0);
+      const reconnect = await api('POST', `/api/workspaces/${wid}/channels/x/oauth/start`, { capability: 'publish' }, 201);
+      await page.waitForLoadState('networkidle', { timeout: 30000 });
+      await page.goto(reconnect.authorizeUrl);
+      const reconnectedResponse = page.waitForResponse(response => response.url().endsWith('/channels/x/oauth/complete') && response.status() === 200);
+      await page.getByRole('button', { name: 'Allow synthetic X account', exact: true }).click();
+      await reconnectedResponse;
+      const reconnectChannels = await api('GET', `/api/workspaces/${wid}/channels`);
+      assert.ok(reconnectChannels.channels.some(c => c.id === cid && c.platform === 'X' && !c.revoked));
+      assert.equal((await stats()).posts, finalStats.posts, 'Reconnect cannot replay earlier approvals.');
+      assert.deepEqual(errors, []);
+      assert.deepEqual(blocked, []);
+      results.push({ name, width, authenticated: 'synthetic Rafii session', oauth: 'real PKCE/SQL with synthetic X consent', mediaUpload: 'verified synthetic response', altText: true, postReadback: true, scheduleCanceled: true, foreignTenantDenied: true, disconnected: true, staleCallbackRejected: true, reconnected: true, noOverflow: true, errors, realProviderCalls: 0 });
       await context.close();
     } catch (error) {
       if (page) {

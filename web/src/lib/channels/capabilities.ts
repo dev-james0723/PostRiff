@@ -36,6 +36,7 @@ export interface ConnectCapabilityDef {
 
 /** The choices in the Connect sheet; a provider only lists the ones it offers. */
 export const CONNECT_CAPABILITY_OPTIONS: readonly ConnectCapabilityDef[] = [
+  { key: 'boards_read', label: 'Profile and boards', description: 'Reads the connected Pinterest profile and boards. No publishing or scheduling.' },
   { key: 'identity', label: 'Account only', description: 'Confirms the account. No posting.' },
   { key: 'posts_read', label: 'Read my posts', description: 'To learn your voice. You pick the posts and approve analysis. No posting.' },
   { key: 'publish', label: 'Publish', description: 'Posts only what you approve.' },

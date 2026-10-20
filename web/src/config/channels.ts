@@ -287,7 +287,9 @@ export const channels: Channel[] = [
     region: 'global',
     notes: [
       hostedPending,
-      'While Pinterest reviews Rafii, Pins go to a test area only you can see.'
+      'Public customer connections remain closed during Rafii’s private Trial.',
+      'Eligible business accounts are recommended. Pinterest may require additional approval for personal-account board and Pin access.',
+      'Trial-created Pins are visible only to their creator.'
     ]
   },
 

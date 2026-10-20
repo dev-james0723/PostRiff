@@ -117,8 +117,9 @@ def main():
         cross = ['test_hosted_wave1_connectors', 'test_hosted_wave3_connectors', 'test_agent_capability_registry',
                  'test_site_agent', 'test_rafii_creation_capabilities', 'test_postriff_orchestration',
                  'test_postriff_platforms_x', 'test_postriff_skills', 'test_rafii_skill_registry', 'test_founder_product_events']
+        cross += sorted(p.stem for p in (ROOT / 'tests').glob('test_pinterest*.py'))
         run('python-x-and-regression', [sys.executable, '-m', 'unittest', *xmodules, *cross, '-v'],
-            overrides={'RAFII_X_TEST_DATABASE_DSN': dsn, 'RAFII_X_TEST_COST_DSN': dsn})
+            overrides={'RAFII_X_TEST_DATABASE_DSN': dsn, 'RAFII_X_TEST_COST_DSN': dsn, 'RAFII_X_LOCAL_OAUTH_E2E': '1'})
         web = ROOT / 'web'
         run('lint', [node, 'node_modules/oxlint/bin/oxlint', 'src'], cwd=web)
         if not args.skip_web_contracts:

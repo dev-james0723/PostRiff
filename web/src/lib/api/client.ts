@@ -373,8 +373,8 @@ export function createApi(getToken: TokenSource) {
         error,
         ...(iss ? { iss } : {})
       }),
-    channelDestinations: (w: string, id: string) =>
-      get<{ connectionId: string; scope?: 'connection' | 'post'; destinations: ChannelDestination[] }>(`${ws(w)}/channels/${encodeURIComponent(id)}/destinations`),
+    channelDestinations: (w: string, id: string, boardId?: string) =>
+      get<{ connectionId: string; scope?: 'connection' | 'post'; boardId?: string; destinations: ChannelDestination[] }>(`${ws(w)}/channels/${encodeURIComponent(id)}/destinations${boardId ? `?boardId=${encodeURIComponent(boardId)}` : ''}`),
     /** TikTok's current creator settings, read fresh each time the composer shows them. */
     creatorInfo: (w: string, id: string) => get<TikTokCreatorInfo>(`${ws(w)}/channels/${encodeURIComponent(id)}/creator-info`),
     chooseChannelDestination: (w: string, id: string, destinationId: string) =>
@@ -393,6 +393,10 @@ export function createApi(getToken: TokenSource) {
       send<{ connectionId: string; state: string; identityVerified: boolean; detail?: string }>(
         'POST',
         `${ws(w)}/channels/${encodeURIComponent(id)}/verify`
+      ),
+    refreshPinterestAuthorization: (w: string, id: string) =>
+      send<{ connectionId: string; authorizationRefreshed: boolean; identityVerified: boolean; expiresAt: number }>(
+        'POST', `${ws(w)}/channels/${encodeURIComponent(id)}/refresh-authorization`
       ),
     insightsCanary: (w: string, id: string) =>
       send<{ state: string; http?: number; providerRead?: boolean; found?: Record<string, number> }>(

@@ -5,6 +5,12 @@
   "en",
   "zh-Hant"
  ],
+ "optionalCapabilities": {
+  "tool.pinterest_boards": {
+   "en": "View your Pinterest boards and sections",
+   "zh-Hant": "查看你的 Pinterest 看板及分區"
+  }
+ },
  "capabilities": {
   "account.delete": {
    "en": "Delete your account",

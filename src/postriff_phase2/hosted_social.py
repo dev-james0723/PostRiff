@@ -11,7 +11,7 @@ import json
 import re
 import time
 from datetime import datetime, timezone
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit, parse_qs
 from postriff_alpha.domain import AlphaError
 from .atproto_oauth import tid
 from .capabilities import HOSTED_PUBLISHERS
@@ -51,6 +51,9 @@ class HostedSocial:
 
     def __init__(self, oauth, providers, assets=None, transport=None, sleep=time.sleep):
         self.oauth, self.providers, self.assets = oauth, providers, assets
+        pinterest = providers.get('pinterest')
+        if getattr(pinterest, 'private_trial', False) is True:
+            pinterest.private_trial_media_gate = self._pinterest_source_matches
         self.transport = transport or http_transport
         self.sleep = sleep
         self.linkedin = LinkedInCandidate(transport=None, version=LINKEDIN_VERSION)
@@ -76,7 +79,16 @@ class HostedSocial:
         # that grant is checked again below against the exact required scopes.
         if manifest['platform'] == 'YouTube':
             return provider if getattr(provider, 'creator_enabled', False) else None
-        if not provider.production_reviewed and not getattr(provider, "account_scoped_direct", False):
+        private_trial = manifest['platform'] == 'Pinterest' and getattr(provider, 'private_trial', False) is True
+        if private_trial:
+            require_manifest = getattr(getattr(provider, 'trial_policy', None), 'require_manifest', None)
+            if not callable(require_manifest):
+                return None
+            try:
+                require_manifest(manifest)
+            except (AlphaError, AttributeError, TypeError, ValueError):
+                return None
+        if not provider.production_reviewed and not private_trial and not getattr(provider, "account_scoped_direct", False):
             return None
         if getattr(provider, "publisher", None) is not None and (not getattr(provider, "publish_live_tested", False)
                 or not getattr(provider, "publishing_permission", False)):
@@ -91,8 +103,26 @@ class HostedSocial:
         asset = manifest["media"][0]
         return self.assets.storage.signed_url(manifest["workspaceId"], "media", asset.get("objectName") or asset["id"], 600)
 
+    def _pinterest_source_matches(self, manifest, source):
+        """Bind the signed delivery path to the exact immutable approved asset."""
+        try:
+            from .pinterest_safety import https_url
+            if not https_url(source) or self.assets is None or len(manifest.get('media') or []) != 1:
+                return False
+            storage, asset = self.assets.storage, manifest['media'][0]
+            origin, actual = urlsplit(storage.project_url), urlsplit(source)
+            object_name = asset.get('objectName') or asset['id']
+            path = storage._path(manifest['workspaceId'], 'media', object_name)
+            expected = '/storage/v1/object/sign/' + quote(storage._bucket('media')) + '/' + quote(path, safe='/')
+            query = parse_qs(actual.query, keep_blank_values=True)
+            return (actual.scheme == origin.scheme == 'https' and actual.netloc == origin.netloc
+                    and actual.path == expected and not actual.fragment
+                    and set(query) == {'token'} and len(query['token']) == 1 and bool(query['token'][0]))
+        except (AlphaError, AttributeError, KeyError, TypeError, ValueError):
+            return False
+
     # --- submit -------------------------------------------------------------------
-    def submit(self, manifest):
+    def submit(self, manifest, *, dispatch_context=None):
         if manifest.get('platform') == 'X':
             return {'state': 'held', 'confirmed': 'Review this X action in Direct Management. A fresh account-bound approval is required.',
                     'reasonCode': 'x_direct_management_review_required'}
@@ -122,6 +152,8 @@ class HostedSocial:
                 return self._submit_threads(manifest, token)
             if manifest["platform"] == "Instagram":
                 return self._submit_instagram(manifest, token)
+            if manifest['platform'] == 'Pinterest':
+                return self._submit_pinterest(manifest, provider, token, dispatch_context=dispatch_context)
             if manifest["platform"] in WAVE1 + WAVE3:
                 return getattr(self, "_submit_" + manifest["platform"].lower())(manifest, provider, token)
         except AlphaError as error:
@@ -512,32 +544,77 @@ class HostedSocial:
         private = " Until TikTok audits Rafii, the post is private: only you can see it." if options["privacyLevel"] != "SELF_ONLY" else ""
         return {"state": "provider_accepted", "reference": publish_id, "confirmed": "TikTok received the video and is processing it; it may take a few minutes." + private}
 
-    def _submit_pinterest(self, manifest, provider, token):
+    def _submit_pinterest(self, manifest, provider, token, *, dispatch_context=None):
+        from .publish_options import normalize
+        from .pinterest_safety import https_url
         options = manifest.get("publishOptions") or {}
         media = manifest.get("media") or []
-        if not options.get("boardId") or len(media) != 1 or not str(media[0].get("mime") or "").startswith("image/"):
-            return {"state": "failed", "confirmed": "A Pin needs one image and a board. Review it again; nothing was posted."}
+        def preflight_error(error):
+            if error.code == 'pinterest_rate_limited':
+                return {'state':'scheduled', 'pinterestBudgetDeferred':True,
+                        'confirmed':'Pinterest request budget reached before publication. This approved Pin waits for the next window; nothing was posted.'}
+            return {'state':'held', 'confirmed':str(error)}
+        try:
+            canonical = normalize('Pinterest', options, media, manifest['payload']['text'])
+            if canonical != options:
+                return {'state': 'held', 'confirmed': 'Pin choices changed. Review the exact Pin again; nothing was posted.'}
+            if provider.identity(token)['providerAccountId'] != manifest.get('providerAccountId'):
+                return {'state': 'held', 'confirmed': 'The Pinterest account changed. Reconnect and review again; nothing was posted.'}
+        except AlphaError as error:
+            return preflight_error(error)
         # The board must be one of this person's own boards (the composer offers only those; it may have gone since).
-        if options["boardId"] not in {board["id"] for board in provider.destinations(token)}:
-            return {"state": "failed", "confirmed": "That board isn't one of this Pinterest account's boards any more. Choose another board and review the Pin again; nothing was posted."}
-        pin = {"board_id": options["boardId"], "description": manifest["payload"]["text"], "media_source": {"source_type": "image_url", "url": self._image_url(manifest)}}
+        try:
+            if options["boardId"] not in {board["id"] for board in provider.destinations(token) if board.get('eligible')}:
+                return {"state": "failed", "confirmed": "That board isn't one of this Pinterest account's boards any more. Choose another board and review the Pin again; nothing was posted."}
+            section = options.get('boardSectionId')
+            if section and section not in {s['id'] for s in provider.sections(token, options['boardId'])}:
+                return {'state': 'failed', 'confirmed': 'This section is unavailable on the chosen board. Review again; nothing was posted.'}
+            source = self._image_url(manifest)
+        except AlphaError as error:
+            return preflight_error(error)
+        if not https_url(source):
+            return {'state': 'held', 'confirmed': 'The approved image has no usable HTTPS source. Upload it again; nothing was posted.'}
+        pin = {"board_id": options["boardId"], "description": manifest["payload"]["text"], "media_source": {"source_type": "image_url", "url": source}}
+        if section:
+            pin['board_section_id'] = section
         if options.get("title"):
             pin["title"] = options["title"]
         if options.get("link"):
             pin["link"] = options["link"]
         if media[0].get("alt"):
-            pin["alt_text"] = str(media[0]["alt"])[:500]
-        response = provider.api(token, "POST", "/v5/pins", content=True, body=pin)
+            pin["alt_text"] = media[0]["alt"]
+        dispatch = getattr(self.oauth, 'pinterest_dispatch', None)
+        if dispatch is None:
+            return {'state': 'held', 'confirmed': 'Pinterest dispatch fencing is unavailable. Nothing was posted.'}
+        attempted = False
+        try:
+            trial_context = {'trial_pin': pin} if getattr(provider, 'private_trial', False) is True else {}
+            with dispatch(manifest, token, dispatch_context, **trial_context) as proof:
+                attempted = True
+                response = provider.api(token, 'POST', '/v5/pins', content=True, body=pin)
+                accepted = response.get('body') if isinstance(response.get('body'), dict) else {}
+                candidate_id = str(accepted.get('id') or '')
+                if response.get('status') in (200, 201) and re.fullmatch(r'\d{5,30}', candidate_id):
+                    proof['pinId'] = candidate_id
+        except AlphaError as error:
+            if attempted and error.code not in ('pinterest_rate_limited', 'pinterest_quota_unavailable', 'pinterest_trial_intent_consumed', 'pinterest_trial_denied', 'pinterest_trial_account_mismatch', 'pinterest_oauth_binding_changed'):
+                return _uncertain('Pinterest submission was interrupted. Check the board and reconcile; do not resubmit.')
+            return preflight_error(error)
         body = response.get("body") if isinstance(response.get("body"), dict) else {}
         pin_id = str(body.get("id") or "")
         if response.get("status") in (200, 201) and re.fullmatch(r"\d{5,30}", pin_id):
-            return {"state": "provider_accepted", "reference": pin_id, "confirmed": "Pinterest created the Pin" + (" in its sandbox (Trial access)" if provider.sandbox else "") + "; read-back pending"}
-        reason = _provider_reason(body)
+            visibility = ('creator_only_trial' if getattr(provider, 'private_trial', False) is True
+                          else 'creator_only_sandbox' if provider.sandbox else 'unverified')
+            detail = ' as a creator-only Trial Pin' if visibility == 'creator_only_trial' else ' in its sandbox (Trial access)' if provider.sandbox else ''
+            return {"state": "provider_accepted", "reference": pin_id, 'visibility': visibility,
+                    "confirmed": "Pinterest created the Pin" + detail + "; read-back pending"}
+        # Pinterest error bodies are untrusted and can echo secrets or personal data.
+        reason = ''
         if response.get("status") == 404:
             return {"state": "failed", "confirmed": "Pinterest can't find that board, so nothing was posted" + (f" ({reason})" if reason else "") + ". Choose another board and review the Pin again."}
         if response.get("status") == 403:
             return {"state": "failed", "confirmed": "Pinterest won't let this account pin to that board, so nothing was posted" + (f" ({reason})" if reason else "") + ". Choose another board and review the Pin again."}
-        return self._classify_status(response.get("status"), body, "Pinterest") or _uncertain("No conclusive Pinterest create response; do not resubmit")
+        return self._classify_status(response.get("status"), {}, "Pinterest") or _uncertain("No conclusive Pinterest create response; do not resubmit")
 
     def _reconcile_wave3(self, manifest, provider, token, reference, job=None):
         platform, text = manifest["platform"], manifest["payload"]["text"]
@@ -591,12 +668,33 @@ class HostedSocial:
                         "confirmed": "TikTok reports the post failed" + (f" ({reason})" if isinstance(reason, str) and reason else "") + "."}
             return _uncertain("TikTok did not report this post's status; check the account")
         if platform == "Pinterest":
-            if not reference:
+            if not reference and getattr(provider, 'private_trial', False) is True:
+                recover = getattr(provider, 'private_trial_recover_reference', None)
+                try:
+                    if callable(recover):
+                        reference = recover(provider.trial_policy, manifest.get('idempotencyKey'))
+                except AlphaError:
+                    return _uncertain('The private Trial response journal is unavailable. Reconcile later; do not resubmit.')
+            if not isinstance(reference, str) or not re.fullmatch(r'\d{5,30}', reference):
                 return _uncertain("No Pin id was recorded; check the board; do not resubmit")
+            if provider.identity(token)['providerAccountId'] != manifest.get('providerAccountId'):
+                return _uncertain('The Pinterest account changed. No write or retry is authorized.')
             response = provider.api(token, "GET", f"/v5/pins/{quote(reference)}", content=True)
             body = response.get("body") if isinstance(response.get("body"), dict) else {}
-            if response.get("status") == 200 and str(body.get("board_id")) == options.get("boardId") and body.get("description") == text:
-                result = {"state": "verified", "reference": reference, "confirmed": "Pinterest read-back matched the approved Pin and board", "verification": "provider_lookup"}
+            matches = (str(body.get('id')) == reference and str(body.get('board_id')) == options.get('boardId')
+                       and body.get('description') == text and (body.get('title') or '') == options.get('title', '')
+                       and (body.get('link') or '') == options.get('link', '')
+                       and (body.get('board_section_id') or '') == options.get('boardSectionId', '')
+                       and isinstance(body.get('media'), dict) and body['media'].get('media_type') == 'image')
+            if response.get("status") == 200 and matches:
+                visibility = ('creator_only_trial' if getattr(provider, 'private_trial', False) is True
+                              else 'creator_only_sandbox' if provider.sandbox else 'unverified')
+                detail = (' Creator-only Trial visibility applies.' if visibility == 'creator_only_trial'
+                          else ' Creator-only Sandbox visibility applies.' if provider.sandbox
+                          else ' Public visibility has not been verified.')
+                result = {"state": "verified", "reference": reference,
+                          "confirmed": "Pinterest API read-back matched the approved Pin, account, board and metadata." + detail,
+                          "verification": "provider_lookup", 'visibility': visibility}
                 if not provider.sandbox:
                     result["url"] = f"https://www.pinterest.com/pin/{reference}/"
                 return result

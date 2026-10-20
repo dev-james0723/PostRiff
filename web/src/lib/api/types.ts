@@ -1449,6 +1449,8 @@ export interface ChannelView {
 }
 
 export interface ProviderView {
+  /** Restricted server-side Pinterest pilot; never a public release gate. */
+  trialReadonly?: boolean;
   configurationState?: string;
   credentialPresence?: { clientId: boolean; clientSecret: boolean };
   readinessState?: string;
@@ -1501,8 +1503,11 @@ export interface ProviderView {
 export interface ChannelDestination {
   id: string;
   name: string;
-  kind: 'text' | 'announcement' | 'page' | 'board';
+  kind: 'text' | 'announcement' | 'page' | 'board' | 'section';
   selected: boolean;
+  boardId?: string;
+  privacy?: string;
+  eligible?: boolean;
 }
 
 export interface OwnedPost {
@@ -1730,6 +1735,16 @@ export interface Metric {
   nativeName: string;
 }
 
+export interface AnalyticsReadOutcome {
+  provider: string;
+  connectionId: string;
+  providerPostId: string;
+  jobId: string | null;
+  outcome: 'success' | 'no_data' | 'read_failed';
+  observedAt: number;
+  readOffset: string;
+}
+
 export interface AnalyticsPost {
   connectionId?: string | null;
   contentTypeId?: string | null;
@@ -1744,10 +1759,13 @@ export interface AnalyticsPost {
   freshness: { observedAt: number; ingestedAt: number };
   definitionVersion: string;
   rates: Record<string, { display: string; numerator: number | null; denominator: number | null }>;
+  latestRead?: AnalyticsReadOutcome;
 }
 
 export interface Analytics {
   families?: Record<string, string[]>;
+  readOutcomes?: AnalyticsReadOutcome[];
+  readOutcomeAvailability?: 'available' | 'unavailable';
   state: string;
   posts: AnalyticsPost[];
   rules: Record<string, string>;

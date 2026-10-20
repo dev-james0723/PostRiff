@@ -45,12 +45,18 @@ def verified_session_id(access_token, principal):
 
 
 def verified_auth_time(access_token, principal):
-    """Seconds since epoch when this session was last verified by sign-in (JWT iat).
+    """Newest signed AMR sign-in/MFA time; token issuance never renews step-up authority.
 
-    Used only for step-up freshness; a missing or malformed claim counts as stale.
+    Missing, malformed, nonfinite or future method times count as stale. The
+    caller still enforces its existing freshness window and verified identity.
     """
-    value = _verified_payload(access_token, principal).get("iat")
-    if type(value) not in (int, float) or value <= 0:
+    import math
+    import time
+    try:
+        method, value = verified_method_time(access_token, principal)
+    except (OverflowError, TypeError, ValueError):
+        return 0
+    if not method or type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= time.time():
         return 0
     return float(value)
 
