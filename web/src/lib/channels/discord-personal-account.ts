@@ -21,3 +21,9 @@ export function missingScopePublishingMessage(provider: string): string {
     ? 'Discord publishing is unavailable until the required server and channel authorization is verified.'
     : 'Publishing stays Assisted.';
 }
+
+/** Revoking an existing local mapping does not need a live provider grant. */
+export function discordPrivateLinkActions(identity: Pick<DiscordIdentity, 'status' | 'privateDraftsLinked' | 'privateDraftsConfigured'>, enabled: boolean) {
+  const remove = identity.privateDraftsConfigured === true || identity.privateDraftsLinked === true;
+  return { bind: enabled && identity.status === 'linked' && !remove, remove };
+}

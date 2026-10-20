@@ -212,6 +212,7 @@ class MastodonProvider(OAuthProvider):
 
 # --- Discord ----------------------------------------------------------------------------------------------------
 class DiscordProvider(OAuthProvider):
+    assisted_fallback = False
     id, platform, capability_version = "discord", "Discord", 1
     AUTH = "https://discord.com/oauth2/authorize"
     API = "https://discord.com/api/v10"
@@ -239,6 +240,9 @@ class DiscordProvider(OAuthProvider):
         self.connections_v2_enabled = False
         self.rate_v1_enabled = False
         self.engagement_v1_enabled = False
+        self.webhook_v1_enabled = False
+        self.user_install_v1_enabled = False
+        self.interaction_config_raw = None
         self.message_content_evidence_raw = None
         self.rate_policy_raw = None
         self.rate_limiter = None
@@ -265,6 +269,10 @@ class DiscordProvider(OAuthProvider):
             adapter.authorization_v2_enabled = values.get('POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED') == 'true'
             adapter.connections_v2_enabled = values.get('POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED') == 'true'
             adapter.rate_v1_enabled = values.get('POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED') == 'true'
+            adapter.webhook_v1_enabled = (values.get('POSTRIFF_DISCORD_WEBHOOK_V1_ENABLED') == 'true'
+                                           and values.get('POSTRIFF_DISCORD_WEBHOOK_QUALIFIED') == 'true')
+            adapter.user_install_v1_enabled = values.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') == 'true'
+            adapter.interaction_config_raw = values.get('POSTRIFF_DISCORD_INTERACTION_CONFIG')
             adapter.rate_policy_raw = values.get('POSTRIFF_DISCORD_RATE_POLICY')
             adapter.engagement_v1_enabled = values.get('POSTRIFF_DISCORD_ENGAGEMENT_V1_ENABLED') == 'true'
             adapter.message_content_evidence_raw = values.get('POSTRIFF_DISCORD_MESSAGE_CONTENT_EVIDENCE')
@@ -275,7 +283,7 @@ class DiscordProvider(OAuthProvider):
 
     def _rate_identity(self, kind, bearer=None, user_id=None):
         from .discord.rate_limits import RequestIdentity
-        credential = self.bot_token if kind == 'bot' else bearer if kind == 'user' else self.client_secret
+        credential = self.bot_token if kind == 'bot' else bearer if kind in ('user', 'webhook') else self.client_secret
         return RequestIdentity.make(self.client_id, kind, credential, user_id)
 
     def admit_bot_request(self, method, path, *, binding=None, valid_until=None):
@@ -305,7 +313,7 @@ class DiscordProvider(OAuthProvider):
         intent_id = kwargs.pop('rate_intent_id', None)
         authorize = kwargs.pop('rate_authorize', None)
         if (self.rate_v1_enabled and method == 'POST'
-                and path.startswith('/channels/') and path.endswith('/messages')
+                and (path.startswith('/channels/') and path.endswith('/messages') or path.startswith('/webhooks/'))
                 and (rate_permit is None or binding is None or not callable(authorize))):
             # A message create requires pre-seal admission, never an implicit
             # allocation after the P0 intent has already committed.
@@ -393,8 +401,8 @@ class DiscordProvider(OAuthProvider):
         return response
 
     def authorize_url(self, redirect, state, challenge, scopes):
-        # Current Web API code-grant docs do not document PKCE parameters. Do not
-        # infer support from the separate Social SDK; retain server-side state binding.
+        # Legacy transaction shape retained for existing bot callbacks. New
+        # webhook v2 transactions use PKCE and issuer validation in DiscordConnections.
         return self.AUTH + "?" + urlencode({"client_id": self.client_id, "response_type": "code", "redirect_uri": redirect, "scope": " ".join(scopes),
                                             "state": state, "permissions": str(self.PERMISSIONS), "integration_type": "0"})
 
@@ -434,13 +442,17 @@ class DiscordProvider(OAuthProvider):
 
     def identity(self, access_token):
         session = self.session(access_token)
+        if session.get('kind') == 'webhook':
+            from .discord.webhooks import verify_resource
+            evidence = verify_resource(self, session)
+            return {'providerAccountId': session['webhookId'], 'handle': evidence['name'], 'accountType': 'webhook'}
         body = self._ok(self._bot("GET", f"/guilds/{session['guild']}"), "id")
         picture = f"https://cdn.discordapp.com/icons/{body['id']}/{body['icon']}.png" if isinstance(body.get("icon"), str) and re.fullmatch(r"[a-f0-9_]{1,64}", body["icon"]) else None
         return {"providerAccountId": str(body["id"]), "handle": str(body.get("name") or body["id"]), "accountType": "server", "pictureUrl": picture}
 
     def inspect_scopes(self, access_token, expected_account_id=None):
         """Legacy bot presence only; linked installations use separate proofs."""
-        if self.session(access_token).get('kind') == 'installation':
+        if self.session(access_token).get('kind') in ('installation', 'webhook', 'identity'):
             # Bot membership does not introspect installation consent or the
             # linked person's OAuth grant. DiscordConnections verifies both.
             return None
@@ -563,6 +575,9 @@ class DiscordProvider(OAuthProvider):
     def destinations(self, access_token, *, read_authorize=None):
         """Explicit installation, server-manager and effective channel permission evidence."""
         session = self.session(access_token)
+        if session.get('kind') == 'webhook':
+            from .discord.webhooks import verify
+            return [verify(self, session, read_authorize=read_authorize)]
         if (session.get('v') != 2 or session.get('applicationId') != self.client_id
                 or any(not re.fullmatch(r'[0-9]{5,25}', str(session.get(k, ''))) for k in ('botUserId', 'user', 'guild'))):
             raise AlphaError('Reconnect Discord to bind the application, bot and authorizing user before choosing channels.', 409)
@@ -602,9 +617,18 @@ class DiscordProvider(OAuthProvider):
         evidence = next((d for d in self.destinations(access_token) if d['id'] == str(destination_id)), None)
         if evidence is None:
             raise AlphaError("Choose a text channel in this server.", 409)
-        return json.dumps({**session, "channel": str(destination_id), 'destinationEvidence': evidence})
+        return json.dumps({**session, "channel": str(destination_id), 'destinationEvidence': evidence,
+                           **({'destinationAuthorized': True} if session.get('kind') == 'webhook' else {})})
 
     def authorize_destination(self, access_token, target, *, media=False, read_authorize=None):
+        session = self.session(access_token)
+        if session.get('kind') == 'webhook':
+            from .discord.webhooks import verify
+            evidence = verify(self, session, read_authorize=read_authorize)
+            if (media or target.get('senderKind') != 'webhook' or session.get('destinationAuthorized') is not True
+                    or any(evidence.get(k) != target.get(k) for k in ('applicationId', 'webhookId', 'linkedUserId', 'guildId', 'channelId'))):
+                raise AlphaError('Authorize this exact webhook channel. Text only.', 409)
+            return evidence
         evidence = next((d for d in self.destinations(access_token, read_authorize=read_authorize) if d['id'] == target['channelId']), None)
         if (not evidence or any(evidence.get(k) != target.get(k) for k in
                                ('applicationId', 'botUserId', 'linkedUserId', 'guildId', 'channelId'))

@@ -53,7 +53,12 @@ def postgres_factory(dsn, *, pooled=False, max_size=20, max_waiting=64, timeout=
         raise RuntimeError("Install the pinned hosted PostgreSQL dependency.") from error
     # Supabase transaction-mode pooling does not support prepared statements.
     # Each invocation gets one bounded connection and TLS is enforced by the DSN.
-    return lambda: psycopg.connect(dsn, client_encoding="utf8", prepare_threshold=None, connect_timeout=8)
+    def factory():
+        return psycopg.connect(dsn, client_encoding="utf8", prepare_threshold=None, connect_timeout=8)
+    # A separate bounded checkout of the same DB, never a new queue or service.
+    factory.bounded = lambda _timeout: psycopg.connect(dsn, client_encoding="utf8", prepare_threshold=None,
+        connect_timeout=2, options="-c statement_timeout=300 -c lock_timeout=100")
+    return factory
 
 
 def supabase_verifier(project_url, publishable_key, connection_factory=None, get_user=None):
@@ -664,6 +669,28 @@ class HostedApplication:
                 service = self._runtime()
                 from .youtube.fleet import run_lane
                 return self._json(start_response, 200, run_lane(service, self.worker, lanes[suffix]))
+            if path == '/api/discord/interactions':
+                if method != 'POST':
+                    raise AlphaError('Discord interaction route unavailable.', 404)
+                if environ.get('wsgi.url_scheme') != 'https':
+                    raise AlphaError('Discord interactions require HTTPS.', 400)
+                if environ.get('CONTENT_TYPE', '').split(';')[0].strip().lower() != 'application/json':
+                    raise AlphaError('Discord interaction content type invalid.', 415)
+                try:
+                    length = int(environ.get('CONTENT_LENGTH') or '0')
+                except (TypeError, ValueError):
+                    raise AlphaError('Discord interaction body size invalid.', 413) from None
+                if not 0 < length <= 65536:
+                    raise AlphaError('Discord interaction body size invalid.', 413)
+                service = self._runtime()
+                from .discord.interactions import DiscordInteractions
+                oauth = service.oauth
+                endpoint = DiscordInteractions(oauth.providers.get('discord'), oauth.repository.connection_factory, oauth.public_base_url)
+                raw = environ['wsgi.input'].read(length)
+                if len(raw) != length:
+                    raise AlphaError('Discord interaction body incomplete.', 400)
+                return self._json(start_response, 200, endpoint.receive(raw,
+                    environ.get('HTTP_X_SIGNATURE_TIMESTAMP', ''), environ.get('HTTP_X_SIGNATURE_ED25519', '')))
             bearer = environ.get("HTTP_AUTHORIZATION", "")
             api_bearer = bearer.startswith("Bearer prt_")
             if api_bearer:
@@ -1108,6 +1135,18 @@ class HostedApplication:
                 from . import connection_health
                 if connection_health.deployment_enabled(connection_health.environment(service)):
                     return self._json(start_response, 200, connection_health.ConnectionHealth(service).read(parts[2], token))
+            if (len(parts) == 6 and parts[:2] == ['api', 'workspaces']
+                    and parts[3:5] == ['discord', 'private-review'] and method == 'GET'):
+                from .discord.interactions import DiscordInteractions
+                oauth = service.oauth
+                endpoint = DiscordInteractions(oauth.providers.get('discord'), oauth.repository.connection_factory, oauth.public_base_url)
+                return self._json(start_response, 200, endpoint.review_entry(oauth.discord_connections, parts[2], token, parts[5]))
+            if (len(parts) == 7 and parts[:2] == ['api', 'workspaces']
+                    and parts[3:5] == ['discord', 'interaction-links'] and method == 'POST' and parts[6] in ('bind', 'remove')):
+                from .discord.interactions import DiscordInteractions
+                oauth = service.oauth
+                endpoint = DiscordInteractions(oauth.providers.get('discord'), oauth.repository.connection_factory, oauth.public_base_url)
+                return self._json(start_response, 200, endpoint.bind(oauth.discord_connections, parts[2], token, parts[5], remove=parts[6] == 'remove'))
             if len(parts) == 7 and parts[:2] == ['api', 'workspaces'] and parts[3:5] == ['discord', 'identities']:
                 discord = service.oauth.discord_connections
                 if parts[6] == 'guilds' and method == 'GET':

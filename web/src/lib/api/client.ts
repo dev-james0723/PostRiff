@@ -365,6 +365,8 @@ export function createApi(getToken: TokenSource) {
       ),
     oauthContext: (provider: string, state: string) =>
       send<{ workspaceId: string }>('POST', `/api/oauth/${encodeURIComponent(provider)}/context`, { state }),
+    discordPrivateReview: (w: string, id: string) => get<{ workspaceId: string; ready: boolean }>(`${ws(w)}/discord/private-review/${encodeURIComponent(id)}`),
+    discordInteractionLink: (w: string, id: string, remove = false) => send<{ linked: boolean }>('POST', `${ws(w)}/discord/interaction-links/${encodeURIComponent(id)}/${remove ? 'remove' : 'bind'}`, {}),
     discordGuilds: (w: string, id: string) => get<{ identityConnectionId: string; guilds: { id: string; name: string }[] }>(`${ws(w)}/discord/identities/${encodeURIComponent(id)}/guilds`),
     disconnectDiscordIdentity: (w: string, id: string) => send<{ disconnected: boolean; note: string }>('POST', `${ws(w)}/discord/identities/${encodeURIComponent(id)}/disconnect`, {}),
     oauthStart: (w: string, provider: string, capability = 'identity', input?: Record<string, unknown>) =>

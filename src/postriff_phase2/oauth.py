@@ -235,6 +235,7 @@ class OAuthService:
                             'normalizedCapabilities': normalized, 'readinessChecklist': checklist,
                             'connectKind': cls.connect_kind, 'startInput': cls.start_input, 'hasDestinations': cls.has_destinations,
                             'destinationScope': getattr(cls, 'destination_scope', 'connection'), 'destinationLabel': getattr(cls, 'destination_label', 'Channel'),
+                            **({'discordModes': self.discord_modes(adapter)} if pid == 'discord' else {}),
                             'discordConnectionsV2': bool(pid == 'discord' and adapter and getattr(adapter, 'connections_v2_enabled', False)),
                             'capabilities': legacy})
         # Keep explicitly injected/test providers visible without changing their authority.
@@ -244,6 +245,21 @@ class OAuthService:
                                 'executionPaused': not getattr(adapter, 'execution_enabled', True),
                                 'capabilities': {cap: bool(adapter.capability_scopes(cap)) for cap in ('identity', 'publish', 'analytics', 'comments_read', 'reply')}})
         return entries
+
+    @staticmethod
+    def discord_modes(adapter):
+        from .discord.interactions import available, install_link
+        user_ready = available(adapter)
+        webhook_ready = bool(adapter and getattr(adapter, 'webhook_v1_enabled', False)
+                             and getattr(adapter, 'authorization_v2_enabled', False) and getattr(adapter, 'connections_v2_enabled', False)
+                             and getattr(adapter, 'production_reviewed', False) and getattr(adapter, 'execution_enabled', True))
+        return {'identity': {'senderKind': 'none', 'canPublish': False},
+                'bot': {'senderKind': 'bot'},
+                'webhook': {'senderKind': 'webhook', 'enabled': webhook_ready, 'payloadTypes': ['text'],
+                            'status': 'available' if webhook_ready else 'unavailable'},
+                'userInstall': {'senderKind': 'interaction', 'enabled': user_ready, 'canPublish': False, 'canSchedule': False,
+                                'status': 'available' if user_ready else 'unavailable',
+                                **({'installUrl': install_link(adapter)} if user_ready else {})}}
 
     @staticmethod
     def connection_readiness(channel, provider):
@@ -257,6 +273,15 @@ class OAuthService:
             return {'connection': 'CONNECTED' if connected else 'NOT_CONNECTED', 'history': 'YOUTUBE_CREATOR_IDENTITY',
                     'publishing': 'YOUTUBE_CAPABILITIES_SEPARATE', 'fullyAvailable': False,
                     'evidence': 'last_verified_grant', 'liveVerified': False}
+        if platform == 'Discord' and channel.get('discordConnectionKind') == 'webhook':
+            ready = (usable and 'webhook.incoming' in scopes
+                     and (provider.get('discordModes') or {}).get('webhook', {}).get('enabled') is True
+                     and channel.get('capabilities', {}).get('publish', {}).get('level') == 'Direct')
+            return {'connection': 'CONNECTED' if connected else 'REAUTHORIZATION_REQUIRED',
+                    'history': 'HISTORICAL_IMPORT_UNAVAILABLE',
+                    'publishing': 'PUBLISHING_AVAILABLE' if ready and provider.get('productionReviewed') else
+                        'PUBLISHING_AWAITING_PROVIDER_REVIEW' if ready else 'PUBLISHING_PERMISSION_UNAVAILABLE',
+                    'fullyAvailable': False, 'evidence': 'last_verified_grant', 'liveVerified': False}
         from .providers import adapter_class_for_platform
         adapter_class = adapter_class_for_platform(platform)
         read_scope = getattr(adapter_class, 'read_scope', None)
@@ -535,7 +560,7 @@ class OAuthService:
     # --- complete (authenticated exchange) ----------------------------------------
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
         if provider_id == 'discord' and getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
-            return self.discord_connections.complete(workspace_id, token, state, code, error)
+            return self.discord_connections.complete(workspace_id, token, state, code, error, iss=iss)
         if provider_id == 'pinterest':
             # Claim in a separate committed transaction. A failed or ambiguous code
             # exchange must not make the same callback usable again after rollback.
@@ -979,6 +1004,10 @@ class OAuthService:
                 if channel is None or stored[3] != grant.get('authorizationGeneration'):
                     raise AlphaError('This Discord connection changed. Reconnect and authorize the channel again.', 409)
                 register_destination(state, channel, adapter.session(updated)['destinationEvidence'], stored[3], principal, self.clock())
+                if channel.get('discordConnectionKind') == 'webhook':
+                    if channel.get('discordAuthorizedBy') != principal:
+                        raise AlphaError('Only this webhook’s authorizer can authorize its destination.', 403)
+                    channel.update(capabilityVerified=True, verifiedAt=self.clock())
                 # Default selection is not a material authorization change.
                 self.commands.engine.invalidate(state)
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
@@ -1063,7 +1092,11 @@ class OAuthService:
         connections_enabled = getattr(self.providers.get('discord'), 'connections_v2_enabled', False)
         if envelope.get('kind') == 'installation' and not connections_enabled:
             raise AlphaError('This Discord connection workflow is paused. Nothing was posted.', 409)
-        if connections_enabled:
+        if envelope.get('kind') == 'webhook':
+            if not connections_enabled or 'webhook.incoming' not in credential[2]:
+                raise AlphaError('Webhook publishing is unavailable.', 409)
+            self.discord_connections.validate_webhook(cur, workspace_id, envelope)
+        elif connections_enabled:
             self.discord_connections.validate_installation(cur, workspace_id, envelope)
         return {'provider': 'discord', 'accessToken': access,
                 'scopes': list(credential[2]), 'authorizationGeneration': credential[3]}
@@ -1262,7 +1295,9 @@ class OAuthService:
                 elif adapter.assisted_fallback:
                     set_level(matrix, "schedule", "Assisted", "Rafii prepares the scheduled post; you finish the last step.", now, adapter.capability_version)
         elif requested in PUBLISH_CAPABILITIES:
-            if missing:
+            if getattr(adapter, 'id', None) == 'discord':
+                set_level(matrix, 'publish', 'Unsupported', 'Discord publishing is unavailable until the required application, server/channel and publishing authorization is verified.', now, adapter.capability_version)
+            elif missing:
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", "Some permissions weren't granted, so you post the last step yourself.", now, adapter.capability_version)
             else:
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
@@ -1299,10 +1334,23 @@ class OAuthService:
         now = self.clock()
         catalog = self.provider_catalog()
         by_platform = {provider['platform']: provider for provider in catalog}
-        views = [{**customer_view(with_youtube_credential_status(c, credentials.get((workspace_id, c['id']))), matrices.get(c['id'], assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
+        views = [{**customer_view(with_youtube_credential_status(c, credentials.get((workspace_id, c['id']))), matrices.get(c['id'], unsupported_matrix() if c.get('platform') == 'Discord' else assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
         from .discord.engagement import annotate_capabilities
         annotate_capabilities(views, snapshot['state'], channel_actor, now, self.providers.get('discord'))
         for view in views:
+            if view.get('platform') == 'Discord' and view.get('discordConnectionKind') == 'webhook':
+                ready = (getattr(self.providers.get('discord'), 'webhook_v1_enabled', False)
+                         and getattr(self.providers.get('discord'), 'production_reviewed', False)
+                         and view.get('connectionState') == 'publish_verified'
+                         and any(isinstance(d, dict) and d.get('status') == 'authorized'
+                                 and d.get('authorizationGeneration') == view.get('discordAuthorizationGeneration')
+                                 and d.get('senderKind') == 'webhook' and d.get('webhookId') == view.get('providerAccountId')
+                                 for d in view.get('discordDestinations', [])))
+                view['capabilities'] = unsupported_matrix()
+                if ready:
+                    for name in ('publish', 'schedule'):
+                        set_level(view['capabilities'], name, 'Direct', 'Authorized webhook; exact text approval required. Rafii schedules delivery.', now, view.get('capabilityVersion', 1))
+                view['senderKind'] = 'webhook'
             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
         for view in views:
             if view.get('platform') == 'Pinterest':
@@ -1425,7 +1473,7 @@ class OAuthService:
                     # scope list. Never let generic custody replace it with
                     # the legacy adapter's inferred bot/identify pair.
                     envelope = json.loads(self.vault.decrypt(row[1], row[3]))
-                    if isinstance(envelope, dict) and envelope.get('kind') in ('installation', 'identity'):
+                    if isinstance(envelope, dict) and envelope.get('kind') in ('installation', 'identity', 'webhook'):
                         raise AlphaError('Use the Discord connection verification workflow.', 409,
                                          code='discord_installation_verification_required')
                 self._assert_pinterest_context(row[0], workspace_id, scopes=row[7])
@@ -1566,7 +1614,7 @@ class OAuthService:
                 self.youtube_policy.require_user(cur, workspace_id, principal, token, adapter, scopes=stored[2], force=policy_force)
         provider_id, account_id, scopes, starting_ciphertext = stored[:4]
         if provider_id == 'discord' and getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
-            return self.discord_connections.reverify_installation(workspace_id, connection_id, token=token)
+            return (self.discord_connections.reverify_webhook if connection_id.startswith('discord-webhook-') else self.discord_connections.reverify_installation)(workspace_id, connection_id, token=token)
         grant = None
         reported = []
         identity = None
@@ -1784,7 +1832,7 @@ class OAuthService:
             raise AlphaError("Connection unavailable.", 404)
         provider_id, account_id, state = stored
         if provider_id == 'discord' and getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
-            return self.discord_connections.reverify_installation(workspace_id, connection_id,
+            return (self.discord_connections.reverify_webhook if connection_id.startswith('discord-webhook-') else self.discord_connections.reverify_installation)(workspace_id, connection_id,
                 authenticated=authenticated, actor=actor, audit_event=audit_event)
         state = json.loads(state) if isinstance(state, str) else state
         if not any(c.get("id") == connection_id for c in state.get("phase2", {}).get("channels", [])):

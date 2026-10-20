@@ -109,5 +109,7 @@ test('Discord start and reconnect wiring fence stale results and clear old desti
   const reconnect = text.slice(text.indexOf('  function prepareDiscordReconnect('),text.indexOf('  async function loadDiscordGuilds()'));
   assert.match(reconnect, /setDiscordGuild\(''\)/);
   assert.match(reconnect, /setDiscordGuilds\(\[\]\)/);
-  assert.match(text, /Reconnecting requires server and channel authorization again/);
+  assert.match(text, /dc\.reconnectNotice/);
+  const copy = JSON.parse(fs.readFileSync(path.join(root, 'src/lib/channels/discord-copy.json')));
+  assert.match(copy.en.reconnectNotice, /Reconnecting requires server and channel authorization again/);
 });

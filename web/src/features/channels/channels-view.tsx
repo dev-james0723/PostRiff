@@ -38,6 +38,8 @@ import { ChannelCard, type ChannelActivity } from './channel-card';
 import { ChannelFoldersSection } from './channel-folders-section';
 import { ChannelsSummary } from './channels-summary';
 import { ConnectSheet, type ConnectRequest } from './connect-sheet';
+import { usePreferences } from '@/lib/preferences';
+import { discordCopy } from '@/lib/channels/discord-copy';
 import { DiscordPersonalAccounts } from './discord-personal-accounts';
 import { discordCanConnect } from '@/lib/channels/discord-personal-account';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
@@ -206,6 +208,7 @@ function ChannelsPage() {
   const channelsQuery = useChannels();
   const usage = useUsage();
   const snapshot = useSnapshot();
+  const discordUiCopy = discordCopy(usePreferences().locale);
   const access = useWorkspaceAccess();
   const { reduced } = useMotionPreference();
   const router = useRouter();
@@ -388,7 +391,7 @@ function ChannelsPage() {
               />
 
               {(providers.some(provider => provider.id === 'discord' && provider.discordConnectionsV2) || !!data?.discordIdentities?.length) && (
-                <DiscordPersonalAccounts identities={data?.discordIdentities ?? []}
+                <DiscordPersonalAccounts copy={discordUiCopy} identities={data?.discordIdentities ?? []}
                   available={providers.some(provider => provider.id === 'discord' && provider.discordConnectionsV2 === true)}
                   canManage={canManage} canConnect={discordCanConnect(providers.find(provider => provider.id === 'discord'), canManage)}
                   onConnect={() => openConnect({ providerId: 'discord', capability: 'identity' })}

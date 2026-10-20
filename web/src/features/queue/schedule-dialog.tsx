@@ -1,9 +1,11 @@
 'use client';
 
+import { discordCopy } from '@/lib/channels/discord-copy';
+
 import { publishingSupport } from '@/lib/channels/publishing-support';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useTimeZone } from '@/lib/preferences';
+import { useTimeZone, usePreferences } from '@/lib/preferences';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { now as zonedNow, parseDateTime, toCalendarDateTime, toZoned } from '@internationalized/date';
@@ -149,6 +151,7 @@ function editSteps(variant: SnapshotVariant | undefined, activeVoice: number | n
  */
 export function ScheduleDialog({ open, onOpenChange, variantId: preselected, assetId: preselectedAsset, onPrepared }: ScheduleDialogProps) {
   const snapshot = useSnapshot();
+  const discordUiCopy = discordCopy(usePreferences().locale);
   const access = useWorkspaceAccess();
   // Preparing a review is in the server's approve class (`permissions.py`); say so before anyone fills the form in.
   const canPrepare = checkAccess(access, { permission: 'approve' });
@@ -218,6 +221,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const channel = channelsForVariant.find((c) => c.id === channelId);
   const discordDestinations = channel?.discordDestinations?.filter((d) => d.status === 'authorized' && d.authorizationGeneration === channel.discordAuthorizationGeneration) ?? [];
   const discordDestination = discordDestinations.find((d) => d.id === discordDestinationId);
+  const webhookOnly = channel?.discordConnectionKind === 'webhook';
+  useEffect(() => { if (webhookOnly) setAssetId(''); }, [webhookOnly, defaultAsset]);
   const needsOptions = Boolean(channel && NEEDS_OPTIONS.has(channel.platform));
   const youtubeNow = channel?.platform === 'YouTube' && publishOptions?.publicationMode === 'now';
   const steps = editSteps(variant, activeVoice, canEdit);
@@ -227,7 +232,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
       (channel.platform !== 'Discord' || Boolean(discordDestination)) &&
       (youtubeNow || (chosenAt !== null && !timePassed)) &&
       rights &&
-      (!assetId || Boolean(asset)) &&
+      (!assetId || Boolean(asset)) && (!webhookOnly || !assetId) &&
       (!needsVideo || Boolean(asset)) &&
       (!needsImage || Boolean(asset)) &&
       !steps.blocked &&
@@ -344,6 +349,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             </NativeSelect>
             {channel?.platform === 'Discord' && (
               <div className='flex flex-col gap-1.5'>
+                <p className='text-sm' data-discord-sender>{channel.discordConnectionKind === 'webhook' ? discordUiCopy.senderWebhook : discordUiCopy.senderBot}</p>
                 <Label htmlFor='schedule-discord-destination'>Discord server and channel</Label>
                 <NativeSelect id='schedule-discord-destination' className='w-full [&>select]:h-12' value={discordDestinationId} onChange={(event) => setDiscordDestinationId(event.target.value)}>
                   <NativeSelectOption value='' disabled>{discordDestinations.length === 0 ? 'Authorize a channel in Connections first' : 'Choose an authorized destination'}</NativeSelectOption>
@@ -390,7 +396,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 </Link>
               </Note>
             ) : (
-              channel && <p className='text-muted-foreground text-xs'>{publishingSupport(channel.platform)}</p>
+              channel && <p className='text-muted-foreground text-xs'>{webhookOnly ? discordUiCopy.webhookNotice : publishingSupport(channel.platform)}</p>
             )}
           </div>
 
@@ -413,10 +419,10 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               {timePassed && <Note>Pick a future time.</Note>}
               {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
             </div>}
-            <div className='flex flex-col gap-1.5'>
+            {!webhookOnly && <div className='flex flex-col gap-1.5'>
               <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : 'Image (optional)'}</Label>
               <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : ['image']} />
-            </div>
+            </div>}
           </div>
 
           {!youtubeNow && askFold && (
