@@ -56,5 +56,38 @@ class ReleaseGuardDiagnostics(unittest.TestCase):
         self.assertFalse(data['database_binding_verified'])
         self.assertNotIn('SECRET_VALUE',json.dumps(data))
 
+
+    def test_source_failure_logs_only_safe_code_and_remains_failed(self):
+        self.assertTrue(hasattr(self.module,'source_diagnostics'))
+        safe={'receiptStatus':'metadata_conflict','gitPathPresent':False,'gitMetadataPresent':True,'gitMetadataMatchesReceipt':False}
+        with patch.object(self.module,'source_diagnostics',return_value=safe):
+            code,body,_=self.invoke(source_error=ValueError('SECRET_EXCEPTION'))
+        self.assertEqual(code,1)
+        self.assertEqual(body['failureStage'],'source')
+        self.assertEqual(body['checks'],safe)
+
+    def test_source_diagnostics_metadata_conflict_redacts_raw_sha(self):
+        sha='SECRET_GIT_METADATA'
+        with patch.object(self.module.runpy,'run_path',return_value={'release_source_proof':lambda *args,**kwargs:{'status':'metadata_conflict','sourceRevision':None}}):
+            result=self.module.source_diagnostics({'VERCEL_GIT_COMMIT_SHA':sha,'POSTRIFF_DATABASE_URL':'SECRET_VALUE'})
+        self.assertEqual(result['receiptStatus'],'metadata_conflict')
+        self.assertTrue(result['gitMetadataPresent'])
+        self.assertFalse(result['gitMetadataMatchesReceipt'])
+        self.assertNotIn(sha,json.dumps(result))
+        self.assertNotIn('SECRET_VALUE',json.dumps(result))
+        self.assertEqual(set(result),{'receiptStatus','gitPathPresent','gitMetadataPresent','gitMetadataMatchesReceipt'})
+
+    def test_source_diagnostics_untrusted_status_is_redacted(self):
+        with patch.object(self.module.runpy,'run_path',return_value={'release_source_proof':lambda *args,**kwargs:{'status':'SECRET_LEAK','sourceRevision':'SECRET_LEAK'}}):
+            result=self.module.source_diagnostics({'VERCEL_GIT_COMMIT_SHA':'SECRET_LEAK'})
+        self.assertEqual(result['receiptStatus'],'unavailable')
+        self.assertNotIn('SECRET_LEAK',json.dumps(result))
+
+    def test_source_diagnostics_unreadable_status_fails_closed(self):
+        with patch.object(self.module.runpy,'run_path',side_effect=OSError('SECRET_BACKEND_PATH')):
+            result=self.module.source_diagnostics({'VERCEL_GIT_COMMIT_SHA':'SECRET_BACKEND_PATH'})
+        self.assertEqual(result['receiptStatus'],'unavailable')
+        self.assertNotIn('SECRET_BACKEND_PATH',json.dumps(result))
+
 if __name__=='__main__':
     unittest.main()
