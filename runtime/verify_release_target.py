@@ -41,6 +41,31 @@ def binding_diagnostics(values):
     }
 
 
+def source_diagnostics(values):
+    """Bounded, redacted source-proof state. Never infer permission to build."""
+    root=Path(__file__).resolve().parents[1]
+    status='unavailable'
+    revision=None
+    try:
+        module=runpy.run_path(str(root/'src/postriff_phase2/release_provenance.py'))
+        proof=module['release_source_proof'](values,root=root)
+        allowed=('verified','missing','metadata_only','metadata_conflict','witness_mismatch','invalid_receipt','unavailable')
+        if isinstance(proof,dict):
+            if proof.get('status') in allowed:
+                status=proof['status']
+            revision=proof.get('sourceRevision')
+    except (OSError,ValueError,TypeError,KeyError,RuntimeError,ImportError):
+        pass
+    supplied=values.get('VERCEL_GIT_COMMIT_SHA')
+    present=isinstance(supplied,str) and bool(supplied)
+    return {
+        'receiptStatus':status,
+        'gitPathPresent':os.path.lexists(root/'.git'),
+        'gitMetadataPresent':present,
+        'gitMetadataMatchesReceipt':bool(present and isinstance(revision,str) and supplied==revision),
+    }
+
+
 def main():
     try:
         proof=verify(os.environ)
@@ -50,7 +75,7 @@ def main():
     try:
         source=verify_source(os.environ)
     except (ValueError, TypeError, KeyError, OSError):
-        print(json.dumps({'status':'failed','failureStage':'source'}))
+        print(json.dumps({'status':'failed','failureStage':'source','checks':source_diagnostics(os.environ)}))
         return 1
     print(json.dumps({'status':'passed','execution':'build_binding_check','productionBindings':proof,'sourceProvenance':source}))
     return 0
