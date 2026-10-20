@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import runpy
+from urllib.parse import urlparse, parse_qs, unquote
+import re
 
 
 def verify(values):
@@ -16,12 +18,39 @@ def verify_source(values):
     return stamp_module['build_source_proof'](values)
 
 
+def binding_diagnostics(values):
+    """Only fixed boolean release-identity checks; never print supplied values."""
+    ref='buoyhkbodnhzngaotoel'
+    try:
+        dsn=urlparse(values.get('POSTRIFF_DATABASE_URL',''))
+        username=unquote(dsn.username or '')
+        host=dsn.hostname or ''
+        direct=host=='db.'+ref+'.supabase.co' and username=='postgres'
+        pooled=bool(re.fullmatch(r'[a-z0-9.-]+\.pooler\.supabase\.com',host)) and username=='postgres.'+ref
+        db=dsn.scheme in ('postgres','postgresql') and (direct or pooled) and parse_qs(dsn.query).get('sslmode') in (['require'],['verify-full'])
+    except (ValueError,TypeError,AttributeError):
+        db=False
+    return {
+        'project_matches':values.get('VERCEL_PROJECT_ID')=='prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L',
+        'database_binding_verified':bool(db),
+        'supabase_server_matches':str(values.get('POSTRIFF_SUPABASE_URL','')).rstrip('/')=='https://'+ref+'.supabase.co',
+        'supabase_public_matches':str(values.get('NEXT_PUBLIC_SUPABASE_URL','')).rstrip('/')=='https://'+ref+'.supabase.co',
+        'production_ref_matches':values.get('POSTRIFF_PRODUCTION_PROJECT_REF')==ref,
+        'public_origin_matches':str(values.get('POSTRIFF_PUBLIC_BASE_URL','')).rstrip('/')=='https://rafii.io',
+        'api_origin_empty':not bool(values.get('POSTRIFF_API_ORIGIN')),
+    }
+
+
 def main():
     try:
         proof=verify(os.environ)
-        source = verify_source(os.environ)
     except (ValueError, TypeError, KeyError, OSError):
-        print(json.dumps({'status':'failed','reason':'Release binding or source receipt guard rejected this build before backend access.'}))
+        print(json.dumps({'status':'failed','failureStage':'binding','checks':binding_diagnostics(os.environ)}))
+        return 1
+    try:
+        source=verify_source(os.environ)
+    except (ValueError, TypeError, KeyError, OSError):
+        print(json.dumps({'status':'failed','failureStage':'source'}))
         return 1
     print(json.dumps({'status':'passed','execution':'build_binding_check','productionBindings':proof,'sourceProvenance':source}))
     return 0
