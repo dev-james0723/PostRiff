@@ -4,6 +4,7 @@ This is deliberately not a signed attestation, complete bundle inventory,
 customer qualification, or evidence of a successful provider action.
 """
 from functools import lru_cache
+import base64
 from contextlib import ExitStack
 import hashlib
 import json
@@ -107,6 +108,42 @@ def _empty(status: str) -> dict:
             'receiptSha256': None}
 
 
+
+def witness_bytes(root: Path, name: str, manifest: dict, limit: int = _MAX_WITNESS) -> bytes:
+    """Match exact original config evidence while refusing changed effective policy.
+
+    Vercel CLI uploads a reviewed config but its builder may reformat the active
+    vercel.json. Retain the original bytes in the pre-upload receipt; a builder
+    without Git may use them only when the *complete parsed configuration* is
+    unchanged. In Git checkouts always check actual bytes, never this fallback.
+    """
+    actual = read_regular(root, name, limit)
+    if name != 'vercel.json' or 'vercelConfigSourceBase64' not in manifest:
+        return actual
+    encoded = manifest['vercelConfigSourceBase64']
+    if not isinstance(encoded, str) or len(encoded) > limit * 2:
+        raise ValueError('Invalid original config encoding')
+    try:
+        original = base64.b64decode(encoded, validate=True)
+    except (ValueError, base64.binascii.Error) as error:
+        raise ValueError('Malformed original config') from error
+    if (len(original) > limit
+            or base64.b64encode(original).decode('ascii') != encoded
+            or hashlib.sha256(original).hexdigest() != manifest['files'][name]):
+        raise ValueError('Original config is not bound to the receipt')
+    if actual == original:
+        return actual
+    # Uncommitted local modifications and unexpected upload drift are still
+    # fatal; only builder-side normalization on an immutable package may vary.
+    if os.path.lexists(root / '.git'):
+        return actual
+    source = json.loads(original, object_pairs_hook=_unique_object)
+    effective = json.loads(actual, object_pairs_hook=_unique_object)
+    if type(source) is not dict or type(effective) is not dict or source != effective:
+        raise ValueError('Vercel changed security-relevant deployment settings')
+    return original
+
+
 def _inspect(root: Path) -> dict:
     try:
         raw = read_regular(root, MANIFEST_PATH, _MAX_RECEIPT)
@@ -117,7 +154,10 @@ def _inspect(root: Path) -> dict:
     try:
         manifest = json.loads(raw, object_pairs_hook=_unique_object)
         if (type(manifest) is not dict
-                or set(manifest) != {'schemaVersion', 'sourceRevision', 'coverage', 'files'}
+                or set(manifest) not in (
+                    {'schemaVersion', 'sourceRevision', 'coverage', 'files'},
+                    {'schemaVersion', 'sourceRevision', 'coverage', 'files', 'vercelConfigSourceBase64'},
+                )
                 or type(manifest['schemaVersion']) is not int
                 or manifest['schemaVersion'] != 1
                 or not valid_revision(manifest['sourceRevision'])
@@ -129,7 +169,7 @@ def _inspect(root: Path) -> dict:
             digest = manifest['files'][name]
             if not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest):
                 return _empty('invalid_receipt')
-            if hashlib.sha256(read_regular(root, name, _MAX_WITNESS)).hexdigest() != digest:
+            if hashlib.sha256(witness_bytes(root, name, manifest)).hexdigest() != digest:
                 return _empty('witness_mismatch')
     except (OSError, ValueError, TypeError, UnicodeError, RuntimeError, RecursionError):
         return _empty('invalid_receipt')

@@ -4,6 +4,7 @@ Run after committing the release candidate and before creating build output.
 A package without Git must carry this receipt; it cannot invent a revision.
 """
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -56,8 +57,12 @@ def stamp(root: Path = SOURCE_ROOT) -> dict:
     _clean(root)
     if _git(root, 'rev-parse', 'HEAD').decode().strip() != revision:
         raise ValueError('Git revision changed during source capture')
+    # Preserve exact reviewed source config inside the credential-free receipt.
+    # Vercel's builder may normalize its working vercel.json after source upload.
     manifest = {'schemaVersion': 1, 'sourceRevision': revision,
-                'coverage': 'selected_runtime_files', 'files': files}
+                'coverage': 'selected_runtime_files', 'files': files,
+                'vercelConfigSourceBase64': base64.b64encode(
+                    read_regular(root, 'vercel.json', 8 * 1024 * 1024)).decode('ascii')}
     raw = (json.dumps(manifest, sort_keys=True, separators=(',', ':')) + '\n').encode()
     target = root / MANIFEST_PATH
     if target.is_symlink() or (target.exists() and not target.is_file()):

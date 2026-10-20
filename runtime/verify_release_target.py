@@ -56,15 +56,39 @@ def source_witness_diagnostics():
     import hashlib
     root=Path(__file__).resolve().parents[1]
     try:
-        from postriff_phase2.release_provenance import read_regular, MANIFEST_PATH
+        from postriff_phase2.release_provenance import read_regular, witness_bytes, MANIFEST_PATH
         manifest=json.loads(read_regular(root,MANIFEST_PATH,65536))
         files=manifest.get('files',{})
         if not isinstance(files,dict):raise ValueError('Invalid receipt')
         return {name:bool(isinstance(files.get(name),str) and
-                    hashlib.sha256(read_regular(root,name,8*1024*1024)).hexdigest()==files[name])
+                    hashlib.sha256(witness_bytes(root,name,manifest)).hexdigest()==files[name])
                 if name in files else False for name in SAFE_WITNESS_PATHS}
     except (OSError,ValueError,TypeError,KeyError,RuntimeError,ImportError):
         return {name:False for name in SAFE_WITNESS_PATHS}
+
+
+
+def source_config_diagnostics(root: Path) -> dict:
+    """Fixed-name booleans only, never config values or personal environment."""
+    import base64
+    from postriff_phase2.release_provenance import read_regular, MANIFEST_PATH, _unique_object
+    keys=('$schema','services','rewrites','headers','crons','git')
+    empty={**{k:False for k in keys},'rootKeysEqual':False,'semanticallyEqual':False}
+    try:
+        root=Path(root)
+        receipt=json.loads(read_regular(root, MANIFEST_PATH, 65536), object_pairs_hook=_unique_object)
+        encoded=receipt['vercelConfigSourceBase64']
+        if not isinstance(encoded,str) or len(encoded)>16*1024*1024:
+            return empty
+        source=json.loads(base64.b64decode(encoded,validate=True), object_pairs_hook=_unique_object)
+        active=json.loads(read_regular(root, 'vercel.json', 8*1024*1024), object_pairs_hook=_unique_object)
+        if type(source) is not dict or type(active) is not dict:
+            return empty
+        return {**{k:source.get(k)==active.get(k) for k in keys},
+                'rootKeysEqual':set(source)==set(active),
+                'semanticallyEqual':source==active}
+    except (OSError,ValueError,TypeError,KeyError,UnicodeError,RuntimeError,RecursionError,base64.binascii.Error):
+        return empty
 
 
 def source_diagnostics(values):
@@ -90,6 +114,7 @@ def source_diagnostics(values):
         'gitMetadataPresent':present,
         'gitMetadataMatchesReceipt':bool(present and isinstance(revision,str) and supplied==revision),
         'witnessMatches':source_witness_diagnostics(),
+        'configSemantics':source_config_diagnostics(root),
     }
 
 

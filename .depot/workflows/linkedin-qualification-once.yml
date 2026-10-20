@@ -87,6 +87,7 @@ jobs:
           sys.path[:0] = ['src', 'tests']
           suite = unittest.defaultTestLoader.loadTestsFromNames([
               'test_release_provenance', 'test_release_source_stamp',
+              'test_release_vercel_builder_transform', 'test_release_guard_diagnostics',
               'test_release_directory_identity', 'test_linkedin_disabled_transport_receipts',
               'test_depot_gitlink_checkout'])
           result = unittest.TextTestRunner(verbosity=2).run(suite)

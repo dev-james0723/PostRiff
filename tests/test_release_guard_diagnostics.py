@@ -75,7 +75,7 @@ class ReleaseGuardDiagnostics(unittest.TestCase):
         self.assertFalse(result['gitMetadataMatchesReceipt'])
         self.assertNotIn(sha,json.dumps(result))
         self.assertNotIn('SECRET_VALUE',json.dumps(result))
-        self.assertEqual(set(result),{'receiptStatus','gitPathPresent','gitMetadataPresent','gitMetadataMatchesReceipt','witnessMatches'})
+        self.assertEqual(set(result),{'receiptStatus','gitPathPresent','gitMetadataPresent','gitMetadataMatchesReceipt','witnessMatches','configSemantics'})
 
     def test_source_diagnostics_untrusted_status_is_redacted(self):
         with patch.object(self.module.runpy,'run_path',return_value={'release_source_proof':lambda *args,**kwargs:{'status':'SECRET_LEAK','sourceRevision':'SECRET_LEAK'}}):

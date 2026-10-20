@@ -48,6 +48,31 @@ class SourceStampTests(unittest.TestCase):
         self.assertEqual(proof['sourceRevision'], self.head)
         self.assertEqual(proof, provenance.release_source_proof({}, root=self.root))
 
+    def test_stamp_embeds_exact_original_vercel_source_bytes(self):
+        import base64
+        self.module.stamp(self.root)
+        receipt=json.loads((self.root / provenance.MANIFEST_PATH).read_text())
+        raw=base64.b64decode(receipt['vercelConfigSourceBase64'],validate=True)
+        self.assertEqual(raw, self.git('show',self.head+':vercel.json').encode())
+        self.assertEqual(__import__('hashlib').sha256(raw).hexdigest(), receipt['files']['vercel.json'])
+
+    def test_packaged_build_accepts_only_semantically_equivalent_builder_config(self):
+        config={'services': {'postriff_api': {'buildCommand': 'guard && provision'}},
+                'rewrites': [{'source':'/api/(.*)', 'destination':{'service':'postriff_api'}}],
+                'git': {'deploymentEnabled': False}}
+        (self.root / 'vercel.json').write_text(json.dumps(config,indent=2)+'\n')
+        self.git('add', 'vercel.json')
+        self.git('commit', '-qm', 'track validated config example')
+        current=self.git('rev-parse','HEAD').strip()
+        self.module.stamp(self.root)
+        (self.root/'.git').rename(self.root/'fixture-git-metadata')
+        (self.root/'vercel.json').write_text(json.dumps(config,sort_keys=True,separators=(',',':')))
+        self.assertEqual(self.module.build_source_proof({}, self.root)['sourceRevision'],current)
+        config['git']['deploymentEnabled']=True
+        (self.root/'vercel.json').write_text(json.dumps(config))
+        with self.assertRaises(ValueError):
+            self.module.build_source_proof({}, self.root)
+
     def test_stamp_is_deterministic_for_unchanged_commit(self):
         first = self.module.stamp(self.root)
         self.assertEqual(self.module.stamp(self.root), first)
