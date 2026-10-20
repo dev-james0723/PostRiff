@@ -44,7 +44,10 @@ CREATE INDEX IF NOT EXISTS pr_x_direct_account_idx
 ALTER TABLE public.pr_x_direct_operations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pr_x_direct_operations FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON public.pr_x_direct_operations FROM public,anon,authenticated;
-GRANT ALL ON public.pr_x_direct_operations TO service_role;
+-- Explicit minimum Data API rights for the hosted X operation journal.
+-- Revoke inherited grants too (existing projects may still auto-grant DELETE/TRUNCATE).
+REVOKE ALL ON public.pr_x_direct_operations FROM service_role;
+GRANT SELECT, INSERT, UPDATE ON public.pr_x_direct_operations TO service_role;
 DO $policy$
 BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public'
