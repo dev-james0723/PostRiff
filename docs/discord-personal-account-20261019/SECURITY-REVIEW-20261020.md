@@ -38,6 +38,14 @@
 
 **After:** `SECURITY-REVIEW-GREEN-BOT-AUTHORIZER.txt` and `SECURITY-REVIEW-CUSTODY-FOCUSED.txt` demonstrate member removal, editor/viewer role downgrade, early worker denial, and selected-vs-independent webhook behavior. Existing happy-path fake SQL now explicitly returns a valid active manager instead of a malformed row; denial tests remain strict.
 
+## CI regression found in the first reviewer patch — RED→GREEN correction
+
+**P1-REG-03 (repair compatibility):** New early `validate_installation` also checked token expiry, inadvertently denying legitimate expiring/refreshable linked identities before `_fresh_identity` could execute the existing safe refresh. This is not an authorization bypass; it prevents legitimate bot renewals. Fresh isolated Linux PostgreSQL run `39479072463` correctly failed in `postgres_discord_connections.py`.
+
+**Repair:** Split the live Rafii authorizer permission query into `require_active_installation_authorizer` (active member, manage-connections entitlement, no dependency on token expiry). The worker runs this check before any Discord IO; `_fresh_identity` may now legitimately refresh its subject-bound token; the original full `validate_installation` still checks credential generation, subject and expiry before grants/publishing. Stale or downgraded members never reach refresh or provider POST.
+
+**Evidence:** Original SQL RED in https://github.com/dev-james0723/PostRiff/actions/runs/39479072463 and new unit RED `SECURITY-REVIEW-RED-REFRESH-COMPAT.txt`; unit GREEN `SECURITY-REVIEW-GREEN-REFRESH-COMPAT.txt` (four focused tests). Full Linux SQL/cross-provider requalification of this follow-on patch remains mandatory.
+
 ## Other security contracts checked (read-only)
 
 1. Discord personal-account OAuth is identity-only: `canPublish=false`, `canSchedule=false`, `postAsPersonalUser=false`. Neither Webhook nor User Install may claim ordinary personal-user authorship.

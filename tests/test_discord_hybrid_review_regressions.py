@@ -135,20 +135,47 @@ class InstallationAuthorizerMembershipTests(unittest.TestCase):
                         'identityGeneration': GENERATION, 'user': USER})
         s.bind_identity.assert_not_called()
 
+    def test_active_authorizer_may_refresh_expired_identity_before_final_installation_guard(self):
+        # A legitimate linked identity can be expired at the instant a worker
+        # starts; membership must be checked early without blocking the
+        # existing rotating-token refresh.
+        from test_discord_oauth_lifecycle import NOW
+        s, _ = service()
+        state = {'workspace': {'id': WORKSPACE}, 'phase2': {'discordIdentityLinks': [
+            {'id': 'identity', 'workspaceId': WORKSPACE, 'authorizedBy': ACTOR,
+             'userId': USER, 'status': 'linked', 'authorizationGeneration': GENERATION}]}}
+        cur = Mock()
+        @contextmanager
+        def local(*args, **kwargs):
+            yield cur, state, None
+        s.local = local
+        cur.execute.side_effect = lambda sql, params=(): setattr(cur, 'last_sql', sql)
+        cur.fetchone.side_effect = lambda: ('owner', True) if cur.last_sql.startswith('SELECT m.role') else (state,)
+        s.read_credential = Mock(return_value=(('cipher',), {'kind': 'installation',
+            'identityConnectionId': 'identity'}))
+        s.bind_identity = Mock(return_value=(('cipher', 'key', 'refresh', NOW - 1, GENERATION,
+            ['identify'], USER), {'user': USER}))
+        s._fresh_identity = Mock(return_value={'authorizationGeneration': GENERATION, 'userId': USER})
+        s.installation_identity(WORKSPACE, 'install')
+        s._fresh_identity.assert_called_once_with(WORKSPACE, None, 'identity')
+
     def test_worker_cannot_refresh_removed_installation_identity_before_authority_check(self):
         s, _ = service()
         cursor = Mock()
+        state = {'workspace': {'id': WORKSPACE}, 'phase2': {'discordIdentityLinks': [
+            {'id': 'identity', 'workspaceId': WORKSPACE, 'authorizedBy': ACTOR,
+             'status': 'linked', 'authorizationGeneration': GENERATION}]}}
         @contextmanager
         def local(*args, **kwargs):
-            yield cursor, {}, None
+            yield cursor, state, None
         s.local = local
         s.read_credential = Mock(return_value=(('cipher',), {'kind': 'installation',
             'identityConnectionId': 'identity'}))
-        s.validate_installation = Mock(side_effect=AlphaError('Removed workspace member', 409))
+        s.require_active_installation_authorizer = Mock(side_effect=AlphaError('Removed workspace member', 409))
         s._fresh_identity = Mock()
         with self.assertRaises(AlphaError):
             s.installation_identity(WORKSPACE, 'server')
-        s.validate_installation.assert_called_once()
+        s.require_active_installation_authorizer.assert_called_once()
         s._fresh_identity.assert_not_called()
 
 

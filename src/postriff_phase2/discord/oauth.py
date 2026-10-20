@@ -491,15 +491,18 @@ class DiscordConnections:
                     if isinstance(x, dict) and x.get('workspaceId') == workspace and x.get('authorizedBy') == actor]
 
     def installation_identity(self, workspace, connection):
-        with self.local(workspace, None) as (cur, _, _):
+        with self.local(workspace, None) as (cur, state, _):
             _, envelope = self.read_credential(cur, workspace, connection)
             if envelope.get('kind') == 'webhook':
                 self.validate_webhook(cur, workspace, envelope)
                 return
             if envelope.get('kind') != 'installation' or not envelope.get('identityConnectionId'):
                 fail('Reconnect this legacy installation through a linked Discord identity.')
-            # Deny removed workspace authorizer rights before provider IO.
-            self.validate_installation(cur, workspace, envelope)
+            # An expired *but refreshable* personal token is normal. Check
+            # active Rafii membership before Discord IO without treating local
+            # token expiry as an authorization-revocation verdict.
+            record = identity_record(state, envelope['identityConnectionId'])
+            self.require_active_installation_authorizer(cur, workspace, record)
         self._fresh_identity(workspace, None, envelope['identityConnectionId'])
 
     def reverify_installation(self, workspace, connection, *, token=None,
@@ -651,6 +654,22 @@ class DiscordConnections:
             return {'connectionId': connection, 'state': outcome, 'identityVerified': identity_verified,
                     'scopes': scopes, 'ready': ready}
 
+    @staticmethod
+    def require_active_installation_authorizer(cur, workspace, record):
+        # This check is independent of token expiry; a legitimately expiring
+        # Discord bearer must still be able to use the existing safe refresh.
+        from ..permissions import Membership
+        if record.get('status') != 'linked' or not record.get('authorizedBy'):
+            fail('The Discord server authorizer no longer manages this workspace connection.')
+        cur.execute("SELECT m.role,m.can_manage_connections FROM public.pr_memberships m "
+            "JOIN public.pr_profiles p ON p.user_id=m.user_id "
+            "WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' "
+            "AND p.deleted_at IS NULL FOR SHARE OF m,p",
+            (workspace, record['authorizedBy']))
+        member = cur.fetchone()
+        if not member or not Membership.from_row(member[0], can_manage_connections=member[1]).allows('manage_connections'):
+            fail('The Discord server authorizer no longer manages this workspace connection.')
+
     def validate_installation(self, cur, workspace, envelope):
         if envelope.get('kind') != 'installation' or not envelope.get('identityConnectionId'):
             fail('An identity grant cannot publish. Reconnect the server installation.')
@@ -660,17 +679,7 @@ class DiscordConnections:
             fail()
         state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
         record = identity_record(state, envelope['identityConnectionId'])
-        # Personal Discord OAuth still existing does not confer Rafii
-        # workspace authority after membership removal or role downgrade.
-        from ..permissions import Membership
-        cur.execute("SELECT m.role,m.can_manage_connections FROM public.pr_memberships m "
-            "JOIN public.pr_profiles p ON p.user_id=m.user_id "
-            "WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' "
-            "AND p.deleted_at IS NULL FOR SHARE OF m,p",
-            (workspace, record['authorizedBy']))
-        member = cur.fetchone()
-        if not member or not Membership.from_row(member[0], can_manage_connections=member[1]).allows('manage_connections'):
-            fail('The Discord server authorizer no longer manages this workspace connection.')
+        self.require_active_installation_authorizer(cur, workspace, record)
         credential, identity = self.bind_identity(cur, workspace, record)
         if (credential[4] != envelope.get('identityGeneration') or identity['user'] != envelope.get('user')
                 or not credential[3] or float(credential[3]) <= self.oauth.clock() or record.get('refreshClaim')):
