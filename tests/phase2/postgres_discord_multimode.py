@@ -218,7 +218,11 @@ def close_case(f, job):
 
 sql_worker_cases = []
 with patch('postriff_phase2.billing.require_publishing', return_value=None), patch('postriff_phase2.billing.require_plan_capacity', return_value=None):
-    for scenario in ('concurrent', 'canceled', 'revoked', 'permission_removed', 'unknown', '429'):
+    # One disposable SQL cluster intentionally preserves global rate/failure
+    # history. Exercise unknown-create before permanent permission removal and
+    # shared 429 cooldown; otherwise the denial may correctly hold an unsent
+    # fixture and never exercise the unknown transport branch.
+    for scenario in ('concurrent', 'canceled', 'revoked', 'unknown', '429', 'permission_removed'):
         f, transport, approved = webhook_worker_fixture(scenario)
         worker = base['PostgresWorker'](worker_connection, f.social, clock=time.time,
                                        worker_id='multimode-sql-'+scenario, discord_workers=True)
