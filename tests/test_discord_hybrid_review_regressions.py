@@ -85,5 +85,72 @@ class WebhookVerificationRaceTests(unittest.TestCase):
         self.assertTrue(channel.get('discordVerificationGeneration'))
 
 
+class InstallationAuthorizerMembershipTests(unittest.TestCase):
+    def test_removed_workspace_authorizer_cannot_keep_bot_installation_authority(self):
+        s, _ = service()
+        from test_discord_oauth_lifecycle import NOW
+        generation = GENERATION
+        state = {'workspace': {'id': WORKSPACE}, 'phase2': {'discordIdentityLinks': [
+            {'id': 'identity', 'workspaceId': WORKSPACE, 'authorizedBy': ACTOR,
+             'userId': USER, 'status': 'linked', 'authorizationGeneration': generation}]}}
+        cursor = Mock()
+        def execute(sql, params=()):
+            cursor.last_sql = sql
+        def fetchone():
+            if cursor.last_sql.startswith('SELECT state FROM public.pr_workspaces'):
+                return (state,)
+            if cursor.last_sql.startswith('SELECT m.role'):
+                return None  # User is no longer a Rafii workspace member.
+            raise AssertionError('Unexpected SQL query')
+        cursor.execute.side_effect = execute
+        cursor.fetchone.side_effect = fetchone
+        s.bind_identity = Mock(return_value=(('cipher', 'key', None, NOW + 3600,
+                                                 generation, ['identify', 'guilds'], USER), {'user': USER}))
+        with self.assertRaises(AlphaError):
+            s.validate_installation(cursor, WORKSPACE, {
+                'kind': 'installation', 'identityConnectionId': 'identity',
+                'identityGeneration': generation, 'user': USER})
+        self.assertTrue(any(c.args[0].startswith('SELECT m.role') for c in cursor.execute.call_args_list))
+
+    def test_downgraded_authorizer_cannot_supply_bot_installation_authority(self):
+        s, _ = service()
+        from test_discord_oauth_lifecycle import NOW
+        state = {'workspace': {'id': WORKSPACE}, 'phase2': {'discordIdentityLinks': [
+            {'id': 'identity', 'workspaceId': WORKSPACE, 'authorizedBy': ACTOR,
+             'userId': USER, 'status': 'linked', 'authorizationGeneration': GENERATION}]}}
+        cursor = Mock()
+        def execute(sql, params=()):
+            cursor.last_sql = sql
+        cursor.execute.side_effect = execute
+        s.bind_identity = Mock(return_value=(('cipher', 'key', None, NOW + 3600,
+                GENERATION, ['identify'], USER), {'user': USER}))
+        for downgraded in [('editor', False), ('viewer', False)]:
+            with self.subTest(role=downgraded[0]):
+                def fetchone():
+                    return (state,) if cursor.last_sql.startswith('SELECT state') else downgraded
+                cursor.fetchone.side_effect = fetchone
+                with self.assertRaises(AlphaError):
+                    s.validate_installation(cursor, WORKSPACE, {
+                        'kind': 'installation', 'identityConnectionId': 'identity',
+                        'identityGeneration': GENERATION, 'user': USER})
+        s.bind_identity.assert_not_called()
+
+    def test_worker_cannot_refresh_removed_installation_identity_before_authority_check(self):
+        s, _ = service()
+        cursor = Mock()
+        @contextmanager
+        def local(*args, **kwargs):
+            yield cursor, {}, None
+        s.local = local
+        s.read_credential = Mock(return_value=(('cipher',), {'kind': 'installation',
+            'identityConnectionId': 'identity'}))
+        s.validate_installation = Mock(side_effect=AlphaError('Removed workspace member', 409))
+        s._fresh_identity = Mock()
+        with self.assertRaises(AlphaError):
+            s.installation_identity(WORKSPACE, 'server')
+        s.validate_installation.assert_called_once()
+        s._fresh_identity.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -47,10 +47,17 @@ def reverify_fixture(*, ready=False, scopes=None, consent_proof=True):
     envelopes = {channel['id']: envelope, identity_id: identity_envelope}
     wire.tokens['synthetic-access'] = ['identify', 'guilds']
     cursor = Mock()
-    cursor.fetchone.side_effect = lambda: (state,)
+    last_sql = ['']
+    def fetchone():
+        # A real installation needs an active Rafii connection authorizer.
+        # The synthetic owner is active; removed/downgraded cases have their
+        # own negative regressions in test_discord_hybrid_review_regressions.
+        return ('owner', True) if last_sql[0].startswith('SELECT m.role,m.can_manage_connections') else (state,)
+    cursor.fetchone.side_effect = fetchone
     cursor.rowcount = 1
 
     def execute(sql, params):
+        last_sql[0] = sql
         if sql.startswith('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,scopes=%s'):
             ciphertext, refresh_ct, key, granted, expires, workspace, connection, generation, old_ct = params
             if workspace != WORKSPACE or credentials[connection][0] != old_ct:

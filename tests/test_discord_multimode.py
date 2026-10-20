@@ -218,6 +218,9 @@ class WebhookCustodyTests(unittest.TestCase):
             with self.assertRaises(AlphaError): s.complete(WORKSPACE, 'synthetic-session', 's' * 32, 'webhook-code', iss='https://discord.com')
         self.assertTrue(result['connected']); self.assertEqual(result['senderKind'], 'webhook')
         channel = state['phase2']['channels'][0]
+        # A webhook created independently of a selected personal identity
+        # must not accidentally become dependent on another member's link.
+        self.assertNotIn('discordIdentityConnectionId', channel)
         self.assertFalse(channel['capabilityVerified']); self.assertEqual(channel['discordDestinations'], [])
         params = next(c.args[1] for c in cur.execute.call_args_list if c.args[0].startswith('INSERT INTO public.pr_encrypted_credentials'))
         envelope = json.loads(s.oauth.vault.decrypt(params[3], params[5]))
@@ -225,6 +228,44 @@ class WebhookCustodyTests(unittest.TestCase):
         self.assertEqual(envelope['authorization'], {'bearerScopes': ['identify'], 'webhookScopes': ['webhook.incoming']})
         self.assertNotIn(SECRET, json.dumps(state)); self.assertNotIn('synthetic-bearer', json.dumps(envelope))
         self.assertFalse(any(c[0] == 'POST' for c in hookwire.calls))
+
+    def test_webhook_selected_identity_disconnect_revokes_dependent_channel(self):
+        # A selected identity authorizes the OAuth callback; disconnecting it
+        # must fence the corresponding webhook, not merely the installation.
+        from test_discord_oauth_lifecycle import installation_callback
+        from unittest.mock import patch
+        s, _, state, row, cur = installation_callback()
+        s.adapter.webhook_v1_enabled = True
+        record = state['phase2']['discordIdentityLinks'][0]
+        record['userId'] = USER
+        ctx = {'v': 2, 'purpose': 'webhook', 'workspaceId': WORKSPACE, 'memberId': ACTOR,
+               'applicationId': APP, 'redirectUri': s.oauth.callback_uri('discord'),
+               'pkceVerifier': 'x' * 64, 'expectedChannelId': FIRST,
+               'identityConnectionId': record['id'], 'identityGeneration': record['authorizationGeneration'],
+               'expectedUserId': USER}
+        encrypted, key = s.oauth.vault.encrypt(json.dumps(ctx))
+        row[4:7] = [['identify', 'webhook.incoming'], encrypted, key]
+        wire = HookWire()
+        def responder(method, url, **kwargs):
+            path = urlsplit(url).path.removeprefix('/api/v10')
+            if path == '/oauth2/token':
+                return {'status': 200, 'body': {'token_type': 'Bearer', 'access_token': 'synthetic-bearer',
+                    'expires_in': 3600, 'scope': 'webhook.incoming',
+                    'webhook': {'id': HOOK, 'token': SECRET, 'type': 1, 'guild_id': GUILD,
+                                'channel_id': FIRST, 'application_id': APP}}}
+            if path == '/oauth2/@me':
+                return {'status': 200, 'body': {'application': {'id': APP}, 'user': {'id': USER}, 'scopes': ['identify']}}
+            if path == '/users/@me': return {'status': 200, 'body': {'id': USER}}
+            return wire(method, url, **kwargs)
+        s.adapter.transport = responder
+        with patch('postriff_phase2.hosted.audit'):
+            s.complete(WORKSPACE, 'synthetic-session', 's' * 32, 'webhook-code', iss='https://discord.com')
+        channel = state['phase2']['channels'][0]
+        self.assertEqual(channel.get('discordIdentityConnectionId'), record['id'])
+        s.invalidate_dependents(cur, WORKSPACE, state, record['id'])
+        self.assertTrue(channel['revoked'])
+        self.assertFalse(channel['capabilityVerified'])
+        self.assertFalse(any(c[0] == 'POST' and '/webhooks/' in c[1] for c in wire.calls))
 
     def test_reverify_entry_exists_for_real_webhook_connections(self):
         from postriff_phase2.discord.oauth import DiscordConnections

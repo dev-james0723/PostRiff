@@ -498,6 +498,8 @@ class DiscordConnections:
                 return
             if envelope.get('kind') != 'installation' or not envelope.get('identityConnectionId'):
                 fail('Reconnect this legacy installation through a linked Discord identity.')
+            # Deny removed workspace authorizer rights before provider IO.
+            self.validate_installation(cur, workspace, envelope)
         self._fresh_identity(workspace, None, envelope['identityConnectionId'])
 
     def reverify_installation(self, workspace, connection, *, token=None,
@@ -658,6 +660,17 @@ class DiscordConnections:
             fail()
         state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
         record = identity_record(state, envelope['identityConnectionId'])
+        # Personal Discord OAuth still existing does not confer Rafii
+        # workspace authority after membership removal or role downgrade.
+        from ..permissions import Membership
+        cur.execute("SELECT m.role,m.can_manage_connections FROM public.pr_memberships m "
+            "JOIN public.pr_profiles p ON p.user_id=m.user_id "
+            "WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' "
+            "AND p.deleted_at IS NULL FOR SHARE OF m,p",
+            (workspace, record['authorizedBy']))
+        member = cur.fetchone()
+        if not member or not Membership.from_row(member[0], can_manage_connections=member[1]).allows('manage_connections'):
+            fail('The Discord server authorizer no longer manages this workspace connection.')
         credential, identity = self.bind_identity(cur, workspace, record)
         if (credential[4] != envelope.get('identityGeneration') or identity['user'] != envelope.get('user')
                 or not credential[3] or float(credential[3]) <= self.oauth.clock() or record.get('refreshClaim')):
@@ -750,6 +763,11 @@ class DiscordConnections:
                 'capabilityVersion': self.adapter.capability_version, 'evidenceSource': 'live_provider', 'qualification': 'server_verified',
                 'discordConnectionKind': 'webhook', 'discordAuthorizedBy': actor, 'discordLinkedUserId': user['id'],
                 'discordWebhookChannelId': hook['channel_id'], 'discordAuthorizationGeneration': generation,
+                # Only a webhook explicitly bound to a selected identity becomes
+                # dependent on its later disconnect/reconnect. Independent
+                # webhook grants preserve their own consent lifecycle.
+                **({'discordIdentityConnectionId': context['identityConnectionId']}
+                   if context.get('identityConnectionId') else {}),
                 'discordDestinations': [], 'revoked': False})
             self.save_state(cur, workspace, state)
         return {'connected': True, 'connectionId': connection, 'discordPurpose': 'webhook', 'senderKind': 'webhook',
