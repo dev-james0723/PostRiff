@@ -85,3 +85,6 @@ requirements-dev.txt
 # Manual CI recipe and its hash inventory are not production runtime inputs.
 /.depot/workflows/linkedin-qualification-once.yml
 /.depot/linkedin-qualification-inputs.json
+
+# Include the generated, credential-free clean-commit source receipt.
+!src/postriff_phase2/release-source.json
