@@ -392,8 +392,13 @@ def native_draft(variant, proj=None):
         "constraints": {"verified": False, "limits": row["limits"]},
         # The same rule as the approval gate (`store` refuses `format_not_publishable`): only a platform's default format
         # has a publisher, so any other format is export-only and the review says so before anyone tries to schedule it.
-        "readiness": {"draft": "ready", "export": "ready", "publish": "not_checked", "publishNote": PUBLISH_NOTE}
+        "readiness": ({"draft": "ready", "export": "ready", "publish": "not_checked",
+            "publishNote": "X publishing requires an exact approved Direct Management action in Rafii."} if platform == "X" else
+        {"draft": "ready", "export": "ready", "publish": "not_checked", "publishNote": PUBLISH_NOTE})
         if fmt_id == DEFAULT_FORMATS.get(platform) else
+        {"draft": "ready", "export": "ready", "publish": "unavailable",
+         "publishNote": "Unavailable — X Direct Management does not support publishing this native draft format. No manual or browser publishing fallback is offered."}
+        if platform == "X" else
         {"draft": "ready", "export": "ready", "publish": "export_only", "publishNote": EXPORT_ONLY_NOTE},
     }
 
