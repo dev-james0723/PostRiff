@@ -85,9 +85,19 @@ def b64(value):
     return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
 
 
+# A real identity provider includes signed sign-in AMR. A token refresh changes
+# JWT iat, not the original method timestamp or its step-up freshness window.
+# Tests for legacy/absent AMR explicitly provide amr=[]; never weaken the app's
+# verified_auth_time or its requirement for a fresh signed method.
+_SIGN_IN_AMR = {}
+
 def token(user, session, aal="aal1", **claims):
-    """A synthetic Supabase-shaped access token. getUser below is the only trust boundary, as in production."""
-    payload = {"sub": user, "aal": aal, "iat": int(time.time()), "exp": int(time.time()) + 3600, **claims}
+    """Synthetic Supabase token with session-bound signed AMR; getUser alone establishes trust."""
+    now = int(time.time())
+    if "amr" not in claims:
+        key = (user, session)
+        claims["amr"] = _SIGN_IN_AMR.setdefault(key, [{"method": "password", "timestamp": now}])
+    payload = {"sub": user, "aal": aal, "iat": now, "exp": now + 3600, **claims}
     if session is not None:
         payload["session_id"] = session
     return f"{b64({'alg': 'none', 'typ': 'JWT'})}.{b64(payload)}.sig-{uuid.uuid4().hex}"
@@ -1788,15 +1798,15 @@ def sign_in_method_unknown():
     observe_mode()
     user, _ = person()
     legacy = new_session()
-    status, body = call("GET", "/api/me", token(user, legacy, aal="aal1"))
+    status, body = call("GET", "/api/me", token(user, legacy, aal="aal1", amr=[]))
     assert status == 200 and body["signIn"] == {"method": "unknown", "secondFactor": None}, body
-    assert call("GET", "/api/me", token(user, new_session(), aal="aal2"))[1]["signIn"] == {"method": "unknown", "secondFactor": None}
+    assert call("GET", "/api/me", token(user, new_session(), aal="aal2", amr=[]))[1]["signIn"] == {"method": "unknown", "secondFactor": None}
     details_mode("method")
     passkey, mfa = new_session(), new_session()
     assert call("GET", "/api/me", token(user, passkey, amr=amr("passkey")))[0] == 200
     status, body = call("GET", "/api/me", token(user, mfa, aal="aal2", amr=amr("password") + amr("totp")))
     assert body["signIn"] == {"method": "password", "secondFactor": "authenticator_app"}, body
-    rows = {s["sessionId"]: s for s in call("GET", "/api/auth/sessions", token(user, legacy))[1]["sessions"]}
+    rows = {s["sessionId"]: s for s in call("GET", "/api/auth/sessions", token(user, legacy, amr=[]))[1]["sessions"]}
     assert rows[passkey]["signInMethod"] == "passkey" and rows[legacy]["signInMethod"] == "unknown", rows
     assert all(row["location"] is None for row in rows.values()), rows  # `method` level records no place
 
