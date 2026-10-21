@@ -1,5 +1,7 @@
 'use client';
 
+import { usePreferences } from '@/lib/preferences';
+import { discordCopy } from '@/lib/channels/discord-copy';
 import { useLocalTimeZone } from '@/hooks/use-local-time-zone';
 import type { Manifest } from '@/lib/api/types';
 import { PostPreview } from './post-preview';
@@ -23,8 +25,12 @@ export function ManifestPreview({ manifest, timeZone, scale, className }: Manife
 
 function ResolvedPreview({ manifest, timeZone, scale, className }: ManifestPreviewProps & { timeZone: string }) {
   const post = usePreviewPost(manifest, timeZone);
+  const copy = discordCopy(usePreferences().locale);
   const destination = manifest.discord?.target;
   return <>
+    {manifest.platform === 'Discord' && <p className='text-muted-foreground mb-2 text-sm' data-discord-sender>
+      {manifest.senderKind === 'webhook' ? copy.senderWebhook : copy.senderBot}<br />{copy.senderNotice}
+    </p>}
     {manifest.platform === 'Discord' && <p className='text-muted-foreground mb-2 text-xs' data-discord-frozen-target>
       {destination ? `Frozen target: ${destination.guildName} (${destination.guildId}) · ${destination.channelName} (${destination.channelId})` : 'Legacy Discord approval: a new server and channel preview is required before publication.'}
     </p>}

@@ -357,6 +357,17 @@ class HostedSocial:
             return None  # only the historical feature-off synthetic path
         binding = publish_binding(job, workspace_id, worker_id)
         channel = manifest['discord']['target']['channelId']
+        if manifest.get('senderKind') == 'webhook':
+            from .discord.webhooks import path, require_enabled
+            require_enabled(provider)
+            grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
+            session = provider.session(grant['accessToken'])
+            from .discord.authorization import grant_matches
+            if not grant_matches(manifest, grant, session):
+                raise AlphaError('Discord webhook grant changed.', 409)
+            return provider.rate_limiter.reserve('POST', path(session, execute=True),
+                identity=provider._rate_identity('webhook', session['secret']), binding=binding,
+                valid_until=min(job['leaseUntil'], manifest['expiresAt']))
         return provider.admit_bot_request('POST', f'/channels/{channel}/messages', binding=binding,
                                          valid_until=min(job['leaseUntil'],manifest['expiresAt']))
 
@@ -399,7 +410,11 @@ class HostedSocial:
         rate_arguments = {'rate_permit':dispatch.get('ratePermit'), 'rate_binding':dispatch.get('rateBinding'),
                           'rate_intent_id':dispatch['intent']['id'], 'rate_authorize':dispatch.get('rateAuthorize')}
         try:
-            if image:
+            if manifest.get('senderKind') == 'webhook':
+                from .discord.webhooks import request
+                response = request(provider, 'POST', provider.session(token),
+                    body={'content': wire['content'], 'allowed_mentions': wire['allowed_mentions'], 'flags': wire['flags']}, **rate_arguments)
+            elif image:
                 raw, mime, _alt = image
                 file = wire['files'][0]
                 if hashlib.sha256(raw).hexdigest() != file['sha256'] or len(raw) != file['bytes']:
@@ -424,6 +439,11 @@ class HostedSocial:
             receipt = {'reference': f'{channel}/{message_id}',
                        'url': f"https://discord.com/channels/{target['guildId']}/{channel}/{message_id}",
                        'discordDeliveryEvidence': 'accepted'}
+            if manifest.get('senderKind') == 'webhook':
+                from .discord.webhooks import message_matches
+                if not message_matches(body, manifest, message_id):
+                    return {**receipt, 'state': 'uncertain', 'confirmed': 'Discord webhook receipt differs from approval. Do not resubmit.'}
+                return {**receipt, 'state': 'provider_accepted', 'confirmed': 'Discord webhook created the approved message; read-back pending.'}
             if (body.get('channel_id') != channel or body.get('content') != wire['content']
                     or (body.get('author') or {}).get('id') != target['botUserId']
                     or ('message_reference' in wire and not self._discord_reply_reference_matches(body, manifest))):
@@ -475,6 +495,21 @@ class HostedSocial:
                 evidence = provider.authorize_destination(grant['accessToken'], target, read_authorize=read_authorize)
                 if not evidence.get('userPermissions', 0) & provider.READ_HISTORY:
                     raise AlphaError('Discord history permission changed.', 409)
+            if manifest.get('senderKind') == 'webhook':
+                from .discord.webhooks import request, verify, message_matches
+                from .discord.authorization import grant_matches
+                grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
+                session = provider.session(grant['accessToken'])
+                if not grant_matches(manifest, grant, session):
+                    return _uncertain('The original webhook authorization changed. Keep the receipt; do not resubmit.')
+                verify(provider, session)
+                response = request(provider, 'GET', session, message=message_id)
+                if (digest(wire_content(manifest)) != frozen['wireDigest'] or response.get('status') != 200
+                        or not message_matches(response.get('body'), manifest, message_id)):
+                    return _uncertain('Discord webhook read-back differs from the approved sender, target, text or mention policy.')
+                return {'state': 'verified', 'reference': reference, 'verification': 'provider_lookup',
+                        'url': f"https://discord.com/channels/{target['guildId']}/{channel}/{message_id}",
+                        'confirmed': 'Discord webhook message read back with exact sender, channel and text.', 'discordDeliveryEvidence': 'accepted'}
             if provider._bot_identity(read_authorize=read_authorize) != target.get('botUserId'):
                 return _uncertain('Discord bot identity changed; keep the original receipt for review.')
             response = provider._bot('GET', f'/channels/{channel}/messages/{message_id}', read_authorize=read_authorize)

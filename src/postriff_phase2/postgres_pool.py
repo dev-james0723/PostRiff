@@ -72,10 +72,17 @@ class PooledPostgresFactory:
 
     @contextmanager
     def __call__(self):
+        with self.bounded(self._timeout) as connection:
+            yield connection
+
+    @contextmanager
+    def bounded(self, timeout):
+        if type(timeout) not in (int, float) or not math.isfinite(timeout) or not .01 <= timeout <= 30:
+            raise unavailable()
         pool = self._ready()
         from psycopg_pool import PoolClosed, PoolTimeout, TooManyRequests
         try:
-            with pool.connection(timeout=self._timeout) as connection:
+            with pool.connection(timeout=timeout) as connection:
                 yield connection
         except (PoolClosed, PoolTimeout, TooManyRequests):
             raise unavailable() from None

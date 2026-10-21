@@ -1,5 +1,8 @@
 'use client';
 
+import { usePreferences } from '@/lib/preferences';
+import { discordCopy } from '@/lib/channels/discord-copy';
+
 /**
  * Approve, request changes to, or reject one post of an automation run (`raffi_run_decide`, orchestration §4).
  *
@@ -70,6 +73,7 @@ export function RunDecisionDialog({ target, onClose, act }: { target: DecisionTa
 }
 
 function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onClose: () => void; act: (action: string, payload: Record<string, unknown>) => Promise<Snapshot> }) {
+  const dc = discordCopy(usePreferences().locale);
   const { run, item, decision, automationName, timeZone } = target;
   const snapshot = useSnapshot();
   const state = snapshot.data?.state;
@@ -153,6 +157,7 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
               <SelectTrigger aria-label='Discord destination'><SelectValue placeholder='Choose an authorized server and channel' /></SelectTrigger>
               <SelectContent>{destinations.map((d) => <SelectItem key={d.id} value={d.id}>{d.guildName} · {d.channelName}</SelectItem>)}</SelectContent>
             </Select>
+            {discordTarget && <p className='text-sm' data-discord-sender>{discordTarget.senderKind === 'webhook' ? dc.senderWebhook : dc.senderBot}</p>}
             {discordTarget ? <p className='text-muted-foreground text-xs' data-discord-target>{discordTarget.guildName} ({discordTarget.guildId}) · {discordTarget.channelName} ({discordTarget.channelId}) · {when}</p> : <Note>Authorize a Discord channel in Connections before approving this publication.</Note>}
           </div>
         )}

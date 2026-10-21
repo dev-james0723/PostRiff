@@ -21,6 +21,7 @@ OWNED_CLOUD_ONLY={
     'postgres_discord_capacity.py':'bash scripts/discord-capacity-cloud.sh with an explicit predeclared stage',
     'postgres_discord_admission_index_probe.py':'bash scripts/discord-validation-cloud.sh --scope-store-probe (diagnostic only)',
     'postgres_discord_engagement.py':'bash scripts/discord-p4-validation-cloud.sh',
+    'postgres_discord_multimode.py':'bash scripts/discord-multimode-validation-cloud.sh',
 }
 
 def select_scripts(candidates, requested):

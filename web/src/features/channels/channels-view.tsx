@@ -38,6 +38,10 @@ import { ChannelCard, type ChannelActivity } from './channel-card';
 import { ChannelFoldersSection } from './channel-folders-section';
 import { ChannelsSummary } from './channels-summary';
 import { ConnectSheet, type ConnectRequest } from './connect-sheet';
+import { usePreferences } from '@/lib/preferences';
+import { discordCopy } from '@/lib/channels/discord-copy';
+import { DiscordPersonalAccounts } from './discord-personal-accounts';
+import { discordCanConnect } from '@/lib/channels/discord-personal-account';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 import { ConnectionHealthPanel } from './health/connection-health-panel';
 
@@ -204,6 +208,7 @@ function ChannelsPage() {
   const channelsQuery = useChannels();
   const usage = useUsage();
   const snapshot = useSnapshot();
+  const discordUiCopy = discordCopy(usePreferences().locale);
   const access = useWorkspaceAccess();
   const { reduced } = useMotionPreference();
   const router = useRouter();
@@ -279,12 +284,14 @@ function ChannelsPage() {
   // The provider's return lands here with `?connected=<id>`: scroll to that card, play the check once, clear the param.
   useEffect(() => {
     if (!connectedParam || !data) return;
-    const exists = channels.some((channel) => channel.id === connectedParam);
+    const channelExists = channels.some((channel) => channel.id === connectedParam);
+    const identityExists = data.discordIdentities?.some((identity) => identity.id === connectedParam) === true;
+    const exists = channelExists || identityExists;
     if (!exists && isFetching) return; // the list is still catching up with the exchange
     if (exists) {
-      setHighlightId(connectedParam);
+      if (channelExists) setHighlightId(connectedParam);
       window.requestAnimationFrame(() => {
-        document.getElementById(`channel-${connectedParam}`)?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
+        document.getElementById(`${identityExists ? 'discord-identity' : 'channel'}-${connectedParam}`)?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
       });
     }
     replaceParams((search) => search.delete('connected'));
@@ -383,6 +390,14 @@ function ChannelsPage() {
                 data-tour='channels-summary'
               />
 
+              {(providers.some(provider => provider.id === 'discord' && provider.discordConnectionsV2) || !!data?.discordIdentities?.length) && (
+                <DiscordPersonalAccounts copy={discordUiCopy} identities={data?.discordIdentities ?? []}
+                  available={providers.some(provider => provider.id === 'discord' && provider.discordConnectionsV2 === true)}
+                  canManage={canManage} canConnect={discordCanConnect(providers.find(provider => provider.id === 'discord'), canManage)}
+                  onConnect={() => openConnect({ providerId: 'discord', capability: 'identity' })}
+                  onManage={(identityId) => openConnect({ providerId: 'discord', capability: 'identity', discordIdentityId: identityId })} />
+              )}
+
               {/* Connection Health Center: present only where the server names it (RAFII_CONNECTION_HEALTH_ENABLED). */}
               {data?.connectionHealth?.available === true && <ConnectionHealthPanel />}
 
@@ -408,7 +423,7 @@ function ChannelsPage() {
                   <div data-tour='channels-empty'>
                     <StateMessage
                       kind='empty'
-                      title='No accounts connected'
+                      title={data?.discordIdentities?.length ? 'No publishing accounts connected' : 'No accounts connected'}
                       media={
                         <span aria-hidden className='rafii-glass text-muted-foreground flex size-11 items-center justify-center rounded-full'>
                           <Icons.broadcast className='size-5' />

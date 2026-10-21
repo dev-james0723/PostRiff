@@ -4,6 +4,7 @@ No new tables, provider secrets, scheduler or inbound events. Network calls take
 place between short workspace transactions. Ordinary refresh preserves consent
 generation; reconnect/revocation fences every dependent installation.
 """
+import base64
 import copy
 import hashlib
 import json
@@ -21,6 +22,13 @@ def fail(message='Reconnect Discord and authorize the server and channel again.'
     raise AlphaError(message, status, code='discord_connection_required')
 
 
+def identity_capabilities():
+    """An identity proves the authorizer, never authority to send a message."""
+    return {'connectionKind': 'identity', 'senderKind': 'none', 'canPublish': False,
+            'canSchedule': False, 'postAsPersonalUser': False,
+            'capabilityReason': 'discord_identity_only'}
+
+
 def stable_id(kind, workspace, application, account, actor=''):
     return 'discord-' + kind + '-' + str(uuid.uuid5(uuid.NAMESPACE_URL,
         'rafii:discord:' + digest([kind, workspace, application, account, actor])))
@@ -36,8 +44,9 @@ def identity_record(state, connection, actor=None):
 
 def validate_context(context, workspace, actor, adapter, redirect, scopes, capability):
     purpose = context.get('purpose') if isinstance(context, dict) else None
-    expected = ['identify', 'guilds'] if purpose == 'identity' and context.get('discoverGuilds') else ['identify'] if purpose == 'identity' else ['identify', 'bot']
-    if (purpose not in ('identity', 'installation') or context.get('v') != 1
+    expected = ['identify', 'guilds'] if purpose == 'identity' and context.get('discoverGuilds') else ['identify'] if purpose == 'identity' else ['identify', 'webhook.incoming'] if purpose == 'webhook' else ['identify', 'bot']
+    if (purpose not in ('identity', 'installation', 'webhook') or context.get('v') != (2 if purpose == 'webhook' else 1)
+            or purpose == 'webhook' and (context.get('v') != 2 or not isinstance(context.get('pkceVerifier'), str) or not 43 <= len(context['pkceVerifier']) <= 128)
             or context.get('workspaceId') != workspace or context.get('memberId') != actor
             or context.get('applicationId') != adapter.client_id or context.get('redirectUri') != redirect
             or sorted(scopes) != sorted(expected) or capability != ('identity' if purpose == 'identity' else 'publish')):
@@ -161,10 +170,17 @@ class DiscordConnections:
         from ..hosted import audit, throttle
         adapter = self.adapter
         purpose = inputs.get('discordPurpose', 'identity' if capability == 'identity' else 'installation')
-        if purpose not in ('identity', 'installation') or capability != ('identity' if purpose == 'identity' else 'publish'):
+        if purpose not in ('identity', 'installation', 'webhook') or capability != ('identity' if purpose == 'identity' else 'publish'):
             fail('Choose identity linking or server installation.', 400)
+        if purpose == 'webhook':
+            from .webhooks import require_enabled
+            require_enabled(adapter)
+            if any(k in inputs for k in ('url', 'webhookUrl', 'token', 'secret', 'webhookToken')):
+                fail('Use Discord’s official channel authorization.', 400)
+            if inputs.get('channelId') is not None and not snowflake(inputs['channelId']):
+                fail('Choose a valid Discord channel.', 400)
         discover = inputs.get('discoverGuilds') is True
-        scopes = ['identify', 'guilds'] if purpose == 'identity' and discover else ['identify'] if purpose == 'identity' else ['identify', 'bot']
+        scopes = ['identify', 'guilds'] if purpose == 'identity' and discover else ['identify'] if purpose == 'identity' else ['identify', 'webhook.incoming'] if purpose == 'webhook' else ['identify', 'bot']
         redirect = self.oauth.callback_uri('discord')
         identity = None
         if purpose == 'installation':
@@ -180,7 +196,20 @@ class DiscordConnections:
                        'applicationId': adapter.client_id, 'redirectUri': redirect, 'discoverGuilds': discover,
                        'identityGenerations': {x['id']: x.get('authorizationGeneration') for x in links if x.get('authorizedBy') == actor},
                        'connectionId': inputs.get('connectionId')}
-            if purpose == 'installation':
+            if purpose == 'webhook':
+                context.update(v=2, pkceVerifier=secrets.token_urlsafe(48), expectedChannelId=inputs.get('channelId'))
+                if inputs.get('identityConnectionId'):
+                    selected = identity_record(state, inputs['identityConnectionId'], actor)
+                    self.bind_identity(cur, workspace, selected)
+                    context.update(expectedUserId=selected['userId'], identityConnectionId=selected['id'],
+                                   identityGeneration=selected['authorizationGeneration'])
+                if inputs.get('connectionId'):
+                    prior = next((x for x in state.get('phase2', {}).get('channels', []) if x.get('id') == inputs['connectionId']), None)
+                    if not prior or prior.get('discordConnectionKind') != 'webhook' or prior.get('discordAuthorizedBy') != actor:
+                        fail('Reconnect your own authorized webhook.', 404)
+                    context.update(expectedUserId=prior['discordLinkedUserId'], expectedChannelId=prior['discordWebhookChannelId'],
+                                   priorGeneration=prior['discordAuthorizationGeneration'])
+            elif purpose == 'installation':
                 record = identity_record(state, identity['connectionId'], actor)
                 self.bind_identity(cur, workspace, record)
                 if record['authorizationGeneration'] != identity['authorizationGeneration']:
@@ -201,14 +230,16 @@ class DiscordConnections:
             audit(cur, workspace, actor, 'oauth.started', transaction, {'provider': 'discord', 'purpose': purpose})
         params = {'client_id': adapter.client_id, 'response_type': 'code', 'redirect_uri': redirect,
                   'scope': ' '.join(scopes), 'state': state_value}
+        if purpose == 'webhook':
+            params.update(code_challenge=base64.urlsafe_b64encode(hashlib.sha256(context['pkceVerifier'].encode()).digest()).decode().rstrip('='), code_challenge_method='S256')
         if purpose == 'installation':
             params.update(permissions=str(adapter.PERMISSIONS), integration_type='0', guild_id=inputs['guildId'], disable_guild_select='true')
         return {'transactionId': transaction, 'provider': 'discord', 'platform': 'Discord', 'capability': capability,
                 'discordPurpose': purpose, 'scopes': scopes, 'expiresAt': self.oauth.clock() + 600,
-                'permissionExplanation': 'Link your Discord identity and selected server permissions.' if purpose == 'identity' else 'Install Rafii’s bot in the selected server. Authorize each channel separately.',
+                'permissionExplanation': ('Link your personal Discord profile' + (' and server list' if discover else ' only') + '. This does not authorize publishing as you. It does not install a bot.') if purpose == 'identity' else 'Authorize creation of a Rafii incoming webhook in the channel selected on Discord. Sending still requires separate channel and message approval; text only, never personal-user authorship.' if purpose == 'webhook' else 'Install Rafii’s bot in the selected server. Messages are sent by the bot, not your personal account. Authorize each channel separately.',
                 'authorizeUrl': adapter.AUTH + '?' + urlencode(params)}
 
-    def complete(self, workspace, token, state_value, code, error=None):
+    def complete(self, workspace, token, state_value, code, error=None, iss=None):
         if token is None:
             fail('Sign in to manage Discord connections.', 401)
         from ..hosted import audit
@@ -227,6 +258,11 @@ class DiscordConnections:
             except (TypeError, ValueError):
                 fail('Connection request unavailable.', 404)
             purpose = validate_context(context, workspace, actor, adapter, self.oauth.callback_uri('discord'), row[4], row[2])
+            if purpose == 'webhook':
+                from .webhooks import require_enabled
+                require_enabled(adapter)
+            if iss is not None and iss != 'https://discord.com' or context.get('v') == 2 and iss != 'https://discord.com':
+                fail('Discord authorization issuer did not match. Start again.')
             if row[3] != context['redirectUri']:
                 fail('The Discord callback changed. Start again.')
             cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome=%s WHERE id::text=%s", ('denied' if error or not code else 'exchange_started', row[0]))
@@ -234,17 +270,19 @@ class DiscordConnections:
         # Committed single use BEFORE provider exchange, including ambiguous failures.
         if error or not code:
             return {'connected': False, 'reason': 'denied', 'discordPurpose': purpose}
-        if purpose == 'installation' and not context.get('connectionId'):
+        if purpose in ('installation', 'webhook') and not context.get('connectionId'):
             self.oauth._admit_identity(workspace, adapter)
-        body = self.token_body(self._response('POST', '/oauth2/token', form={'grant_type': 'authorization_code', 'code': code, 'redirect_uri': context['redirectUri']}))
+        body = self.token_body(self._response('POST', '/oauth2/token', form={'grant_type': 'authorization_code', 'code': code, 'redirect_uri': context['redirectUri'], **({'code_verifier': context['pkceVerifier']} if context.get('v') == 2 else {})}))
         # `bot` is installation consent, not a user bearer permission. The
         # frozen request still requires it; prove installation independently
         # below rather than requiring it in current bearer introspection.
-        required = ['identify'] if purpose == 'installation' else row[4]
+        required = ['identify'] if purpose in ('installation', 'webhook') else row[4]
         user, scopes = self.verified_user(body['access_token'], required, context.get('expectedUserId') or context.get('userId'))
         if context.get('expectedUserId') and user['id'] != context['expectedUserId']:
             fail('Reconnect the original Discord identity.')
-        if purpose == 'installation':
+        if purpose == 'webhook':
+            result = self.save_webhook_callback(workspace, token, context, body, user, scopes)
+        elif purpose == 'installation':
             if (user['id'] != context.get('userId') or not isinstance(body.get('guild'), dict)
                     or body['guild'].get('id') != context.get('guildId')):
                 fail('Discord authorized a different identity or server. Start again.')
@@ -311,7 +349,7 @@ class DiscordConnections:
             else:
                 links.append(record)
             self.save_state(cur, workspace, state)
-        return {'connected': True, 'connectionId': connection, 'account': record['account'], 'discordPurpose': 'identity', 'missingScopes': []}
+        return {'connected': True, 'connectionId': connection, 'account': record['account'], 'discordPurpose': 'identity', 'missingScopes': [], **identity_capabilities()}
 
     def save_installation(self, workspace, token, context, envelope, scopes, guild):
         with self.local(workspace, token) as (cur, state, actor):
@@ -439,16 +477,32 @@ class DiscordConnections:
         return {'identityConnectionId': connection, 'guilds': self.user_guilds(self._fresh_identity(workspace, token, connection))}
 
     def public_identities(self, workspace, token):
+        if token is None:
+            fail('Sign in to manage Discord connections.', 401)
         with self.oauth.repository.transaction(token, workspace) as (_, row, actor):
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
-            return [{k: x[k] for k in ('id', 'account', 'userId', 'status', 'expiresAt', 'discoverGuilds') if k in x}
-                    for x in state.get('phase2', {}).get('discordIdentityLinks', []) if x.get('authorizedBy') == actor]
+            return [{**{k: x[k] for k in ('id', 'account', 'userId', 'status', 'expiresAt', 'discoverGuilds') if k in x},
+                     **identity_capabilities(),
+                     **({'privateDraftsConfigured': x.get('privateDraftsLinked') is True,
+                         'privateDraftsLinked': x.get('privateDraftsLinked') is True and x.get('status') == 'linked'
+                         and bool(x.get('authorizationGeneration')) and x.get('privateDraftsGeneration') == x.get('authorizationGeneration')}
+                        if 'privateDraftsLinked' in x else {})}
+                    for x in state.get('phase2', {}).get('discordIdentityLinks', [])
+                    if isinstance(x, dict) and x.get('workspaceId') == workspace and x.get('authorizedBy') == actor]
 
     def installation_identity(self, workspace, connection):
-        with self.local(workspace, None) as (cur, _, _):
+        with self.local(workspace, None) as (cur, state, _):
             _, envelope = self.read_credential(cur, workspace, connection)
+            if envelope.get('kind') == 'webhook':
+                self.validate_webhook(cur, workspace, envelope)
+                return
             if envelope.get('kind') != 'installation' or not envelope.get('identityConnectionId'):
                 fail('Reconnect this legacy installation through a linked Discord identity.')
+            # An expired *but refreshable* personal token is normal. Check
+            # active Rafii membership before Discord IO without treating local
+            # token expiry as an authorization-revocation verdict.
+            record = identity_record(state, envelope['identityConnectionId'])
+            self.require_active_installation_authorizer(cur, workspace, record)
         self._fresh_identity(workspace, None, envelope['identityConnectionId'])
 
     def reverify_installation(self, workspace, connection, *, token=None,
@@ -600,6 +654,22 @@ class DiscordConnections:
             return {'connectionId': connection, 'state': outcome, 'identityVerified': identity_verified,
                     'scopes': scopes, 'ready': ready}
 
+    @staticmethod
+    def require_active_installation_authorizer(cur, workspace, record):
+        # This check is independent of token expiry; a legitimately expiring
+        # Discord bearer must still be able to use the existing safe refresh.
+        from ..permissions import Membership
+        if record.get('status') != 'linked' or not record.get('authorizedBy'):
+            fail('The Discord server authorizer no longer manages this workspace connection.')
+        cur.execute("SELECT m.role,m.can_manage_connections FROM public.pr_memberships m "
+            "JOIN public.pr_profiles p ON p.user_id=m.user_id "
+            "WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' "
+            "AND p.deleted_at IS NULL FOR SHARE OF m,p",
+            (workspace, record['authorizedBy']))
+        member = cur.fetchone()
+        if not member or not Membership.from_row(member[0], can_manage_connections=member[1]).allows('manage_connections'):
+            fail('The Discord server authorizer no longer manages this workspace connection.')
+
     def validate_installation(self, cur, workspace, envelope):
         if envelope.get('kind') != 'installation' or not envelope.get('identityConnectionId'):
             fail('An identity grant cannot publish. Reconnect the server installation.')
@@ -609,6 +679,7 @@ class DiscordConnections:
             fail()
         state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
         record = identity_record(state, envelope['identityConnectionId'])
+        self.require_active_installation_authorizer(cur, workspace, record)
         credential, identity = self.bind_identity(cur, workspace, record)
         if (credential[4] != envelope.get('identityGeneration') or identity['user'] != envelope.get('user')
                 or not credential[3] or float(credential[3]) <= self.oauth.clock() or record.get('refreshClaim')):
@@ -628,3 +699,162 @@ class DiscordConnections:
             self.save_state(cur, workspace, state)
             audit(cur, workspace, actor, 'discord.identity_disconnected', connection)
         return {'disconnected': True, 'remoteRevocation': 'not_requested', 'note': 'Disconnected from this workspace. The shared bot stays installed. Remove Rafii in Discord Authorized Apps to revoke the Discord authorization across connected workspaces.'}
+
+    def validate_webhook(self, cur, workspace, envelope):
+        from .webhooks import require_enabled, path
+        require_enabled(self.adapter)
+        path(envelope)
+        if (envelope.get('workspaceId') != workspace or envelope.get('applicationId') != self.adapter.client_id
+                or any(not snowflake(envelope.get(k)) for k in ('webhookId', 'guild', 'channel', 'user'))):
+            fail('Discord webhook custody does not match this workspace.')
+        cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (workspace,))
+        stored = cur.fetchone()
+        if not stored: fail('Workspace unavailable.')
+        state = json.loads(stored[0]) if isinstance(stored[0], str) else stored[0]
+        if not stored or state.get('accountDeletion') or state.get('accountBlock'):
+            fail('Workspace unavailable.')
+        channel = next((c for c in state.get('phase2', {}).get('channels', [])
+                        if c.get('id') == envelope.get('connectionId')), None)
+        if (not channel or channel.get('revoked') or channel.get('discordConnectionKind') != 'webhook'
+                or channel.get('discordAuthorizedBy') != envelope.get('memberId')
+                or channel.get('providerAccountId') != envelope.get('webhookId')
+                or channel.get('discordLinkedUserId') != envelope.get('user')
+                or channel.get('discordWebhookChannelId') != envelope.get('channel')):
+            fail('This Discord webhook was revoked or changed.')
+        from ..permissions import Membership
+        cur.execute("SELECT m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace, envelope['memberId']))
+        member = cur.fetchone()
+        if not member or not Membership.from_row(*member).allows('manage_connections'):
+            fail('The webhook authorizer no longer has workspace connection permission.')
+
+    def save_webhook_callback(self, workspace, token, context, body, user, scopes):
+        from .webhooks import verify_resource, path
+        hook = body.get('webhook')
+        if (not isinstance(hook, dict) or 'webhook.incoming' not in body['scope'].split()
+                or hook.get('application_id') != self.adapter.client_id or hook.get('type') != 1
+                or any(not snowflake(hook.get(k)) for k in ('id', 'guild_id', 'channel_id'))
+                or context.get('expectedChannelId') and hook.get('channel_id') != context['expectedChannelId']):
+            fail('Discord did not authorize the expected webhook and channel.')
+        envelope = {'v': 2, 'kind': 'webhook', 'workspaceId': workspace, 'memberId': context['memberId'],
+                    'applicationId': self.adapter.client_id, 'webhookId': hook['id'], 'secret': hook.get('token'),
+                    'guild': hook['guild_id'], 'channel': hook['channel_id'], 'user': user['id']}
+        path(envelope)
+        verify_resource(self.adapter, envelope)  # custody only; destination/dispatch require live permissions
+        with self.local(workspace, token) as (cur, state, actor):
+            if actor != context['memberId']: fail()
+            channels = state.setdefault('phase2', {}).setdefault('channels', [])
+            if context.get('identityConnectionId'):
+                selected = identity_record(state, context['identityConnectionId'], actor)
+                selected_row, _ = self.bind_identity(cur, workspace, selected)
+                if selected_row[4] != context.get('identityGeneration') or selected['userId'] != user['id']:
+                    fail('The selected identity changed during webhook authorization.')
+                envelope.update(identityConnectionId=selected['id'], identityGeneration=selected_row[4])
+            if context.get('connectionId'):
+                prior = next((c for c in channels if c.get('id') == context['connectionId']), None)
+                if (not prior or prior.get('discordAuthorizedBy') != actor
+                        or prior.get('discordAuthorizationGeneration') != context.get('priorGeneration')):
+                    fail('Discord changed during reconnect. Reload.')
+                # New OAuth creates a new remote webhook. Revoke only old local authority.
+                prior.update(revoked=True, capabilityVerified=False, defaultDestinationId=None)
+                for d in prior.get('discordDestinations', []): d['status'] = 'revoked'
+                cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,authorization_generation=gen_random_uuid() WHERE workspace_id=%s AND connection_id=%s AND provider='discord'", (workspace, prior['id']))
+            connection = stable_id('webhook', workspace, self.adapter.client_id, hook['id'], actor)
+            if any(c.get('id') == connection for c in channels): fail('This webhook is already connected.')
+            envelope['connectionId'] = connection
+            # Passthrough evidence belongs to the webhook, never invented in bearer introspection.
+            envelope['authorization'] = {'bearerScopes': scopes, 'webhookScopes': ['webhook.incoming']}
+            observed = sorted(set(scopes) | {'webhook.incoming'})
+            generation = self.upsert(cur, workspace, connection, hook['id'], envelope, observed)
+            now = self.oauth.clock()
+            channels.append({'id': connection, 'platform': 'Discord', 'account': 'Rafii webhook · ' + hook['channel_id'],
+                'accountType': 'webhook', 'providerAccountId': hook['id'], 'scopes': observed,
+                'configured': True, 'identityVerified': True, 'capabilityVerified': False,
+                'enabledPermissionGroups': ['identity', 'publish'], 'verifiedAt': now, 'expiresAt': now + 86400 * 365 * 5,
+                'capabilityVersion': self.adapter.capability_version, 'evidenceSource': 'live_provider', 'qualification': 'server_verified',
+                'discordConnectionKind': 'webhook', 'discordAuthorizedBy': actor, 'discordLinkedUserId': user['id'],
+                'discordWebhookChannelId': hook['channel_id'], 'discordAuthorizationGeneration': generation,
+                # Only a webhook explicitly bound to a selected identity becomes
+                # dependent on its later disconnect/reconnect. Independent
+                # webhook grants preserve their own consent lifecycle.
+                **({'discordIdentityConnectionId': context['identityConnectionId']}
+                   if context.get('identityConnectionId') else {}),
+                'discordDestinations': [], 'revoked': False})
+            self.save_state(cur, workspace, state)
+        return {'connected': True, 'connectionId': connection, 'discordPurpose': 'webhook', 'senderKind': 'webhook',
+                'account': 'Rafii webhook', 'missingScopes': [], 'requiresDestinationAuthorization': True}
+
+    def webhook_authorizer(self, envelope):
+        """Resolve only an explicitly bound, current identity; never widen scopes.
+
+        Legacy/independent webhook envelopes keep the existing bot witness path.
+        Fresh provider reads and rotating-token refresh happen outside SQL locks.
+        The bearer is transient server-side data, never saved with the webhook.
+        """
+        connection = envelope.get('identityConnectionId')
+        if not connection:
+            return None
+        workspace = envelope.get('workspaceId')
+
+        def bound(cur, state):
+            self.validate_webhook(cur, workspace, envelope)
+            _, stored = self.read_credential(cur, workspace, envelope.get('connectionId'))
+            if any(stored.get(k) != envelope.get(k) for k in ('identityConnectionId', 'identityGeneration', 'user', 'memberId')):
+                fail('The webhook identity binding changed. Reconnect it.')
+            channel = next(c for c in state['phase2']['channels'] if c['id'] == envelope['connectionId'])
+            record = identity_record(state, connection, envelope.get('memberId'))
+            row, identity = self.bind_identity(cur, workspace, record)
+            if (channel.get('discordIdentityConnectionId') != connection
+                    or row[4] != envelope.get('identityGeneration') or identity['user'] != envelope['user']):
+                fail('The webhook identity changed. Reconnect it.')
+            self.require_active_installation_authorizer(cur, workspace, record)
+            return row, identity
+
+        with self.local(workspace, None) as (cur, state, _):
+            row, _ = bound(cur, state)
+            if 'guilds' not in row[5]:
+                return None
+        identity = self._fresh_identity(workspace, None, connection)
+        with self.local(workspace, None) as (cur, state, _):
+            row, current = bound(cur, state)
+            if (row[4] != identity['authorizationGeneration'] or current['at'] != identity['bearer']
+                    or not row[3] or float(row[3]) <= self.oauth.clock()):
+                fail('The webhook identity changed during verification. Reconnect it.')
+        return identity
+
+    def reverify_webhook(self, workspace, connection, *, token=None, authenticated=None, actor=None, audit_event=None):
+        """Provider read outside SQL; a late success cannot undo newer revocation."""
+        from .webhooks import verify
+        from ..hosted import audit
+        with self.local(workspace, token) as (cur, state, member):
+            row, envelope = self.read_credential(cur, workspace, connection)
+            self.validate_webhook(cur, workspace, envelope)
+            channel = next(c for c in state['phase2']['channels'] if c['id'] == connection)
+            before = digest(channel)
+            generation = row[4]
+            if token is not None and envelope.get('memberId') != member:
+                fail('Only the authorizing member can reverify this webhook.', 403)
+        failure = None
+        try:
+            verify(self.adapter, envelope)
+        except AlphaError as error:
+            failure = error
+        with self.local(workspace, token) as (cur, state, member):
+            current, fresh = self.read_credential(cur, workspace, connection)
+            self.validate_webhook(cur, workspace, fresh)
+            channel = next(c for c in state['phase2']['channels'] if c['id'] == connection)
+            if current[4] != generation or current[0] != row[0] or digest(channel) != before:
+                fail('Webhook changed during verification. Reload.')
+            if failure:
+                channel['capabilityVerified'] = False
+            else:
+                # Read proof cannot authorize a new destination or restore a revoked one.
+                authorized = any(d.get('status') == 'authorized' and d.get('authorizationGeneration') == generation
+                                 for d in channel.get('discordDestinations', []))
+                channel.update(identityVerified=True, capabilityVerified=authorized, verifiedAt=self.oauth.clock())
+            channel['discordVerificationGeneration'] = str(uuid.uuid4())
+            self.save_state(cur, workspace, state)
+            audit(cur, workspace, member or actor, audit_event or 'discord.webhook_verified', connection,
+                  {'state': 'verification_unavailable' if failure else 'read_verified'})
+        if failure: raise failure
+        return {'connectionId': connection, 'state': 'read_verified', 'ready': channel['capabilityVerified'],
+                'senderKind': 'webhook', 'scopes': list(row[5])}

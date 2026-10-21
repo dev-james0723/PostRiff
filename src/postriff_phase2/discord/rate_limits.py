@@ -102,15 +102,22 @@ def _digest(value):
 def route_identity(method, path):
     """Bounded REST templates with exact allowlisted read query shapes.
 
-    OAuth secret-bearing form bodies never contribute to a stored key. Webhook
-    publishing is deliberately unsupported; its invalid404 classification is
-    available defensively without admitting a webhook route/token.
+    Secret-bearing form bodies and webhook path tokens never enter stored
+    route labels; raw paths become hashes. Only exact supported shapes pass.
     """
     if method not in ('GET', 'POST', 'DELETE', 'PUT', 'PATCH') or not isinstance(path, str) or len(path) > 500:
         raise RateCoordinatorUnavailable()
     url = urlsplit(path)
     if not path.startswith('/') or url.scheme or url.netloc or url.fragment or '%' in url.path or '//' in url.path:
         raise RateCoordinatorUnavailable()
+    if url.path.startswith('/webhooks/'):
+        # Token is never stored: only a template and hashed webhook/token major.
+        match = re.fullmatch(r'/webhooks/([0-9]{5,25})/([A-Za-z0-9_-]{20,256})(?:/messages/([0-9]{5,25}))?', url.path)
+        if (not match or method not in ('GET', 'POST') or method == 'POST' and (match[3] or url.query != 'wait=true')
+                or method == 'GET' and url.query):
+            raise RateCoordinatorUnavailable()
+        return (method + ':/webhooks/{id}/{token}' + ('/messages/{id}' if match[3] else ''),
+                _digest('webhooks:' + match[1] + ':' + match[2]))
     if url.query:
         try:
             query = parse_qs(url.query, keep_blank_values=True, strict_parsing=True)
@@ -257,12 +264,12 @@ class RequestIdentity:
 
     @classmethod
     def make(cls, application, kind, credential, user_id=None):
-        if not _ID.fullmatch(application) or kind not in ('bot', 'user', 'oauth') or not isinstance(credential, str) or not credential:
+        if not _ID.fullmatch(application) or kind not in ('bot', 'user', 'oauth', 'webhook') or not isinstance(credential, str) or not credential:
             raise RateCoordinatorUnavailable()
         if user_id is not None and not _ID.fullmatch(user_id):
             raise RateCoordinatorUnavailable()
         fingerprint = _digest(credential)
-        account = application if kind != 'user' else user_id or 'unverified:' + fingerprint
+        account = fingerprint if kind == 'webhook' else application if kind != 'user' else user_id or 'unverified:' + fingerprint
         return cls(_digest(kind + ':' + account), _digest(kind + ':' + application + ':' + fingerprint), kind)
 
 
@@ -281,7 +288,8 @@ def publish_binding(job, workspace, worker):
                 'manifestDigest': digest(manifest), 'authorizationDigest': job['discordAuthorization']['digest'],
                 'approvalDigest': job['approvalDigest'], 'workerKey': _digest(worker),
                 'leaseKey': _digest(job['leaseId']), 'channelKey': _digest(target['channelId']),
-                'applicationKey': _digest(target['applicationId'])}
+                'applicationKey': _digest(target['applicationId']),
+                **({'webhookKey': _digest(target['webhookId'])} if target.get('senderKind') == 'webhook' else {})}
     except (KeyError, ValueError, TypeError, AttributeError):
         raise RateCoordinatorUnavailable() from None
 
@@ -585,10 +593,17 @@ class SharedPostgresBudget:
     def _reserve(self, method, path, *, identity, binding=None, valid_until=None, read_sent=False):
         template, major = route_identity(method,path)
         route = _digest(template)
-        if (not isinstance(identity,RequestIdentity) or binding is not None and
-                (method != 'POST' or not re.fullmatch(r'/channels/[0-9]{5,25}/messages',path)
-                 or binding.get('applicationKey') != self.application_key or binding.get('channelKey') != _digest(path.split('/')[2]))):
+        if not isinstance(identity, RequestIdentity):
             raise RateCoordinatorUnavailable()
+        if binding is not None:
+            bot_route = (re.fullmatch(r'/channels/[0-9]{5,25}/messages', path)
+                         and binding.get('channelKey') == _digest(path.split('/')[2])
+                         and 'webhookKey' not in binding)
+            webhook_route = (template == 'POST:/webhooks/{id}/{token}' and identity.kind == 'webhook'
+                             and binding.get('webhookKey') == _digest(path.split('/')[2])
+                             and _HASH.fullmatch(str(binding.get('channelKey', ''))))
+            if method != 'POST' or binding.get('applicationKey') != self.application_key or not (bot_route or webhook_route):
+                raise RateCoordinatorUnavailable()
         if self.policy is None:
             raise RateCoordinatorUnavailable()
         with self._transaction() as cur:

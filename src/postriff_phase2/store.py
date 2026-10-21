@@ -93,12 +93,12 @@ class Phase2Store(Store):
             return "Connect"
         if c["revoked"] or c["expiresAt"] <= self.clock():
             return "Reconnect"
-        # A bot installation has no hourly OAuth expiry. Its durable consent
+        # Bot installation and incoming-webhook custody have no hourly OAuth expiry. Their durable consent
         # is checked against the credential generation, and the worker checks
         # the exact server/channel permissions again before every send. Aging
         # this setup observation alone must not hold an unchanged approval.
         discord_installation = (c.get('platform') == 'Discord'
-            and c.get('discordConnectionKind') == 'installation'
+            and c.get('discordConnectionKind') in ('installation', 'webhook')
             and c.get('qualification') == 'server_verified'
             and c.get('evidenceSource') == 'live_provider'
             and bool(c.get('discordAuthorizationGeneration')))

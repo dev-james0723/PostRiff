@@ -163,12 +163,22 @@ export interface RunContentType {
 
 export interface WorkerBinding { environment: 'preview'; origin: string }
 
+export interface DiscordModes {
+  identity?: { senderKind: 'none'; canPublish: false };
+  bot?: { senderKind: 'bot' };
+  webhook: { senderKind?: 'webhook'; enabled: boolean; status?: string; payloadTypes?: string[] };
+  userInstall: { senderKind?: 'interaction'; enabled: boolean; status?: string; installUrl?: string; canPublish?: false; canSchedule?: false };
+}
+
 export interface DiscordDestination {
   id: string;
   workspaceId: string;
   connectionId: string;
   applicationId: string;
-  botUserId: string;
+  botUserId?: string;
+  webhookId?: string;
+  senderKind?: 'bot' | 'webhook';
+  credentialKind?: 'webhook';
   linkedUserId: string;
   guildId: string;
   channelId: string;
@@ -181,6 +191,7 @@ export interface DiscordDestination {
 }
 
 export interface Manifest {
+  senderKind?: 'bot' | 'webhook';
   destinationId?: string;
   discord?: { schema: 'rafii.discord.publish.v2'; target: DiscordDestination; wireDigest: string; deliveryDigest: string; operationDigest: string; publicationId: string };
   workerBinding?: WorkerBinding;
@@ -418,7 +429,7 @@ export interface ChannelFolder {
 export interface Phase2State {
   execution: string;
   trial: Trial;
-  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[] }[];
+  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[]; discordConnectionKind?: 'installation' | 'webhook' }[];
   assets: Asset[];
   reviews: Review[];
   jobs: Job[];
@@ -1466,7 +1477,7 @@ export interface ChannelView {
   defaultDestinationId?: string | null;
   discordDestinations?: DiscordDestination[];
   discordIdentityConnectionId?: string;
-  discordConnectionKind?: 'installation';
+  discordConnectionKind?: 'installation' | 'webhook';
   providerAccountId?: string;
   /** Server-recorded identity read; independent of operation approval/evidence times. */
   identityVerifiedAt?: number | null;
@@ -1493,6 +1504,7 @@ export interface ChannelView {
 
 export interface ProviderView {
   discordConnectionsV2?: boolean;
+  discordModes?: DiscordModes;
   /** Restricted server-side Pinterest pilot; never a public release gate. */
   trialReadonly?: boolean;
   configurationState?: string;
@@ -1607,6 +1619,7 @@ export interface OAuthStart {
 }
 
 export interface OAuthComplete {
+  discordPurpose?: 'identity' | 'installation' | 'webhook';
   connectionId?: string;
   connected: boolean;
   /** Bot-code connections before the code has been seen in a channel. */
@@ -2129,7 +2142,17 @@ export interface WorkspaceApiToken {
 export interface ApiTokenCreated { item: WorkspaceApiToken; secret: string }
 /** Server-owned Discord identity references; credentials never enter this model. */
 export interface DiscordIdentity {
+  privateDraftsLinked?: boolean;
+  /** A stored local mapping may still be removed after its live grant expires. */
+  privateDraftsConfigured?: boolean;
   id: string; account: string; userId: string;
   status: 'linked' | 'reconnect_required' | 'disconnected';
   expiresAt: number; discoverGuilds: boolean;
+  /** Identity linking never grants publication authority. Optional for older API responses. */
+  connectionKind?: 'identity';
+  senderKind?: 'none';
+  canPublish?: false;
+  canSchedule?: false;
+  postAsPersonalUser?: false;
+  capabilityReason?: 'discord_identity_only';
 }

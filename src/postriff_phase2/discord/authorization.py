@@ -17,6 +17,13 @@ IDENTITY = ('workspaceId', 'connectionId', 'applicationId', 'botUserId',
             'linkedUserId', 'guildId', 'channelId', 'authorizationGeneration',
             'resourceGeneration', 'id')
 LABELS = ('guildName', 'channelName', 'kind')
+WEBHOOK_IDENTITY = tuple(k for k in IDENTITY if k != 'botUserId') + ('webhookId', 'senderKind', 'credentialKind')
+
+def identity_keys(target):
+    return WEBHOOK_IDENTITY if target.get('senderKind') == 'webhook' else IDENTITY
+
+def sender_kind(target):
+    return 'webhook' if target.get('senderKind') == 'webhook' else 'bot'
 
 
 def digest(value):
@@ -44,22 +51,29 @@ def destination(state, channel, selected_id):
             or found.get('workspaceId') != state['workspace']['id']
             or found.get('connectionId') != channel.get('id')
             or found.get('authorizationGeneration') != channel.get('discordAuthorizationGeneration')
-            or any(not found.get(k) for k in IDENTITY)
-            or any(not snowflake(found.get(k)) for k in ('applicationId', 'botUserId', 'linkedUserId', 'guildId', 'channelId'))):
+            or any(not found.get(k) for k in identity_keys(found))
+            or any(not snowflake(found.get(k)) for k in (('applicationId', 'webhookId', 'linkedUserId', 'guildId', 'channelId') if sender_kind(found) == 'webhook' else ('applicationId', 'botUserId', 'linkedUserId', 'guildId', 'channelId')))):
         reject('Select an authorized Discord server and channel for this post.')
+    if (sender_kind(found) == 'webhook') != (channel.get('discordConnectionKind') == 'webhook') or sender_kind(found) == 'webhook' and found.get('credentialKind') != 'webhook':
+        reject('Discord sender kind changed.')
     return found
 
 
 def register_destination(state, channel, evidence, generation, actor, now):
     """A default change registers one resource; it never edits another resource."""
     wid, connection = state['workspace']['id'], channel['id']
-    if not generation or any(not snowflake(evidence.get(k)) for k in
-                             ('applicationId', 'botUserId', 'linkedUserId', 'guildId', 'channelId')):
+    webhook = evidence.get('senderKind') == 'webhook'
+    snow_keys = ('applicationId', 'linkedUserId', 'guildId', 'channelId', 'webhookId' if webhook else 'botUserId')
+    if (webhook != (channel.get('discordConnectionKind') == 'webhook') or not generation
+            or webhook and evidence.get('credentialKind') != 'webhook'
+            or any(not snowflake(evidence.get(k)) for k in snow_keys)):
         reject('Discord did not confirm this installation and destination.')
     selected_id = destination_id(wid, connection, evidence['guildId'], evidence['channelId'])
     records = channel.setdefault('discordDestinations', [])
     prior = next((d for d in records if d.get('id') == selected_id), None)
-    identity = {k: evidence[k] for k in ('applicationId', 'botUserId', 'linkedUserId', 'guildId', 'channelId')}
+    identity = {k: evidence[k] for k in snow_keys}
+    if webhook:
+        identity.update(senderKind='webhook', credentialKind='webhook')
     unchanged = (prior and prior.get('status') == 'authorized'
                  and prior.get('authorizationGeneration') == generation
                  and all(prior.get(k) == v for k, v in identity.items()))
@@ -86,6 +100,12 @@ def revoke_destination(state, channel, selected_id, actor, now):
 
 def wire_content(manifest):
     media = manifest.get('media') or []
+    if manifest.get('senderKind') == 'webhook' or sender_kind((manifest.get('discord') or {}).get('target') or {}) == 'webhook':
+        text = (manifest.get('payload') or {}).get('text')
+        if (media or manifest.get('engagementReply') or manifest.get('publishOptions')
+                or not isinstance(text, str) or not text.strip() or '\x00' in text
+                or len(text.encode('utf-16-le')) // 2 > 2000):
+            reject('Webhook publishing supports text only, without threads, replies, attachments or sender overrides.')
     if len(media) > 1 or any(not str(a.get('mime', '')).startswith('image/') for a in media):
         reject('Discord posts support text and at most one approved image.')
     files = []
@@ -99,6 +119,7 @@ def wire_content(manifest):
         files.append({'id': index, 'filename': f'rafii.{suffix}', 'description': asset.get('alt') or '',
                       'sha256': asset['hash'], 'bytes': asset['bytes'], 'mime': asset['mime']})
     wire = {'content': manifest['payload']['text'], 'allowed_mentions': {'parse': []}, 'files': files}
+    if manifest.get('senderKind') == 'webhook': wire['flags'] = 4  # suppress automatic embeds; exact text-only contract
     if manifest.get('operation') == 'discord.reply':
         reply = manifest.get('engagementReply') or {}
         text = manifest['payload']['text']
@@ -131,6 +152,21 @@ def unresolved_delivery(job):
     return False
 
 
+def same_webhook_effect(original, manifest):
+    """Rotating a webhook cannot erase an unresolved same-channel create."""
+    old = (original.get('discord') or {}).get('target') or {}
+    new = (manifest.get('discord') or {}).get('target') or {}
+    if (sender_kind(old) != 'webhook' and sender_kind(new) != 'webhook'
+            or original.get('workspaceId') != manifest.get('workspaceId')
+            or any(not old.get(k) or old.get(k) != new.get(k) for k in ('applicationId', 'guildId', 'channelId'))):
+        return False
+    try:
+        prior, current = wire_content(original), wire_content(manifest)
+        return all(prior.get(k) == current.get(k) for k in ('content', 'allowed_mentions', 'files', 'message_reference'))
+    except (AlphaError, KeyError, TypeError, ValueError):
+        return False
+
+
 def assert_no_unresolved_repeat(state, manifest, *, excluding=None):
     frozen = manifest['discord']
     for job in state['phase2'].get('jobs', []):
@@ -138,7 +174,8 @@ def assert_no_unresolved_repeat(state, manifest, *, excluding=None):
             continue
         original = job.get('manifest') or {}
         if (original.get('platform') == 'Discord' and unresolved_delivery(job)
-                and ((original.get('discord') or {}).get('deliveryDigest') == frozen['deliveryDigest']
+                and (same_webhook_effect(original, manifest)
+                     or (original.get('discord') or {}).get('deliveryDigest') == frozen['deliveryDigest']
                      or (not original.get('discord') and original.get('channelId') == manifest['channelId']
                          and original.get('payload') == manifest.get('payload')))):
             reject('An earlier Discord delivery is unresolved. Reconcile it before approving another copy.')
@@ -146,12 +183,14 @@ def assert_no_unresolved_repeat(state, manifest, *, excluding=None):
 
 def freeze_manifest(state, channel, manifest, selected_id):
     record = destination(state, channel, selected_id)
-    target = {k: copy.deepcopy(record.get(k)) for k in IDENTITY + LABELS}
+    target = {k: copy.deepcopy(record.get(k)) for k in identity_keys(record) + LABELS}
+    manifest['senderKind'] = sender_kind(target)
     wire = wire_content(manifest)
     delivery_digest = digest({'workspaceId': manifest['workspaceId'],
-                              'applicationId': target['applicationId'], 'botUserId': target['botUserId'],
+                              'applicationId': target['applicationId'],
+                              **({'sender': {'kind': 'webhook', 'id': target['webhookId']}} if sender_kind(target) == 'webhook' else {'botUserId': target['botUserId']}),
                               'guildId': target['guildId'], 'channelId': target['channelId'], 'wire': wire})
-    operation = digest({'target': {k: target[k] for k in IDENTITY}, 'wire': wire,
+    operation = digest({'target': {k: target[k] for k in identity_keys(target)}, 'wire': wire,
                         'variantId': manifest['variantId'], 'contentRevision': manifest['contentRevision'],
                         'timing': manifest['timing']})
     ended = [j for j in state['phase2'].get('jobs', [])
@@ -174,9 +213,10 @@ def manifest_current(state, channel, manifest):
         return (frozen['schema'] == SCHEMA and manifest['workspaceId'] == state['workspace']['id']
                 and target['workspaceId'] == manifest['workspaceId'] and target['connectionId'] == manifest['channelId']
                 and target['id'] == manifest['destinationId']
-                and all(record.get(k) == target.get(k) for k in IDENTITY)
+                and all(record.get(k) == target.get(k) for k in identity_keys(target))
+                and manifest.get('senderKind', 'bot') == sender_kind(target)
                 and frozen['wireDigest'] == digest(wire_content(manifest))
-                and frozen['operationDigest'] == digest({'target': {k: target[k] for k in IDENTITY},
+                and frozen['operationDigest'] == digest({'target': {k: target[k] for k in identity_keys(target)},
                     'wire': wire_content(manifest), 'variantId': manifest['variantId'],
                     'contentRevision': manifest['contentRevision'], 'timing': manifest['timing']}))
     except (AlphaError, KeyError, TypeError, ValueError):
@@ -250,7 +290,14 @@ def campaign_binding(state, channel, variant, selected_id, publish_at, zone, now
 def grant_matches(manifest, grant, session):
     try:
         target = manifest['discord']['target']
-        return (grant.get('provider') == 'discord' and 'bot' in grant.get('scopes', [])
+        if sender_kind(target) == 'webhook':
+            return (grant.get('provider') == 'discord' and 'webhook.incoming' in grant.get('scopes', [])
+                    and session.get('kind') == 'webhook' and session.get('workspaceId') == manifest['workspaceId']
+                    and session.get('applicationId') == target['applicationId']
+                    and session.get('webhookId') == target['webhookId'] and session.get('guild') == target['guildId']
+                    and session.get('channel') == target['channelId'] and session.get('user') == target['linkedUserId']
+                    and grant.get('authorizationGeneration') == target['authorizationGeneration'])
+        return (session.get('kind') != 'webhook' and grant.get('provider') == 'discord' and 'bot' in grant.get('scopes', [])
                 and grant.get('authorizationGeneration') == target['authorizationGeneration']
                 and session.get('applicationId') == target['applicationId']
                 and session.get('botUserId') == target['botUserId']
