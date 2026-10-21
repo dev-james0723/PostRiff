@@ -55,7 +55,7 @@ jobs:
       - name: Exercise the built archive in a read-only network-isolated Lambda runtime
         run: |
           docker pull --platform linux/amd64 "$LAMBDA_IMAGE"
-          docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{join .RepoDigests ","}}' "$LAMBDA_IMAGE" > validation/discord-ping-runtime/evidence/lambda-image.txt
+          docker image inspect "$LAMBDA_IMAGE" | python -c 'import json,sys; value=json.load(sys.stdin)[0]; assert (value["Os"],value["Architecture"])==("linux","amd64"); print(json.dumps({k:value[k] for k in ("Id","Os","Architecture","RepoDigests")}))' > validation/discord-ping-runtime/evidence/lambda-image.txt
           docker run --rm --pull=never --platform linux/amd64 --read-only --network none \
             --user 1000:1000 --cap-drop=ALL --security-opt=no-new-privileges \
             --pids-limit 64 --memory 256m --cpus 1 --tmpfs /tmp:rw,size=67108864,mode=1777 \
