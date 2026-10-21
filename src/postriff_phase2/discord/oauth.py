@@ -748,6 +748,7 @@ class DiscordConnections:
                 selected_row, _ = self.bind_identity(cur, workspace, selected)
                 if selected_row[4] != context.get('identityGeneration') or selected['userId'] != user['id']:
                     fail('The selected identity changed during webhook authorization.')
+                envelope.update(identityConnectionId=selected['id'], identityGeneration=selected_row[4])
             if context.get('connectionId'):
                 prior = next((c for c in channels if c.get('id') == context['connectionId']), None)
                 if (not prior or prior.get('discordAuthorizedBy') != actor
@@ -781,6 +782,44 @@ class DiscordConnections:
             self.save_state(cur, workspace, state)
         return {'connected': True, 'connectionId': connection, 'discordPurpose': 'webhook', 'senderKind': 'webhook',
                 'account': 'Rafii webhook', 'missingScopes': [], 'requiresDestinationAuthorization': True}
+
+    def webhook_authorizer(self, envelope):
+        """Resolve only an explicitly bound, current identity; never widen scopes.
+
+        Legacy/independent webhook envelopes keep the existing bot witness path.
+        Fresh provider reads and rotating-token refresh happen outside SQL locks.
+        The bearer is transient server-side data, never saved with the webhook.
+        """
+        connection = envelope.get('identityConnectionId')
+        if not connection:
+            return None
+        workspace = envelope.get('workspaceId')
+
+        def bound(cur, state):
+            self.validate_webhook(cur, workspace, envelope)
+            _, stored = self.read_credential(cur, workspace, envelope.get('connectionId'))
+            if any(stored.get(k) != envelope.get(k) for k in ('identityConnectionId', 'identityGeneration', 'user', 'memberId')):
+                fail('The webhook identity binding changed. Reconnect it.')
+            channel = next(c for c in state['phase2']['channels'] if c['id'] == envelope['connectionId'])
+            record = identity_record(state, connection, envelope.get('memberId'))
+            row, identity = self.bind_identity(cur, workspace, record)
+            if (channel.get('discordIdentityConnectionId') != connection
+                    or row[4] != envelope.get('identityGeneration') or identity['user'] != envelope['user']):
+                fail('The webhook identity changed. Reconnect it.')
+            self.require_active_installation_authorizer(cur, workspace, record)
+            return row, identity
+
+        with self.local(workspace, None) as (cur, state, _):
+            row, _ = bound(cur, state)
+            if 'guilds' not in row[5]:
+                return None
+        identity = self._fresh_identity(workspace, None, connection)
+        with self.local(workspace, None) as (cur, state, _):
+            row, current = bound(cur, state)
+            if (row[4] != identity['authorizationGeneration'] or current['at'] != identity['bearer']
+                    or not row[3] or float(row[3]) <= self.oauth.clock()):
+                fail('The webhook identity changed during verification. Reconnect it.')
+        return identity
 
     def reverify_webhook(self, workspace, connection, *, token=None, authenticated=None, actor=None, audit_event=None):
         """Provider read outside SQL; a late success cannot undo newer revocation."""

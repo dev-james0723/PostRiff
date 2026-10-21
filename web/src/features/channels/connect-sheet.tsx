@@ -460,6 +460,7 @@ export function ConnectSheet({
                   <DiscordModeChoices purpose={discordPurpose} busy={busy} modes={provider.discordModes} copy={dc} onChange={purpose => {
                     if (busy) return;
                     discordRequestGeneration.current += 1; setDiscordPurpose(purpose); setDiscordGuild(''); setDiscordGuilds([]); setError(null);
+                    if (purpose === 'webhook' && !discordIdentities.some(x => x.id === discordIdentity && x.status === 'linked' && x.discoverGuilds === true)) setDiscordIdentity('');
                   }} />
                   {discordIdentities.map(link => (
                     <div key={link.id} className='rafii-quiet flex flex-wrap items-center gap-2 rounded-md p-2 text-sm'>
@@ -502,6 +503,16 @@ export function ConnectSheet({
                       </label>
                       <p className='text-muted-foreground text-xs'>{dc.separateChannel}</p>
                     </>
+                  ) : discordPurpose === 'webhook' ? (
+                    <label className='flex flex-col gap-1 text-sm'>{dc.webhookIdentityLabel}
+                      <select aria-label={dc.webhookIdentityLabel} value={discordIdentity} disabled={busy}
+                        onChange={e => { discordRequestGeneration.current += 1; setDiscordIdentity(e.target.value); setError(null); }}
+                        className='rafii-quiet rounded-md p-2'>
+                        <option value=''>{dc.webhookIdentityNone}</option>
+                        {discordIdentities.filter(x => x.status === 'linked' && x.discoverGuilds === true).map(x =>
+                          <option key={x.id} value={x.id}>{x.account} · {x.userId}</option>)}
+                      </select>
+                    </label>
                   ) : null}
                   <p className='text-muted-foreground text-xs'>{dc.reconnectNotice}</p>
                   <p className='text-muted-foreground text-xs'>{dc.disconnectNotice}</p>

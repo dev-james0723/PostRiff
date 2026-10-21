@@ -264,6 +264,11 @@ class WebhookCustodyTests(unittest.TestCase):
             s.complete(WORKSPACE, 'synthetic-session', 's' * 32, 'webhook-code', iss='https://discord.com')
         channel = state['phase2']['channels'][0]
         self.assertEqual(channel.get('discordIdentityConnectionId'), record['id'])
+        saved = next(c.args[1] for c in cur.execute.call_args_list if c.args[0].startswith('INSERT INTO public.pr_encrypted_credentials'))
+        envelope = json.loads(s.oauth.vault.decrypt(saved[3], saved[5]))
+        self.assertEqual(envelope['identityConnectionId'], record['id'])
+        self.assertEqual(envelope['identityGeneration'], record['authorizationGeneration'])
+        self.assertNotIn('synthetic-bearer', json.dumps(envelope))
         s.invalidate_dependents(cur, WORKSPACE, state, record['id'])
         self.assertTrue(channel['revoked'])
         self.assertFalse(channel['capabilityVerified'])

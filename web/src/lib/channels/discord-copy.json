@@ -34,7 +34,7 @@
     "disconnectNotice": "Disconnecting locally holds dependent posts. The shared bot stays installed.",
     "webhookUnavailable": "Webhook publishing is unavailable pending separate qualification.",
     "interactionUnavailable": "User Install is unavailable pending application configuration and command verification.",
-    "webhookNotice": "Discord will create a Rafii webhook in the channel you authorize. Publishing also needs Rafii’s installed app to read current server membership and channel permissions; unavailable proof stops sending. Authorize the exact channel and approve each message. The webhook remains the sender. Text only; no personal authorship, threads or attachments.",
+    "webhookNotice": "Discord will create a Rafii webhook in the channel you authorize. Link an account with server-list permission to verify server owner or Administrator access without installing a bot. Other members need Rafii’s installed app to check current channel permissions. Missing or revoked proof stops sending. Authorize the exact channel and approve each message. The webhook remains the sender. Text only; no personal authorship, threads or attachments.",
     "interactionNotice": "User Install opens private Rafii drafts and review after you invoke the registered command. It cannot publish or schedule posts. Sign in to Rafii to view content.",
     "installUser": "Install Rafii to your Discord account",
     "linkPrivate": "Link this identity to private drafts",
@@ -56,7 +56,9 @@
     "openChannels": "Open Channels",
     "privateStoredLinked": "Stored private draft link: linked",
     "privateStoredUnlinked": "Stored private draft link: not linked",
-    "callbackContextChanged": "The connection context changed. Open Channels to check the original account and workspace before continuing."
+    "callbackContextChanged": "The connection context changed. Open Channels to check the original account and workspace before continuing.",
+    "webhookIdentityLabel": "Account for bot-free owner or Administrator checks (optional)",
+    "webhookIdentityNone": "Use the installed app for permission checks"
   },
   "zh-Hant": {
     "personalTitle": "個人 Discord 帳戶",
@@ -93,7 +95,7 @@
     "disconnectNotice": "在本工作區中斷連接會暫停相關貼文，共用機械人仍會保留。",
     "webhookUnavailable": "Webhook 發文尚待獨立驗證，目前無法使用。",
     "interactionUnavailable": "使用者安裝功能尚待應用程式設定及指令驗證，目前無法使用。",
-    "webhookNotice": "Discord 會在你授權的頻道建立 Rafii Webhook。發送前亦需要已安裝的 Rafii 應用程式唯讀核實最新伺服器成員資格及頻道權限；無法核實便不會發送。請授權確實頻道並逐則批准訊息。發送者仍是 Webhook，只支援文字，不代表個人發文，亦不支援討論串或附件。",
+    "webhookNotice": "Discord 會在你授權的頻道建立 Rafii Webhook。連結已授權伺服器列表的帳戶，即可核實伺服器擁有者或管理員權限，無須安裝 Bot。其他成員仍需已安裝的 Rafii 應用程式核實最新頻道權限。無法核實或權限已撤銷便不會發送。請授權確實頻道並逐則批准訊息。發送者仍是 Webhook，只支援文字，不代表個人發文，亦不支援討論串或附件。",
     "interactionNotice": "使用者安裝功能讓你呼叫已註冊指令後開啟私密的 Rafii 草稿及審閱頁面。此功能不能發文或排程，查看內容須登入 Rafii。",
     "installUser": "將 Rafii 安裝到你的 Discord 帳戶",
     "linkPrivate": "將此身分連接至私密草稿入口",
@@ -115,7 +117,9 @@
     "openChannels": "開啟連接頁面",
     "privateStoredLinked": "已儲存的私密草稿入口：已連接",
     "privateStoredUnlinked": "已儲存的私密草稿入口：未連接",
-    "callbackContextChanged": "連接情境已變更。請開啟連接頁面，確認原本的帳戶及工作區後再繼續。"
+    "callbackContextChanged": "連接情境已變更。請開啟連接頁面，確認原本的帳戶及工作區後再繼續。",
+    "webhookIdentityLabel": "免 Bot 核實擁有者或管理員權限的帳戶（選填）",
+    "webhookIdentityNone": "使用已安裝的應用程式核實權限"
   },
   "zh-Hans": {
     "personalTitle": "个人 Discord 账户",
@@ -152,7 +156,7 @@
     "disconnectNotice": "在本工作区断开连接会暂停相关帖子，共用机器人仍会保留。",
     "webhookUnavailable": "Webhook 发文尚待独立验证，目前无法使用。",
     "interactionUnavailable": "用户安装功能尚待应用设置及命令验证，目前无法使用。",
-    "webhookNotice": "Discord 将在你授权的频道创建 Rafii Webhook。发送前还需要已安装的 Rafii 应用唯读核实最新服务器成员资格及频道权限；无法核实便不会发送。请授权确切频道并逐条批准消息。发送者仍是 Webhook，仅支持文字，不代表个人发文，也不支持话题或附件。",
+    "webhookNotice": "Discord 将在你授权的频道创建 Rafii Webhook。关联已授权服务器列表的账户，即可核实服务器所有者或管理员权限，无需安装 Bot。其他成员仍需已安装的 Rafii 应用核实最新频道权限。无法核实或权限已撤销便不会发送。请授权确切频道并逐条批准消息。发送者仍是 Webhook，仅支持文字，不代表个人发文，也不支持话题或附件。",
     "interactionNotice": "用户安装功能让你调用已注册命令后打开私密的 Rafii 草稿及审核页面。此功能不能发文或排期，查看内容须登录 Rafii。",
     "installUser": "将 Rafii 安装到你的 Discord 账户",
     "linkPrivate": "将此身份连接至私密草稿入口",
@@ -174,6 +178,8 @@
     "openChannels": "打开连接页面",
     "privateStoredLinked": "已保存的私密草稿入口：已连接",
     "privateStoredUnlinked": "已保存的私密草稿入口：未连接",
-    "callbackContextChanged": "连接上下文已变更。请打开连接页面，确认原来的账户及工作区后再继续。"
+    "callbackContextChanged": "连接上下文已变更。请打开连接页面，确认原来的账户及工作区后再继续。",
+    "webhookIdentityLabel": "免 Bot 核实所有者或管理员权限的账户（选填）",
+    "webhookIdentityNone": "使用已安装的应用核实权限"
   }
 }

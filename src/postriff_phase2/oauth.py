@@ -82,6 +82,8 @@ class OAuthService:
         from .discord.oauth import DiscordConnections
         self.discord_connections = DiscordConnections(self)
         discord = self.providers.get('discord')
+        if discord is not None:
+            discord.webhook_authorizer = self.discord_connections.webhook_authorizer
         if discord is not None and getattr(discord, 'rate_v1_enabled', False):
             from .discord.rate_limits import SharedPostgresBudget, RateCoordinatorUnavailable
             try:

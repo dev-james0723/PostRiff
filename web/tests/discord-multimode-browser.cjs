@@ -55,6 +55,15 @@ async function until(check) {
         const send = (body, status = 200) => route.fulfill({status, contentType: 'application/json', body: JSON.stringify(body)});
         if (path.endsWith('/channels/discord/oauth/start') && req.method() === 'POST') {
           const body = req.postDataJSON(); starts.push(body);
+          if (body.input.discordPurpose === 'webhook') {
+            assert.equal(body.capability, 'publish');
+            assert.equal(body.input.identityConnectionId, 'second-identity');
+            const scopes = ['identify', 'webhook.incoming'];
+            return send({transactionId: 'synthetic-webhook-transaction', provider: 'discord', platform: 'Discord', scopes,
+              discordPurpose: 'webhook', capability: 'publish', expiresAt: 9999999999,
+              authorizeUrl: 'https://discord.com/oauth2/authorize?' + new URLSearchParams({client_id: '1234567', scope: scopes.join(' '), state: 'synthetic-webhook-xxxxxxxxxxxxxxxxxxxx'}),
+              permissionExplanation: 'Synthetic webhook grant; the webhook remains the sender.'}, 201);
+          }
           assert.equal(body.input.discordPurpose, 'identity'); assert.equal(body.capability, 'identity');
           if (holdStart) await new Promise(resolve => { releaseStart = resolve; });
           const scopes = body.input.discoverGuilds ? ['identify', 'guilds'] : ['identify'];
@@ -125,6 +134,22 @@ async function until(check) {
       await page.waitForURL('**/app/channels?connected=*');
       await page.locator('#discord-identity-' + identities[0].id).waitFor();
       assert.equal(callbacks, 2);
+      stage = 'bot-free-webhook-identity-selection-' + width;
+      provider.discordModes.webhook = {enabled: true, status: 'available'};
+      await page.goto(base + '/app/channels');
+      await page.getByRole('button', {name: 'Manage personal account', exact: true}).first().click();
+      await sheet.getByRole('button', {name: 'Incoming webhook', exact: true}).click();
+      const ownerIdentity = sheet.getByRole('combobox', {name: 'Account for bot-free owner or Administrator checks (optional)', exact: true});
+      assert.equal(await ownerIdentity.inputValue(), '', 'an identity without server-list scope must not stay selected invisibly');
+      assert.equal(await ownerIdentity.getByRole('option', {name: identities[0].account + ' · ' + identities[0].userId, exact: true}).count(), 0);
+      const beforeWebhook = starts.length;
+      await ownerIdentity.selectOption('second-identity');
+      assert.equal(starts.length, beforeWebhook, 'identity selection cannot silently start OAuth');
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+      await sheet.getByRole('button', {name: 'Continue', exact: true}).click();
+      await sheet.getByRole('link', {name: /Continue to Discord/}).waitFor();
+      assert.equal(starts.length, beforeWebhook + 1);
+      assert.equal(starts.at(-1).input.identityConnectionId, 'second-identity');
       stage = 'explicit-bot-webhook-composer-sender-' + width;
       const bot = {...structuredClone(input.channel), discordConnectionKind: 'installation'};
       const hook = {...structuredClone(input.channel), id: 'discord-webhook-synthetic', account: 'Synthetic webhook', discordConnectionKind: 'webhook', scopes: ['identify', 'webhook.incoming']};
@@ -145,7 +170,7 @@ async function until(check) {
       mkdirSync(join(root, '.depot/discord-multimode-browser'), {recursive: true});
       await page.screenshot({path: join(root, `.depot/discord-multimode-browser/${width}.png`), fullPage: true});
       checks.push({width, identityNoServer: true, officialScopeUpgrade: true, staleResponse: true, wrongSubject: true,
-        callback: true, sender: true, unavailableModes: true, keyboard: true, accessibility: 'axe WCAG2A/AA new section', unexpectedMutations: unexpected});
+        callback: true, sender: true, unavailableModes: true, botFreeIdentitySelection: true, keyboard: true, accessibility: 'axe WCAG2A/AA new section', unexpectedMutations: unexpected});
       await context.close();
     }
     writeFileSync(join(root, '.depot/discord-multimode-browser/results.json'), JSON.stringify({execution: 'synthetic-running-browser', checks, realDiscord: 'NOT_RUN'}, null, 2));

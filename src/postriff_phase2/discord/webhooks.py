@@ -44,16 +44,66 @@ def verify_resource(provider, session, *, read_authorize=None):
             'selected': session.get('destinationAuthorized') is True}
 
 
-def verify(provider, session, *, read_authorize=None):
-    """A webhook token is not proof of the author's current channel permission.
+def owner_permissions(provider, session, *, read_authorize=None):
+    """Only current owners/admins bypass channel overwrites without a bot.
 
-    Sending remains webhook-authenticated. Rafii's already installed app supplies
-    read-only membership/role/channel evidence; absent evidence holds publishing.
-    Identity connection and webhook custody do not require this extra read access.
+    The server-side resolver rechecks the selected identity's encrypted custody,
+    generation, expiry and active Rafii membership. No permission proof is cached.
+    """
+    resolver = getattr(provider, 'webhook_authorizer', None)
+    identity = resolver(session) if callable(resolver) else None
+    if identity is None:
+        return None
+    if (not isinstance(identity, dict) or not isinstance(identity.get('scopes'), list)
+            or any(not isinstance(s, str) for s in identity['scopes'])
+            or identity.get('userId') != session.get('user')
+            or not isinstance(identity.get('bearer'), str) or not identity['bearer']):
+        raise AlphaError('The webhook authorizer changed. Reconnect it.', 409)
+    if 'guilds' not in identity['scopes']:
+        return None
+    def read(route, expected):
+        return provider._json(provider._discord_http('GET', route,
+            credential_kind='user', bearer=identity['bearer'], user_id=identity['userId'],
+            headers={'Authorization': 'Bearer ' + identity['bearer'],
+                     'User-Agent': f'DiscordBot ({provider.website}, 1)'},
+            read_authorize=read_authorize), expected)
+    info = read('/oauth2/@me', dict)
+    if (not isinstance(info.get('application'), dict) or info['application'].get('id') != provider.client_id
+            or not isinstance(info.get('user'), dict) or info['user'].get('id') != session['user']
+            or not isinstance(info.get('scopes'), list) or any(not isinstance(s, str) for s in info['scopes'])
+            or not {'identify', 'guilds'}.issubset(info['scopes'])):
+        raise AlphaError('Discord did not confirm the webhook authorizer and server-list consent.', 409)
+    guilds = read('/users/@me/guilds?limit=200', list)
+    seen, proof = set(), None
+    if len(guilds) > 200:
+        raise AlphaError('Discord returned an invalid server list.', 409)
+    for guild in guilds:
+        if not isinstance(guild, dict) or not snowflake(guild.get('id')) or guild['id'] in seen:
+            raise AlphaError('Discord returned an invalid server list.', 409)
+        seen.add(guild['id'])
+        if guild['id'] != session['guild']:
+            continue
+        permissions = guild.get('permissions')
+        if guild.get('owner') is True:
+            proof = 'current_owner_oauth'
+        elif isinstance(permissions, str) and re.fullmatch(r'[0-9]{1,128}', permissions) and int(permissions) & (1 << 3):
+            proof = 'current_admin_oauth'
+    return proof
+
+
+def verify(provider, session, *, read_authorize=None):
+    """Webhook custody alone cannot prove current authorizer permissions.
+
+    Owners/admins use their separately linked OAuth identity. Other members need
+    the installed app's current channel overwrite evidence; missing proof holds.
     """
     resource = verify_resource(provider, session, read_authorize=read_authorize)
     if any(not snowflake(session.get(k)) for k in ('guild', 'channel', 'user')):
         raise AlphaError('Discord webhook permission evidence is unavailable.', 409)
+    proof = owner_permissions(provider, session, read_authorize=read_authorize)
+    if proof:
+        return {**resource, 'userPermissions': provider.VIEW_CHANNEL | provider.SEND_MESSAGES,
+                'permissionProof': proof}
     bot = provider._bot_identity(read_authorize=read_authorize)
     guild = provider._json(provider._bot('GET', '/guilds/' + session['guild'], read_authorize=read_authorize), dict)
     if guild.get('id') != session['guild']:

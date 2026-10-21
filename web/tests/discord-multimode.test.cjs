@@ -33,6 +33,18 @@ test('all existing UI packs cover personal modes and sender copy', () => {
   }
 });
 
+test('all three language packs disclose the bot-free owner/admin boundary', () => {
+  const {DiscordModeChoices} = load('src/features/channels/discord-mode-choices.tsx');
+  const packs = JSON.parse(fs.readFileSync(path.join(root, 'src/lib/channels/discord-copy.json')));
+  for (const copy of Object.values(packs)) {
+    const html = renderToStaticMarkup(React.createElement(DiscordModeChoices,
+      {purpose:'webhook', busy:false, onChange:()=>{}, copy, modes:{webhook:{enabled:true},userInstall:{enabled:false}}}));
+    assert.ok(html.includes(copy.webhookNotice));
+    assert.ok(copy.webhookIdentityLabel.trim());
+    assert.ok(copy.webhookIdentityNone.trim());
+  }
+});
+
 test('private mapping removal remains available while paused or reconnect-required', () => {
   const helpers = load('src/lib/channels/discord-personal-account.ts');
   assert.equal(typeof helpers.discordPrivateLinkActions, 'function', 'private removal is incorrectly tied to new-install eligibility');
