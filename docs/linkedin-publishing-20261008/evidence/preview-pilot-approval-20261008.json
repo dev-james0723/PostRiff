@@ -1,0 +1,21 @@
+{
+  "state": "HUMAN_APPROVED_NOT_YET_EXECUTED",
+  "observedAtUtc": "2026-10-08 06:07:04 UTC",
+  "userApproval": "yes i approve",
+  "approvalSource": "Direct user reply to exact LinkedIn preview pilot approval request",
+  "candidateSha256": "fa4ff7a0cc464a4216eacc4509c4f08e9ec5a14dc142b5cb7cf9ae014b29eac4",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "branch": "codex/social-connection-recovery-20261007",
+  "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "approvedEffects": [
+    "Create exactly two reviewed preview-only LinkedIn product-evidence/workflow environment records; no upsert",
+    "Redeploy the same tested source to preview under existing authorization",
+    "Tester B owner performs optional openid/profile/w_member_social consent privately",
+    "One immediate PUBLIC personal text post through normal Rafii UI against the intended B connection, exact approved text"
+  ],
+  "postText": "Rafii integration test: verifying a LinkedIn text post. This test post will be removed after verification.",
+  "maximumPostCount": 1,
+  "additionalBillingAuthorityUsd": 0,
+  "productionExcluded": true,
+  "permanentDeletionApproval": "Required at action time for only the newly returned pilot ID; not covered by this preapproval"
+}

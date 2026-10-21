@@ -18,7 +18,7 @@ class AssetKindTests(unittest.TestCase):
         self.assertEqual(ak.kind_of(VIDEO), "video")
         self.assertEqual(ak.kind_of({"mime": "VIDEO/MP4"}), "video")
         self.assertEqual(ak.kind_of({**IMAGE, "kind": "video"}), "image")   # a stored or client kind never wins over mime
-        self.assertIsNone(ak.kind_of({"mime": "application/pdf"}))
+        self.assertEqual(ak.kind_of({"mime": "application/pdf"}), "document")
         self.assertEqual(ak.kind_of({"processing": "decoded"}), "image")   # legacy records have no mime
         self.assertIsNone(ak.kind_of({"mime": "text/plain"}))
         self.assertIsNone(ak.kind_of(None))
@@ -44,7 +44,9 @@ class AssetKindTests(unittest.TestCase):
         self.assertTrue(ak.is_library_asset(VIDEO))
         self.assertTrue(ak.is_library_asset({**VIDEO, "processing": "uploading"}))
         self.assertFalse(ak.is_library_asset({**IMAGE, "deleted": True}))
-        self.assertFalse(ak.is_library_asset({"mime": "application/pdf"}))
+        self.assertTrue(ak.is_library_asset({"mime": "application/pdf"}))
+        self.assertFalse(ak.is_ready({"mime": "application/pdf"}))
+        self.assertTrue(ak.is_ready({"mime": "application/pdf", "processing": "validated"}))
 
 
 if __name__ == "__main__":

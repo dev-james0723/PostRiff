@@ -1,0 +1,27 @@
+{
+  "products": {
+    "observedAt": "2026-10-08T04:20:38.134Z",
+    "appId": "263833009",
+    "appName": "James Studio",
+    "console": "https://www.linkedin.com/developers/apps/263833009/products",
+    "shareProductAdded": true,
+    "shareTier": "Default Tier",
+    "oidcProductAdded": true,
+    "communityManagementAdded": false,
+    "communityManagementShownAvailable": true,
+    "roleRestrictionShownOnProducts": false,
+    "externalPublishingLiveVerified": false
+  },
+  "auth": {
+    "observedAt": "2026-10-08T04:20:57.446Z",
+    "appId": "263833009",
+    "console": "https://www.linkedin.com/developers/apps/263833009/auth",
+    "scopeRows": [
+      "openid Use your name and photo profile Use your name and photo w_member_social Create, modify, and delete posts, comments, and reactions on your behalf email Use the primary email address associated with your LinkedIn account"
+    ],
+    "approvedPreviewCallbackRegistered": true,
+    "canonicalProductionCallbackRegistered": true,
+    "rolesReviewed": false,
+    "settingsChanged": false
+  }
+}

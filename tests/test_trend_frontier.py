@@ -113,6 +113,21 @@ class FrontierSQL(unittest.TestCase):
             cur.execute('SELECT * FROM pr_trend_jobs WHERE scope_key=%s AND job_id=%s',(self.scope,jid))
             return row(cur)
 
+    def maintenance_pass(self, *, after=None):
+        # The worker scans all scopes in bounded pages. Follow its documented
+        # cursor instead of assuming this fixture sorts into the first page.
+        cancelled = 0
+        while True:
+            receipt = self.engine.maintenance(after=after)
+            self.assertEqual(receipt['status'], 'ok')
+            cancelled += receipt['cancelled']
+            next_key = receipt['next_key']
+            if next_key is None:
+                return cancelled
+            if after is not None:
+                self.assertGreater(next_key, after, 'maintenance cursor must advance')
+            after = next_key
+
     def fetch(self, sql, args=()):
         with self.connect() as db: return db.execute(sql,args).fetchone()
 
@@ -235,6 +250,11 @@ class FrontierSQL(unittest.TestCase):
         unrelated = {identifier: self.job(identifier)['state'] for identifier in produced['jobs']
                      if identifier != d['job_id']}
         with self.connect() as db:
+            for i in range(100):
+                db.execute('''INSERT INTO pr_trend_outbox(scope_key,event_id,event_key,event_type,node_id,payload)
+                    SELECT scope_key,%s,%s,event_type,node_id,payload FROM pr_trend_outbox
+                    WHERE scope_key=%s AND payload->>'record'='allocation' LIMIT 1''',
+                    (str(uuid.uuid4()), 'frontier-allocation:'+format(i, '064x'), self.scope))
             db.execute("UPDATE pr_trend_nodes SET validity='revoked' WHERE scope_key=%s AND node_id=%s",(self.scope,self.sources[0]))
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
         self.assertGreaterEqual(self.maintain_until_cancelled([d['job_id']]), 1)

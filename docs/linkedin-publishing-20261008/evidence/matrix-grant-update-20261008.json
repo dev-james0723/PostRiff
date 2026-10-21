@@ -1,0 +1,25 @@
+{
+  "schema": "rafii.social.matrix-evidence-update.v1",
+  "observedAtUtc": "2026-10-08T07:45:51.420956+00:00",
+  "capabilityRows": 205,
+  "capabilityCounts": {
+    "PARTIAL": 2,
+    "NOT_RUN": 203
+  },
+  "liveCases": 196,
+  "liveCaseCounts": {
+    "PARTIAL": 2,
+    "NOT_RUN": 194
+  },
+  "fullLivePasses": 0,
+  "writeGrantEvidence": "../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json",
+  "heldApprovedJobEvidence": "../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json",
+  "change": "Actual consent/blocker evidence only; no row state promoted",
+  "facebookMinimumContract": "Official pages_show_list and debug_token primary pages verified; no live Facebook result",
+  "candidateSourceSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+  "mirrorSkippedDifferentOwnerBytes": [
+    "docs/official-social-20261005/capability-matrix.csv",
+    "docs/official-social-20261005/capability-matrix.json",
+    "docs/official-social-20261005/live-e2e-matrix.json"
+  ]
+}

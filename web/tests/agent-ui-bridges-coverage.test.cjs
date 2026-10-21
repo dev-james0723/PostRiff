@@ -1,7 +1,7 @@
 /**
  * rafii-genui/1 lane D (J06): the analytics coverage rules the server computes for generated views
  * (agent_runtime_v2/ui_domain/analytics.py build_coverage/coverage_state) are the same as the Analytics page's
- * web/src/features/analytics/coverage.ts. Both languages run tests/fixtures/agent_ui/coverage/cases.json.
+ * web/src/features/analytics/coverage.ts. Both languages run tests/fixtures/agent_ui/bridge-cases.json.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -22,7 +22,7 @@ vm.runInContext(`(function(require, exports, module){${code}\n})`, vm.createCont
   coverage,
   { exports: coverage },
 );
-const cases = JSON.parse(fs.readFileSync(path.join(WEB, '..', 'tests/fixtures/agent_ui/coverage/cases.json'), 'utf8'));
+const cases = JSON.parse(fs.readFileSync(path.join(WEB, '..', 'tests/fixtures/agent_ui/bridge-cases.json'), 'utf8'));
 
 test('the shared coverage fixtures exist', () => {
   assert.ok(cases.length >= 5);

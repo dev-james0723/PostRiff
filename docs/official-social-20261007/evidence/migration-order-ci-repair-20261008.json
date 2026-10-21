@@ -1,0 +1,28 @@
+{
+  "recordedAtUtc": "2026-10-08T04:07:07.302645+00:00",
+  "execution": "REAL source-bound GitHub failure and single local control regression; no production DDL",
+  "sourceSha": "2bdab04757709b82408c2124a25f48f61700b01d",
+  "githubRunId": 37724093989,
+  "githubJobId": 113138189907,
+  "githubMergeSha": "387a9770cbcdb9898e1affdb96570bed6831275d",
+  "testedTree": "244aba847c2793c61be7af5df7b505b6e75ca37d",
+  "artifactId": 11527735772,
+  "artifactSha256": "31f3658d7db9a793a0e08e16506f00b8e5f858b5e6ed2b21e0a48e3fdf71b6da",
+  "failure": "test_migration_numbers.ChatMediaMigrationTests.test_rls_harness_loads_it_in_order: merged disposable harness loaded 100/101 before 094-096.",
+  "broadResult": {
+    "tests": 3807,
+    "failures": 1,
+    "skipped": 371
+  },
+  "repair": "Move only social100/101 includes after Library096; retain all migrations and RLS assertions. Test unchanged.",
+  "focused": {
+    "command": "PYTHONPATH=tests python3 -m unittest -v test_migration_numbers.ChatMediaMigrationTests.test_rls_harness_loads_it_in_order",
+    "source": "Four exact source files materialized from2bdab047 Git objects because worktree access is unavailable.",
+    "redExitCode": 1,
+    "greenExitCode": 0,
+    "redLogSha256": "3ced85d643d9b0e9248120f981dc25e4a9371d53c496a42c8338f7ff50003786",
+    "greenLogSha256": "485469945b67cf123a31dbee24b5a9aefbf689792dbdb8fa89718f3a5f5179eb"
+  },
+  "otherChecks": "Six GitHub suites and Vercel passed; dependency-lock intentionally skipped. New-head required checks pending after this scoped test-harness fix.",
+  "validationScope": "All heavyweight validation stays on cloud. Prior Depot CI/browser validates unchanged application files; changed harness will be validated by new-head integrated GitHub gates."
+}
