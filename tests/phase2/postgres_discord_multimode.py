@@ -122,6 +122,39 @@ except AlphaError: pass
 else: raise AssertionError('same actor borrowed foreign-workspace webhook custody')
 checks.append('foreign member, same-actor foreign workspace and browser-role SQL isolation')
 
+# Real PostgreSQL bindings for the bot-free owner path. The same Discord subject
+# may independently consent in two tenants; custody and revocation stay scoped.
+from unittest.mock import patch
+owner_start = oauth.start(other_workspace, foreign_token, 'discord', 'identity',
+    {'discordPurpose': 'identity', 'discoverGuilds': True})
+owner_state = parse_qs(urlsplit(owner_start['authorizeUrl']).query)['state'][0]
+owner_identity = oauth.complete(other_workspace, foreign_token, 'discord', owner_state, 'identity-code')['connectionId']
+owner_start = oauth.start(other_workspace, foreign_token, 'discord', 'publish',
+    {'discordPurpose': 'webhook', 'identityConnectionId': owner_identity, 'channelId': FIRST})
+owner_state = parse_qs(urlsplit(owner_start['authorizeUrl']).query)['state'][0]
+owner_hook = oauth.complete(other_workspace, foreign_token, 'discord', owner_state, 'webhook-code', iss='https://discord.com')['connectionId']
+with connection() as db:
+    row = db.execute('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (other_workspace, owner_hook)).fetchone()
+    bound_hook = json.loads(oauth.vault.decrypt(*row))
+assert bound_hook['identityConnectionId'] == owner_identity and 'at' not in bound_hook
+wire.route_overrides[('GET', '/users/@me/guilds')] = {'status': 200, 'body': [{'id': GUILD, 'owner': True, 'permissions': '0'}]}
+with patch.object(provider, '_bot_identity', side_effect=AlphaError('Synthetic server has no bot.', 409)) as bot_read:
+    oauth.choose_destination(other_workspace, foreign_token, owner_hook, FIRST)
+    grant = oauth.discord_grant_for_worker(other_workspace, owner_hook)
+    assert provider.destinations(grant['accessToken'])[0]['permissionProof'] == 'current_owner_oauth'
+    bot_read.assert_not_called()
+    wire.route_overrides[('GET', '/users/@me/guilds')]['body'][0]['owner'] = False
+    try: provider.destinations(grant['accessToken'])
+    except AlphaError: pass
+    else: raise AssertionError('demoted authorizer retained bot-free publishing permission')
+oauth.discord_connections.disconnect_identity(other_workspace, foreign_token, owner_identity)
+try: oauth.discord_grant_for_worker(other_workspace, owner_hook)
+except AlphaError: pass
+else: raise AssertionError('disconnected owner identity retained webhook custody')
+assert oauth.discord_grant_for_worker(workspace, hook_connection)['provider'] == 'discord'
+wire.route_overrides.pop(('GET', '/users/@me/guilds'))
+checks.append('bot-free owner proof, demotion and selected-identity disconnect with real tenant-scoped SQL custody')
+
 oauth.discord_connections.disconnect_identity(workspace, token, identity)
 assert endpoint.resolve(USER) == []
 oauth.disconnect(workspace, token, hook_connection)

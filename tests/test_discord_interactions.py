@@ -56,6 +56,21 @@ class InteractionTests(InteractionFixture, unittest.TestCase):
         self.assertIn('/queue', result['data']['content'])
         self.assertNotIn('synthetic-never', json.dumps(result)); self.assertNotIn('draft content', json.dumps(result))
         with self.assertRaises(AlphaError): self.send(self.packet())
+    def test_private_reply_uses_signed_discord_locale_with_safe_english_fallback(self):
+        for locale, linked, unlinked in [
+                ('en-US', 'Open your private Rafii drafts', 'Open Rafii and link'),
+                ('zh-TW', '開啟你的私密 Rafii 草稿', '開啟 Rafii 並連結'),
+                ('zh-CN', '打开你的私密 Rafii 草稿', '打开 Rafii 并关联'),
+                ('unknown', 'Open your private Rafii drafts', 'Open Rafii and link'),
+                ({'untrusted': 'locale'}, 'Open your private Rafii drafts', 'Open Rafii and link')]:
+            for links, expected in [([{'workspaceId': 'workspace', 'identityId': 'identity'}], linked), ([], unlinked)]:
+                with self.subTest(locale=locale, linked=bool(links)):
+                    self.seen.clear(); self.links = links
+                    result = self.send(self.packet(locale=locale))
+                    self.assertIn(expected, result['data']['content'])
+                    self.assertEqual(result['data']['flags'], 64)
+                    self.assertEqual(result['data']['allowed_mentions'], {'parse': []})
+                    self.assertNotIn('synthetic-never', json.dumps(result))
     def test_application_user_owner_context_and_command_fail_closed(self):
         for changes in [{'application_id': USER}, {'context': 0}, {'authorizing_integration_owners': {'1': APP}},
                         {'user': {'id': APP}}, {'data': {'id': USER, 'name': 'rafii-drafts', 'type': 1}},

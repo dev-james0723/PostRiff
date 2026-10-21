@@ -13,6 +13,15 @@ COMMAND = {'name': 'rafii-drafts', 'type': 1, 'description': 'Open your private 
            'integration_types': [1], 'contexts': [1, 2],
            'description_localizations': {'zh-TW': '開啟你的私密 Rafii 草稿及審閱', 'zh-CN': '打开你的私密 Rafii 草稿及审核'}}
 
+PRIVATE_REPLY_COPY = {
+    'en-US': ('Open Rafii and link or reconnect one account/workspace for private drafts: ',
+              'Open your private Rafii drafts and review (sign in required): '),
+    'zh-TW': ('開啟 Rafii 並連結或重新連結一個帳戶及工作區，以使用私密草稿：',
+              '開啟你的私密 Rafii 草稿及審閱（需要登入）：'),
+    'zh-CN': ('打开 Rafii 并关联或重新关联一个账户及工作区，以使用私密草稿：',
+              '打开你的私密 Rafii 草稿及审核（需要登录）：'),
+}
+
 
 def deny(message='Discord interaction unavailable. Open Rafii to reconnect.', status=401):
     raise AlphaError(message, status, code='discord_interaction_unavailable')
@@ -182,10 +191,12 @@ class DiscordInteractions:
         if origin.scheme != 'https' or not origin.hostname or origin.username or origin.password: deny(status=503)
         # Link contains no draft IDs/content or bearer authority; Rafii authenticates
         # its normal session and verifies membership before showing any workspace.
+        locale = packet.get('locale')
+        copy = PRIVATE_REPLY_COPY.get(locale if isinstance(locale, str) else '', PRIVATE_REPLY_COPY['en-US'])
         url = self.web_base_url + '/app/channels?connect=discord'
-        text = 'Open Rafii and link or reconnect one account/workspace for private drafts: '
+        text = copy[0]
         if len(links) == 1:
             url = self.web_base_url + '/app/queue/discord?' + urlencode({'workspaceId': links[0]['workspaceId'], 'identityId': links[0].get('identityId', '')})
-            text = 'Open your private Rafii drafts and review (sign in required): '
+            text = copy[1]
         if self.monotonic() - started >= 2.0: deny('Open Rafii to continue. Interaction response deadline reached.', 503)
         return {'type': 4, 'data': {'flags': 64, 'content': text + url, 'allowed_mentions': {'parse': []}}}
