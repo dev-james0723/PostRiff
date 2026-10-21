@@ -47,9 +47,11 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v > ../evidence/unit.log 2>&1
       - name: Original nine-case offline reference parity
         run: UPSTREAM_SOURCE_ROOT="$RUNNER_TEMP/ping-upstream" python validation/discord-ping-runtime/frozen/tests/reference_parity.py > validation/discord-ping-runtime/evidence/reference-parity.json
+      - name: Validate build-origin packaging boundaries with synthetic metadata
+        run: python -m unittest discover -s validation/discord-ping-runtime -p 'test_package_output.py' -v > validation/discord-ping-runtime/evidence/package-unit.log 2>&1
       - name: Build the actual isolated Python function archive without a Vercel project
         run: |
-          VERCEL_BUILDER_MODULES="$RUNNER_TEMP/ping-builder/node_modules" node validation/discord-ping-runtime/build-archive.cjs
+          VERCEL_BUILDER_MODULES="$RUNNER_TEMP/ping-builder/node_modules" python validation/discord-ping-runtime/qualify.py build-origin
           python validation/discord-ping-runtime/qualify.py unpack
           python -m pip_audit --path validation/discord-ping-runtime/evidence/function/_vendor --format json --output validation/discord-ping-runtime/evidence/runtime-audit.json
       - name: Exercise the built archive in a read-only network-isolated Lambda runtime
@@ -61,7 +63,7 @@ jobs:
             --pids-limit 64 --memory 256m --cpus 1 --tmpfs /tmp:rw,size=67108864,mode=1777 \
             --entrypoint /var/lang/bin/python3.12 \
             -e PYTHONDONTWRITEBYTECODE=1 \
-            -v "$PWD/validation/discord-ping-runtime/evidence/function:/function:ro" \
+            -v "$PWD/validation/discord-ping-runtime/.vercel/output/functions/api/discord/interactions.func:/function:ro" \
             -v "$PWD/validation/discord-ping-runtime/qualify.py:/driver/qualify.py:ro" \
             -v "$PWD/validation/discord-ping-runtime/FROZEN-SOURCES.json:/driver/frozen-manifest.json:ro" \
             "$LAMBDA_IMAGE" /driver/qualify.py probe --runtime-root /function --manifest /driver/frozen-manifest.json \

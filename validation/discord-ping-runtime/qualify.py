@@ -22,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 BASELINE = "e891af3591d8baabdb54c05d936ccd61c3299e42"
 PRODUCT = "fe45c568ed65c80f76afebc9911eeaa1a1a59c29"
 APP = "1553164599086555297"
-HOST = "synthetic-a7a0.example.invalid"
+HOST = "synthetic-ping-build.vercel.app"
 ROUTE = "/api/discord/interactions"
 
 
@@ -85,6 +85,29 @@ def unpack():
                       "runtime": record["runtime"], "sha256": record["sha256"]}))
 
 
+def synthetic_key():
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    # Public, deterministic fixture only. Never use it for a hosted Discord app.
+    return Ed25519PrivateKey.from_private_bytes(hashlib.sha256(b"rafii-origin-package-fixture-only").digest())
+
+
+def build_origin():
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+    source = os.environ["GITHUB_SHA"]
+    public = synthetic_key().public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
+    env = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL") if key in os.environ}
+    env.update({"VERCEL": "1", "VERCEL_ENV": "production", "VERCEL_URL": HOST,
+           "VERCEL_PROJECT_ID": "prj_syntheticping", "VERCEL_DEPLOYMENT_ID": "dpl_syntheticping",
+           "RAFII_A7A0_EXPECTED_PROJECT_ID": "prj_syntheticping", "RAFII_A7A0_SOURCE_SHA": source,
+           "RAFII_A7A0_APPLICATION_ID": APP, "RAFII_A7A0_PUBLIC_KEY_HEX": public,
+           "VERCEL_BUILDER_MODULES": os.environ["VERCEL_BUILDER_MODULES"]})
+    subprocess.run(["node", str(HERE / "build-deployment.cjs")], cwd=HERE, env=env, check=True)
+    result = json.loads((HERE / "evidence/origin-binding.json").read_text())
+    result["execution"] = "synthetic platform context through hosted-build entrypoint and actual builder ZIP"
+    write("origin-binding.json", result)
+    print(json.dumps(result))
+
+
 def probe(root, manifest_path):
     assert sys.version_info[:2] == (3, 12), sys.version
     assert platform.system() == "Linux"
@@ -104,10 +127,13 @@ def probe(root, manifest_path):
     spec = importlib.util.spec_from_file_location("ping_archive_handler", root / "api/discord/interactions.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    key = Ed25519PrivateKey.generate()  # Synthetic, ephemeral, never serialized to evidence.
+    key = synthetic_key()  # Deterministic public fixture; no real signing key or credential.
     public = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
-    env = {"RAFII_A7A0_APPLICATION_ID": APP, "RAFII_A7A0_PUBLIC_KEY_HEX": public,
-           "RAFII_A7A0_EXPECTED_ORIGIN": "https://" + HOST, "VERCEL_URL": HOST}
+    config = json.loads((root / ".vc-config.json").read_text())
+    assert config["runtime"] == "python3.12" and config["maxDuration"] == 5
+    assert config["environment"] == {"RAFII_A7A0_APPLICATION_ID": APP,
+        "RAFII_A7A0_PUBLIC_KEY_HEX": public, "RAFII_A7A0_EXPECTED_ORIGIN": "https://" + HOST}
+    env = {**config["environment"], "VERCEL_URL": HOST}
     server = ThreadingHTTPServer(("127.0.0.1", 0), module.handler)
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
@@ -188,7 +214,7 @@ def probe(root, manifest_path):
         thread.join(timeout=2)
     print(json.dumps({"status": "PASS", "execution": "real loopback HTTP in read-only network-none Lambda container",
                       "python": platform.python_version(), "cryptography": cryptography.__version__,
-                      "runtimeImportsFromBuiltArchive": True, "cases": outcomes, "networkGuard": counts,
+                      "runtimeImportsFromBuiltArchive": True, "serializedBuildOriginApplied": True, "cases": outcomes, "networkGuard": counts,
                       "liveDiscord": "NOT_RUN", "publicHttps": "NOT_RUN", "deployment": "NOT_RUN"}))
 
 
@@ -200,6 +226,12 @@ def finish():
     assert parity["offline_reference_parity"] == "PASS" and len(parity["cases"]) == 9
     smoke = json.loads((out / "lambda-probe.json").read_text())
     assert smoke["status"] == "PASS" and len(smoke["cases"]) == 20
+    package_unit = (out / "package-unit.log").read_text()
+    assert "Ran 14 tests" in package_unit and re.search(r"\nOK\s*$", package_unit)
+    packaging = json.loads((out / "origin-binding.json").read_text())
+    assert packaging["status"] == "PASS" and packaging["expectedOrigin"] == "https://" + HOST
+    assert packaging["frozenRuntimeSourcesUnchanged"] and not packaging["systemVariablesOverridden"]
+    assert smoke["serializedBuildOriginApplied"]
     audit = json.loads((out / "runtime-audit.json").read_text())
     assert any(d["name"].lower() == "cryptography" and d["version"] == "50.0.1" for d in audit["dependencies"])
     assert sum(len(d.get("vulns", [])) for d in audit["dependencies"]) == 0
@@ -208,7 +240,8 @@ def finish():
     build = json.loads((out / "builder-result.json").read_text())
     result = {"status": "PASS", "source": source["source"], "productSource": PRODUCT,
               "originalBaseline": BASELINE, "frozenFingerprint": source["fingerprint"],
-              "unitTests": 13, "referenceCases": 9, "actualHttpCases": 20,
+              "unitTests": 13, "packageTests": 14, "referenceCases": 9, "actualHttpCases": 20,
+              "buildOriginPackaging": "PASS_SYNTHETIC_CONTEXT_ACTUAL_ZIP",
               "runtime": build["runtime"], "functionSha256": build["sha256"],
               "auditedRuntimeDependencies": len(audit["dependencies"]), "runtimeVulnerabilities": 0,
               "productSourceUnchanged": True, "execution": "free standard runner and isolated Lambda image",
@@ -220,7 +253,7 @@ def finish():
 def emit_evidence():
     out = HERE / "evidence"
     for name in ("frozen-source.json", "reference-parity.json", "builder-result.json",
-                 "runtime-audit.json", "lambda-probe.json", "qualification.json"):
+                 "runtime-audit.json", "origin-binding.json", "lambda-probe.json", "qualification.json"):
         p = out / name
         if p.exists():
             try:
@@ -230,7 +263,7 @@ def emit_evidence():
                 print("PING_RUNTIME_EVIDENCE " + json.dumps({"name": name, "value": value}))
             except (ValueError, OSError):
                 print("PING_RUNTIME_EVIDENCE_UNREADABLE " + name)
-    for name in ("unit.log", "lambda-image.txt"):
+    for name in ("unit.log", "package-unit.log", "lambda-image.txt"):
         p = out / name
         if p.exists():
             print("PING_RUNTIME_TEXT " + json.dumps({"name": name, "value": p.read_text()}))
@@ -238,7 +271,7 @@ def emit_evidence():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("verify-source", "unpack", "probe", "finish", "emit-evidence"))
+    parser.add_argument("mode", choices=("verify-source", "unpack", "build-origin", "probe", "finish", "emit-evidence"))
     parser.add_argument("--runtime-root", type=Path)
     parser.add_argument("--manifest", type=Path)
     args = parser.parse_args()
@@ -246,6 +279,8 @@ if __name__ == "__main__":
         verify_source()
     elif args.mode == "unpack":
         unpack()
+    elif args.mode == "build-origin":
+        build_origin()
     elif args.mode == "probe":
         probe(args.runtime_root, args.manifest)
     elif args.mode == "emit-evidence":

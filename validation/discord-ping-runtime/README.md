@@ -37,3 +37,39 @@ No production project, database, credential, protection setting, public endpoint
 Discord registry or customer account is modified. Root automatic Git deployments
 remain disabled. Rollback is to stop using this auxiliary validation branch;
 preserve the qualified product head and its security repair.
+
+## Build-time origin packaging candidate
+
+The hosted build can read its platform-generated VERCEL_URL and serialize the
+exact HTTPS origin in Build Output API function environment metadata. The frozen
+verifier and adapter remain byte-identical. At runtime the existing comparison
+against platform VERCEL_URL still rejects a different deployment. No request
+Host/forwarded header establishes trust, and no system variable is overwritten.
+
+package_output.py validates the approved project ID, deployment ID, source SHA,
+public application ID/key, actual builder ZIP and frozen runtime hashes. It emits
+one Python function with a five-second duration and exactly three public runtime
+Config values. The source builder receives a stripped environment with no app
+credentials or platform OIDC tokens. build-deployment.cjs is the hosted-build
+entrypoint; deployment/ contains the proposed package/install/build settings.
+A source upload must flatten that template into a dedicated public PING-only
+project root with the helper files, manifest and five frozen runtime inputs.
+No Git linkage, production resources or credentials belong in that project.
+
+The new 14 packaging tests use small synthetic archive/metadata fixtures. CI also
+serializes a synthetic build URL into the ACTUAL builder ZIP output and runs the
+20 HTTP cases from that packaged function in the isolated Lambda image. Its
+publicly documented deterministic signing fixture is never a real Discord key.
+This validates the mechanical packaging and build/runtime mismatch rejection.
+It does not attest real Vercel system values, actual cold start/TLS, protection
+behavior or Discord acceptance. Those still require the exact approved hosted
+build, provider metadata readback and signed-PING check.
+
+The generated URL is only known during the real hosted build, so an offline
+prebuilt deployment cannot stand in for that build. Public project creation,
+its request exposure and cost/window, the real public key, Portal Endpoint Save
+and later useful command handling remain separate exact approval/acceptance
+gates. Source qualification itself performs no deployment or provider action.
+
+Official contracts: [Build Output API environment metadata](https://vercel.com/docs/build-output-api/primitives)
+and [build/runtime system values](https://vercel.com/docs/environment-variables/system-environment-variables).

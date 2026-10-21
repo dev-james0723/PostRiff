@@ -19,6 +19,10 @@ assert.match(source, /^[0-9a-f]{40}$/);
   const utils = require(path.join(modules, '@vercel/build-utils'));
   const inputs = ['.python-version', 'requirements.txt', 'vercel.json',
     'a7a0_ping_core.py', 'api/discord/interactions.py'];
+  const manifest = JSON.parse(fs.readFileSync(path.join(here, 'FROZEN-SOURCES.json'), 'utf8'));
+  for (const name of inputs) {
+    assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(frozen, name))).digest('hex'), manifest.files[name]);
+  }
   const selected = Object.fromEntries(inputs.map(name =>
     [name, new utils.FileFsRef({fsPath: path.join(frozen, name)})]));
   fs.mkdirSync(out, {recursive: true});
@@ -42,6 +46,8 @@ assert.match(source, /^[0-9a-f]{40}$/);
   const record = {status: 'PASS', execution: 'offline builder on GitHub standard runner',
     source, builderVersion: '14.2.0', cliPackageVersion: '59.23.2',
     runtime: artifact.runtime, architecture: artifact.architecture,
+    handler: artifact.handler, environmentKeys: Object.keys(artifact.environment || {}).sort(),
+    supportsResponseStreaming: artifact.supportsResponseStreaming ?? null,
     selectedInputs: inputs, fileCount: names.length, files: names.sort(),
     bytes: zip.length, sha256: crypto.createHash('sha256').update(zip).digest('hex'),
     deployment: 'NOT_RUN', liveDiscord: 'NOT_RUN'};
