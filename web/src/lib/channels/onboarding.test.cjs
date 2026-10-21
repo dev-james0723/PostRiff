@@ -14,7 +14,7 @@ function helpers() {
 test('new connections request read/identity before publishing; explicit reconnect is preserved', () => {
   const { defaultConnectCapability } = helpers();
   const p = { capabilities: { identity: true, posts_read: true, publish: true } };
-  assert.equal(defaultConnectCapability(p), 'posts_read');
+  assert.equal(defaultConnectCapability(p), 'identity');
   assert.equal(defaultConnectCapability(p, 'publish'), 'publish');
   assert.equal(defaultConnectCapability({ capabilities: { identity: true, publish: true } }), 'identity');
 });
@@ -34,4 +34,13 @@ test('paused, expired and disconnected channels cannot start imports', () => {
   assert.ok(historyBlocker(c, { ...p, executionPaused: true }));
   assert.ok(historyBlocker({ ...c, connectionState: 'token_expired' }, p));
   assert.ok(historyBlocker(c, { ...p, configured: false }));
+});
+
+test('Pinterest read-only reconnect retains boards without requesting any write permission', () => {
+  const { defaultConnectCapability } = helpers();
+  const p = { id: 'pinterest', trialReadonly: true, capabilities: { identity: true, boards_read: true, publish: false } };
+  assert.equal(defaultConnectCapability(p, 'identity'), 'boards_read');
+  assert.equal(defaultConnectCapability(p, 'publish'), 'boards_read');
+  assert.equal(defaultConnectCapability(p), 'boards_read');
+  assert.equal(defaultConnectCapability({ ...p, trialReadonly: false }, 'identity'), 'identity');
 });

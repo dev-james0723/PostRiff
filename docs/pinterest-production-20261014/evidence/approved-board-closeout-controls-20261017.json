@@ -1,0 +1,30 @@
+{
+  "checkedAt": "2026-10-17T22:39:04.594432+00:00",
+  "status": "PASS",
+  "execution": "LIGHTWEIGHT_LOCAL_METADATA_JSON_HASH_CONTROL_NOT_PRODUCT_CI",
+  "checks": [
+    "git diff --check",
+    "2Pin drafts actualboardID/account and NOT_APPROVED/NOT_RUN",
+    "zero Pin/newboard authority in activation",
+    "expiry within24h and canonical UUID",
+    "public flags/provider-model data gates off",
+    "4 exact SQL/rollback SHA256 hashes",
+    "frozen source PNG SHA256",
+    "173productionmetadata no observed comparable drift",
+    "product730d0440 unchanged; tracked deltas documentation only",
+    "fresh rafii.io inspect2tFMREADY production target"
+  ],
+  "remoteValidationReused": "v0czdxw6gg product730d0440; no rerun",
+  "productionSqlWrites": 0,
+  "deployments": 0,
+  "newOAuth": 0,
+  "pinCreates": 0,
+  "realBoardCreatesThisApprovedPhase": 1,
+  "broadLocalValidation": false,
+  "limitations": [
+    "No new live4scope/APIv5board/publish/schedule/analytics acceptance",
+    "Globalmetricflag scalar redacted/unverified",
+    "Backupdates/content/restoreintegrity NOT_RUN",
+    "Native compliant screen recording unavailable after bounded compile timeout"
+  ]
+}

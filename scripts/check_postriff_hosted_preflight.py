@@ -35,6 +35,25 @@ def load_env_file(path):
     return values
 
 
+
+def source_upload_boundary(upload_rules):
+    """Reject private upload re-includes, except the fixed credential-free receipt.
+
+    This generated receipt is the exact Git-source witness required by the
+    production release guard, not a private env file or person-owned artifact.
+    No other ! override is approved.
+    """
+    normalized={rule.removeprefix('/') for rule in upload_rules}
+    required=('.env*','.*-broker-*','.upgrade-*','broker.key',
+              '.phase3-build-venv/','desktop/','vendor/',
+              'src/james_au_social/','studio/broker/','studio/web/',
+              'web/node_modules/','web/.next/','docs/','tests/')
+    approved={'!src/postriff_phase2/release-source.json'}
+    return all(rule in normalized for rule in required) and {
+        rule for rule in upload_rules if rule.startswith('!')
+    } == approved
+
+
 def validate_structure(root=ROOT):
     checks = []
     required = [
@@ -82,8 +101,7 @@ def validate_structure(root=ROOT):
     private_exclusions = all(marker in boundary for boundary in exclusions for marker in (".env*", "broker.key", "*.command", "src/james_au_social/**", ".venv/**", ".phase3-build-venv/**", "desktop/**", "vendor/**", "web/**", "tests/**", "docs/**"))
     checks.append(_result("function-bundle-boundary", "pass" if private_exclusions else "fail", "local credentials, launchers, private social modules, tests and evidence are excluded"))
     upload_rules = (root / ".vercelignore").read_text().splitlines()
-    normalized_upload_rules = {rule.removeprefix("/") for rule in upload_rules}
-    upload_boundary = all(rule in normalized_upload_rules for rule in (".env*", ".*-broker-*", ".upgrade-*", "broker.key", ".phase3-build-venv/", "desktop/", "vendor/", "src/james_au_social/", "studio/broker/", "studio/web/", "web/node_modules/", "web/.next/", "docs/", "tests/")) and not any(rule.startswith("!") for rule in upload_rules)
+    upload_boundary = source_upload_boundary(upload_rules)
     checks.append(_result("source-upload-boundary", "pass" if upload_boundary else "fail", "explicit blocklist excludes credentials, hidden broker state, caches, private modules, tests and evidence from source upload"))
 
     dependencies = set((root / "requirements.txt").read_text().splitlines())
@@ -102,8 +120,9 @@ def validate_structure(root=ROOT):
     leaked = re.search(r"(?:sb_secret_|sk-proj-)[A-Za-z0-9_-]{16,}", samples)
     checks.append(_result("environment-template", "fail" if leaked else "pass", "placeholder-only contract; no secret-shaped literal found"))
     crons = config.get("crons", [])
-    exact_cron = crons == [{"path": "/api/cron/worker", "schedule": "* * * * *"}]
-    checks.append(_result("production-cron-candidate", "pass" if exact_cron else "pending", "one-minute authenticated worker candidate" if exact_cron else "add the reviewed production cadence before promotion"))
+    exact_cron = crons == [{"path": "/api/cron/worker", "schedule": "* * * * *"},
+                           {"path": "/api/cron/linkedin/worker", "schedule": "* * * * *"}]
+    checks.append(_result("production-cron-candidate", "pass" if exact_cron else "pending", "one-minute authenticated worker and opt-in bounded LinkedIn lane candidates" if exact_cron else "add the reviewed production cadence before promotion"))
     checks.append(_result("vercel-project-link", "pass" if (root / ".vercel/project.json").is_file() else "pending", "linked" if (root / ".vercel/project.json").is_file() else "no Vercel project selected"))
     return checks
 

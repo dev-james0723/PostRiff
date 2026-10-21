@@ -1,0 +1,45 @@
+{
+  "status": "PASS",
+  "action": "Register one approved Pinterest OAuth redirect URI",
+  "approval": "Latest direct human Approve following NEXT-ACTION-CALLBACK.md action preview",
+  "app_id": "1615884",
+  "app_name": "Rafii",
+  "console_url": "https://developers.pinterest.com/apps/1615884/configure/",
+  "redirect_uri": "https://rafii.io/api/oauth/pinterest/callback",
+  "before": {
+    "registered_redirect_uris": [],
+    "prepared_field_only": true
+  },
+  "execution": {
+    "clicked": "Add redirect link",
+    "additional_save_required": false
+  },
+  "after_reload": {
+    "registered_redirect_uris": [
+      "https://rafii.io/api/oauth/pinterest/callback"
+    ],
+    "editable_field_empty": true,
+    "remove_control_present": true,
+    "access_tier": "Trial access active"
+  },
+  "persistence_verified": true,
+  "existing_uri_removals": 0,
+  "external_writes": [
+    "Added the single approved redirect URI to Pinterest app 1615884"
+  ],
+  "secret_read_or_rotation": false,
+  "token_generation": false,
+  "oauth_consent": false,
+  "pin_publication": false,
+  "database_change": false,
+  "deployment": false,
+  "standard_access_submission": false,
+  "billing_change": false,
+  "resource_creation": false,
+  "screenshot": "pinterest-callback-registered.jpg",
+  "screenshot_sha256": "e1441b7edadd61309101d5d728cf85bed90e87aea33ceaeedadd973b9f99d981",
+  "production_readiness": "NO-GO",
+  "scope_limit": "Registration only; does not prove callback runtime, OAuth, API, publication or Standard Access acceptance.",
+  "recorded_at_utc": "2026-10-15T05:58:08.703772+00:00",
+  "execution_date_utc": "2026-10-15"
+}

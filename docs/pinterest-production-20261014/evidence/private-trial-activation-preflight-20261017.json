@@ -1,0 +1,106 @@
+{
+  "checkedAt": "2026-10-17T22:37:34.355134+00:00",
+  "execution": "READ_ONLY_PRODUCTION_PREFLIGHT",
+  "canonicalProject": {
+    "id": "buoyhkbodnhzngaotoel",
+    "name": "postriff-phase2-private",
+    "region": "us-east-1",
+    "status": "ACTIVE_HEALTHY",
+    "databaseVersion": "17.6"
+  },
+  "source": {
+    "liveProduct": "e2e5169ff19ac268c0a0ad06994f67b41f69f949",
+    "liveDeployment": "dpl_2tFM29HomWyWcrzTqTtikWN6Pvti",
+    "liveVerifiedAt": "2026-10-17T22:39:04.594432+00:00",
+    "candidate": "730d044078434638f31eb5ca0e57280307ff8317",
+    "scopedCloudRun": "v0czdxw6gg",
+    "productChangedAfterCloudRun": false,
+    "liveInspectMethod": "vercel inspect https://rafii.io --json with exact team; READY/id/target/immutableURL compared; prior source hash qualification reused",
+    "liveImmutableUrl": "https://postriff-phase2-private-gvudra5h2-jamesau0723-6572s-projects.vercel.app"
+  },
+  "database": {
+    "journalTable": "ABSENT_EXPECTED_UNAPPLIED",
+    "metricProviderCheck": "provider = ANY (ARRAY['threads'::text, 'instagram'::text])",
+    "metricCheckValidated": true,
+    "pinterestMetricDefinitionCount": 0,
+    "quotaTable": "pr_pinterest_rate_budgets",
+    "quotaRls": true,
+    "quotaForcedRls": true,
+    "quotaAnonSelect": false,
+    "quotaAuthenticatedSelect": false,
+    "quotaServerDml": true,
+    "quotaServerTruncate": false,
+    "ownMember": {
+      "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+      "actorId": "b167161d-37f4-4bc3-ae22-2482c982e5a0",
+      "role": "owner",
+      "status": "active",
+      "canPublish": true,
+      "canManageConnections": true
+    },
+    "oldOwnPinterestCredential": {
+      "connectionId": "909e9784cdcde21f2bb7cf521ce67f43",
+      "providerAccountId": "1126814906675966091",
+      "revoked": true,
+      "accessErased": true,
+      "refreshErased": true,
+      "scopes": [
+        "boards:read",
+        "user_accounts:read"
+      ]
+    },
+    "ownPinterestJobsMatchingPlatformOrOldConnection": 0,
+    "queriesObservedBetween": "2026-10-17T22:31:19Z/22:34:13Z",
+    "ciphertextValuesReturned": false,
+    "otherTenantRowsRead": false
+  },
+  "envMetadata": {
+    "comparedFields": [
+      "key",
+      "target",
+      "type",
+      "updatedAt"
+    ],
+    "oldProductionCount": 173,
+    "newProductionCount": 173,
+    "diff": [],
+    "idComparison": "Old metadata omitted record IDs; no IDs or secret values compared.",
+    "currentSnapshot": "private-trial-production-env-metadata-20261017.json",
+    "newIdsCaptured": true,
+    "secretValuesCompared": false,
+    "metricGlobalFlagValue": "UNVERIFIED_REDACTED; exact scoped override proposed1",
+    "metricWorkspaceAllowlist": "ABSENT_IN_PROJECT_METADATA; proposed exact own workspace only",
+    "connector403": "Equivalent explicit-project/team CLI GET succeeded; no settings or auth changes"
+  },
+  "backups": {
+    "observedAt": "2026-10-17T22:33:01.917Z",
+    "method": "Kynlo native scheduled backups page",
+    "project": "buoyhkbodnhzngaotoel",
+    "physicalRows": 8,
+    "enabledRestoreControls": 8,
+    "datesAndContentsVerified": false,
+    "restoreIntegrity": "NOT_RUN",
+    "newBackupCreated": false,
+    "restoreExecuted": false
+  },
+  "standardAccess": {
+    "observedAt": "2026-10-17T22:35Z",
+    "method": "CUA native Chrome official My apps after navigating from exact1615884 Upgrade form",
+    "appId": "1615884",
+    "statusText": "Trial access active",
+    "upgradeLinkAvailable": true,
+    "pendingOrStandardApprovalDisplayed": false,
+    "formVideoAttached": false,
+    "formFpsRequirement": "20\u201360fps",
+    "formExistingWebsite": "https://postriff-phase2-private.vercel.app/",
+    "formExistingPrivacy": "https://postriff-phase2-private.vercel.app/privacy",
+    "formExistingReportingChecked": false,
+    "trialBasicAnalyticsDisplayedSupported": true,
+    "trialWritingStandardPinsDisplayed": "Visible only to the user who creates them",
+    "submissionClicked": false,
+    "browserBackendIssue": "Native Kynlo inspect succeeded; later click unavailable; bound native CUA completed read-only tier check without permission changes"
+  },
+  "productionMutations": 0,
+  "newOAuth": false,
+  "pinsCreated": 0
+}

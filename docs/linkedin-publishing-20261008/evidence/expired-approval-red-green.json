@@ -1,0 +1,149 @@
+{
+  "schema": "rafii.expired-approval-regression.v1",
+  "observedAtUtc": "2026-10-08T08:04:02.004791+00:00",
+  "red": {
+    "runId": "cdltwwq04q",
+    "workflowId": "tn4w6rw0w2",
+    "jobId": "vtswz9vtk8",
+    "attemptId": "v9lddbchrp",
+    "state": "RED_REPRODUCED",
+    "failure": "Prepare again not visible for expired definitive no-submit hold; locator timeout30s",
+    "sourceHead": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+    "snapshot": "7a4cefba plus the new focused browser regression, before UI fix",
+    "localReceipt": "/private/tmp/rafii-expired-approval-red-cloud.json",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/tn4w6rw0w2?job=vtswz9vtk8&attempt=v9lddbchrp",
+    "cliFollowExitCode": 0,
+    "cliExitCodeIsNotJobVerdict": true
+  },
+  "green": {
+    "runId": "td827856ht",
+    "workflowId": "45wsxmd3d6",
+    "jobId": "1f2slb3r11",
+    "attemptId": "gc3djgc26s",
+    "state": "PASS",
+    "sourceHead": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+    "snapshot": {
+      "transportMode": "remote_patch",
+      "baseSha": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+      "baseRef": "refs/remotes/origin/consumer-saas",
+      "branch": "codex/linkedin-publishing-recovery-20261008",
+      "sourceHead": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+      "includedFileCount": 2748,
+      "includedBytes": 1902272,
+      "sourceFingerprint": "9f76df7da95844f146f7fa5038d8fec7204de61046ef19048650513f01d965d8",
+      "markerPath": ".depot/jcb-source.json",
+      "patchBytes": 699352,
+      "patchSha256": "cf93313149c7734af36fec12f17f4826bb7ed69edda866abea2b2f30aa4a4d99",
+      "excludedForbiddenCount": 28,
+      "inputExcludes": [
+        "docs/**",
+        "downloads/**",
+        "motion/**",
+        "artifacts/**",
+        "vendor/**",
+        ".preview/**",
+        "audio-reactive-fix/**",
+        "PostRiff_Research_2026-09-18/**",
+        "*.zip",
+        "desktop/**",
+        "studio/**",
+        "docs/linkedin-publishing-20261008/evidence/**",
+        "docs/facebook-connection-20261008/**",
+        "docs/official-social-20261008/**"
+      ],
+      "explicitExcludedCount": 2549,
+      "changedPathCount": 103,
+      "recoverableRawReceipt": "/private/tmp/rafii-expired-approval-green-cloud.json"
+    },
+    "localReceipt": "/private/tmp/rafii-expired-approval-green-cloud.json",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/45wsxmd3d6?job=1f2slb3r11&attempt=gc3djgc26s",
+    "status": {
+      "org_id": "jf34f85hr0",
+      "run_id": "td827856ht",
+      "status": "finished",
+      "workflows": [
+        {
+          "workflow_id": "45wsxmd3d6",
+          "status": "finished",
+          "name": "James Cloud Build",
+          "jobs": [
+            {
+              "job_display_name": "e2e",
+              "job_id": "1f2slb3r11",
+              "job_key": "_inline_0.yaml:e2e",
+              "status": "finished",
+              "attempts": [
+                {
+                  "attempt_id": "gc3djgc26s",
+                  "attempt": 1,
+                  "status": "finished",
+                  "sandbox_id": "wptl6d4plwcqpz2fkg7j",
+                  "session_id": "1d074db8-cd6d-49e2-9162-7c7f192b6297",
+                  "logs_command": "depot ci logs gc3djgc26s --org jf34f85hr0",
+                  "download_available": true,
+                  "download_command": "depot ci logs gc3djgc26s --output-file logs.txt --org jf34f85hr0",
+                  "view_url": "https://depot.dev/orgs/jf34f85hr0/workflows/45wsxmd3d6?job=1f2slb3r11&attempt=gc3djgc26s",
+                  "ssh_available": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "browser": {
+      "execution": "cloud Next/Playwright; synthetic provider responses; no live qualification",
+      "checks": [
+        {
+          "callbackThroughNormalUI": true,
+          "restoresOriginatingWorkspaceFromOtherSelection": true,
+          "width": 1280,
+          "granularCapabilities": true,
+          "savedIdentitySeparatedFromRelease": true,
+          "sharePermissionSeparatedFromLiveQualification": true,
+          "restrictedOrganizationRemainsBlocked": true,
+          "approvedJobScopedDispatchOnce": true,
+          "futureJobNotDispatched": true,
+          "heldRecoveryKeepsOriginalJob": true,
+          "expiredNoSubmitApprovalCanPrepareAgain": true,
+          "acceptedLinkedInReceiptVisibleWithoutPrivateRead": true,
+          "ownerCheckNeverApiVerified": true,
+          "noAcceptedPostResubmission": true,
+          "minimumIdentitySelected": true,
+          "latestIdentityVerificationShown": true,
+          "noReadyFromIdentity": true,
+          "readHierarchy": true,
+          "immutableApproval": true,
+          "noDuplicateAfterUnknown": true,
+          "horizontalOverflow": false
+        },
+        {
+          "callbackThroughNormalUI": true,
+          "restoresOriginatingWorkspaceFromOtherSelection": true,
+          "width": 390,
+          "granularCapabilities": true,
+          "savedIdentitySeparatedFromRelease": true,
+          "sharePermissionSeparatedFromLiveQualification": true,
+          "restrictedOrganizationRemainsBlocked": true,
+          "approvedJobScopedDispatchOnce": true,
+          "futureJobNotDispatched": true,
+          "heldRecoveryKeepsOriginalJob": true,
+          "expiredNoSubmitApprovalCanPrepareAgain": true,
+          "acceptedLinkedInReceiptVisibleWithoutPrivateRead": true,
+          "ownerCheckNeverApiVerified": true,
+          "noAcceptedPostResubmission": true,
+          "minimumIdentitySelected": true,
+          "latestIdentityVerificationShown": true,
+          "noReadyFromIdentity": true,
+          "readHierarchy": true,
+          "immutableApproval": true,
+          "noDuplicateAfterUnknown": true,
+          "horizontalOverflow": false
+        }
+      ]
+    },
+    "execution": "Synthetic cloud Next/Chromium only; not real iPhone or live provider proof"
+  },
+  "oldApprovalExtended": false,
+  "providerCalls": false
+}

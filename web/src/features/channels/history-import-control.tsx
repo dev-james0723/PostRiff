@@ -115,7 +115,7 @@ export function HistoryImportControl({ channel, provider, canManage }: { channel
             {showReview && <section className='flex flex-col gap-3 text-sm' aria-label={copy.review}>
               <p>{copy.bounds}</p><p>{copy.metadata}</p><p>{copy.metrics}</p><p>{copy.purge}</p>
               <label className='flex min-h-11 items-start gap-3'><input type='checkbox' aria-label={copy.confirm} className='mt-1 size-4 shrink-0' checked={confirmed} disabled={!allowed || request.isPending || reconciling || Boolean(blockedError) || Boolean(status.error) || status.isFetching} onChange={(event) => setConfirmed(event.target.checked)} /><span>{copy.confirm}</span></label>
-              <Button variant='action' size='control' disabled={!confirmed || !allowed || request.isPending || reconciling || Boolean(blockedError) || Boolean(status.error) || status.isFetching} onClick={() => { setConfirmed(false); request.mutate(); }}>{request.isPending ? copy.pending : copy.request}</Button>
+              <Button variant='action' size='control' disabled={!confirmed || !allowed || request.isPending || reconciling || Boolean(blockedError) || Boolean(status.error) || status.isFetching} onClick={() => { setConfirmed(false); request.mutate(); }}>{request.isPending ? copy.requesting : copy.request}</Button>
             </section>}
             {data && !showReview && !active && !data.purgePending && allowed && <Button variant='glass' size='control' onClick={() => { setConfirmed(false); request.reset(); setReviewing(true); }}>{copy.repeat}</Button>}
           </div>

@@ -1,0 +1,55 @@
+{
+  "executedAt": "2026-10-18T02:39:58.258436Z",
+  "status": "PASS",
+  "canonicalProject": "buoyhkbodnhzngaotoel",
+  "humanApproval": "APPROVE continue for4b4a6b07 exactactivationpackage",
+  "migrations": [
+    {
+      "name": "pinterest_private_trial_response_journal_20261017",
+      "version": "20261018023938",
+      "sha256": "432a509ca82201ab4e3ba7c1b78d437ed54b9457f18dd9b4d44209335ce2fc39"
+    },
+    {
+      "name": "pinterest_native_pin_metric_reads_20261017",
+      "version": "20261018023956",
+      "sha256": "a01f47d11595c42665c7aa2f1bfec41b6f0a23935ca5b4d58e639577cba8dbd7"
+    }
+  ],
+  "initialToolFailure": {
+    "error": "Invalid or expired requestState",
+    "outcomeReconciledAt": "2026-10-18T02:39:01.389081Z",
+    "journalAbsent": true,
+    "historyEmpty": true,
+    "retryOnlyAfterReconciliation": true
+  },
+  "postflight": {
+    "journalRls": true,
+    "journalForceRls": true,
+    "anonSelect": false,
+    "authenticatedSelect": false,
+    "serverSelect": true,
+    "serverInsert": true,
+    "serverPinIdUpdate": true,
+    "serverAuthorityUpdate": false,
+    "serverDelete": false,
+    "serverTruncate": false,
+    "immutableTrigger": 1,
+    "journalRows": 0,
+    "metricCheckValidated": true,
+    "metricProviders": [
+      "threads",
+      "instagram",
+      "pinterest"
+    ],
+    "nativeMetrics": [
+      "IMPRESSION",
+      "SAVE",
+      "PIN_CLICK",
+      "OUTBOUND_CLICK"
+    ]
+  },
+  "existingQuotaReapplied": false,
+  "otherTenantDataRead": false,
+  "rowsCopied": 0,
+  "newResourcesCreated": false
+}

@@ -166,6 +166,9 @@ function HomeWorkspace() {
   /* ---- composer state: original input, applied settings, staged dialog choices ---- */
   const [text, setText] = useState('');
   const [savedBrief, setSavedBrief] = useState<string | null>(null);
+  // Keep the identity after a lost response so pressing save again cannot create
+  // another copy. A changed workspace, text or destination is a new request.
+  const manualSave = useRef<{ signature: string; requestId: string } | null>(null);
   useEffect(() => {
     if (!user?.id) return;
     try {
@@ -402,6 +405,44 @@ function HomeWorkspace() {
   const commandReady = canEdit && Boolean(slash) && !preparing && Boolean(snapshot.data) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length);
   const canGenerate = commandReady || (canEdit && choice.available && !preparing && !creditInvalid && Boolean(models.data && snapshot.data) && text.trim().length > 0 && destinationCount > 0 && use && (!imageRequested || Boolean(imageCapability?.available)) && !generation.busy && !generation.running && !(attachmentsOn && attachments.blockers.length));
 
+  const manualTextOnly = !imageRequested && included.length === 0 && attachments.chips.length === 0;
+  const canSaveOriginal = canEdit && Boolean(snapshot.data) && !preparing && !generation.busy && !generation.running
+    && text.trim().length > 0 && text.length <= 10000 && formatted.length > 0 && manualTextOnly;
+
+  async function saveOriginalDraft() {
+    if (!canSaveOriginal || !submission.enter()) return;
+    const signature = JSON.stringify({ workspaceId, text, destinations: formatted });
+    const pending = manualSave.current;
+    const attempt = pending?.signature === signature ? pending : { signature, requestId: crypto.randomUUID() };
+    manualSave.current = attempt;
+    const requestId = attempt.requestId;
+    setPreparing(true);
+    try {
+      const latest = await api.snapshot(workspaceId);
+      if (!submission.alive()) return;
+      const after = await api.act(workspaceId, latest.revision, 'manual_draft_create', {
+        text, destinations: formatted, requestId, ...(capabilityRevision ? { capabilityRevision } : {})
+      });
+      if (!submission.alive()) return;
+      client.setQueryData(keys.snapshot(workspaceId), after);
+      const saved = (after.state.variants ?? []).filter((variant) => variant.manualRequestId === requestId);
+      if (saved.length !== formatted.length || saved.some((variant) => variant.text !== text)
+        || formatted.some((target) => !saved.some((variant) => variant.platform === target.platform
+          && variant.language === target.language && (variant.channelId ?? null) === (target.channelId ?? null)
+          && (variant.format ?? platformRow(creation, variant.platform)?.defaultFormat ?? null)
+            === (target.format ?? platformRow(creation, target.platform)?.defaultFormat ?? null)))) {
+        throw new Error('The saved drafts could not be verified. Reload before trying again.');
+      }
+      toast.success(saved.length === 1 ? 'Original text saved as a draft.' : `Original text saved as ${saved.length} drafts.`);
+      router.push('/app/queue?view=drafts');
+    } catch (error) {
+      if (submission.alive()) toast.error(error instanceof Error ? error.message : 'Couldn’t save the draft. Your text is kept here.');
+    } finally {
+      submission.leave();
+      if (submission.alive()) setPreparing(false);
+    }
+  }
+
   async function start() {
     const body = text.trim();
     const currentSlash = parseSlash(body);
@@ -598,9 +639,15 @@ function HomeWorkspace() {
           <GrowthEntry audience />
           <RadarHome />
           {canEdit && <div className='flex flex-wrap items-center gap-2 text-xs'>
+            <Button variant='glass' size='sm' onClick={() => void saveOriginalDraft()} disabled={!canSaveOriginal}>
+              Save as draft{formatted.length > 1 ? ` · ${formatted.length}` : ''}
+            </Button>
             <Button variant='quiet' size='sm' onClick={saveBrief} disabled={preparing || generation.busy || !text.trim() || savedBrief === text}>Save brief</Button>
             {savedBrief !== null && <Button variant='quiet' size='sm' onClick={clearBrief}>Clear saved brief</Button>}
             <span role='status' className='text-muted-foreground'>{savedBrief === null ? '' : savedBrief === text ? 'Saved for this browser session' : 'Unsaved changes'}</span>
+            <p className='text-muted-foreground w-full'>
+              {manualTextOnly ? 'Save as draft keeps your text unchanged for each selected destination. No AI credits used.' : 'To save original text only, remove attachments and context, and turn off image generation.'}
+            </p>
           </div>}
           {canEdit ? (
             <IdeaComposer

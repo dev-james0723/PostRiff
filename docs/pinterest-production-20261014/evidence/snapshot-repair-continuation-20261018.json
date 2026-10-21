@@ -1,0 +1,27 @@
+{
+  "recordedAt": "2026-10-18T06:02:58.740676+00:00",
+  "status": "CANDIDATE_CONTROL_SYNTAX_PASS_ONLY",
+  "checks": {
+    "preflight.py": "ca1cc0e174d9b8222a9320027a82e929b7aa09b5865968da876a78b64be886b2",
+    "deploy.py": "5b1c7493a3fba90d10b4c185b21a6cf416b8bc6552bdc68bc45d08b8817abeee",
+    "qualify.py": "ab62a11a56147d80192c96fdb3f57bd5c4278ba6ec83ff43c2dbd9dbe1e7315f",
+    "promote.py": "c1586a94ab5f663175c5296ab03813e11afdf9f440ddb967bca1c286ab7fcaf2"
+  },
+  "manualCopyConfirmationFileExists": false,
+  "deploymentStateFileExists": false,
+  "promotionStateFileExists": false,
+  "checksExecuted": "AST parse only; qualify/promote not executed; no provider/deployment effects",
+  "secretCopyControl": "Human source confirmation required before any clipboard read; generic Continue is not a copy acknowledgment.",
+  "qualificationGates": [
+    "same existing Vercel project",
+    "actual candidate READY with exact product and receipt metadata",
+    "all 2217 source paths/raw SHA1 compared",
+    "three services, Node24 and cron match previous production",
+    "fresh candidate health and production env/alias preflight",
+    "one build and one promotion budget; reconcile any state before retry"
+  ],
+  "cloudRunReused": "08m85w3gj9 PASS 32 tests; no new CI run",
+  "standardNativeVerificationAt": "2026-10-18T05:59Z",
+  "standardVisibleState": "Rafii / Trial access active / Upgrade",
+  "publicFeatures": "Connect/Publish/Schedule/Analytics NO-GO"
+}

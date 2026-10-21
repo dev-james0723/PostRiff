@@ -1,0 +1,21 @@
+{
+  "checkedAt": "2026-10-18T02:49:07.492844+00:00",
+  "status": "PASS",
+  "deploymentId": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ",
+  "alias": "rafii.io",
+  "aliasMatchesProductionTarget": true,
+  "readyState": "READY",
+  "immutableUrl": "postriff-phase2-private-hgyvl2wz7-jamesau0723-6572s-projects.vercel.app",
+  "healthHttpStatus": 200,
+  "healthBody": {
+    "status": "ok",
+    "execution": "phase2-hosted-candidate",
+    "configured": true,
+    "phase0": "incomplete",
+    "customerValidated": false,
+    "sourceRevision": null
+  },
+  "sourceProof": "2217completeuploadedrawcontentSHA1allmatch;source730d0440/receipt4b4a6b07;healthsourceRevisionnullnotusedasSHAproof",
+  "rebuilds": 0,
+  "pinCreates": 0
+}

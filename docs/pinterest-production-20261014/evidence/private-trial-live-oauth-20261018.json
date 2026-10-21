@@ -1,0 +1,36 @@
+{
+  "checkedAt": "2026-10-18T03:03:59.737301Z",
+  "status": "BLOCKED",
+  "reason": "HUMAN_CONSENT_NOT_COMPLETED_OAUTH_STATE_EXPIRED",
+  "execution": "REAL_OAUTH_START_AND_PROVIDER_SCREEN_ONLY",
+  "transactionId": "9af24e11-72a2-404a-b5cb-4a8b6de456dd",
+  "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+  "actorId": "b167161d-37f4-4bc3-ae22-2482c982e5a0",
+  "appId": "1615884",
+  "scopes": [
+    "user_accounts:read",
+    "boards:read",
+    "pins:read",
+    "pins:write"
+  ],
+  "callback": "https://rafii.io/api/oauth/pinterest/callback",
+  "createdAt": "2026-10-18T02:53:06.614548Z",
+  "expiresAt": "2026-10-18T03:03:06.614548Z",
+  "consumedAt": null,
+  "outcome": null,
+  "expired": true,
+  "officialScreen": {
+    "app": "Rafii",
+    "loggedInAs": "James Au",
+    "button": "Give access",
+    "humanRequestedToComplete": true,
+    "agentClickedFinalConsent": false
+  },
+  "newCredentialExchange": "NOT_RUN",
+  "newIdentityBoardsRefresh": "NOT_RUN",
+  "mediaUploads": 0,
+  "pinCreates": 0,
+  "stateCodeTokenRetained": false,
+  "policyExpiry": "2026-10-18T18:00:00Z unchanged",
+  "next": "Wait for human readiness, then initiate a fresh OAuth transaction within the already approved policy. Do not repeat SQL/build/promotion or extend pilot."
+}

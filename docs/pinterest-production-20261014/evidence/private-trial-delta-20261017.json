@@ -1,0 +1,98 @@
+{
+  "checkedAt": "2026-10-17T21:40:40.277105+00:00",
+  "productSource": "730d044078434638f31eb5ca0e57280307ff8317",
+  "liveSource": "e2e5169ff19ac268c0a0ad06994f67b41f69f949",
+  "classification": "LOCAL_CANDIDATE_NOT_DEPLOYED_NOT_ENABLED",
+  "preparedCases": {
+    "privateTrial": 10,
+    "privateTrialRecovery": 4,
+    "privateTrialVisibility": 8,
+    "analytics": 24,
+    "existingScheduleReverification": 9,
+    "existingConfigurationDiagnostics": 7
+  },
+  "localSyntheticControls": [
+    {
+      "target": "test_pinterest_private_trial.PrivateTrial.test_all_four_capabilities_private_and_public_review_stays_false",
+      "status": "PASS",
+      "seconds": 0.003,
+      "scope": "before later containment/journal additions; current full suite NOT_RUN"
+    },
+    {
+      "target": "test_pinterest_private_trial.PrivateTrial.test_independent_durable_reservations_survive_unknown_outcome_and_reconnect",
+      "status": "PASS",
+      "seconds": 0.001,
+      "scope": "before journal addition; actual DB NOT_RUN"
+    },
+    {
+      "target": "test_pinterest_private_trial.PrivateTrial.test_transport_requires_exact_fenced_body_and_recorded_pin",
+      "status": "PASS",
+      "seconds": 0.001,
+      "scope": "rerun after fullbody/media/ack-gate wiring"
+    },
+    {
+      "target": "test_pinterest_private_trial.PrivateTrial.test_policy_identity_board_expiry_and_time_never_broaden_authority",
+      "status": "PASS",
+      "seconds": 0.001,
+      "scope": "before publish/schedule pairing addition; new negative cases full suite NOT_RUN"
+    },
+    {
+      "target": "test_pinterest_analytics.PinterestAnalytics.test_private_trial_reads_native_metrics_without_claiming_public_review",
+      "status": "PASS",
+      "seconds": 0.001,
+      "priorFailure": "AttributeError synthetic PrivateAnalyticsPolicy lacked require_scopes; fixture repaired then exact control passed"
+    },
+    {
+      "target": "test_pinterest_private_trial_recovery.PinterestPrivateTrialRecovery.test_signed_source_matches_only_exact_approved_workspace_immutable_object",
+      "status": "PASS",
+      "seconds": 0.018
+    },
+    {
+      "target": "test_pinterest_private_trial_recovery.PinterestPrivateTrialRecovery.test_reconciliation_recovers_known_journal_id_without_a_second_post",
+      "status": "PASS",
+      "seconds": 0.001,
+      "priorFailure": "Synthetic fixture recovery ID9876543 differed from readback987654321; fixed distinct fixture alias then exact control passed"
+    },
+    {
+      "target": "test_pinterest_private_trial.PrivateTrial.test_known_response_journal_recovers_same_id_and_never_overwrites_or_creates",
+      "status": "PASS",
+      "seconds": 0.001
+    }
+  ],
+  "localEnvironment": "Mac existing Python, one narrowly targeted lightweight synthetic control per invocation; no installs/full modules/Node/PG/browser builds/fan-out",
+  "static": {
+    "pythonAST": "PASS(15changed/newPythonfiles)",
+    "gitDiffCheck": "PASS",
+    "cloudScriptBashSyntax": "PASS",
+    "json": "PASS; final documentation validation pending"
+  },
+  "cloud": {
+    "status": "PASS",
+    "classification": "REMOTE_SYNTHETIC_AND_DISPOSABLE_PASS",
+    "doctor": "PASS with authorized existing network; earlier authentication error was sandbox DNS",
+    "includedDepotCI": "29512/2000minutes; exhausted",
+    "paidRunStarted": true,
+    "proposedJob": "one8vCPU,provider timeout45minutes,compute ceilingUSD1.08 plus possible other metering; no total/account hard dollarcap",
+    "newSourceRunId": "v0czdxw6gg",
+    "completedEvidence": "private-trial-cloud-validation-20261017.json",
+    "historicalCostBlockResolved": true
+  },
+  "notRun": [
+    "real4scopeOAuth",
+    "realPinID/readback/visibility",
+    "actualscheduledPinexecution",
+    "realnativeAnalytics",
+    "nonowneracceptance",
+    "compliantStandardvideo",
+    "Standardsubmission",
+    "newproductionrelease"
+  ],
+  "migrations": {
+    "20261017_pinterest_trial_journal.sql": "432a509ca82201ab4e3ba7c1b78d437ed54b9457f18dd9b4d44209335ce2fc39",
+    "20261017_pinterest_trial_journal.rollback.sql": "56891be19ebedb51ff13af47f112c15d8e5bd9c0622d37b3552bb92e904299ca",
+    "20261017_pinterest_metric_reads.sql": "a01f47d11595c42665c7aa2f1bfec41b6f0a23935ca5b4d58e639577cba8dbd7"
+  },
+  "productionMutations": false,
+  "providerWrites": false,
+  "publicCustomerReadiness": "NO_GO"
+}

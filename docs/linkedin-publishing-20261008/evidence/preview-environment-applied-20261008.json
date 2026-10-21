@@ -1,0 +1,40 @@
+{
+  "execution": "APPLIED_PREVIEW_ONLY_REDEPLOY_PENDING",
+  "atUtc": "2026-10-08T06:08:08.061364+00:00",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "teamId": "team_PgXY5VdAYKcsv0RLoDPHscNq",
+  "gitBranch": "codex/social-connection-recovery-20261007",
+  "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "candidateSha256": "fa4ff7a0cc464a4216eacc4509c4f08e9ec5a14dc142b5cb7cf9ae014b29eac4",
+  "mcpCreateDenied403": true,
+  "cliFallback": "Official installed Vercel CLI using own existing authorized credentials; same POST/v10 action/explicit project/team",
+  "priorAbsenceReconciledAfterMcpFailure": true,
+  "upsert": false,
+  "created": [
+    {
+      "id": "563MitzNzDuimC2W",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_PRODUCT_APPROVALS_JSON",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/social-connection-recovery-20261007",
+      "type": "encrypted",
+      "createdAt": 1791439689626
+    },
+    {
+      "id": "h1qhxQvW4R8kkaGD",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_OFFICIAL_SOCIAL_ENABLED",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/social-connection-recovery-20261007",
+      "type": "encrypted",
+      "createdAt": 1791439691997
+    }
+  ],
+  "productionChangePerformed": false,
+  "secretValuesReadOrPrinted": false,
+  "deploymentStillRequired": true,
+  "protectedCredentialAndConnectionReviewIdsUnchanged": true,
+  "createdCount": 2
+}

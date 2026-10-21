@@ -85,6 +85,16 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
   const attachmentsRef = handlers?.ref;
   const [caret, setCaret] = useState(value.length);
   const composerBox = useRef<HTMLElement>(null);
+  const lastTextEvent = useRef<Event | null>(null);
+  function updateText(event: SyntheticEvent<HTMLTextAreaElement>) {
+    // Native/autofill input can arrive without React's value-tracked onChange.
+    // Both handlers share one native event; notify the parent once per edit.
+    if (lastTextEvent.current !== event.nativeEvent) {
+      lastTextEvent.current = event.nativeEvent;
+      onChange(event.currentTarget.value);
+    }
+    setCaret(event.currentTarget.selectionStart ?? event.currentTarget.value.length);
+  }
   // The forwarded ref and the attachments' ref point at the same textarea.
   const setTextarea = useCallback(
     (element: HTMLTextAreaElement | null) => {
@@ -113,9 +123,9 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
       <textarea
         ref={setTextarea}
         value={value}
-        onChange={(event) => { onChange(event.target.value); setCaret(event.target.selectionStart ?? event.target.value.length); }}
+        onChange={updateText}
         onKeyDown={onKeyDown}
-        onInput={(event) => handlers?.onInput?.(event)}
+        onInput={(event) => { handlers?.onInput?.(event); updateText(event); }}
         onSelect={(event) => { setCaret(event.currentTarget.selectionStart ?? event.currentTarget.value.length); handlers?.onSelect?.(event); }}
         onCompositionStart={() => handlers?.onCompositionStart?.()}
         onCompositionEnd={() => handlers?.onCompositionEnd?.()}

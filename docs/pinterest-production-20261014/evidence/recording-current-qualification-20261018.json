@@ -1,0 +1,53 @@
+{
+  "recordedAt": "2026-10-18T15:00:42.735265+00:00",
+  "status": "BLOCKED_NO_QUALIFIED_RECORDING_CONTROLS_OR_SOURCE",
+  "agent": "standard_access_video",
+  "actualChecks": [
+    {
+      "at": "2026-10-18T14:36:09Z",
+      "result": "OBS Untitled/MissingFiles preserved; no ScreenStudio window then visible."
+    },
+    {
+      "at": "2026-10-18T14:45:52Z",
+      "result": "One native Kynlo launch verified ScreenStudio com.timpler.screenstudio/PID59615/window5758 recording-manager-widget."
+    },
+    {
+      "at": "2026-10-18T14:46:37Z",
+      "result": "Focus acknowledged but actual active accessibility tree identified ChatGPT; no unexpected control clicked. Cause unverified."
+    },
+    {
+      "at": "2026-10-18T14:49:12Z",
+      "result": "Exact window/PID scoped capture returned a white4561B image; no readable controls/source/FPS/export/recording indicator. This does not establish missing permissions, interference or recording state."
+    },
+    {
+      "at": "2026-10-18T15:00:25Z",
+      "result": "Verified main display0(0,0,1512,982) and exact widget5758/PID59615 at(506,834,228,48). One strictly matched composited region shows dark recorder toolbar/mode icons/Update. Source/FPS/export/recording state still unqualified. Earlier white window capture is not proof of unrendered UI."
+    }
+  ],
+  "recordingStarts": 0,
+  "newFootage": false,
+  "exportsOrEncoding": 0,
+  "osPermissionsOrRecorderPreferencesChanged": false,
+  "clipboardOrChromeAccessByAgent": false,
+  "OBSRecordingState": "UNKNOWN; no owned OBS recording started and no existing recording stopped",
+  "rawLocalEvidence": [
+    {
+      "file": "KYNLO-RECORDER-SCOUT-20261018T143609Z.json",
+      "sha256": "681010af03b05b1fe5add0885756166045f769d477ecae41c8afeea9787384e4"
+    },
+    {
+      "file": "SCREEN-STUDIO-LAUNCH-20261018T144637Z.json",
+      "sha256": "35189953599669a11d35a9a7822b697820b5555790d1142293ca4188855260dc"
+    },
+    {
+      "file": "SCREEN-STUDIO-WIDGET-20261018T144912Z.json",
+      "sha256": "fd8f3ceb250111f9c993c47c482aa4de5cf6353082ef045da1309b914caaa181"
+    },
+    {
+      "file": "SCREEN-STUDIO-REGION-20261018T150025Z.json",
+      "sha256": "df5c42b744c783248292febc9ad444b7216d0f6b5b7774f0a2a82999efe856fd"
+    }
+  ],
+  "next": "Use a verified addressed source/window and native recorder controls before recording. A nonactivating panel/capture artifact remains a hypothesis; do not infer permissions, license, interference, or recording state. No further blind retries.",
+  "updatedAt": "2026-10-18T15:10:38.406423+00:00"
+}

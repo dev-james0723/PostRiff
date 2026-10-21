@@ -1,0 +1,17 @@
+{
+  "observedAtUtc": "2026-10-08 05:50:52 UTC",
+  "requestedAlias": "postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+  "deploymentId": "dpl_E6mrgNSbYf8ZSHG6XxU6rynUTg3T",
+  "project": {
+    "id": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "name": "postriff-phase2-private",
+    "framework": null
+  },
+  "target": null,
+  "readyState": "READY",
+  "immutableOrigin": "https://postriff-phase2-private-o8cy65o7g-jamesau0723-6572s-projects.vercel.app",
+  "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "branch": "codex/social-connection-recovery-20261007",
+  "repo": "dev-james0723/PostRiff",
+  "productionChangePerformed": false
+}

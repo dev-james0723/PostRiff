@@ -79,6 +79,7 @@ export interface Asset {
   storagePath?: string;
   /** Chat-context SPEC §5.13. `kind` is always derived from `mime` (`lib/media/asset-kinds.ts`), never trusted. */
   kind?: 'image' | 'video' | 'audio' | 'document' | 'file';
+  pages?: number;
   category?: 'media' | 'video' | string;
   durationSource?: 'container' | 'client';
   poster?: AssetImagePart;
@@ -161,7 +162,29 @@ export interface RunContentType {
   contentSkillRouteIds?: string[];
 }
 
+export interface WorkerBinding { environment: 'preview'; origin: string }
+
+export interface DiscordDestination {
+  id: string;
+  workspaceId: string;
+  connectionId: string;
+  applicationId: string;
+  botUserId: string;
+  linkedUserId: string;
+  guildId: string;
+  channelId: string;
+  guildName: string;
+  channelName: string;
+  kind: string;
+  authorizationGeneration: string;
+  resourceGeneration: string;
+  status?: 'authorized' | 'revoked' | 'reauthorization_required';
+}
+
 export interface Manifest {
+  destinationId?: string;
+  discord?: { schema: 'rafii.discord.publish.v2'; target: DiscordDestination; wireDigest: string; deliveryDigest: string; operationDigest: string; publicationId: string };
+  workerBinding?: WorkerBinding;
   workspaceId: string;
   actor: string;
   /** The connection this post goes out through (a `ChannelView.id`). */
@@ -193,6 +216,9 @@ export interface Job {
   approvedAt?: number;
   approvalDigest?: string;
   nextAt?: number;
+  leaseUntil?: number;
+  workerBinding?: WorkerBinding;
+  previewDispatchPending?: boolean;
   checks?: number;
   scheduleId?: string | null;
   url?: string;
@@ -202,7 +228,11 @@ export interface Job {
   resultSchema?: string;
   progress?: { version: number; stage: string };
   providerReference?: string;
+  publishedEdit?: { text: string; actionId: string; editedAt: number; verification: 'provider_accepted' };
   providerConfirmed?: string;
+  providerUpload?: unknown;
+  providerAssets?: unknown;
+  providerThread?: unknown;
   nextAction?: string;
   cancelRequested: boolean;
   verification?: { method: string; at: number } | null;
@@ -247,6 +277,8 @@ export interface VariantFeedback {
 }
 
 export interface SnapshotVariant {
+  /** Retry identity for an original-text save; no model or publication authority. */
+  manualRequestId?: string;
   postDoctorGoal?: 'conversation' | 'shareability' | 'authority' | 'reach' | 'general';
   /** Post media recorded when the draft was written (chat-context SPEC §5.10). */
   media?: RunMedia[];
@@ -388,7 +420,7 @@ export interface ChannelFolder {
 export interface Phase2State {
   execution: string;
   trial: Trial;
-  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean }[];
+  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[] }[];
   assets: Asset[];
   reviews: Review[];
   jobs: Job[];
@@ -642,6 +674,8 @@ export interface RunSkill {
 }
 
 export interface RunItemDecision {
+  discord?: Manifest['discord'];
+  timing?: Manifest['timing'];
   decision: 'approve' | 'reject' | 'revise' | string;
   by: string;
   at: number;
@@ -655,6 +689,7 @@ export interface RunItemDecision {
 
 /** One destination of a run (orchestration §2). */
 export interface RunItem {
+  destinationId?: string | null;
   /** `<platform>|<channelId or ''>|<language>`. */
   key: string;
   platform: string;
@@ -768,6 +803,7 @@ export interface RecurringOccurrence {
 
 export interface Snapshot {
   revision: number;
+  workerBinding?: WorkerBinding | null;
   state: SnapshotState;
   membership?: Membership;
   runtimeResult?: Record<string, unknown>;
@@ -1420,13 +1456,41 @@ export interface ResearchEgress {
 export type CapabilityLevel = 'Direct' | 'Assisted' | 'Bridge' | 'Unsupported';
 
 export interface Capability {
+  availability?: 'scoped' | 'consent_required';
   level: CapabilityLevel;
   evidence: string;
   verifiedAt: number | null;
   capabilityVersion: number;
 }
 
+export interface OfficialCapability {
+  key: string;
+  permission_group: string;
+  officialSupport: 'documented' | 'unsupported' | 'audit_unavailable';
+  state: 'READY' | 'BLOCKED';
+  appApproved: boolean;
+  granted: boolean;
+  eligible: boolean;
+  implemented: boolean;
+  liveE2E: boolean;
+  blockers: string[];
+  limitation: string;
+  method: string;
+  scopes: string[];
+  source: string;
+  scheduling: string;
+}
+
 export interface ChannelView {
+  discordEngagement?: { implemented: boolean; enabled: boolean };
+  defaultDestinationId?: string | null;
+  discordDestinations?: DiscordDestination[];
+  discordIdentityConnectionId?: string;
+  discordConnectionKind?: 'installation';
+  providerAccountId?: string;
+  /** Server-recorded identity read; independent of operation approval/evidence times. */
+  identityVerifiedAt?: number | null;
+  officialCapabilities?: Record<string, OfficialCapability>;
   id: string;
   platform: string;
   account: string;
@@ -1449,6 +1513,10 @@ export interface ChannelView {
 }
 
 export interface ProviderView {
+  discordConnectionsV2?: boolean;
+  /** Restricted server-side Pinterest pilot; never a public release gate. */
+  trialReadonly?: boolean;
+  officialCapabilities?: Record<string, OfficialCapability>;
   configurationState?: string;
   credentialPresence?: { clientId: boolean; clientSecret: boolean };
   readinessState?: string;
@@ -1466,6 +1534,8 @@ export interface ProviderView {
   id: string;
   platform: string;
   productionReviewed: boolean;
+  memberPublishingApproved?: boolean;
+  memberPublishingStatus?: { approved: boolean; code: string; message: string; runtimeEnvironmentVerified?: boolean; runtimeEnvironment?: 'preview' | 'production' | null } | null;
   executionPaused?: boolean;
   capabilities: Record<string, boolean>;
   wave?: string | null;
@@ -1499,10 +1569,19 @@ export interface ProviderView {
 }
 
 export interface ChannelDestination {
+  guildName?: string;
+  guildId?: string;
+  channelId?: string;
+  stableId?: string;
+  authorizedId?: string | null;
   id: string;
   name: string;
-  kind: 'text' | 'announcement' | 'page' | 'board';
+  kind: 'text' | 'announcement' | 'page' | 'board' | 'section' | 'member' | 'organization';
+  tasks?: string[];
   selected: boolean;
+  boardId?: string;
+  privacy?: string;
+  eligible?: boolean;
 }
 
 export interface OwnedPost {
@@ -1568,12 +1647,14 @@ export interface OAuthComplete {
 /* ---------- usage & billing ---------- */
 
 export interface Entitlement {
-  planTermsId: string;
-  writingBatchesRemaining: number;
-  mediaCreditsRemaining: number;
-  connectedAccounts: number;
-  members: number;
-  storageMb: number;
+  /** Internal Founder workspaces have no customer plan or numeric allowance ceiling. */
+  unlimited?: boolean;
+  planTermsId: string | null;
+  writingBatchesRemaining: number | null;
+  mediaCreditsRemaining: number | null;
+  connectedAccounts: number | null;
+  members: number | null;
+  storageMb: number | null;
   resetsAt: number | null;
   source: string;
   version: number;
@@ -1730,6 +1811,16 @@ export interface Metric {
   nativeName: string;
 }
 
+export interface AnalyticsReadOutcome {
+  provider: string;
+  connectionId: string;
+  providerPostId: string;
+  jobId: string | null;
+  outcome: 'success' | 'no_data' | 'read_failed';
+  observedAt: number;
+  readOffset: string;
+}
+
 export interface AnalyticsPost {
   connectionId?: string | null;
   contentTypeId?: string | null;
@@ -1744,10 +1835,13 @@ export interface AnalyticsPost {
   freshness: { observedAt: number; ingestedAt: number };
   definitionVersion: string;
   rates: Record<string, { display: string; numerator: number | null; denominator: number | null }>;
+  latestRead?: AnalyticsReadOutcome;
 }
 
 export interface Analytics {
   families?: Record<string, string[]>;
+  readOutcomes?: AnalyticsReadOutcome[];
+  readOutcomeAvailability?: 'available' | 'unavailable';
   state: string;
   posts: AnalyticsPost[];
   rules: Record<string, string>;
@@ -2058,3 +2152,27 @@ export interface WorkspaceApiToken {
   revokedAt: number | null; createdBy: string;
 }
 export interface ApiTokenCreated { item: WorkspaceApiToken; secret: string }
+/** Server-owned Discord identity references; credentials never enter this model. */
+export interface DiscordIdentity {
+  id: string; account: string; userId: string;
+  status: 'linked' | 'reconnect_required' | 'disconnected';
+  expiresAt: number; discoverGuilds: boolean;
+}
+
+export interface NativeSocialReading {
+  provider: string;
+  feature: string;
+  availability: string;
+  data: unknown;
+  provenance: { kind: 'provider_native'; provider: string; reportingPeriod: Record<string, string> };
+  rate: Record<string, string>;
+  executionState?: string;
+  message?: string;
+}
+
+export interface NativeSocialPreview {
+  id: string;
+  digest: string;
+  state: 'preview';
+  manifest: { action: string; target: string; payload: Record<string, unknown>; platform: string; providerAccountId: string };
+}

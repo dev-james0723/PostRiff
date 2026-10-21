@@ -1,0 +1,70 @@
+{
+  "deployment": "dpl_C4AqhCMXcy7LYB4eeCBvXgxQWSVv",
+  "mode": "real_trial_request",
+  "apiEnvironment": "production",
+  "records": [
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T16:58:26.506066+00:00",
+      "grantType": "authorization_code",
+      "method": "POST",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/oauth/token",
+      "phase": "started",
+      "queryKeys": [],
+      "requestId": "8f8fdeb33b75497eaa8ecad6ff933833"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T16:58:26.786055+00:00",
+      "grantType": "authorization_code",
+      "method": "POST",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/oauth/token",
+      "phase": "response",
+      "queryKeys": [],
+      "requestId": "8f8fdeb33b75497eaa8ecad6ff933833",
+      "status": 200,
+      "summary": {
+        "accessTokenPresent": true,
+        "recognizedScopes": [
+          "boards:read",
+          "user_accounts:read"
+        ],
+        "refreshTokenPresent": true,
+        "unexpectedScopesPresent": false
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T16:58:26.814883+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "started",
+      "queryKeys": [],
+      "requestId": "dc3c40f476da4e83be9961f030fcfcc4"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T16:58:26.945799+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "response",
+      "queryKeys": [],
+      "requestId": "dc3c40f476da4e83be9961f030fcfcc4",
+      "status": 200,
+      "summary": {
+        "accountIdPresent": true,
+        "usernamePresent": true
+      }
+    }
+  ]
+}

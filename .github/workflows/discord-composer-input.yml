@@ -1,0 +1,84 @@
+name: Discord composer input regression
+on:
+  pull_request:
+    paths:
+      - 'web/src/features/agent/home/idea-composer.tsx'
+      - 'web/src/features/agent/home/expanded-idea-dialog.tsx'
+      - 'web/tests/home-attachments-wiring.test.cjs'
+      - 'web/tests/discord-connections-browser.cjs'
+      - 'web/src/features/queue/schedule-dialog.tsx'
+      - 'web/tests/discord-p0-browser.cjs'
+      - '.github/workflows/discord-composer-input.yml'
+permissions:
+  contents: read
+concurrency:
+  group: discord-composer-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+env:
+  OPENUI_TELEMETRY_DISABLED: '1'
+  NEXT_TELEMETRY_DISABLED: '1'
+  NEXT_PUBLIC_SENTRY_DISABLED: '1'
+  POSTRIFF_RESEARCH: '0'
+  POSTRIFF_LOCAL_CLI: '0'
+jobs:
+  native-input:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact public feature source without credentials
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git init .
+          git remote add origin https://github.com/dev-james0723/PostRiff.git
+          git -c protocol.version=2 fetch --depth=1 origin "$SOURCE_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install existing pinned dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          npm --prefix web ci
+      - name: Controlled text, attachments and IME regression
+        run: node --test web/tests/home-attachments-wiring.test.cjs
+      - name: Application types and lint
+        run: |
+          (cd web && node node_modules/next/dist/bin/next typegen)
+          npm --prefix web run typecheck
+          npm --prefix web run lint
+      - name: Prepare synthetic fixture with provider fence
+        env:
+          PYTHONPATH: scripts/linkedin_test_fence:src:tests
+          RAFII_DISCORD_SYNTHETIC_FENCE: '1'
+        run: |
+          mkdir -p .depot
+          python tests/discord_ui_fixture.py .depot/discord-p0-ui.json
+      - name: Install isolated cloud Chromium
+        working-directory: web
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Native input and expanded composer in real Home UI
+        run: node web/tests/discord-connections-browser.cjs
+      - name: Selected destination label and exact Discord approval
+        run: node web/tests/discord-p0-browser.cjs
+      - name: Retain exact source and browser evidence
+        if: always()
+        run: |
+          mkdir -p .depot/discord-composer-evidence
+          git rev-parse HEAD > .depot/discord-composer-evidence/source.txt
+          sha256sum web/src/features/agent/home/idea-composer.tsx web/src/features/agent/home/expanded-idea-dialog.tsx web/tests/home-attachments-wiring.test.cjs web/tests/discord-connections-browser.cjs web/src/features/queue/schedule-dialog.tsx web/tests/discord-p0-browser.cjs .github/workflows/discord-composer-input.yml > .depot/discord-composer-evidence/source-sha256.txt
+          find .depot -maxdepth 1 -name 'discord-connections*' -type f -exec cp '{}' .depot/discord-composer-evidence/ \;
+          if [ -d .depot/discord-p0-evidence ]; then cp -R .depot/discord-p0-evidence .depot/discord-composer-evidence/; fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: discord-composer-${{ github.event.pull_request.head.sha }}
+          path: .depot/discord-composer-evidence/
+          retention-days: 14
