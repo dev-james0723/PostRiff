@@ -17,7 +17,7 @@ import time
 from urllib.parse import quote, urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 from .net_guard import assert_public, public_host, pinned_public_json_transport
-from .mastodon_protocol import discover, instance_host
+from .mastodon_protocol import discover, instance_host, refuse_rate_limited_registration
 from .provider_base import OAuthProvider, _credential_shape, default_transport
 
 
@@ -167,6 +167,7 @@ class MastodonProvider(OAuthProvider):
         if body is None:
             response = self.transport("POST", f"https://{host}/api/v1/apps", form={"client_name": "Rafii", "redirect_uris": redirect, "scopes": " ".join(scopes), "website": self.website})
             body = response.get("body") if isinstance(response.get("body"), dict) else {}
+            refuse_rate_limited_registration(response)
             if response.get("status") != 200:
                 raise AlphaError("That server didn't accept Rafii. Check the server name or choose fewer permissions.", 502)
         if not _credential_shape(body.get("client_id")) or not _credential_shape(body.get("client_secret")):

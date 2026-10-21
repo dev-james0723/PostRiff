@@ -1,6 +1,7 @@
 """Connect-only shared Mastodon application cache; no management endpoints."""
 import json
 from .contracts import digest
+from .mastodon_protocol import refuse_rate_limited_registration
 from .provider_base import _credential_shape
 from postriff_alpha.domain import AlphaError
 
@@ -27,6 +28,7 @@ class ApplicationCache:
                     return credentials
             response = self.provider.transport("POST", "https://" + host + "/api/v1/apps", form={
                 "client_name": "Rafii", "redirect_uris": redirect, "scopes": " ".join(scopes), "website": self.provider.website})
+            refuse_rate_limited_registration(response)
             body = self.provider._ok(response, "client_id", "client_secret")
             expiry = body.get('client_secret_expires_at', 0)
             if (not _credential_shape(body.get('client_id')) or not _credential_shape(body.get('client_secret'))
