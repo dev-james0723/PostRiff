@@ -1,0 +1,80 @@
+{
+  "executionState": "CANDIDATE_ONLY_NOT_APPLIED",
+  "provider": "linkedin",
+  "consoleAppId": "263833009",
+  "appName": "James Studio",
+  "project": "postriff-phase2-private",
+  "branch": "codex/social-connection-recovery-20261007",
+  "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "previewOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+  "proposedProductRecordKey": "share_on_linkedin",
+  "proposedProductRecord": {
+    "state": "approved",
+    "appId": "86761m831bhyiu",
+    "audience": "external",
+    "approvedScopes": [
+      "w_member_social"
+    ],
+    "evidenceRef": "docs/linkedin-publishing-20261008/app-product-observation.json",
+    "environment": "preview",
+    "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback"
+  },
+  "proposedPreviewEnvironmentOnly": {
+    "POSTRIFF_OAUTH_LINKEDIN_OFFICIAL_SOCIAL_ENABLED": "true"
+  },
+  "requiredRuntimeChecks": [
+    "Observe memberPublishingStatus.runtimeEnvironmentVerified=true and runtimeEnvironment=preview in the existing hosted catalog before adding Share evidence.",
+    "Actual Python runtime VERCEL_ENV equals preview. If missing, stop; do not infer from a frontend variable.",
+    "Actual public base URL equals previewOrigin, with exact registered /api/oauth/linkedin/callback.",
+    "Secure equality comparison of actual configured LinkedIn OAuth client ID with approved app; never print client secret.",
+    "Preserve the separate current CONNECTION_REVIEW_JSON identity record. The branch product key was absent at inspection; stop and review any change before creating it, preserving any unrelated records.",
+    "Verify production runtime rejects this preview record and production settings remain unchanged.",
+    "Immediately before applying, recheck the two candidate keys remain absent and no LinkedIn jobs have appeared. Stop and review any change; never overwrite another operator record."
+  ],
+  "excludedChanges": [
+    "POSTRIFF_OFFICIAL_SOCIAL_ENABLED global flag",
+    "productionReviewed",
+    "liveVerified",
+    "production release or live activation",
+    "other providers",
+    "provider registration changes",
+    "billing authority",
+    "secrets or credential-key rotation"
+  ],
+  "operationEffect": "Allows a member grant with actual w_member_social to prepare/approve/create supported member posts through existing gates. Does not turn feature E2E qualification READY or grant restricted reads, organization publishing, comments or analytics.",
+  "rollback": [
+    "Remove only the two newly created preview-branch variables by their returned IDs, or restore their exact prior values if the reviewed precondition changed. Preserve CONNECTION_REVIEW_JSON and all other records.",
+    "Keep sourceb7ee0e68 and existing encrypted grants/stable credential key; no secret rotation or customer grant revocation.",
+    "Reconcile only the newly returned pilot post ID before cleanup; rollback never replays a create or alters production.",
+    "After removing only the newly created preview environment IDs, redeploy the same tested source to preview and verify publishing disabled/basic connections retained."
+  ],
+  "integrationTarget": {
+    "branch": "codex/social-connection-recovery-20261007",
+    "pullRequest": "https://github.com/dev-james0723/PostRiff/pull/131",
+    "authorization": "Existing push/PR/preview authorization; parent reviews/integrates local worker commit. Worker branch is not pushed."
+  },
+  "remainingApproval": "Preview evidence/workflow activation, owner optional publishing consent and one exact PUBLIC post; only-returned-ID cleanup requires confirmation at the permanent-deletion boundary.",
+  "localImplementationBranch": "codex/linkedin-publishing-recovery-20261008",
+  "pullRequest": "https://github.com/dev-james0723/PostRiff/pull/131",
+  "preActivationObservation": {
+    "state": "READ_ONLY_VERIFIED_NOT_APPLIED",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "deploymentId": "dpl_E6mrgNSbYf8ZSHG6XxU6rynUTg3T",
+    "clientMatchesApprovedApp": true,
+    "publicOriginMatchesRegisteredCallback": true,
+    "runtimeEnvironmentVerified": true,
+    "runtimeEnvironment": "preview",
+    "existingBranchProductRecordPresent": false,
+    "existingBranchPublishingFlagPresent": false,
+    "existingConnectionReviewPreserved": true,
+    "existingLinkedInJobsInPreviewDatabase": 0,
+    "secretValuesReadOrPrinted": false,
+    "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+    "latestRealWorkspaceReloadAtUtc": "2026-10-08T05:23:47.828Z",
+    "receiptCompiledAtUtc": "2026-10-08T05:47:34.218642+00:00",
+    "configurationObservedAtUtc": "2026-10-08T05:17:54.855896+00:00"
+  },
+  "requiredChecksEvidence": "evidence/github-b7ee0e68.json",
+  "preparedPrivateDraftEvidence": "evidence/private-pilot-draft-b7ee0e68.json",
+  "previewActivationDeployment": "After approval and exact preview environment creation, redeploy the same tested b7 source under existing preview authorization; recheck fixed alias/source/runtime/client/callback, retained A/B connections and operation gates. Production excluded."
+}

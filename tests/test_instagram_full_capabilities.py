@@ -29,7 +29,7 @@ class InstagramFullCapabilityTests(unittest.TestCase):
         self.assertTrue(adapter.account_scoped_direct)
         return adapter
 
-    def test_live_grant_preserves_all_instagram_capabilities(self):
+    def test_grant_preserves_verified_contracts_without_promoting_unverified_insights(self):
         adapter = self.adapter()
         granted = [
             "instagram_business_basic",
@@ -38,8 +38,9 @@ class InstagramFullCapabilityTests(unittest.TestCase):
             "instagram_business_manage_comments",
         ]
         matrix = OAuthService._capabilities(adapter, "comments_read", granted, [], 1234, "token")
-        for capability in ("publish", "schedule", "analytics", "comments_read", "reply"):
+        for capability in ("publish", "schedule", "comments_read", "reply"):
             self.assertEqual(matrix[capability]["level"], "Direct", capability)
+        self.assertEqual(matrix["analytics"]["level"], "Unsupported")
 
     def test_metric_scheduler_accepts_account_scoped_instagram_grant(self):
         adapter = self.adapter()

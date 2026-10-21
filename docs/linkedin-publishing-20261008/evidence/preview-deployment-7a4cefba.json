@@ -1,0 +1,17 @@
+{
+  "schema": "rafii.deployment-identity.v1",
+  "observedAtUtc": "2026-10-08T08:04:02.004791+00:00",
+  "execution": "READ_ONLY_VERCEL_DEPLOYMENT_API_AND_NORMAL_UI",
+  "project": "postriff-phase2-private",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "teamId": "team_PgXY5VdAYKcsv0RLoDPHscNq",
+  "deploymentId": "dpl_HUGEcuSxUJCJYwxaP31XTpNV2mrQ",
+  "source": "git",
+  "sourceSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+  "branch": "codex/social-connection-recovery-20261007",
+  "state": "READY",
+  "canonicalOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+  "immutableUrl": "https://postriff-phase2-private-m19k33zmh-jamesau0723-6572s-projects.vercel.app",
+  "aliasMatches": true,
+  "productionReleasedByThisTask": false
+}

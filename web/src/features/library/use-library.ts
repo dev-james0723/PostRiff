@@ -19,7 +19,7 @@ export type LibraryAsset = Asset;
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 /** Photos are fitted in the browser first (`fitForUpload`: HEIC and others become JPEG), so a pick may be larger. */
 export const MAX_PICK_BYTES = 30 * 1024 * 1024;
-export const ACCEPTED_TYPES = { 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/heic': ['.heic'], 'image/heif': ['.heif'], 'image/webp': ['.webp'] };
+export const ACCEPTED_TYPES = { 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/heic': ['.heic'], 'image/heif': ['.heif'], 'image/webp': ['.webp'], 'image/gif': ['.gif'], 'application/pdf': ['.pdf'] };
 
 export interface AssetUse {
   kind: 'review' | 'job';

@@ -1,0 +1,40 @@
+{
+  "execution": "JCB/Depot remote validation with synthetic provider transports and real disposable PostgreSQL; no live social E2E",
+  "frontend": {
+    "runId": "gp922n7frg",
+    "exitCode": 0,
+    "nodeTests": 480,
+    "auditVulnerabilities": 0,
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "nextVersion": "16.3.6"
+  },
+  "browser": {
+    "runId": "4kxl4rpwqh",
+    "exitCode": 0,
+    "widths": [
+      1280,
+      390
+    ],
+    "visualInspection": "PASS",
+    "providerResponses": "synthetic"
+  },
+  "finalBackend": {
+    "runId": "nd84zg5dg1",
+    "exitCode": 0,
+    "pythonTests": 216,
+    "postgresLifecycleTests": 15,
+    "sqlSafetyAssertions": "PASS"
+  },
+  "liveProviderTestsPassed": 0,
+  "liveCasesNotRun": 196,
+  "capabilityRows": 205,
+  "readyCapabilities": 0,
+  "localAfterCurrentPolicy": [
+    "metadata export and JSON integrity checks",
+    "git diff --check",
+    "bash -n three cloud entry scripts",
+    "individual targeted unit tests; no local full suite"
+  ]
+}

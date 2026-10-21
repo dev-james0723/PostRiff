@@ -14,7 +14,8 @@ class PreviewIsolation(unittest.TestCase):
         value=self.env()
         self.assertEqual(isolated_environment(value)['POSTRIFF_RESEARCH'],'0')
         self.assertNotIn('POSTRIFF_RESEARCH',value)
-        self.assertEqual(isolated_environment({'VERCEL_ENV':'production'}),{'VERCEL_ENV':'production'})
+        self.assertEqual(isolated_environment({}),{})
+        with self.assertRaises(ValueError): isolated_environment({'VERCEL_ENV':'production'})
 
     def test_mixed_production_configuration_rejected_before_connect(self):
         mutations=[('POSTRIFF_ENVIRONMENT','production'),('POSTRIFF_PRODUCTION_PROJECT_REF','s'*20),('NEXT_PUBLIC_SUPABASE_URL','https://'+'p'*20+'.supabase.co'),('POSTRIFF_DATABASE_URL','postgresql://postgres:synthetic@db.'+'p'*20+'.supabase.co/postgres?sslmode=require'),('POSTRIFF_DATABASE_URL','host=127.0.0.1'),('POSTRIFF_API_ORIGIN','https://production.example'),('POSTRIFF_PUBLIC_BASE_URL','https://production.example'),('STRIPE_SECRET_KEY','sk_live_synthetic'),('AI_GATEWAY_API_KEY','unpinned'),('POSTRIFF_RESEARCH','1'),('POSTRIFF_LOCAL_CLI','1')]
@@ -34,3 +35,21 @@ class PreviewIsolation(unittest.TestCase):
         for name in ('DIAL_API_KEY','DIAL_AUDIO_SIGNING_SECRET','DIAL_WEBHOOK_SIGNING_SECRET','DIAL_VERIFICATION_SECRET'):
             with self.subTest(name=name),self.assertRaises(ValueError):
                 isolated_environment({**self.env(),name:'unreviewed-production-secret'})
+
+    def test_oauth_preview_is_bound_to_its_candidate_before_database_setup(self):
+        credential = 'synthetic-linkedin-client'
+        values = {**self.env(), 'POSTRIFF_OAUTH_LINKEDIN_CLIENT_ID': credential,
+                  'POSTRIFF_STAGING_SECRET_SHA256': json.dumps({
+                      'POSTRIFF_OAUTH_LINKEDIN_CLIENT_ID': hashlib.sha256(credential.encode()).hexdigest()}),
+                  'VERCEL_BRANCH_URL': 'recovery-branch.example', 'VERCEL_URL': 'recovery-revision.example'}
+        with patch('postriff_phase2.hosted_app.postgres_factory', side_effect=AssertionError('No database setup allowed')):
+            for origin in ('https://staging.example', 'https://other-branch.example', 'https://production.example'):
+                with self.subTest(origin=origin), self.assertRaisesRegex(ValueError, 'OAuth preview callbacks'):
+                    runtime_from_environment({**values, 'POSTRIFF_PUBLIC_BASE_URL': origin,
+                                              'POSTRIFF_STAGING_PUBLIC_BASE_URL': origin})
+        for name in ('VERCEL_BRANCH_URL', 'VERCEL_URL'):
+            origin = 'https://' + values[name]
+            bound = {**values, 'POSTRIFF_PUBLIC_BASE_URL': origin, 'POSTRIFF_STAGING_PUBLIC_BASE_URL': origin}
+            self.assertEqual(isolated_environment(bound)['POSTRIFF_PUBLIC_BASE_URL'], origin)
+        with self.assertRaisesRegex(ValueError, 'OAuth preview callbacks'):
+            isolated_environment({key: value for key, value in values.items() if not key.startswith('VERCEL_') or key == 'VERCEL_ENV'})

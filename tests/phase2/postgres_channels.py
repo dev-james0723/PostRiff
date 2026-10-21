@@ -271,9 +271,24 @@ view = next(c for c in oauth.channels(wid_a, 'one')['channels'] if c['id'] == ci
 assert view['scopes'] == ['openid'] and view['capabilities']['publish']['level'] == 'Unsupported'
 assert not next(c for c in service.get(wid_a, 'one')['state']['phase2']['channels'] if c['id'] == cid)['capabilityVerified']
 assert oauth.token_for_worker(wid_a, cid)['scopes'] == ['openid']
+# An unobservable grant is a temporary verification failure, not evidence of revocation.
+before_unavailable = service.get(wid_a, 'one')
 provider.inspect_scopes = lambda access, account: None
+assert oauth.verify(wid_a, 'one', cid) == {
+    'connectionId': cid, 'identityVerified': False,
+    'scopes': ['openid'], 'state': 'verification_unavailable',
+}
+assert service.get(wid_a, 'one') == before_unavailable
+denied(lambda: oauth.token_for_worker(wid_a, cid), 503)
+with connection() as db:
+    assert db.execute('SELECT scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid_a, cid)).fetchone()[0] == ['openid']
+assert oauth.channels(wid_a, 'one')['channels'][0]['capabilities']['publish']['level'] == 'Unsupported'
+# An explicitly observed empty grant still removes authority and requires reconnect.
+provider.inspect_scopes = lambda access, account: []
 assert oauth.verify(wid_a, 'one', cid)['state'] == 'scope_missing'
 assert oauth.channels(wid_a, 'one')['channels'][0]['connectionState'] == 'scope_missing'
+with connection() as db:
+    assert db.execute('SELECT scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid_a, cid)).fetchone()[0] == []
 # Simulate another connection being authorized while identity lookup is in flight.
 base_identity = provider.identity
 rotated, rotated_key = oauth.vault.encrypt('ACCESS-reauthorized')
@@ -286,7 +301,7 @@ denied(lambda: oauth.verify(wid_a, 'one', cid), 409)
 with connection() as db:
     assert db.execute('SELECT access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid_a,cid)).fetchone()[0] == rotated
 provider.identity = base_identity
-checks.append('scope re-verification persists downgraded authority, fails closed on unknown grants, and fences a reauthorization race')
+checks.append('scope re-verification preserves stored grants without extending trust when unavailable, downgrades explicit scope loss, and fences a reauthorization race')
 
 # The picture download runs after the connection is saved: an unexpected fault in it (a TypeError on the
 # 2026-09-25 production build) must not report the saved connection as failed.
