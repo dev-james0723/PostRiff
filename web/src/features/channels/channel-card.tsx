@@ -51,6 +51,7 @@ import { historyImportCopy } from '@/lib/channels/history-import-copy';
 import { usePreferences } from '@/lib/preferences';
 import type { ConnectRequest } from './connect-sheet';
 import { DestinationPicker } from './destination-picker';
+import { PinterestBoardsSheet } from './pinterest-boards-sheet';
 import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN, STATEFUL_GLASS } from './rafii-materials';
 
 /** Jobs for this account, counted from the workspace snapshot by the page. */
@@ -412,7 +413,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           <span aria-hidden className='hidden md:inline'>
             ·
           </span>
-          {channel.platform === 'YouTube' ? <Link href={`/app/youtube?channel=${encodeURIComponent(channel.id)}`} className='text-sm underline'>Independent creator capabilities</Link> : <ScopesList scopes={channel.scopes} />}
+          {channel.platform === 'YouTube' ? <Link href={`/app/youtube?channel=${encodeURIComponent(channel.id)}`} className='text-sm underline'>Independent creator capabilities</Link> : channel.platform === 'X' ? <Link href={`/app/x?channel=${encodeURIComponent(channel.id)}`} className='text-sm underline'>Manage X directly</Link> : <ScopesList scopes={channel.scopes} />}
         </div>
       )}
 
@@ -464,6 +465,9 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           <Icons.history className='size-4' />
           History
         </Button>
+        {canManage && !disconnected && channel.platform === 'Pinterest' && channel.scopes?.includes('boards:read') && (
+          <PinterestBoardsSheet channelId={channel.id} account={channel.account} />
+        )}
         {canManage && !disconnected && provider?.hasDestinations && provider.destinationScope !== 'post' && (
           <DestinationPicker channelId={channel.id} platform={channel.platform} label={provider.destinationLabel ?? 'Channel'} disabled={busy} />
         )}

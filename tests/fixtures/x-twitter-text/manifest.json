@@ -1,0 +1,35 @@
+{
+  "upstream": "https://github.com/twitter/twitter-text",
+  "commit": "30e2430d90cff3b46393ea54caf511441983c260",
+  "files": {
+    "validate.yml": {
+      "sha256": "29fa1be663676f3d0bb0a67f393b32c15d92c5dd10db9be401bf7708d7c5b703",
+      "sourcePath": "conformance/validate.yml",
+      "sourceUrl": "https://raw.githubusercontent.com/twitter/twitter-text/30e2430d90cff3b46393ea54caf511441983c260/conformance/validate.yml",
+      "bytes": 58496
+    },
+    "extract.yml": {
+      "sha256": "2b4f65d43462eb9785785eb94b633d1eccf920d5047fa17d98a45ea219851c71",
+      "sourcePath": "conformance/extract.yml",
+      "sourceUrl": "https://raw.githubusercontent.com/twitter/twitter-text/30e2430d90cff3b46393ea54caf511441983c260/conformance/extract.yml",
+      "bytes": 45303
+    },
+    "v3.json": {
+      "sha256": "2aca8d4a5d1f10e2d680a7d7421ca3afe446c879c19d0fe835c1df7aa19c124a",
+      "sourcePath": "config/v3.json",
+      "sourceUrl": "https://raw.githubusercontent.com/twitter/twitter-text/30e2430d90cff3b46393ea54caf511441983c260/config/v3.json",
+      "bytes": 460
+    },
+    "LICENSE": {
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "sourcePath": "LICENSE",
+      "sourceUrl": "https://raw.githubusercontent.com/twitter/twitter-text/30e2430d90cff3b46393ea54caf511441983c260/LICENSE",
+      "bytes": 11357
+    }
+  },
+  "parser": {
+    "package": "twitter-text-parser",
+    "version": "3.0.0",
+    "wheelSha256": "b36bd22e147db2234e79c73b021f10c3073e8c54f22b68c31696239b6917cdd3"
+  }
+}

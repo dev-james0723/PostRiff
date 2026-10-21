@@ -141,11 +141,15 @@ class XAdapter(unittest.TestCase):
         self.assertEqual(wire.calls[0]["form"]["code_verifier"], "VERIFIER")
         self.assertEqual(json.loads(grant["accessToken"])["at"], "AT")
         self.assertEqual(x.inspect_scopes(grant["accessToken"]), sorted(grant["scopes"]))
-        identity = x.identity(grant["accessToken"])
+        from postriff_phase2.x_direct_cost import bind_x_cost_context
+        with bind_x_cost_context(workspace_id="synthetic-workspace", connection_id="synthetic-connection",
+                operation="identity.read", reserve=lambda request: request.request_id):
+            identity = x.identity(grant["accessToken"])
         self.assertEqual((identity["providerAccountId"], identity["handle"]), ("42", "@rafii"))
         self.assertEqual(wire.calls[1]["headers"]["Authorization"], "Bearer AT")
-        refreshed = x.refresh("RT")
-        self.assertEqual(refreshed["refreshToken"], "RT")  # X did not rotate it this time
+        refreshed = x.refresh(grant["refreshToken"])
+        self.assertEqual(json.loads(refreshed["refreshToken"])["rt"], "RT")
+        self.assertEqual(x.authorization_generation(refreshed["accessToken"]), x.authorization_generation(grant["accessToken"]))
         self.assertTrue(x.revoke(refreshed["accessToken"]))
         self.assertEqual(wire.calls[3]["form"]["token"], "AT2")
 
@@ -342,6 +346,11 @@ class Cursor:
             db.txns[txn_id] = {"workspace": workspace, "member": member, "provider": provider, "capability": capability, "redirect": redirect, "scopes": scopes,
                                "state_hash": state_hash, "ciphertext": ciphertext, "key_id": key_id, "expires": db.clock() + ttl, "consumed": False}
             self.result = (txn_id,)
+        elif s.startswith("SELECT id::text,member_id::text,provider,capability,scopes,extract(epoch from expires_at),consumed_at IS NOT NULL FROM public.pr_oauth_transactions"):
+            workspace, state_hash = params
+            found = next(((k, t) for k, t in db.txns.items() if t["state_hash"] == state_hash and t["workspace"] == workspace), None)
+            self.result = None if not found else (found[0], found[1]["member"], found[1]["provider"], found[1]["capability"],
+                                                  found[1]["scopes"], found[1]["expires"], found[1]["consumed"])
         elif s.startswith("SELECT id::text,member_id::text,provider"):
             state_hash, workspace = params
             found = next(((k, t) for k, t in db.txns.items() if t["state_hash"] == state_hash and t["workspace"] == workspace), None)
@@ -353,10 +362,16 @@ class Cursor:
         elif s.startswith("UPDATE public.pr_oauth_transactions SET verifier_ciphertext"):
             db.txns[params[2]].update(ciphertext=params[0], key_id=params[1])
         elif s.startswith("UPDATE public.pr_oauth_transactions SET consumed_at"):
-            db.txns[params[0]]["consumed"] = True
+            if "WHERE workspace_id=%s AND provider='x'" in s:
+                for txn in db.txns.values():
+                    if txn["workspace"] == params[0] and txn["provider"] == "x" and txn["expires"] > db.clock():
+                        txn.update(consumed=True, ciphertext="", expires=db.clock(), outcome="disconnected")
+            else:
+                db.txns[params[0]]["consumed"] = True
+                db.txns[params[0]]["outcome"] = "exchange_started" if "exchange_started" in s else "exchanged"
         elif s.startswith("INSERT INTO public.pr_encrypted_credentials"):
             workspace, connection, provider, account, access, refresh, key_id, scopes, expires, refresh_supported = params
-            db.credentials[connection] = {"workspace": workspace, "provider": provider, "account": account, "access": access, "key_id": key_id, "scopes": scopes, "expires": expires, "revoked": False}
+            db.credentials[connection] = {"workspace": workspace, "provider": provider, "account": account, "access": access, "refresh": refresh, "key_id": key_id, "scopes": scopes, "expires": expires, "revoked": False}
         elif s.startswith("SELECT provider FROM public.pr_encrypted_credentials"):
             found = db.credentials.get(params[1])
             self.result = (found["provider"],) if found and not found["revoked"] and found.get("workspace", "workspace") == params[0] else None
@@ -380,8 +395,20 @@ class Cursor:
                                 and not (c.get("workspace", "workspace") == workspace and key == connection)), None)
         elif s.startswith("SELECT provider,access_ciphertext,key_id,connection_id FROM public.pr_encrypted_credentials"):
             self.rows = [(c["provider"], c["access"], c["key_id"], key) for key, c in db.credentials.items() if c.get("workspace", "workspace") == params[0] and not c["revoked"]]
+        elif s.startswith("SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials"):
+            found = db.credentials.get(params[1])
+            self.result = (found["access"],found["key_id"]) if found and not found["revoked"] and found["workspace"]==params[0] else None
+        elif s.startswith("SELECT provider,access_ciphertext,key_id,refresh_ciphertext FROM public.pr_encrypted_credentials"):
+            found = db.credentials.get(params[1])
+            self.result = (found["provider"],found["access"],found["key_id"],found.get("refresh")) if found and not found["revoked"] and found["workspace"]==params[0] else None
+        elif s.startswith("SELECT to_regclass("):
+            self.result = (None,)  # Pure OAuth fixture has no Direct journal; real SQL is tested separately.
+        elif s.startswith("UPDATE public.pr_workspaces SET state="):
+            db.repository.state = json.loads(params[0])
+            db.repository.revision += 1
         elif s.startswith("UPDATE public.pr_encrypted_credentials SET revoked_at=now()"):
-            db.credentials[params[1]]["revoked"] = True
+            found=db.credentials[params[1]]
+            found.update(revoked=True, access="", refresh=None)
         elif s.startswith("UPDATE public.pr_channel_capabilities"):
             self.result = None
         elif s.startswith("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials"):
@@ -413,6 +440,7 @@ class Repository:
         self.db = Database(clock)
         self.state = initial_phase2_state("workspace", "owner", "Owner", "studio", 100)
         self.revision = 1
+        self.db.repository = self
 
     @contextmanager
     def transaction(self, token, workspace):
@@ -425,7 +453,10 @@ class Repository:
 
     def command(self, workspace, token, revision, command, requirement="edit", after=None, **kwargs):
         require(Membership("owner"), requirement)
-        self.state, self.revision = command(copy.deepcopy(self.state), "owner"), self.revision + 1
+        proposed = command(copy.deepcopy(self.state), "owner")
+        if after is not None:
+            after(self.db.cursor(), proposed, "owner")
+        self.state, self.revision = proposed, self.revision + 1
         return {"state": self.state, "revision": self.revision}
 
     def assert_fresh(self, token, principal):
@@ -557,6 +588,9 @@ def manifest(platform, account_id, text="Hello from Rafii https://rafii.example/
 class Publishing(unittest.TestCase):
     def reviewed(self, adapter):
         adapter.production_reviewed = True
+        if isinstance(adapter, XProvider):
+            # Prior X publishing tests use a synthetic explicit publishing release.
+            adapter.publishing_release_enabled = True
         return adapter
 
     def test_unreviewed_or_unsupported_media_never_reaches_the_network(self):
@@ -565,8 +599,9 @@ class Publishing(unittest.TestCase):
         social = HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}), ["tweet.write"]), {"x": x})
         self.assertEqual(social.submit(manifest("X", "42"))["state"], "held")
         x.production_reviewed = True
+        x.publishing_release_enabled = True  # Fixture only; production remains disabled.
         video = [{"id": "m", "mime": "video/mp4", "alt": ""}]
-        self.assertEqual(social.submit(manifest("X", "42", media=video))["state"], "failed")
+        self.assertEqual(social.submit(manifest("X", "42", media=video))["state"], "held")
         self.assertEqual(wire.calls, [])
 
     def test_bluesky_post_with_link_facet_then_readback(self):
@@ -626,18 +661,14 @@ class Publishing(unittest.TestCase):
         verified = social.reconcile(manifest("Discord", "555555"), {"providerReference": result["reference"]})
         self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Discord"}})["state"], "verified")
 
-    def test_x_post_and_readback_bind_the_author(self):
-        text = manifest("X", "42")["payload"]["text"]
-        wire = Wire([ok({"data": {"id": "1800000000000000001", "text": text}}, 201), ok({"data": {"id": "1800000000000000001", "text": text, "author_id": "99"}}),
-                     ok({"data": {"id": "1800000000000000001", "text": text, "author_id": "42"}})])
-        x = self.reviewed(XProvider("c", "s", transport=wire))
-        social = HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}), ["tweet.write"]), {"x": x})
+    def test_legacy_x_post_route_requires_the_direct_approval_journal(self):
+        wire = Wire([])
+        social = HostedSocial(Grants("legacy-token", ["tweet.write"]),
+            {"x": self.reviewed(XProvider("c", "s", transport=wire))})
         result = social.submit(manifest("X", "42"))
-        self.assertEqual(result["state"], "provider_accepted")
-        self.assertEqual(social.reconcile(manifest("X", "42"), {"providerReference": result["reference"]})["state"], "uncertain")  # another author
-        verified = social.reconcile(manifest("X", "42"), {"providerReference": result["reference"]})
-        self.assertEqual(normalize_result(verified, {"manifest": {"platform": "X"}})["state"], "verified")
-        self.assertEqual(verified["url"], "https://x.com/james/status/1800000000000000001")
+        self.assertEqual((result["state"], result["reasonCode"]),
+            ("held", "x_direct_management_review_required"))
+        self.assertEqual(wire.calls, [])
 
 
 
@@ -647,17 +678,16 @@ class DefiniteRejections(unittest.TestCase):
     def x(self, *responses):
         adapter = XProvider("c", "s", transport=Wire(responses))
         adapter.production_reviewed = True
+        adapter.publishing_release_enabled = True  # Explicit synthetic publish qualification.
         return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}), ["tweet.write"]), {"x": adapter})
 
-    def test_x_bad_request_duplicate_and_permission(self):
-        refused = self.x(ok({"detail": "Your Tweet text is too long."}, 400)).submit(manifest("X", "42"))
-        self.assertEqual(refused["state"], "failed")
-        self.assertIn("Your Tweet text is too long.", refused["confirmed"])
-        duplicate = self.x(ok({"detail": "You are not allowed to create a Tweet with duplicate content.", "status": 403}, 403)).submit(manifest("X", "42"))
-        self.assertEqual(duplicate["state"], "failed")
-        self.assertTrue(duplicate["confirmed"].startswith("Duplicate content"))
-        self.assertNotIn("re-authorization", duplicate["confirmed"])
-        self.assertEqual(self.x(ok({"detail": "Forbidden"}, 403)).submit(manifest("X", "42"))["state"], "held")
+    def test_legacy_x_route_never_infers_a_provider_rejection(self):
+        for status in (400, 403, 429, 500):
+            social = self.x(ok({"detail": "Synthetic response that must not be requested"}, status))
+            result = social.submit(manifest("X", "42"))
+            self.assertEqual((result["state"], result["reasonCode"]),
+                ("held", "x_direct_management_review_required"))
+            self.assertEqual(social.providers["x"].transport.calls, [])
 
     def test_telegram_error_codes(self):
         cases = ((400, {"ok": False, "error_code": 400, "description": "Bad Request: message text is empty"}, "failed"),
@@ -798,22 +828,23 @@ class XReconcile(unittest.TestCase):
     def social(self, wire):
         x = XProvider("c", "s", transport=wire)
         x.production_reviewed = True
+        x.publishing_release_enabled = True  # Fixture only.
         return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}), ["tweet.write"]), {"x": x})
 
-    def test_links_are_expanded_entities_decoded_and_the_media_link_dropped(self):
+    def test_legacy_reference_does_not_authorize_content_verification(self):
         text = "Recital & rehearsal notes https://rafii.example/notes"
         stored = {"id": "1800000000000000001", "author_id": "42", "text": "Recital &amp; rehearsal notes https://t.co/abc123 https://t.co/media99",
                   "entities": {"urls": [{"start": 30, "url": "https://t.co/abc123", "expanded_url": "https://rafii.example/notes"},
                                         {"start": 50, "url": "https://t.co/media99", "expanded_url": "https://x.com/james/status/1800000000000000001/photo/1", "media_key": "3_1"}]}}
         wire = Wire([ok({"data": stored})])
         verified = self.social(wire).reconcile(manifest("X", "42", text=text), {"providerReference": stored["id"], "checks": 1})
-        self.assertEqual(verified["state"], "verified")
-        self.assertIn("entities", wire.calls[0]["url"])
+        self.assertEqual(verified["state"], "held")
+        self.assertEqual(wire.calls, [])  # Exact modern receipt verification is exercised by executor tests.
 
-    def test_billed_reads_stop_after_a_few_inconclusive_checks(self):
+    def test_legacy_reference_never_authorizes_a_billable_read(self):
         wire = Wire([])
-        result = self.social(wire).reconcile(manifest("X", "42"), {"providerReference": "1800000000000000001", "checks": HostedSocial.X_RECONCILE_LIMIT + 1})
-        self.assertEqual((result["state"], wire.calls), ("uncertain", []))
+        result = self.social(wire).reconcile(manifest("X", "42"), {"providerReference": "1800000000000000001", "checks": 4})
+        self.assertEqual((result["state"], wire.calls), ("held", []))
 
 
 class MinorFixes(unittest.TestCase):
@@ -839,12 +870,16 @@ class MinorFixes(unittest.TestCase):
         for seconds_left, renewed in ((100, True), (1000, False)):
             with self.subTest(seconds_left=seconds_left):
                 repo, vault = fixtures.Repository(), CredentialVault(CredentialVault.generate_key())
-                access, key = vault.encrypt(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}))
-                refresh = vault.encrypt("RT")[0]
-                now = 1_800_000_000
-                repo.credential = ("x", access, refresh, key, now + seconds_left, True, False, ["tweet.write"], "42", now - 3600)
                 x = XProvider("c", "s", transport=Wire([]))
-                x.refresh = Mock(return_value={"accessToken": json.dumps({"v": 1, "at": "AT2", "scope": ["tweet.write"]}), "refreshToken": "RT2", "expiresIn": 7200})
+                scope = "tweet.read users.read tweet.write offline.access"
+                initial = x._grant({"access_token":"AT","refresh_token":"RT","scope":scope,"expires_in":7200})
+                renewed_grant = x._grant({"access_token":"AT2","refresh_token":"RT2","scope":scope,"expires_in":7200},
+                    previous_refresh=initial["refreshToken"])
+                access, key = vault.encrypt(initial["accessToken"])
+                refresh = vault.encrypt(initial["refreshToken"])[0]
+                now = 1_800_000_000
+                repo.credential = ("x", access, refresh, key, now + seconds_left, True, False, scope.split(), "42", now - 3600)
+                x.refresh = Mock(return_value=renewed_grant)
                 OAuthService(repo, None, vault, {"x": x}, BASE, clock=lambda: now).token_for_worker("workspace", "conn")
                 self.assertEqual(x.refresh.called, renewed)
 

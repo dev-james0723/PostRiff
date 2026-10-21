@@ -5,6 +5,12 @@
   "en",
   "zh-Hant"
  ],
+ "optionalCapabilities": {
+  "tool.pinterest_boards": {
+   "en": "View your Pinterest boards and sections",
+   "zh-Hant": "查看你的 Pinterest 看板及分區"
+  }
+ },
  "capabilities": {
   "account.delete": {
    "en": "Delete your account",
@@ -589,6 +595,18 @@
   "tool.library_metadata_apply": {
    "en": "Apply reviewed Library details",
    "zh-Hant": "套用已審閱的資料庫詳細資料"
+  },
+  "tool.x_capabilities": {
+   "en": "Check direct X capabilities",
+   "zh-Hant": "查看 X 直接管理功能"
+  },
+  "tool.x_operations_list": {
+   "en": "Check approved X operations and receipts",
+   "zh-Hant": "查看 X 操作與收據"
+  },
+  "tool.x_action_propose": {
+   "en": "Prepare an X action for your approval",
+   "zh-Hant": "準備待你批准的 X 操作"
   }
  },
  "providers": {

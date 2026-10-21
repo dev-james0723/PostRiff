@@ -1,0 +1,2 @@
+# Test-only dependency for pinned official twitter-text YAML fixtures.
+PyYAML==6.0.2

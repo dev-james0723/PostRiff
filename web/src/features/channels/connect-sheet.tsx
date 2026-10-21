@@ -38,6 +38,7 @@ export interface ConnectRequest {
 
 function offeredCapabilities(provider: ProviderView | undefined): ConnectCapability[] {
   if (!provider) return [];
+  // Only offer capabilities the server can authorize for this release.
   return CONNECT_CAPABILITIES.filter((key) => provider.capabilities[key] === true);
 }
 
@@ -168,8 +169,11 @@ export function ConnectSheet({
     setBusy(true);
     setError(null);
     try {
-      const input = provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : undefined;
-      const started = await api.oauthStart(workspaceId, provider.id, capability, input);
+      const input = {
+        ...(provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : {}),
+        ...(reconnect && provider.id === 'x' ? { connectionId: reconnect.channelId } : {})
+      };
+      const started = await api.oauthStart(workspaceId, provider.id, capability, Object.keys(input).length ? input : undefined);
       if (reconnect) {
         rememberExpectedReconnect({ channelId: reconnect.channelId, account: reconnect.account, transactionId: started.transactionId });
       }
@@ -338,6 +342,7 @@ export function ConnectSheet({
                     </details>
                   )}
                   {provider.id === 'linkedin' && !provider.historyAvailableForApp && <p>LinkedIn doesn&apos;t share past posts yet. Add your own text in Learn my voice.</p>}
+                  {provider.id === 'x' && <p>X account connection beta: posting, scheduling and analytics are unavailable. Connecting grants no publishing access.</p>}
                 </div>
               )}
 

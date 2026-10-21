@@ -399,7 +399,15 @@ class HostedPhase2Commands:
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
         required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
         # `language` is optional: records from before per-channel languages still carry it (languages plan §6).
-        if set(channel) - {"language", "refreshBindingRequired", "authorizationLane", "youtubeIdentityIngestedAt"} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
+        optional = {"language", "refreshBindingRequired", "authorizationLane", "youtubeIdentityIngestedAt"}
+        if channel.get("platform") == "X":
+            optional |= {"authorizationGeneration", "refreshSupported"}
+            if ("authorizationGeneration" in channel and (
+                    not isinstance(channel["authorizationGeneration"], str)
+                    or not re.fullmatch(r"[A-Za-z0-9_-]{20,128}", channel["authorizationGeneration"])
+                    or type(channel.get("refreshSupported")) is not bool)):
+                raise AlphaError("A server-bound X authorization generation is required.")
+        if set(channel) - optional != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
             raise AlphaError("A complete server-verified channel record is required.")
         if channel.get("authorizationLane", "standard") not in ("standard", "agentic"):
             raise AlphaError("A server-bound YouTube authorization lane is required.")
@@ -468,6 +476,8 @@ class HostedWorkspaceService:
         from .youtube.service import YouTubeCreatorService
         self.youtube = YouTubeCreatorService(self)
         self.commands.youtube_capacity = self.youtube.capacity
+        from .x_direct_service import XDirectService
+        self.x_direct = XDirectService(self)
         from .learning_service import HostedLearning
         # Preference learning: every command's implied events are captured in that command's transaction.
         self.learning = HostedLearning(connection_factory, clock)

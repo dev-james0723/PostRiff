@@ -16,7 +16,7 @@ fs.mkdirSync(out, { recursive: true });
 const principal = randomUUID();
 const headers = { 'Content-Type':'application/json', 'X-PostRiff-Request':'founder-alpha', Authorization:'Bearer dev:'+principal, Origin:base };
 async function api(method, url, body) {
-  const response = await fetch(base+url, { method, headers, ...(body === undefined ? {} : {body:JSON.stringify(body)}) });
+  const response = await fetch(base+url, { method, headers, cache: 'no-store', ...(body === undefined ? {} : {body:JSON.stringify(body)}) });
   assert.ok(response.ok, `${url} ${response.status}: ${await response.clone().text()}`);
   return response.json();
 }
@@ -58,10 +58,30 @@ async function api(method, url, body) {
     await dialog.getByText(/300 posts and 12 pages/).waitFor();
     await dialog.getByText(/Caption text and caption hashes/).waitFor();
     assert.equal(posts,0);await shot('review-desktop');
+    // Tie UI optimism to the actual 202 receipt, then require a durable exact-ID GET.
+    // A separately issued GET can briefly reach an earlier no-store view while the
+    // server finishes the request. No second POST is made and no wrong import is accepted.
+    const accepted = page.waitForResponse(response => new URL(response.url()).pathname === endpoint
+      && response.request().method() === 'POST', { timeout: 30000 });
     await confirm.check();await dialog.getByRole('button',{name:'Confirm import',exact:true}).click();
+    const acceptedResponse = await accepted;
+    assert.equal(acceptedResponse.status(), 202, 'Only a committed server queue response counts as approval.');
+    assert.equal(acceptedResponse.headers()['cache-control'], 'no-store');
+    const queued = await acceptedResponse.json();
+    assert.equal(queued.status, 'pending');
+    assert.match(queued.importId, /^[0-9a-f-]{36}$/);
     await dialog.getByText('Import queued',{exact:true}).waitFor();assert.equal(posts,1);
-    assert.equal((await api('GET',endpoint)).status,'pending');
-    checks.push('opening/review does not POST; unchecked explicit metadata/analytics consent; real 202 request and queued status');
+    let durable = null, lastObserved = null;
+    for (let attempt = 0; attempt < 25; attempt++) {
+      lastObserved = await api('GET', endpoint);
+      if (lastObserved.status === 'pending' && lastObserved.importId === queued.importId) {
+        durable = lastObserved; break;
+      }
+      assert.equal(lastObserved.status, 'none', 'An incorrect, failed, or foreign import cannot satisfy durability.');
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    assert.ok(durable, 'The exact 202 importId was not durable across a fresh no-store API GET.');
+    checks.push('opening/review does not POST; unchecked consent; actual 202 and exact committed importId, one submission');
     fixture('retry');await dialog.getByRole('button',{name:'Refresh status',exact:true}).click();
     await dialog.getByText('Rafii will retry automatically with the same progress.',{exact:true}).waitFor();
     assert.equal(await dialog.getByRole('button',{name:'Confirm import',exact:true}).count(),0);assert.equal(posts,1);

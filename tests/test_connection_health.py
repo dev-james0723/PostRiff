@@ -39,7 +39,13 @@ class World:
 
     def __init__(self, **extra):
         self.registry = providers.registry_from_environment(environment(**extra))
-        self.oauth = OAuthService(None, None, CredentialVault(KEY), self.registry, "https://app.example", clock=lambda: NOW)
+        # The mounted Pinterest adapter requires the real durable-quota interface.
+        # These are pure readiness projections: a database request would be a bug,
+        # not permission to replace quota with an in-memory/free success path.
+        def no_database_io():
+            raise AssertionError("Readiness projection must not reserve quota or open a database.")
+        self.repository = SimpleNamespace(connection_factory=no_database_io)
+        self.oauth = OAuthService(self.repository, None, CredentialVault(KEY), self.registry, "https://app.example", clock=lambda: NOW)
         self.catalog = self.oauth.provider_catalog()
         self.by_platform = {p["platform"]: p for p in self.catalog}
 

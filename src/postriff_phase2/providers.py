@@ -264,6 +264,66 @@ def registry_from_environment(values, transport=None):
         adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true"
         adapter.publish_live_tested = str(values.get(prefix + "PUBLISH_LIVE_TESTED", "")).lower() == "true"
         adapter.publishing_permission = str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true"
+        if provider_id == "x":
+            from .x_access_evidence import load_evidence
+            import time
+            adapter.x_access_evidence = load_evidence(values, adapter.client_id, time.time())
+            adapter.verified_entitlements = adapter.x_access_evidence.get('entitlements', frozenset())
+            adapter.public_customer_acceptance_verified = adapter.x_access_evidence.get('publicCustomerVerified', False)
+            # Operator assertions do not replace console or customer OAuth acceptance evidence.
+            def enabled_flag(name):
+                return str(values.get(name, "")).lower() == "true"
+            try:
+                daily_limit = int(values.get("POSTRIFF_OAUTH_X_MAX_DAILY_IDENTITY_CALLS", "0"))
+            except (TypeError, ValueError):
+                daily_limit = 0
+            adapter.daily_identity_limit = daily_limit if 1 <= daily_limit <= 100 else 0
+            raw_workspaces = str(values.get("POSTRIFF_OAUTH_X_CONNECT_PILOT_WORKSPACES", "")).strip()
+            workspace_ids = [w for w in re.split(r"[\s,]+", raw_workspaces) if w]
+            adapter.customer_connect_workspaces = frozenset(workspace_ids) if (
+                workspace_ids and len(workspace_ids) <= 10
+                and all(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", w) for w in workspace_ids)
+            ) else frozenset()
+            # Public customer admission is independent of the limited identity pilot.
+            # These switches permit an attempt; they are not provider acceptance evidence.
+            adapter.public_connect_enabled = (
+                enabled_flag("POSTRIFF_OAUTH_X_PUBLIC_CONNECT_ENABLED")
+                and enabled_flag("POSTRIFF_OAUTH_X_CUSTOMER_ACCESS_APPROVED")
+                and adapter.production_reviewed
+                and adapter.daily_identity_limit > 0)
+            adapter.customer_connect_enabled = adapter.public_connect_enabled or (
+                enabled_flag("POSTRIFF_OAUTH_X_CONNECT_PILOT_ENABLED")
+                and enabled_flag("POSTRIFF_OAUTH_X_CUSTOMER_ACCESS_APPROVED")
+                and adapter.daily_identity_limit > 0
+                and bool(adapter.customer_connect_workspaces))
+            adapter.publishing_release_enabled = (
+                enabled_flag("POSTRIFF_OAUTH_X_PUBLISHING_RELEASE_ENABLED")
+                and adapter.production_reviewed and adapter.publish_live_tested
+                and adapter.publishing_permission)
+            raw_acceptance = str(values.get("POSTRIFF_OAUTH_X_DIRECT_ACCEPTANCE_WORKSPACES", "")).strip()
+            acceptance_ids = [w for w in re.split(r"[\s,]+", raw_acceptance) if w]
+            adapter.direct_acceptance_workspaces = frozenset(acceptance_ids) if (
+                acceptance_ids and len(acceptance_ids) <= 10
+                and all(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", w) for w in acceptance_ids)
+            ) else frozenset()
+            adapter.direct_acceptance_enabled = (
+                enabled_flag("POSTRIFF_OAUTH_X_DIRECT_ACCEPTANCE_ENABLED")
+                and enabled_flag("POSTRIFF_OAUTH_X_CUSTOMER_ACCESS_APPROVED")
+                and adapter.production_reviewed and adapter.daily_identity_limit > 0
+                and bool(adapter.direct_acceptance_workspaces))
+            adapter.direct_management_enabled = (
+                enabled_flag("POSTRIFF_OAUTH_X_DIRECT_MANAGEMENT_ENABLED")
+                and adapter.public_connect_enabled and adapter.production_reviewed)
+            registry.diagnostics["x"].update({
+                "xPublicConnectEnabled": adapter.public_connect_enabled,
+                "xDirectAcceptanceEnabled": adapter.direct_acceptance_enabled,
+                "xDirectManagementEnabled": adapter.direct_management_enabled,
+                "xConnectPilotEnabled": enabled_flag("POSTRIFF_OAUTH_X_CONNECT_PILOT_ENABLED"),
+                "xCustomerEntitlementAttested": enabled_flag("POSTRIFF_OAUTH_X_CUSTOMER_ACCESS_APPROVED"),
+                "xDailyIdentityCallLimit": adapter.daily_identity_limit,
+                "xPilotWorkspaceAllowlistSize": len(adapter.customer_connect_workspaces),
+                "xPublishingReleaseEnabled": adapter.publishing_release_enabled,
+            })
         if provider_id == "pixelfed":
             adapter.qualified_instances = frozenset(re.split(r"[\s,]+", str(values.get(prefix + "QUALIFIED_INSTANCES", "")).strip())) - {""}
         webhook_configured = True
@@ -277,6 +337,15 @@ def registry_from_environment(values, transport=None):
         adapter.execution_enabled = (not operator_disabled
                                      and (enabled or not getattr(cls, "feature_flag_required", False))
                                      and (provider_verified or not getattr(cls, "provider_approval_required", False)))
+        if provider_id == 'pinterest':
+            # Read-only account-bound Trial pilot is distinct from public customer connections.
+            # Supplying credentials alone must never open public OAuth before release approval.
+            trial = getattr(adapter, 'trial_readonly', False) or getattr(adapter, 'private_trial', False)
+            if getattr(adapter, 'private_trial', False):
+                adapter.production_reviewed = False
+            policy_approved = str(values.get(prefix + 'POLICY_APPROVED', '')).lower() == 'true'
+            adapter.execution_enabled = not operator_disabled and (trial or (enabled and provider_verified and adapter.production_reviewed and policy_approved))
+            adapter.quota_required = True
         approved_scopes = [scope for scope in re.split(r"[\s,]+", str(values.get(prefix + "APPROVED_SCOPES", "")).strip()) if scope]
         registry.diagnostics[provider_id].update({
             "featureFlagEnabled": enabled if getattr(cls, "feature_flag_required", False) else True,
@@ -297,5 +366,9 @@ def registry_from_environment(values, transport=None):
         if provider_id == "linkedin":
             # Allows requesting the restricted scope, never substitutes for a real grant.
             adapter.history_approved = str(values.get(prefix + "HISTORY_APPROVED", "")).lower() == "true"
+        if provider_id == 'pinterest':
+            registry.diagnostics[provider_id]['productionEnabled'] = not trial and adapter.execution_enabled
+            registry.diagnostics[provider_id]['policyReviewRecorded'] = policy_approved
+            registry.diagnostics[provider_id]['trialApiEnvironment'] = getattr(adapter, 'trial_api_environment', None)
         registry[provider_id] = adapter
     return registry

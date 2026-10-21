@@ -1,51 +1,51 @@
 ---
 name: postriff-channel-x
-description: Prepare and validate X drafts, or use the qualified free controlled-browser route for exact approved text posts and X-native scheduling.
+description: Prepare X drafts and propose exact customer-approved actions through Rafii's official X API connector.
 metadata:
-  version: 1.1.0
+  version: 2.0.1
 ---
 
-# x adapter
+# X adapter
 
-This adapter adds what is specific to x. The shared adapter contract (`postriff-adapter-contract`) is bound with it and governs asset rules, setup, browser fallback, approval and safety, the draft payload mapping, and verification. A section below that repeats one of those headings overrides the contract for this channel only. Its variants use `platform` `X`.
+Use platform `X`. X has a Direct-only contract: every account action requires an authorized official X API execution path. This X-specific rule overrides alternative route choices in `postriff-adapter-contract`; all non-conflicting shared requirements still apply.
 
-## 1. Channel purpose
+## Drafting
 
-One central claim in one post: shorter and sharper than the same idea on LinkedIn or Threads, never a clipped version of either.
+Preserve the creator's factual claims and recorded voice. A single `x.post` has `text`; an `x.thread` draft has the first post in `text` and later posts in `nativeFields.sequence`. A draft is preparation, never authorization or proof of publication.
 
-## 2. Audience and expected language
+Drafting is never a publishing promise. Use the account's verified native constraints. Standard posts use a 280-weighted-character baseline; always apply the supplied account limit and URL/emoji rules; do not silently truncate or assume Premium features. Keep qualifications and attribution. Do not invent personal experience.
 
-Planning language: `en`, subject to the workspace's actual audience. Preserve the creator's real angle as recorded in `IDENTITY.md` and `VOICE.md`; localize framing rather than mechanically translating. Keep qualifications and attribution intact.
+## Connection and capability checks
 
-## 3. Native content formats
+Connect and reconnect through Rafii's official OAuth 2.0 flow with PKCE. Use the authenticated workspace's selected connection. Read the server capability catalogue for the exact operation, granted scopes, application entitlement, implemented handler and cost admission.
 
-The following are implemented **local draft schemas**, not current API capability declarations. Unsupported formats fail closed.
+If X restricts an operation, display `Unavailable — X API restriction` and the documented reason. If Rafii lacks an implementation or current verification, state that actual limitation. Never present a missing implementation as an X prohibition.
+
+Do not offer or execute X Assisted, Manual or browser publishing, native browser scheduling, cookie reuse or companion submission. A failed API request does not authorize another route.
+
+## Customer approval and execution
+
+An Agent can inspect the connection and propose a precise operation. It cannot approve its own proposal. The customer reviews the exact connected account, content, targets, media, timing and cost estimate in Rafii and explicitly approves the immutable request digest.
+
+Rafii's durable queue dispatches approved scheduled work through the official API. Scheduling is a Rafii queue capability; do not claim an organic native X scheduling API. Likes and follows require direct user intent and must not become unattended bulk actions.
+
+Bind execution to the workspace, account, current authorization generation, current customer permission and approved request. Reconnect, disconnect, cancellation or permission changes invalidate affected queued authority. Use durable cost admission before every billable request; a request counter is not a guaranteed invoice ceiling.
+
+## Media approval
+
+Propose `media.upload` with an existing workspace `asset_id` and optional `alt_text`. The customer approves that exact upload separately from the post. Only completed, unexpired, same-account media receipts can be attached; never accept an arbitrary media ID or remote URL as ownership evidence. The server needs explicit current upload price ceilings, not an assumed free transfer. A partial or uncertain upload does not authorize a retry or a post.
+
+## Results
+
+Report a provider receipt only after a real X API response with a validated operation-specific result. For published posts, reconcile the returned ID with the authorized account and approved content through an official read.
+
+An ambiguous write stays uncertain. Do not blindly retry, fabricate an ID or convert a preview into a successful result. Preserve partial thread and media outcomes. Report missing analytics fields as unavailable or unknown.
+
+## Native content formats
+
+These are local draft schemas. Publishing requires the exact Direct workflow, account authorization and explicit customer approval.
 
 | Native format | Required media kind | Required native fields |
 | --- | --- | --- |
 | `x.post` | optional | No extra fields |
 | `x.thread` | optional | `sequence` |
-
-## 4. Caption/title/description rules
-
-A PostRiff writing run returns one `x.post` per destination in `text`: a single post, unless the destination asks for `x.thread`. For `x.thread`, `text` is the first post and `nativeFields.sequence` holds the posts that follow, in order; every post is drafted for review and export, and Rafii does not publish threads. Each post must fit 280 characters by X's own count, the `characterLimit` the run sends: a CJK character or an emoji counts as two, a link as 23. Put the claim in the first line and cut everything that does not carry it: warm-up sentences, restated context, sign-offs and filler. At most one hashtag, and only when the person uses them. Do not invent personal experience or product facts. If the approved facts cannot be stated honestly within the limit, keep the strongest supported point, list what was left out in `unknowns`, and say so in `warnings`; never silently truncate. PostRiff drafts X posts for review, copy and export. It publishes to X only through its hosted X connector, after an operator has configured and approved it, so a draft here is never a publishing promise.
-
-## 6. API setup requirements
-
-The free route uses X's own web composer and native scheduler through the companion's persistent browser session. It makes no X API calls and needs no developer credits or paid API plan. The companion owns the approval and idempotency ledger for that route; the hosted API never sees the session.
-
-## 7. Browser fallback checkpoints
-
-Reuse an existing `x.com` tab in the companion's controlled browser session, or create one there if absent. Never launch a separate Playwright Chrome/Edge profile and never copy cookies. Require the authenticated account menu and exact own-profile link before every write. Native scheduling uses `Schedule post`, labeled date/time controls, `Confirm`, the final `Schedule` control, and exact matching in `Scheduled posts`. Unknown landmarks produce `ui_changed`.
-
-## 8. Approval and safety rules
-
-Drafts stay `draft_only`. A browser submission requires a manifest hash bound to exact text, the exact connected account handle, public destination, and immediate or exact scheduled time. Persist `submitting` before the final click. After that click, an ambiguous result is `unknown` and must never be retried blindly. Replies, threads, media, engagement, account creation, paid calls, editing, deletion, and autonomous unapproved posting are outside this route.
-
-## 10. Verification checklist
-
-Review exact account/destination, native surface, authored copy, audience, localization, and schedule. For an immediate post, reopen the exact `x.com/<handle>/status/<id>` permalink and match author and text. For a scheduled post, reopen X's native Scheduled posts queue and match exact text and time. Local preview or a click alone is not success. No live post was created during installation.
-
-## Controlled-browser route
-
-Where the workspace has connected X through the desktop companion rather than the API, the companion reuses its signed-in browser tab, creates the exact approval hash, records the idempotency claim before the final click, and independently verifies the post or scheduled queue entry. The route makes no X API call and needs no paid API plan. It is available only to a workspace that has completed that connection; it is never assumed.

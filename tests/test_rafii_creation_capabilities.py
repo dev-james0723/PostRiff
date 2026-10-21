@@ -281,8 +281,10 @@ class WriterRouteTest(FlagIsolation):
             for fmt in row["formats"]:
                 native = cc.native_draft({"platform": row["platform"], "language": "en", "format": fmt["id"], "text": "Copy."}, proj)
                 gate_refuses = fmt["id"] != cc.DEFAULT_FORMATS.get(row["platform"])
-                self.assertEqual(native["readiness"]["publish"], "export_only" if gate_refuses else "not_checked", fmt["id"])
-                self.assertEqual(native["readiness"]["publishNote"], cc.EXPORT_ONLY_NOTE if gate_refuses else cc.PUBLISH_NOTE)
+                expected_status = ("unavailable" if row["platform"] == "X" else "export_only") if gate_refuses else "not_checked"
+                self.assertEqual(native["readiness"]["publish"], expected_status, fmt["id"])
+                expected_note = ("Unavailable — X Direct Management does not support publishing this native draft format. No manual or browser publishing fallback is offered." if row["platform"] == "X" else cc.EXPORT_ONLY_NOTE) if gate_refuses else ("X publishing requires an exact approved Direct Management action in Rafii." if row["platform"] == "X" else cc.PUBLISH_NOTE)
+                self.assertEqual(native["readiness"]["publishNote"], expected_note)
         story = cc.native_draft({"platform": "Instagram", "language": "en", "format": "instagram.story", "text": "Copy."}, proj)
         self.assertEqual(story["readiness"]["publish"], "export_only")
 

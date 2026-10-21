@@ -311,7 +311,19 @@ class HostedPhase2Acceptance(unittest.TestCase):
             encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
             return "header." + encoded + ".signature"
         principal = "00000000-0000-0000-0000-000000000001"
-        self.assertEqual(verified_auth_time(token({"sub": principal, "iat": 1_800_000_000}), principal), 1_800_000_000.0)
+        # Issuing or refreshing a JWT does not prove a new sign-in. Only a signed,
+        # finite, non-future AMR method timestamp can renew step-up authority.
+        with patch("time.time", return_value=1_800_000_010.0):
+            self.assertEqual(verified_auth_time(token({"sub": principal, "iat": 1_800_000_000}), principal), 0)
+            self.assertEqual(verified_auth_time(token({"sub": principal, "iat": 1_800_000_009,
+                "amr": [{"method": "password", "timestamp": 1_800_000_000}]}), principal), 1_800_000_000.0)
+            self.assertEqual(verified_auth_time(token({"sub": principal, "amr": [
+                {"method": "password", "timestamp": 1_800_000_000},
+                {"method": "mfa/totp", "timestamp": 1_800_000_005}]}), principal), 1_800_000_005.0)
+            for invalid in (None, "1800000000", True, 0, -1, 1_800_000_011, float('inf'), float('nan')):
+                with self.subTest(timestamp=invalid):
+                    self.assertEqual(verified_auth_time(token({"sub": principal,
+                        "amr": [{"method": "password", "timestamp": invalid}]}), principal), 0)
         self.assertEqual(verified_auth_time(token({"sub": principal}), principal), 0)
         with self.assertRaises(AlphaError):
             verified_auth_time(token({"sub": "other", "iat": 1}), principal)

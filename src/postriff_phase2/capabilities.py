@@ -34,6 +34,10 @@ def publish_route(state: dict, destination: dict, *, providers: dict | None = No
     Phase 2 engine's readiness function when the caller needs a fresh "Ready for posting" (the commit gate re-verifies
     first, so creation-time checks pass None and judge the connection by its verified permissions)."""
     platform = destination.get("platform") or ""
+    if platform.lower() in ('x','twitter'):
+        return {"publish":False,"code":"x_direct_management_review_required",
+                "reason":"Open Manage X to review, approve and dispatch through the official X API.",
+                "href":"/app/x"}
     provider_id = HOSTED_PUBLISHERS.get(platform)
     if provider_id is None:
         return {"publish": False, "code": "no_route", "reason": _no_route(platform)}

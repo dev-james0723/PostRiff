@@ -88,6 +88,11 @@ _POLICY = ("kind", "version", "category", "risk", "confirmation", "permission", 
            "auth_state", "resource_scope", "audit", "voice", "idempotent")
 
 
+POST_FREEZE_TOOLS = frozenset(("library_browse", "library_metadata_apply",
+    "x_action_propose", "x_capabilities", "x_operations_list"))
+POST_FREEZE_X_SITE = frozenset(("x.action.propose", "x.capabilities", "x.operations.list"))
+
+
 def registry_snapshot() -> dict:
     caps = registry.ensure()
     out = {}
@@ -125,17 +130,19 @@ class Fixtures(unittest.TestCase):
         for key in ("tools", "manager", "specialists", "commandsDirect", "siteAgent", "genuiActions", "genuiQueries", "limits"):
             actual = self.live[key]
             if key == "tools":
-                actual = {name: value for name, value in actual.items() if name not in ("library_browse", "library_metadata_apply")}
+                actual = {name: value for name, value in actual.items() if name not in POST_FREEZE_TOOLS}
             elif key == "manager":
-                actual = [name for name in actual if name not in ("library_browse", "library_metadata_apply")]
+                actual = [name for name in actual if name not in POST_FREEZE_TOOLS]
+            elif key == "siteAgent":
+                actual = {name: value for name, value in actual.items() if name not in POST_FREEZE_X_SITE}
             self.assertEqual(actual, self.golden["live"][key], f"today's {key} changed")
-        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + 2, "only declared post-freeze Library tools were added")
+        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + len(POST_FREEZE_TOOLS), "only declared post-freeze tools were added")
 
     def test_registry_policy_is_frozen(self):
         snapshot = registry_snapshot()
-        self.assertEqual(snapshot["capabilities"].pop("tool.library_browse")["since"], 2)
-        self.assertEqual(snapshot["capabilities"].pop("tool.library_metadata_apply")["since"], 2)
-        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] not in ("tool.library_browse", "tool.library_metadata_apply")]
+        for name in POST_FREEZE_TOOLS:
+            self.assertEqual(snapshot["capabilities"].pop("tool." + name)["since"], 2)
+        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] not in {"tool." + name for name in POST_FREEZE_TOOLS}]
         self.assertEqual(sorted(snapshot["capabilities"]), sorted(self.golden["capabilities"]), "no capability vanishes or appears")
         for capability_id, entry in snapshot["capabilities"].items():
             expected = self.golden["capabilities"][capability_id]
@@ -164,11 +171,16 @@ class Fixtures(unittest.TestCase):
         self.assertEqual(len(self.live["genuiQueries"]), 45)
         for cap in [registry.for_action(a) for a in self.live["genuiActions"]] + [registry.for_query(q) for q in self.live["genuiQueries"]]:
             self.assertEqual(cap.capability_id in expected, cap.tenant == "workspace", cap.capability_id)
-        self.assertEqual(len(self.live["siteAgent"]), 37)
+        self.assertEqual(len(self.live["siteAgent"]), 37 + len(POST_FREEZE_X_SITE))
         for tool_id in self.live["siteAgent"]:
-            self.assertIn(registry.site_capability(tool_id), expected)
+            cap_id = registry.site_capability(tool_id)
+            if tool_id in POST_FREEZE_X_SITE:
+                self.assertNotIn(cap_id, expected)
+                self.assertEqual(caps[cap_id].since, 2)
+            else:
+                self.assertIn(cap_id, expected)
         sdk_names = set(self.live["manager"]) | {n for names in self.live["specialists"].values() for n in names}
-        self.assertLessEqual({registry.for_tool(n).capability_id for n in sdk_names if n != "library_browse"}, expected)
+        self.assertLessEqual({registry.for_tool(n).capability_id for n in sdk_names if n not in POST_FREEZE_TOOLS}, expected)
 
     def test_post_freeze_tool_never_joins_legacy(self):
         # #152 registers this shape only when it is integrated; the explicit since-2 declaration is mandatory.
@@ -246,7 +258,7 @@ class RegistryMatchesToday(unittest.TestCase):
             if cap_id.startswith("tool."):
                 adapted.append(tool_id)
                 self.assertEqual(cap_id, "tool." + tool_id.replace(".", "_"))
-        self.assertEqual(len(adapted), 36)
+        self.assertEqual(len(adapted), 36 + len(POST_FREEZE_X_SITE))
         self.assertEqual(registry.site_capability("automation.patch_propose"), "site.automation_patch_propose")
         with self.assertRaises(LookupError):
             registry.site_capability("not.a_site_tool")

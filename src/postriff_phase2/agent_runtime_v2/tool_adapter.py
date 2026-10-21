@@ -270,6 +270,7 @@ def _approval_gate(tool: Tool):
 
 # --- site-agent read tools, adapted ---------------------------------------------------------------------------------------
 _SITE_NAMES = {
+    "x.capabilities":"x_capabilities","x.operations.list":"x_operations_list","x.action.propose":"x_action_propose",
     "library.search": "library_search", "library.read": "library_read",
     "help.search": "help_search", "help.get": "help_get", "route.describe": "route_describe", "workspace.summary": "workspace_summary",
     "channels.capabilities": "channels_capabilities", "queue.summary": "queue_summary", "job.get": "job_get", "draft.get": "draft_get",
@@ -449,11 +450,11 @@ def register_site_tools() -> None:
     overrides = _client_tool_overrides()
     for tool_id, definition in site_tools.CATALOG.items():
         name = _SITE_NAMES.get(tool_id)
-        if name is None or name in REGISTRY or definition["effect"] not in ("read", "client_action"):
+        if name is None or name in REGISTRY or (definition["effect"] not in ("read", "client_action") and tool_id!="x.action.propose"):
             continue
         extra = overrides.get(tool_id, {})
         description = extra.get("description") or definition["purpose"]
-        effect = extra.get("effect", contracts.READ)
+        effect = extra.get("effect", contracts.MUTATE_REVERSIBLE if tool_id=="x.action.propose" else contracts.READ)
         spec = contracts.ToolSpec(name=name, effect=effect, permission=site_tools.REQUIREMENT.get(tool_id, "read"),
                                   description=f"{description} (Rafii site tool {tool_id} v{definition['version']}" + ("; read only.)" if effect == contracts.READ else ".)"))
         schema = _json_schema(definition["input"])

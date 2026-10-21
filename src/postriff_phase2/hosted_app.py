@@ -336,7 +336,7 @@ def runtime_from_environment(environ=None):
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)
     on_verified=then_capture(on_verified,service.growth.enabled('check'))
-    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), youtube_maintenance=service.youtube)
+    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), youtube_maintenance=service.youtube, x_maintenance=service.x_direct)
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
@@ -1071,6 +1071,9 @@ class HostedApplication:
                     return self._json(start_response, 200, service.oauth.youtube_policy.status(parts[2], token))
                 if method == 'POST':
                     return self._json(start_response, 200, service.oauth.youtube_policy.accept(parts[2], token, self._body(environ)))
+            if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'x':
+                from .x_direct_service import handle_http
+                return handle_http(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube':
                 from .youtube.http import handle as youtube_handle
                 return youtube_handle(self, environ, start_response, service, token, method, parts)
@@ -1094,7 +1097,8 @@ class HostedApplication:
                     extra = {"iss": body["iss"]} if body.get("iss") is not None else {}
                     return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
                 if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
-                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4]))
+                    board_id = self._query_str(environ, 'boardId')
+                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4], board_id=board_id))
                 if len(parts) == 6 and parts[5] == "creator-info" and method == "GET":
                     return self._json(start_response, 200, oauth.creator_info(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "destination" and method == "POST":
@@ -1112,6 +1116,9 @@ class HostedApplication:
                     if method == "GET":
                         return self._json(start_response, 200, history.status(parts[2], token, parts[4]))
                     return self._json(start_response, 202, history.request(parts[2], token, parts[4], self._body(environ)))
+                if len(parts) == 6 and parts[5] == "refresh-authorization" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, oauth.refresh_pinterest_authorization(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))

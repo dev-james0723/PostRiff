@@ -333,8 +333,10 @@ assert bt["workflow"]["research"]["quote"], bt["workflow"]["research"]
 platforms = {p["platform"]: p for p in b["platforms"]}
 assert platforms["LinkedIn"]["canPublish"] and not platforms["X"]["canPublish"] and not platforms["Xiaohongshu"]["canPublish"], platforms
 b_reply = say  # keep flake-free
-# X has a hosted publisher now; with no X adapter mounted in this environment the reason is "not available yet".
-assert "Publishing to X isn't available yet" in b["platforms"][2]["reason"] if b["platforms"][2]["platform"] == "X" else True
+# The general automation grant does not authorize an X Direct API call. This
+# workspace must enter Manage X for a separate exact-operation approval.
+assert platforms["X"].get("code") == "x_direct_management_review_required", platforms["X"]
+assert "Manage X" in platforms["X"]["reason"] and "official X API" in platforms["X"]["reason"], platforms["X"]
 skills = [step["skill"] for step in b["skills"]]
 assert skills[:1] == ["schedule_trigger"] and "quote_verification" in skills and "platform_adaptation" in skills and "auto_publish_check" in skills and "approval_gate" not in skills, skills
 checks.append("B: Wednesday+Friday 16:30 for Xiaohongshu, LinkedIn and X; auto-publish granted by the owner in chat; the card says X and Xiaohongshu can't publish; skills composed from the request")

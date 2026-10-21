@@ -263,6 +263,11 @@ export function createApi(getToken: TokenSource) {
     portal: (w: string, returnPath?: string) =>
       send<{ url: string }>('POST', `${ws(w)}/billing/portal`, { returnPath }),
 
+    xOverview: (w: string, c: string) => get<import('./x-types').XOverview>(`${ws(w)}/x/${encodeURIComponent(c)}`),
+    xPreview: (w: string, c: string, body: import('./x-types').XActionInput) => send<import('./x-types').XOperation>('POST', `${ws(w)}/x/${encodeURIComponent(c)}/preview`, body),
+    xRead: (w: string, c: string, body: import('./x-types').XActionInput) => send<Record<string, unknown>>('POST', `${ws(w)}/x/${encodeURIComponent(c)}/read`, body),
+    xApprove: (w: string, c: string, id: string, body: { digest: string; confirmed: true }) => send<import('./x-types').XOperation>('POST', `${ws(w)}/x/${encodeURIComponent(c)}/operations/${encodeURIComponent(id)}/approve`, body),
+    xCancel: (w: string, c: string, id: string) => send<import('./x-types').XOperation>('POST', `${ws(w)}/x/${encodeURIComponent(c)}/operations/${encodeURIComponent(id)}/cancel`, {}),
     /* channels */
     /* `connectionHealth` is present only where the server admits this workspace to the Health Center (RAFII_CONNECTION_HEALTH_ENABLED). */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[]; connectionHealth?: { available: boolean; href: string } }>(`${ws(w)}/channels`),
@@ -368,8 +373,8 @@ export function createApi(getToken: TokenSource) {
         error,
         ...(iss ? { iss } : {})
       }),
-    channelDestinations: (w: string, id: string) =>
-      get<{ connectionId: string; scope?: 'connection' | 'post'; destinations: ChannelDestination[] }>(`${ws(w)}/channels/${encodeURIComponent(id)}/destinations`),
+    channelDestinations: (w: string, id: string, boardId?: string) =>
+      get<{ connectionId: string; scope?: 'connection' | 'post'; boardId?: string; destinations: ChannelDestination[] }>(`${ws(w)}/channels/${encodeURIComponent(id)}/destinations${boardId ? `?boardId=${encodeURIComponent(boardId)}` : ''}`),
     /** TikTok's current creator settings, read fresh each time the composer shows them. */
     creatorInfo: (w: string, id: string) => get<TikTokCreatorInfo>(`${ws(w)}/channels/${encodeURIComponent(id)}/creator-info`),
     chooseChannelDestination: (w: string, id: string, destinationId: string) =>
@@ -388,6 +393,10 @@ export function createApi(getToken: TokenSource) {
       send<{ connectionId: string; state: string; identityVerified: boolean; detail?: string }>(
         'POST',
         `${ws(w)}/channels/${encodeURIComponent(id)}/verify`
+      ),
+    refreshPinterestAuthorization: (w: string, id: string) =>
+      send<{ connectionId: string; authorizationRefreshed: boolean; identityVerified: boolean; expiresAt: number }>(
+        'POST', `${ws(w)}/channels/${encodeURIComponent(id)}/refresh-authorization`
       ),
     insightsCanary: (w: string, id: string) =>
       send<{ state: string; http?: number; providerRead?: boolean; found?: Record<string, number> }>(

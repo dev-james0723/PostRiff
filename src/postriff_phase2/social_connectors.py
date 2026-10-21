@@ -1,3 +1,5 @@
+import hashlib
+import math
 """Hosted adapters for X, Mastodon, Discord and Telegram (Rafii Hosted Channels Plan, Wave 1).
 
 Grants these adapters store are small versioned JSON documents, encrypted like any token by oauth.CredentialVault:
@@ -13,7 +15,7 @@ import re
 import secrets
 import socket
 import string
-from urllib.parse import quote, urlencode, urlsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 from .net_guard import assert_public, public_host
 from .provider_base import OAuthProvider, _credential_shape, default_transport
@@ -48,76 +50,224 @@ def _https_origin(value):
 
 # --- X --------------------------------------------------------------------------------------------------------
 class XProvider(OAuthProvider):
-    id, platform, capability_version = "x", "X", 1
+    id, platform, capability_version = "x", "X", 2
     AUTH = "https://x.com/i/oauth2/authorize"
     TOKEN = "https://api.x.com/2/oauth2/token"
     REVOKE = "https://api.x.com/2/oauth2/revoke"
     ME = "https://api.x.com/2/users/me"
-    SCOPES = {"identity": ["tweet.read", "users.read", "offline.access"],
-              "publish": ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"],
-              "schedule": ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"]}
-    EXPLAIN = {"identity": "Connect your X account. Rafii reads nothing else from it.",
-               "publish": "Rafii will post to this X account only when you approve each exact post. X charges Rafii for every post and read."}
-    account_requirement = "An X account."
+    SCOPES = {
+        "identity": ["tweet.read", "users.read", "offline.access"],
+        "publish": ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"],
+        "schedule": ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"],
+        "reply": ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"],
+        "posts_read": ["tweet.read", "users.read", "offline.access"],
+        "analytics": ["tweet.read", "users.read", "offline.access"],
+        "comments_read": ["tweet.read", "users.read", "offline.access"],
+        "moderate": ["tweet.read", "users.read", "tweet.moderate.write", "offline.access"],
+        "interactions": ["tweet.read", "users.read", "tweet.write", "like.read", "like.write", "offline.access"],
+        "account_management": ["tweet.read", "users.read", "follows.read", "follows.write", "mute.read", "mute.write", "block.read", "block.write", "offline.access"],
+        "bookmarks": ["tweet.read", "users.read", "bookmark.read", "bookmark.write", "offline.access"],
+        "lists": ["tweet.read", "users.read", "list.read", "list.write", "offline.access"],
+        "direct_messages": ["tweet.read", "users.read", "dm.read", "dm.write", "media.write", "offline.access"],
+    }
+    EXPLAIN = {
+        "identity": "Connect your X account and verify its profile through the official X API.",
+        "publish": "Rafii uses the official X API to publish only the exact content you approve. Provider API charges apply.",
+        "schedule": "Approve exact posts for Rafii's durable queue to dispatch through the official X API.",
+        "reply": "Reply through the official X API only after approving the exact recipient and content.",
+        "analytics": "Read available official post metrics. Missing or restricted fields remain unavailable.",
+        "posts_read": "Read bounded post data through the official X API.",
+        "comments_read": "Read available replies and mentions through the official X API.",
+        "moderate": "Hide or unhide eligible replies after exact approval.",
+        "interactions": "Approve individual likes and reposts. Likes require direct user intent.",
+        "account_management": "Manage eligible follows, mutes and blocks. X app restrictions still apply.",
+        "bookmarks": "Read and manage your authorized X bookmarks after exact approval.",
+        "lists": "Read and manage eligible X lists through the official API.",
+        "direct_messages": "Read available legacy DMs and approve exact messages. This does not enable encrypted X Chat.",
+    }
+    account_requirement = "An eligible X account with the required official API permissions."
     publish_scope = "tweet.write"
-    publish_required = frozenset({"tweet.write"})
-    refresh_margin = 300  # X access tokens last two hours
+    publish_required = frozenset({"tweet.read", "tweet.write", "users.read"})
+    implemented_capabilities = frozenset({"identity"})
+    assisted_fallback = False
+    refresh_margin = 300
+    customer_connect_enabled = False
+    customer_connect_workspaces = frozenset()
+    publishing_release_enabled = False
+    cost_admission_ready = False
+    daily_identity_limit = 0
 
     def _basic(self):
-        return "Basic " + base64.b64encode(f"{quote(self.client_id, safe='')}:{quote(self.client_secret, safe='')}".encode()).decode()
+        pair = f"{quote(self.client_id, safe='')}:{quote(self.client_secret, safe='')}"
+        return "Basic " + base64.b64encode(pair.encode()).decode()
+
+    def _client_binding(self):
+        return hashlib.sha256(str(self.client_id).encode()).hexdigest()
 
     def authorize_url(self, redirect, state, challenge, scopes):
-        return self.AUTH + "?" + urlencode({"response_type": "code", "client_id": self.client_id, "redirect_uri": redirect, "scope": " ".join(scopes),
-                                            "state": state, "code_challenge": challenge, "code_challenge_method": "S256"})
+        return self.AUTH + "?" + urlencode({
+            "response_type": "code", "client_id": self.client_id,
+            "redirect_uri": redirect, "scope": " ".join(scopes), "state": state,
+            "code_challenge": challenge, "code_challenge_method": "S256",
+        })
 
-    @staticmethod
-    def _grant(body):
-        scopes = body["scope"].split() if isinstance(body.get("scope"), str) else []
-        return {"accessToken": json.dumps({"v": 1, "at": body["access_token"], "scope": scopes}), "refreshToken": body.get("refresh_token"),
-                "expiresIn": body.get("expires_in"), "scopes": scopes}
+    def _session(self, token, kind="x_access"):
+        value = _load(token)
+        secret_key = "at" if kind == "x_access" else "rt"
+        generation = value.get("authorizationGeneration")
+        scopes = value.get("scope")
+        if (value.get("kind") != kind
+                or value.get("clientBinding") != self._client_binding()
+                or not isinstance(generation, str) or not generation
+                or not isinstance(value.get(secret_key), str) or not value[secret_key]
+                or not isinstance(scopes, list)
+                or not all(isinstance(scope, str) and scope for scope in scopes)):
+            raise AlphaError("This X authorization must be reconnected.", 409,
+                             code="x_authorization_binding_invalid")
+        return value
+
+    def _grant(self, body, previous_refresh=None):
+        access, expiry = body.get("access_token"), body.get("expires_in")
+        if (not isinstance(access, str) or not access
+                or isinstance(expiry, bool) or not isinstance(expiry, (int, float))
+                or not math.isfinite(expiry) or expiry <= 0):
+            raise AlphaError("X did not return a valid authorization grant.", 502)
+        previous = self._session(previous_refresh, "x_refresh") if previous_refresh else None
+        if "scope" in body:
+            if not isinstance(body["scope"], str):
+                raise AlphaError("X did not return valid authorization scopes.", 502)
+            scopes = sorted(set(body["scope"].split()))
+        elif previous:
+            scopes = list(previous["scope"])
+        else:
+            raise AlphaError("X did not verify the authorization scopes.", 502)
+        generation = previous["authorizationGeneration"] if previous else secrets.token_urlsafe(24)
+        common = {"v": 1, "clientBinding": self._client_binding(),
+                  "authorizationGeneration": generation, "scope": scopes}
+        refresh = body.get("refresh_token")
+        if refresh is None and previous:
+            refresh = previous["rt"]
+        if refresh is not None and (not isinstance(refresh, str) or not refresh):
+            raise AlphaError("X did not return a valid refresh grant.", 502)
+        return {
+            "accessToken": json.dumps({**common, "kind": "x_access", "at": access}),
+            "refreshToken": (json.dumps({**common, "kind": "x_refresh", "rt": refresh})
+                             if refresh is not None else None),
+            "expiresIn": expiry, "scopes": scopes,
+        }
 
     def exchange(self, code, verifier, redirect):
-        body = self._ok(self.transport("POST", self.TOKEN, headers={"Authorization": self._basic()},
-                                       form={"grant_type": "authorization_code", "code": code, "redirect_uri": redirect, "code_verifier": verifier, "client_id": self.client_id}), "access_token")
+        body = self._ok(self.transport("POST", self.TOKEN,
+            headers={"Authorization": self._basic()},
+            form={"grant_type": "authorization_code", "code": code,
+                  "redirect_uri": redirect, "code_verifier": verifier,
+                  "client_id": self.client_id}), "access_token")
         return self._grant(body)
 
-    @staticmethod
-    def bearer(access_token):
-        return _load(access_token)["at"]
+    def bearer(self, access_token):
+        return self._session(access_token)["at"]
 
-    def identity(self, access_token):
-        body = self._ok(self.transport("GET", self.ME + "?" + urlencode({"user.fields": "profile_image_url"}), headers={"Authorization": "Bearer " + self.bearer(access_token)}), "data")
-        data = body["data"] if isinstance(body["data"], dict) else {}
-        if not re.fullmatch(r"\d{1,25}", str(data.get("id", ""))):
-            raise AlphaError("The provider did not complete this authorization step.", 502)
-        username = data.get("username") if isinstance(data.get("username"), str) else None
-        return {"providerAccountId": str(data["id"]), "handle": "@" + username if username else str(data["id"]), "accountType": "profile", "pictureUrl": data.get("profile_image_url")}
+    def authorization_generation(self, access_token):
+        return self._session(access_token)["authorizationGeneration"]
+
+    def preserve_destination(self, old_access, new_access):
+        old, new = self._session(old_access), self._session(new_access)
+        if old["authorizationGeneration"] != new["authorizationGeneration"]:
+            raise AlphaError("This X authorization changed; reconnect and review again.",
+                             409, code="x_authorization_changed")
+        return new_access
 
     def inspect_scopes(self, access_token, expected_account_id=None):
-        """X has no user-token introspection: these are the scopes X's own token response granted, not requests."""
         try:
-            scopes = _load(access_token).get("scope")
+            return sorted(set(self._session(access_token)["scope"]))
         except AlphaError:
             return None
-        return sorted(set(scopes)) if isinstance(scopes, list) and all(isinstance(s, str) for s in scopes) else None
 
     def refresh(self, refresh_token):
-        body = self._ok(self.transport("POST", self.TOKEN, headers={"Authorization": self._basic()},
-                                       form={"grant_type": "refresh_token", "refresh_token": refresh_token, "client_id": self.client_id}), "access_token")
-        grant = self._grant(body)
-        grant["refreshToken"] = grant["refreshToken"] or refresh_token
-        return grant
+        previous = self._session(refresh_token, "x_refresh")
+        body = self._ok(self.transport("POST", self.TOKEN,
+            headers={"Authorization": self._basic()},
+            form={"grant_type": "refresh_token", "refresh_token": previous["rt"],
+                  "client_id": self.client_id}), "access_token")
+        return self._grant(body, previous_refresh=refresh_token)
+
+    def identity(self, access_token):
+        session = self._session(access_token)
+        if not {"tweet.read", "users.read"}.issubset(session["scope"]):
+            raise AlphaError("X did not grant the required identity permissions.", 409)
+        body = self._ok(self.api(access_token, "GET", "/2/users/me",
+            query={"user.fields": "profile_image_url"}, max_resources=1), "data")
+        data = body["data"] if isinstance(body["data"], dict) else {}
+        if body.get("errors") or not isinstance(data.get("id"), str) or not re.fullmatch(r"[1-9][0-9]{0,18}", data["id"]):
+            raise AlphaError("The provider did not complete this authorization step.", 502)
+        username = data.get("username") if isinstance(data.get("username"), str) else None
+        return {"providerAccountId": str(data["id"]),
+                "handle": "@" + username if username else str(data["id"]),
+                "accountType": "profile", "pictureUrl": data.get("profile_image_url")}
+
+    def revoke_grant(self, access_token, refresh_token=None):
+        access = self._session(access_token)
+        tokens = []
+        if refresh_token:
+            refresh = self._session(refresh_token, "x_refresh")
+            if refresh["authorizationGeneration"] != access["authorizationGeneration"]:
+                raise AlphaError("This X authorization changed; reconnect and review again.",
+                                 409, code="x_authorization_changed")
+            tokens.append((refresh["rt"], "refresh_token"))
+        tokens.append((access["at"], "access_token"))
+        revoked = True
+        for token, hint in tokens:
+            response = self.transport("POST", self.REVOKE,
+                headers={"Authorization": self._basic()},
+                form={"token": token, "token_type_hint": hint, "client_id": self.client_id})
+            revoked = response.get("status") == 200 and revoked
+        return revoked
 
     def revoke(self, token):
-        return self.transport("POST", self.REVOKE, headers={"Authorization": self._basic()},
-                              form={"token": self.bearer(token), "token_type_hint": "access_token", "client_id": self.client_id}).get("status") == 200
+        return self.revoke_grant(token)
 
     def api(self, access_token, method, path, **kwargs):
-        headers = {"Authorization": "Bearer " + self.bearer(access_token), **kwargs.pop("headers", {})}
-        return self.transport(method, "https://api.x.com" + path, headers=headers, **kwargs)
+        from .x_direct_cost import admit_x_request
+        bearer = self.bearer(access_token)
+        method = str(method).upper()
+        parts = urlsplit(path)
+        if (method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}
+                or parts.scheme or parts.netloc or parts.fragment
+                or not parts.path.startswith("/2/") or "\\" in parts.path
+                or any(segment in {".", ".."} for segment in parts.path.split("/"))):
+            raise AlphaError("This X API operation is unavailable.", 409,
+                             code="x_api_operation_unavailable")
+        pairs = parse_qsl(parts.query, keep_blank_values=True)
+        if len({key for key, _ in pairs}) != len(pairs):
+            raise AlphaError("Ambiguous X request parameters.", 400)
+        query = dict(pairs)
+        supplied_query = kwargs.pop("query", None)
+        if supplied_query is not None:
+            if not isinstance(supplied_query, dict) or set(query).intersection(supplied_query):
+                raise AlphaError("Ambiguous X request parameters.", 400)
+            query.update(supplied_query)
+        if "json_body" in kwargs:
+            if "body" in kwargs:
+                raise AlphaError("Ambiguous X request payload.", 400)
+            kwargs["body"] = kwargs.pop("json_body")
+        headers = dict(kwargs.pop("headers", {}) or {})
+        if any(str(key).lower() in {"authorization", "host", "cookie"} for key in headers):
+            raise AlphaError("X request authentication cannot be overridden.", 400)
+        headers["Authorization"] = "Bearer " + bearer
+        max_resources = kwargs.pop("max_resources", None)
+        admit_x_request(method=method, path=parts.path,
+                        body=kwargs.get("body"), query=query,
+                        max_resources=max_resources)
+        target = "https://api.x.com" + parts.path
+        if query:
+            target += "?" + urlencode(query, doseq=True)
+        try:
+            return self.transport(method, target, headers=headers, **kwargs)
+        except AlphaError as error:
+            raise AlphaError('The X API transport result is unknown.', 502, code='x_provider_transport_unknown') from error
 
 
-# --- Mastodon ---------------------------------------------------------------------------------------------------
+
 class MastodonProvider(OAuthProvider):
     id, platform, capability_version = "mastodon", "Mastodon", 1
     SCOPES = {"identity": ["read:accounts"],

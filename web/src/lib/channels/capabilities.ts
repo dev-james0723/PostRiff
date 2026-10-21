@@ -36,12 +36,19 @@ export interface ConnectCapabilityDef {
 
 /** The choices in the Connect sheet; a provider only lists the ones it offers. */
 export const CONNECT_CAPABILITY_OPTIONS: readonly ConnectCapabilityDef[] = [
+  { key: 'boards_read', label: 'Profile and boards', description: 'Reads the connected Pinterest profile and boards. No publishing or scheduling.' },
   { key: 'identity', label: 'Account only', description: 'Confirms the account. No posting.' },
   { key: 'posts_read', label: 'Read my posts', description: 'To learn your voice. You pick the posts and approve analysis. No posting.' },
   { key: 'publish', label: 'Publish', description: 'Posts only what you approve.' },
   { key: 'analytics', label: 'Analytics', description: 'Reads available analytics for this account’s own posts. Historical metadata and analytics require a separate confirmed import when available.' },
   { key: 'comments_read', label: 'Comments', description: 'Reads comments and replies.' },
-  { key: 'reply', label: 'Reply', description: 'Replies only with your approval.' }
+  { key: 'reply', label: 'Reply', description: 'Replies only with your approval.' },
+  { key: 'interactions', label: 'Likes and reposts', description: 'Manage individual likes and reposts you explicitly approve.' },
+  { key: 'account_management', label: 'Account relationships', description: 'Read and manage follows and mutes you approve. Restricted actions stay unavailable.' },
+  { key: 'bookmarks', label: 'Bookmarks', description: 'Read and organize the bookmarks you authorize.' },
+  { key: 'lists', label: 'Lists', description: 'Read and manage lists owned by your account, with your approval.' },
+  { key: 'direct_messages', label: 'Direct messages', description: 'Read authorized conversations and send only messages you approve.' },
+  { key: 'moderate', label: 'Moderation', description: 'Manage replies where the official API permits your account to do so.' }
 ];
 
 /** One line per capability level, for hover cards and InfoTips (never inline on the card). */

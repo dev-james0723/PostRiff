@@ -120,6 +120,9 @@ TOOL_POLICY: dict[str, dict] = {
     "library_search": _read("library"),
     "library_read": _read("library"),
     "channels_capabilities": _read("connections"),
+    "x_capabilities": _read("connections", since=2),
+    "x_operations_list": _read("content","connections", since=2),
+    "x_action_propose": _write("content","connections", idempotency="native_key",retry_class="manual",explicit_request=True,since=2),
     **{name: _read("content") for name in ("queue_summary", "job_get", "draft_get", "calendar_range", "reviews_list", "publishing_summary",
                                            "content_search", "entity_status", "workspace_summary", "workspace_search", "attention_summary",
                                            "attention_summary_v2")},
@@ -676,7 +679,14 @@ def reach(surface_name: str, grants=None) -> frozenset:
 
 # --- the permissions UI's view (CF-1 §11) ---------------------------------------------------------------------------------
 def copy_table() -> dict:
-    return json.loads(_COPY_PATH.read_text(encoding="utf-8"))
+    copy = json.loads(_COPY_PATH.read_text(encoding='utf-8'))
+    from . import tool_adapter
+    # Optional extension titles are active only when their actual tool is
+    # registered. Missing titles and stale regular capabilities still fail lint.
+    for ident, title in (copy.get('optionalCapabilities') or {}).items():
+        if ident.startswith('tool.') and ident[5:] in tool_adapter.REGISTRY:
+            copy['capabilities'][ident] = title
+    return copy
 
 
 def _provider_key(scope: ProviderScope) -> str:
