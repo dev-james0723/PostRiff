@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "functions": {
+    "api/discord/interactions.py": {
+      "maxDuration": 5,
+      "excludeFiles": "{tests/**,evidence/**,review/**,**/__pycache__/**}"
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "schema": "rafii.discord.a7a0.ping-only.source-provenance.v1",
+  "original_repository": "dev-james0723/PostRiff",
+  "pull_request": 216,
+  "original_commit_sha": "e891af3591d8baabdb54c05d936ccd61c3299e42",
+  "original_state": "reviewed_draft_unmerged",
+  "original_source_evidence": [
+    {
+      "path": "src/postriff_phase2/discord/interactions.py",
+      "git_blob_sha1": "a459fcb50acf08da842eccfc54e42784625e8445",
+      "sha256": "adfd626ccce59e698262eea316fc99a4a868fe48419f01892870c87927917f9d"
+    },
+    {
+      "path": "src/postriff_phase2/discord/authorization.py",
+      "git_blob_sha1": "0f9d0a11fecc52af29a7a6d9cb0d7042b9b6f47c"
+    },
+    {
+      "path": "src/postriff_alpha/domain.py",
+      "git_blob_sha1": "97a96ea5a6b1efdeff1ccbb30f0088236e656ead"
+    },
+    {
+      "path": "requirements.txt",
+      "git_blob_sha1": "d8641004832f9b457d5c10a970a9abddd3fa04f1"
+    },
+    {
+      "path": "vercel.json",
+      "git_blob_sha1": "4652296a166b7a580aaf6ea087349941ebf32e2d"
+    }
+  ],
+  "derived_overlay": true,
+  "byte_identical_to_original": false,
+  "security_relevant_behavior": "Extracted Ed25519 raw-body signature, timestamp and strict JSON checks; deliberately restricts to HTTP signed type-1 PING; no user commands, DB, provider tokens, or HTTP egress",
+  "deployment_target": "UNALLOCATED",
+  "vercel_project_id": null,
+  "preview_url": null,
+  "deployment_executed": false,
+  "production_touched": false,
+  "network_requests_to_discord": 0,
+  "verification_level": "mac_local_synthetic_unit_and_reference_parity_pass",
+  "limitations": [
+    "No Vercel Python 3.12 build/deployment or cold-start",
+    "No external signed Discord PING",
+    "No public origin/Project/SSO/fee guarantee",
+    "Derived overlay with separate hashes (not identical to original code)"
+  ],
+  "parity_passed_offline_cases": 9,
+  "mac_test_runtime_python": "3.14.5",
+  "mac_test_cryptography": "50.0.1"
+}

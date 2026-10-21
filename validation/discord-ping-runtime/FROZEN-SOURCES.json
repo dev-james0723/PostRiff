@@ -1,0 +1,16 @@
+{
+  "originalBaseline": "e891af3591d8baabdb54c05d936ccd61c3299e42",
+  "productBaseline": "fe45c568ed65c80f76afebc9911eeaa1a1a59c29",
+  "source": "Frozen local A7a-0 overlay; exact subset of its pre-existing SHA256 manifest",
+  "files": {
+    ".python-version": "7b55f8e67b5623c4bef3fa691288da9437d79d3aba156de48d481db32ac7d16d",
+    "requirements.txt": "4026896996503d662ae0d9b5db045d1d5ff511c681dbfc09f5d5a11ee06b28c5",
+    "vercel.json": "c89e0b6783bf6421755a9fc806a2a985ee43153103a951563c21eb41198da782",
+    "a7a0_ping_core.py": "a4162ebd37556d62ae0b3f815ae96ea2764e3eb78788790d53b7fac8471e0450",
+    "api/discord/interactions.py": "3cf436cf0ccc2575964a7348a2605387627a0d164bb227ec4c735f6bc507e4d7",
+    "SOURCE_PROVENANCE.json": "c444edff9ee9a93bca9674bee8c5e24f2c4156292f054fe40d05e617d1a57f31",
+    "tests/test_ping_only.py": "eac5a71886645225e715b31e3f98fa5c2e69edc287804d1c11a1f8a1becf3b69",
+    "tests/test_static_boundaries.py": "e75a840fb13390c29b1cea080fa25d306784eccd13596f4383c05af408b0b810",
+    "tests/reference_parity.py": "a05cf4a870a424ca2505f7194e843ec43ac42da9dcdaf7b5f83a8f8a1567383e"
+  }
+}

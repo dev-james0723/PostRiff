@@ -1,0 +1,75 @@
+name: Discord isolated PING Python runtime qualification
+on:
+  push:
+    branches: ['codex/discord-ping-runtime-20261021']
+    paths:
+      - 'validation/discord-ping-runtime/**'
+      - '.github/workflows/discord-ping-runtime.yml'
+permissions:
+  contents: read
+concurrency:
+  group: discord-ping-runtime-20261021
+  cancel-in-progress: false
+jobs:
+  qualification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      VERCEL_TELEMETRY_DISABLED: '1'
+      DO_NOT_TRACK: '1'
+      LAMBDA_IMAGE: public.ecr.aws/lambda/python:3.12@sha256:3856536f53e945debf4c90d0ff301cbaa837c07a4ab9b0e2c102c6e54ceb9762
+    steps:
+      - name: Exact public source without credentials or submodule recursion
+        run: |
+          git init .
+          git remote add origin https://github.com/dev-james0723/PostRiff.git
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git fetch --depth=1 origin fe45c568ed65c80f76afebc9911eeaa1a1a59c29
+          git fetch --depth=1 origin e891af3591d8baabdb54c05d936ccd61c3299e42
+          git worktree add --detach "$RUNNER_TEMP/ping-upstream" e891af3591d8baabdb54c05d936ccd61c3299e42
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+      - name: Verify exact frozen inputs and unchanged product source
+        run: python validation/discord-ping-runtime/qualify.py verify-source
+      - name: Install only pinned qualification tools on the cloud runner
+        run: |
+          python -m pip install --disable-pip-version-check -r validation/discord-ping-runtime/frozen/requirements.txt uv==0.11.16 pip-audit==2.10.1
+          mkdir -p "$RUNNER_TEMP/ping-builder"
+          printf '{"private":true}\n' > "$RUNNER_TEMP/ping-builder/package.json"
+          npm --prefix "$RUNNER_TEMP/ping-builder" install --ignore-scripts --no-audit --no-fund --save-exact vercel@59.23.2 @vercel/python@14.2.0
+      - name: Original 13 minimal-import and security tests
+        working-directory: validation/discord-ping-runtime/frozen
+        run: python -m unittest discover -s tests -p 'test_*.py' -v > ../evidence/unit.log 2>&1
+      - name: Original nine-case offline reference parity
+        run: UPSTREAM_SOURCE_ROOT="$RUNNER_TEMP/ping-upstream" python validation/discord-ping-runtime/frozen/tests/reference_parity.py > validation/discord-ping-runtime/evidence/reference-parity.json
+      - name: Build the actual isolated Python function archive without a Vercel project
+        run: |
+          VERCEL_BUILDER_MODULES="$RUNNER_TEMP/ping-builder/node_modules" node validation/discord-ping-runtime/build-archive.cjs
+          python validation/discord-ping-runtime/qualify.py unpack
+          python -m pip_audit --path validation/discord-ping-runtime/evidence/function/_vendor --format json --output validation/discord-ping-runtime/evidence/runtime-audit.json
+      - name: Exercise the built archive in a read-only network-isolated Lambda runtime
+        run: |
+          docker pull --platform linux/amd64 "$LAMBDA_IMAGE"
+          docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{join .RepoDigests ","}}' "$LAMBDA_IMAGE" > validation/discord-ping-runtime/evidence/lambda-image.txt
+          docker run --rm --pull=never --platform linux/amd64 --read-only --network none \
+            --user 1000:1000 --cap-drop=ALL --security-opt=no-new-privileges \
+            --pids-limit 64 --memory 256m --cpus 1 --tmpfs /tmp:rw,size=67108864,mode=1777 \
+            --entrypoint /var/lang/bin/python3.12 \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "$PWD/validation/discord-ping-runtime/evidence/function:/function:ro" \
+            -v "$PWD/validation/discord-ping-runtime/qualify.py:/driver/qualify.py:ro" \
+            -v "$PWD/validation/discord-ping-runtime/FROZEN-SOURCES.json:/driver/frozen-manifest.json:ro" \
+            "$LAMBDA_IMAGE" /driver/qualify.py probe --runtime-root /function --manifest /driver/frozen-manifest.json \
+            > validation/discord-ping-runtime/evidence/lambda-probe.json
+      - name: Exact source and aggregate verdict
+        run: python validation/discord-ping-runtime/qualify.py finish
+      - name: Emit recoverable metadata to run logs without artifact storage
+        if: always()
+        run: python validation/discord-ping-runtime/qualify.py emit-evidence
