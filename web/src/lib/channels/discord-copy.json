@@ -58,7 +58,19 @@
     "privateStoredUnlinked": "Stored private draft link: not linked",
     "callbackContextChanged": "The connection context changed. Open Channels to check the original account and workspace before continuing.",
     "webhookIdentityLabel": "Account for bot-free owner or Administrator checks (optional)",
-    "webhookIdentityNone": "Use the installed app for permission checks"
+    "webhookIdentityNone": "Use the installed app for permission checks",
+    "callbackSignIn": "Sign in to finish connecting your Discord account.",
+    "callbackIncomplete": "This link is incomplete. Start again from Channels.",
+    "callbackRetry": "Start again from Channels.",
+    "callbackPermissionsTitle": "Some permissions weren’t granted",
+    "callbackMissingPermissions": "Missing permissions:",
+    "callbackDifferentAccount": "Different account connected. {account} still needs reconnecting.",
+    "callbackBack": "Back to Channels",
+    "callbackTitle": "Finishing connection",
+    "callbackConfirming": "Confirming your account…",
+    "callbackFailed": "Couldn't connect",
+    "callbackConnected": "Connected {account}",
+    "callbackDenied": "Access not granted"
   },
   "zh-Hant": {
     "personalTitle": "個人 Discord 帳戶",
@@ -119,7 +131,19 @@
     "privateStoredUnlinked": "已儲存的私密草稿入口：未連接",
     "callbackContextChanged": "連接情境已變更。請開啟連接頁面，確認原本的帳戶及工作區後再繼續。",
     "webhookIdentityLabel": "免 Bot 核實擁有者或管理員權限的帳戶（選填）",
-    "webhookIdentityNone": "使用已安裝的應用程式核實權限"
+    "webhookIdentityNone": "使用已安裝的應用程式核實權限",
+    "callbackSignIn": "請先登入，完成 Discord 帳戶連接。",
+    "callbackIncomplete": "此連結不完整，請返回連接頁面重試。",
+    "callbackRetry": "請返回連接頁面重試。",
+    "callbackPermissionsTitle": "部分權限未獲授予",
+    "callbackMissingPermissions": "尚未授予的權限：",
+    "callbackDifferentAccount": "已連接另一個帳戶，{account} 仍需重新連接。",
+    "callbackBack": "返回連接頁面",
+    "callbackTitle": "正在完成連接",
+    "callbackConfirming": "正在確認你的帳戶…",
+    "callbackFailed": "無法連接",
+    "callbackConnected": "已連接 {account}",
+    "callbackDenied": "未獲授權"
   },
   "zh-Hans": {
     "personalTitle": "个人 Discord 账户",
@@ -180,6 +204,18 @@
     "privateStoredUnlinked": "已保存的私密草稿入口：未连接",
     "callbackContextChanged": "连接上下文已变更。请打开连接页面，确认原来的账户及工作区后再继续。",
     "webhookIdentityLabel": "免 Bot 核实所有者或管理员权限的账户（选填）",
-    "webhookIdentityNone": "使用已安装的应用核实权限"
+    "webhookIdentityNone": "使用已安装的应用核实权限",
+    "callbackSignIn": "请先登录，完成 Discord 账户连接。",
+    "callbackIncomplete": "此链接不完整，请返回连接页面重试。",
+    "callbackRetry": "请返回连接页面重试。",
+    "callbackPermissionsTitle": "部分权限未获授予",
+    "callbackMissingPermissions": "尚未授予的权限：",
+    "callbackDifferentAccount": "已连接其他账户，{account} 仍需重新连接。",
+    "callbackBack": "返回连接页面",
+    "callbackTitle": "正在完成连接",
+    "callbackConfirming": "正在确认你的账户…",
+    "callbackFailed": "无法连接",
+    "callbackConnected": "已连接 {account}",
+    "callbackDenied": "未获授权"
   }
 }

@@ -54,6 +54,7 @@ export function ConnectReturn() {
   const [error, setError] = useState<string | null>(null);
 
   const provider = params.get('provider') ?? '';
+  const callbackCopy = provider === 'discord' ? dc : discordCopy('en');
   const state = params.get('state') ?? '';
   const discordContext = JSON.stringify([workspaceId, user?.id ?? '', provider, state]);
   activeDiscordContext.current = discordContext;
@@ -62,7 +63,7 @@ export function ConnectReturn() {
     // Do not consume a single-use OAuth code before authentication is ready.
     if (provider === 'discord' && (authStatus === 'loading' || !workspaceId)) return;
     if (provider === 'discord' && authStatus !== 'signed-in') {
-      setError('Sign in to finish connecting your Discord account.');
+      setError(callbackCopy.callbackSignIn);
       return;
     }
     if (handled.current) {
@@ -73,7 +74,7 @@ export function ConnectReturn() {
     startedDiscordContext.current = discordContext;
     const staleDiscord = () => provider === 'discord' && activeDiscordContext.current !== discordContext;
     if (!provider || !state) {
-      setError('This link is incomplete. Start again from Channels.');
+      setError(callbackCopy.callbackIncomplete);
       return;
     }
     // The server independently verifies `iss` and the exact OAuth transaction.
@@ -96,10 +97,10 @@ export function ConnectReturn() {
           if (value.discordPurpose === 'identity') toast.success(dc.callbackIdentity, { description: dc.identityNotice });
           if (value.discordPurpose === 'webhook') toast.success(dc.callbackWebhook);
           if (value.missingScopes?.length) {
-            toast.warning('Some permissions weren’t granted', { description: `Missing: ${value.missingScopes.join(', ')}. ${provider === 'discord' ? dc.publishUnavailable : missingScopePublishingMessage(provider)}` });
+            toast.warning(callbackCopy.callbackPermissionsTitle, { description: provider === 'discord' ? `${dc.callbackMissingPermissions} ${value.missingScopes.join(', ')}. ${dc.publishUnavailable}` : `Missing: ${value.missingScopes.join(', ')}. ${missingScopePublishingMessage(provider)}` });
           }
           if (expected && expected.channelId !== connectionId) {
-            toast.warning(`Different account connected. ${expected.account} still needs reconnecting.`);
+            toast.warning(callbackCopy.callbackDifferentAccount.replace('{account}', () => expected.account));
           }
           // Straight back to Channels: the page scrolls to the new card and plays its check once.
           router.replace(`/app/channels?connected=${encodeURIComponent(connectionId)}`);
@@ -107,30 +108,30 @@ export function ConnectReturn() {
         }
         setResult(value);
       })
-      .catch((err) => { if (!staleDiscord()) setError(err instanceof ApiError ? err.message : 'Start again from Channels.'); });
-  }, [api, client, params, provider, router, state, workspaceId, dc, discordContext, authStatus]);
+      .catch((err) => { if (!staleDiscord()) setError(err instanceof ApiError ? err.message : callbackCopy.callbackRetry); });
+  }, [api, client, params, provider, router, state, workspaceId, dc, callbackCopy, discordContext, authStatus]);
 
   const back = (
     <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
-      Back to Channels
+      {callbackCopy.callbackBack}
     </Link>
   );
 
   return (
-    <PageContainer pageTitle='Finishing connection' width='reading'>
+    <PageContainer pageTitle={callbackCopy.callbackTitle} width='reading'>
       <div className='flex max-w-xl flex-col gap-4'>
-        {!result && !error && <StateMessage kind='loading' title='Confirming your account…' />}
-        {error && <StateMessage kind='error' title="Couldn't connect" description={error} action={back} />}
+        {!result && !error && <StateMessage kind='loading' title={callbackCopy.callbackConfirming} />}
+        {error && <StateMessage kind='error' title={callbackCopy.callbackFailed} description={error} action={back} />}
         {result &&
           (result.connected ? (
             <StateMessage
               kind='success'
-              title={`Connected ${result.account ?? ''}`.trim()}
-              description={result.missingScopes?.length ? `Missing permissions: ${result.missingScopes.join(', ')}. ${provider === 'discord' ? dc.publishUnavailable : missingScopePublishingMessage(provider)}` : undefined}
+              title={callbackCopy.callbackConnected.replace('{account}', () => result.account ?? '').trim()}
+              description={result.missingScopes?.length ? `${callbackCopy.callbackMissingPermissions} ${result.missingScopes.join(', ')}. ${provider === 'discord' ? dc.publishUnavailable : missingScopePublishingMessage(provider)}` : undefined}
               action={back}
             />
           ) : (
-            <StateMessage kind='error' title='Access not granted' description={result.reason || undefined} action={back} />
+            <StateMessage kind='error' title={callbackCopy.callbackDenied} description={result.reason || undefined} action={back} />
           ))}
       </div>
     </PageContainer>

@@ -43,6 +43,7 @@ async function until(check) {
         {...input.connections.identity, id: 'second-identity', account: 'Second synthetic identity', userId: '818181', discoverGuilds: true}];
       let channels = [], snapshot = structuredClone(template.snapshot), starts = [], discoveries = 0, callbacks = 0, unexpected = 0;
       let holdStart = false, releaseStart, wrongSubject = false, localUnlinks = 0;
+      let callbackLocale = 'en', releaseCallback;
       const provider = {id: 'discord', platform: 'Discord', configured: true, connectReady: true, productionReviewed: true,
         discordConnectionsV2: true, capabilities: {identity: true, publish: true}, setupIssues: [],
         discordModes: {webhook: {enabled: false, status: 'unavailable'}, userInstall: {enabled: false, status: 'unavailable'}}};
@@ -74,6 +75,14 @@ async function until(check) {
         }
         if (path.endsWith('/channels/discord/oauth/complete') && req.method() === 'POST') {
           callbacks++; assert.equal(req.postDataJSON().iss, 'https://discord.com');
+          const callbackCode = req.postDataJSON().code || '';
+          if (callbackCode.startsWith('locale-denied-')) {
+            await new Promise(resolve => { releaseCallback = resolve; });
+            return send({connected: false, reason: 'Synthetic provider refusal.'});
+          }
+          if (callbackCode.startsWith('locale-transport-')) return route.abort('failed');
+          if (callbackCode.startsWith('locale-partial-')) return send({connected: true,
+            connectionId: identities[0].id, discordPurpose: 'identity', missingScopes: ['guilds']});
           if (wrongSubject) return send({error: 'Reconnect the original Discord identity.', code: 'discord_connection_required'}, 409);
           return send({connected: true, connectionId: identities[0].id, discordPurpose: 'identity', missingScopes: []});
         }
@@ -81,7 +90,7 @@ async function until(check) {
         if (path.endsWith('/guilds')) { discoveries++; return send({identityConnectionId: 'wrong-subject', guilds: [{id: '999999', name: 'MUST NOT APPEAR'}]}); }
         if (path.endsWith('/channels')) return send({channels, providers: [provider], discordIdentities: identities});
         if (path === '/api/catalog') return send({authMode: 'dev', execution: 'dev-synthetic', phase2: true, templates: [], routes: [], profileMetadata: {}});
-        if (path === '/api/me') return send({userId: actor, displayName: 'Synthetic tester', preferences: {timeZone: 'UTC', locale: 'en'}, mfa: {}});
+        if (path === '/api/me') return send({userId: actor, displayName: 'Synthetic tester', preferences: {timeZone: 'UTC', locale: callbackLocale}, mfa: {}});
         if (path === '/api/workspaces') return send({workspaces: [{workspaceId: wid, name: 'Synthetic Discord', plan: 'studio', membership: template.snapshot.membership, memberCounts: {owner: 1}}]});
         if (path === `/api/workspaces/${wid}`) return send(snapshot);
         if (path.includes('/discord/private-review/')) return send({error: 'This private identity is not linked to the current actor.'}, 403);
@@ -134,6 +143,47 @@ async function until(check) {
       await page.waitForURL('**/app/channels?connected=*');
       await page.locator('#discord-identity-' + identities[0].id).waitFor();
       assert.equal(callbacks, 2);
+      const callbackLocales = [{"locale":"en","title":"Finishing connection","pending":"Confirming your account…","denied":"Access not granted","failed":"Couldn't connect","incomplete":"This link is incomplete. Start again from Channels.","retry":"Start again from Channels.","back":"Back to Channels","permissions":"Some permissions weren’t granted","different":"Different account connected. Previous <identity> $& still needs reconnecting.","unavailable":"Discord publishing is unavailable until the required destination and permissions are separately authorized."},{"locale":"zh-Hant","title":"正在完成連接","pending":"正在確認你的帳戶…","denied":"未獲授權","failed":"無法連接","incomplete":"此連結不完整，請返回連接頁面重試。","retry":"請返回連接頁面重試。","back":"返回連接頁面","permissions":"部分權限未獲授予","different":"已連接另一個帳戶，Previous <identity> $& 仍需重新連接。","unavailable":"Discord 發文目前無法使用，須先另行授權所需目的地及權限。"},{"locale":"zh-Hans","title":"正在完成连接","pending":"正在确认你的账户…","denied":"未获授权","failed":"无法连接","incomplete":"此链接不完整，请返回连接页面重试。","retry":"请返回连接页面重试。","back":"返回连接页面","permissions":"部分权限未获授予","different":"已连接其他账户，Previous <identity> $& 仍需重新连接。","unavailable":"Discord 发文目前无法使用，须先另行授权所需目标及权限。"}];
+      for (const copy of callbackLocales) {
+        callbackLocale = copy.locale;
+        const beforeCallbacks = callbacks;
+        const callbackUrl = scenario => base + '/channels/connect?' + new URLSearchParams({
+          provider: 'discord', state: 'synthetic-state-locale-' + width + '-' + copy.locale + '-' + scenario,
+          code: 'locale-' + scenario + '-' + copy.locale, iss: 'https://discord.com'});
+        stage = 'localized-callback-pending-denied-' + width + '-' + copy.locale;
+        releaseCallback = undefined;
+        await page.goto(callbackUrl('denied'));
+        await until(() => Boolean(releaseCallback));
+        await page.getByRole('heading', {name: copy.title, exact: true}).waitFor();
+        await page.getByText(copy.pending, {exact: true}).waitFor();
+        releaseCallback();
+        await page.getByText(copy.denied, {exact: true}).waitFor();
+        const back = page.getByRole('link', {name: copy.back, exact: true});
+        await back.focus();
+        assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('href')), '/app/channels');
+        assert.equal(callbacks, beforeCallbacks + 1, 'locale hydration/remount must not exchange a one-use code twice');
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+        stage = 'localized-callback-incomplete-' + width + '-' + copy.locale;
+        await page.goto(base + '/channels/connect?provider=discord');
+        await page.getByText(copy.failed, {exact: true}).waitFor();
+        await page.getByText(copy.incomplete, {exact: true}).waitFor();
+        assert.equal(callbacks, beforeCallbacks + 1, 'an incomplete return cannot start an exchange');
+        stage = 'localized-callback-transport-' + width + '-' + copy.locale;
+        await page.goto(callbackUrl('transport'));
+        await page.getByText(copy.failed, {exact: true}).waitFor();
+        await page.getByText(copy.retry, {exact: true}).waitFor();
+        stage = 'localized-callback-permissions-reconnect-' + width + '-' + copy.locale;
+        await page.evaluate(() => sessionStorage.setItem('postriff.channels.expected-reconnect',
+          JSON.stringify({channelId: 'other-synthetic-identity', account: 'Previous <identity> $&', transactionId: 'synthetic-reconnect'})));
+        await page.goto(callbackUrl('partial'));
+        await page.waitForURL('**/app/channels?connected=*');
+        await page.getByText(copy.permissions, {exact: true}).waitFor();
+        await page.getByText(copy.different, {exact: true}).waitFor();
+        await page.getByText(copy.unavailable, {exact: false}).first().waitFor();
+        assert.equal(callbacks, beforeCallbacks + 3);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+      }
+      callbackLocale = 'en';
       stage = 'bot-free-webhook-identity-selection-' + width;
       provider.discordModes.webhook = {enabled: true, status: 'available'};
       await page.goto(base + '/app/channels');
@@ -170,7 +220,7 @@ async function until(check) {
       mkdirSync(join(root, '.depot/discord-multimode-browser'), {recursive: true});
       await page.screenshot({path: join(root, `.depot/discord-multimode-browser/${width}.png`), fullPage: true});
       checks.push({width, identityNoServer: true, officialScopeUpgrade: true, staleResponse: true, wrongSubject: true,
-        callback: true, sender: true, unavailableModes: true, botFreeIdentitySelection: true, keyboard: true, accessibility: 'axe WCAG2A/AA new section', unexpectedMutations: unexpected});
+        callback: true, callbackLocales: callbackLocales.map(copy => copy.locale), callbackLocaleScenarios: ['pending', 'denied', 'incomplete', 'transport', 'permissions', 'reconnect'], sender: true, unavailableModes: true, botFreeIdentitySelection: true, keyboard: true, accessibility: 'axe WCAG2A/AA new section', unexpectedMutations: unexpected});
       await context.close();
     }
     writeFileSync(join(root, '.depot/discord-multimode-browser/results.json'), JSON.stringify({execution: 'synthetic-running-browser', checks, realDiscord: 'NOT_RUN'}, null, 2));
