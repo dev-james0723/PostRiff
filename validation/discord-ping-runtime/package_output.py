@@ -15,6 +15,7 @@ import zipfile
 
 PUBLIC_KEYS = {"RAFII_A7A0_APPLICATION_ID", "RAFII_A7A0_PUBLIC_KEY_HEX",
                "RAFII_A7A0_EXPECTED_ORIGIN"}
+BUILDER_ENV = {"PYTHONPATH": "_vendor", "PYTHONDONTWRITEBYTECODE": "1"}
 INPUTS = [".python-version", "requirements.txt", "vercel.json",
           "a7a0_ping_core.py", "api/discord/interactions.py"]
 FORBIDDEN = re.compile(r"(^|/)(\.env[^/]*|\.git|\.codex|\.token-pilot|\.agents|node_modules|postriff_[^/]*|psycopg[^/]*)(/|$)")
@@ -78,7 +79,8 @@ def write_output(evidence, output, manifest_path, env):
     require(record.get("selectedInputs") == INPUTS, "Unexpected builder inputs.")
     require(record.get("sha256") == sha256(data), "Function archive hash mismatch.")
     require(record.get("architecture") == "x86_64", "Qualified architecture required.")
-    require(record.get("environmentKeys") == [], "Unexpected builder environment.")
+    require(record.get("environmentKeys") == sorted(BUILDER_ENV)
+            and record.get("environment") == BUILDER_ENV, "Unexpected builder environment.")
     handler = record.get("handler", "")
     require(isinstance(handler, str) and re.fullmatch(
         r"[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*", handler),
@@ -111,7 +113,7 @@ def write_output(evidence, output, manifest_path, env):
     }
     require(set(variables) == PUBLIC_KEYS, "Unexpected function environment.")
     config = {"runtime": "python3.12", "handler": handler, "architecture": "x86_64",
-              "maxDuration": 5, "environment": variables}
+              "maxDuration": 5, "environment": {**BUILDER_ENV, **variables}}
     if record.get("supportsResponseStreaming") is not None:
         require(type(record["supportsResponseStreaming"]) is bool, "Invalid streaming metadata.")
         config["supportsResponseStreaming"] = record["supportsResponseStreaming"]
@@ -126,7 +128,9 @@ def write_output(evidence, output, manifest_path, env):
         "deploymentId": context["deployment"], "expectedOrigin": context["origin"],
         "applicationId": context["app"], "publicKeySha256": sha256(context["public"].encode()),
         "functionArchiveSha256": record["sha256"], "functionConfigSha256": sha256(config_bytes),
-        "functionEnvironmentKeys": sorted(variables), "maxDuration": 5,
+        "functionEnvironmentKeys": sorted(config["environment"]),
+        "builderEnvironmentKeys": sorted(BUILDER_ENV), "publicConfigKeys": sorted(variables),
+        "maxDuration": 5,
         "frozenRuntimeSourcesUnchanged": True, "systemVariablesOverridden": False,
         "hostedAcceptance": "NOT_RUN", "realDiscordAcceptance": "NOT_RUN",
     }

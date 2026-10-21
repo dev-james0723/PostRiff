@@ -48,8 +48,8 @@ Host/forwarded header establishes trust, and no system variable is overwritten.
 
 package_output.py validates the approved project ID, deployment ID, source SHA,
 public application ID/key, actual builder ZIP and frozen runtime hashes. It emits
-one Python function with a five-second duration and exactly three public runtime
-Config values. The source builder receives a stripped environment with no app
+one Python function with a five-second duration, exactly three public runtime
+Config values and the builder's pinned PYTHONPATH/_vendor and no-bytecode settings. The source builder receives a stripped environment with no app
 credentials or platform OIDC tokens. build-deployment.cjs is the hosted-build
 entrypoint; deployment/ contains the proposed package/install/build settings.
 A source upload must flatten that template into a dedicated public PING-only

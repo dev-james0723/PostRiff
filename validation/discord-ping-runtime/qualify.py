@@ -131,7 +131,8 @@ def probe(root, manifest_path):
     public = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
     config = json.loads((root / ".vc-config.json").read_text())
     assert config["runtime"] == "python3.12" and config["maxDuration"] == 5
-    assert config["environment"] == {"RAFII_A7A0_APPLICATION_ID": APP,
+    assert config["environment"] == {"PYTHONPATH": "_vendor", "PYTHONDONTWRITEBYTECODE": "1",
+        "RAFII_A7A0_APPLICATION_ID": APP,
         "RAFII_A7A0_PUBLIC_KEY_HEX": public, "RAFII_A7A0_EXPECTED_ORIGIN": "https://" + HOST}
     env = {**config["environment"], "VERCEL_URL": HOST}
     server = ThreadingHTTPServer(("127.0.0.1", 0), module.handler)

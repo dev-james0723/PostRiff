@@ -36,6 +36,7 @@ assert.match(source, /^[0-9a-f]{40}$/);
   assert.equal(result.resultVersion, 3);
   const artifact = result.result.output;
   assert.equal(artifact.runtime, 'python3.12');
+  assert.deepEqual(artifact.environment, {PYTHONPATH: '_vendor', PYTHONDONTWRITEBYTECODE: '1'});
   const names = Object.keys(artifact.files);
   for (const name of ['a7a0_ping_core.py', 'api/discord/interactions.py']) assert(names.includes(name), name);
   const forbidden = /(^|\/)(\.env[^/]*|\.git|\.codex|\.token-pilot|\.agents|node_modules|postriff_[^/]*|psycopg[^/]*)(\/|$)/;
@@ -46,7 +47,8 @@ assert.match(source, /^[0-9a-f]{40}$/);
   const record = {status: 'PASS', execution: 'offline builder on GitHub standard runner',
     source, builderVersion: '14.2.0', cliPackageVersion: '59.23.2',
     runtime: artifact.runtime, architecture: artifact.architecture,
-    handler: artifact.handler, environmentKeys: Object.keys(artifact.environment || {}).sort(),
+    handler: artifact.handler, environmentKeys: Object.keys(artifact.environment).sort(),
+    environment: artifact.environment,
     supportsResponseStreaming: artifact.supportsResponseStreaming ?? null,
     selectedInputs: inputs, fileCount: names.length, files: names.sort(),
     bytes: zip.length, sha256: crypto.createHash('sha256').update(zip).digest('hex'),

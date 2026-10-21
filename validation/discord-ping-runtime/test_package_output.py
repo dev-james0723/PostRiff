@@ -8,7 +8,7 @@ import tempfile
 import unittest
 import zipfile
 
-from package_output import INPUTS, PUBLIC_KEYS, PackageRejected, trusted_context, write_output
+from package_output import BUILDER_ENV, INPUTS, PUBLIC_KEYS, PackageRejected, trusted_context, write_output
 
 HERE = Path(__file__).resolve().parent
 SOURCE = "a" * 40
@@ -40,7 +40,8 @@ class PackageOutputTests(unittest.TestCase):
         self.record = {
             "status": "PASS", "runtime": "python3.12", "architecture": "x86_64",
             "source": SOURCE, "selectedInputs": INPUTS,
-            "handler": "vc__handler__python.handler", "environmentKeys": [],
+            "handler": "vc__handler__python.vc_handler", "environmentKeys": sorted(BUILDER_ENV),
+            "environment": dict(BUILDER_ENV),
             "supportsResponseStreaming": True,
         }
         self.archive()
@@ -70,7 +71,9 @@ class PackageOutputTests(unittest.TestCase):
         cfg = json.loads((self.output / "functions/api/discord/interactions.func/.vc-config.json").read_text())
         self.assertEqual(cfg["environment"]["RAFII_A7A0_EXPECTED_ORIGIN"],
                          "https://synthetic-ping-build.vercel.app")
-        self.assertEqual(set(cfg["environment"]), PUBLIC_KEYS)
+        self.assertEqual(set(cfg["environment"]), PUBLIC_KEYS | set(BUILDER_ENV))
+        for name, value in BUILDER_ENV.items():
+            self.assertEqual(cfg["environment"][name], value)
         self.assertEqual(cfg["handler"], self.record["handler"])
         self.assertEqual(cfg["maxDuration"], 5)
         self.assertFalse(result["systemVariablesOverridden"])
@@ -112,7 +115,8 @@ class PackageOutputTests(unittest.TestCase):
 
     def test_runtime_architecture_source_and_inputs_remain_pinned(self):
         changes = {"runtime": "python3.14", "architecture": "arm64", "source": "b" * 40,
-                   "selectedInputs": INPUTS + [".env"], "environmentKeys": ["DATABASE_URL"]}
+                   "selectedInputs": INPUTS + [".env"], "environmentKeys": ["DATABASE_URL"],
+                   "environment": {**BUILDER_ENV, "PYTHONPATH": "../outside"}}
         original = dict(self.record)
         for name, value in changes.items():
             self.record = {**original, name: value}
