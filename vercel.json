@@ -108,7 +108,8 @@
   "git": {
     "deploymentEnabled": {
       "codex/rafii-brand-brain-v11": false,
-      "wip/no-vercel/mastodon-connect-production-parity-20261018": false
+      "wip/no-vercel/mastodon-connect-production-parity-20261018": false,
+      "claude/mastodon-connect-prod-candidate": false
     }
   }
 }
