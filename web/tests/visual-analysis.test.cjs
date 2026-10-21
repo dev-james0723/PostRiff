@@ -230,12 +230,19 @@ if (require.main === module && process.argv.includes('--fixtures')) {
   });
   test('forecast binding change, stale read, expiry, missing qualification and errors suppress numeric values', () => {
     for(const mutate of [x=>x.binding.trust_receipt_id='other',x=>x.binding.workspace_id='other',
-      x=>x.response.data.scope_key='workspace:other',x=>x.response.as_of=new Date(Date.now()-31_000).toISOString(),
-      x=>x.binding.expires_at=new Date(Date.now()-1000).toISOString(),x=>delete x.response.data.qualification]) {
+      // These mutations must be stale relative to the fixture's signed read
+      // instant, not a wall clock that may advance during Python projection or CI.
+      x=>x.response.data.scope_key='workspace:other',x=>x.response.as_of=new Date(now-60_000).toISOString(),
+      x=>x.binding.expires_at=new Date(now-60_000).toISOString(),x=>delete x.response.data.qualification]) {
       const x=clone(f.bound);mutate(x);assert.equal(panel.selectForecast(x,f.trend,f.workspace,'',now),null);
       reset(x);requested=true;assert.doesNotMatch(render(panel.ForecastPanel),/Point estimate/);
     }
     for(const state of ['error','loading']) {reset(f.bound);requested=true;queryResult.isError=state==='error';queryResult.isFetching=state==='loading';assert.doesNotMatch(render(panel.ForecastPanel),/Point estimate/);}
+  });
+  test('forecast bound expires exactly at its signed effective expiry', () => {
+    const x=clone(f.bound);x.binding.expires_at=new Date(now+5000).toISOString();
+    assert.ok(panel.selectForecast(x,f.trend,f.workspace,'',now));
+    assert.equal(panel.selectForecast(x,f.trend,f.workspace,'',now+5000),null);
   });
   test('stored APIs encode IDs and use GET/no-store/auth/abort only; invalid forecast rejects', async () => {
     const original=global.fetch;const calls=[];const abort=new AbortController();
