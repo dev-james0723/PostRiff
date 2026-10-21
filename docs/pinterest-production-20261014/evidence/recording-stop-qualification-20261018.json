@@ -1,0 +1,106 @@
+{
+  "observed_at": "2026-10-18T16:05:10Z",
+  "execution_state": "PARTIAL_QUALIFICATION_NOT_RECORDING",
+  "recorder": {
+    "app": "Screen Studio",
+    "pid": 59615,
+    "version": "3.7.5-4595"
+  },
+  "source_candidate": {
+    "cg_window_id": 6014,
+    "owner_pid": 2442,
+    "title": "Channels · Rafii",
+    "tab_id": "C366465A77F74B390DFE4BF7886800D3",
+    "url": "https://rafii.io/app/channels",
+    "bounds": [
+      1550,
+      20,
+      1250,
+      880
+    ],
+    "status": "parent-created and frozen; fresh URL/source verification still required before capture"
+  },
+  "verified_ui": {
+    "after_recording": "Create project checked",
+    "automatic_exports_checked": false,
+    "start_recording_bounds": [
+      364,
+      818,
+      855,
+      64
+    ],
+    "available_mode": "Window",
+    "camera": "No camera",
+    "microphone": "No microphone",
+    "system_audio": "No system audio"
+  },
+  "stop_qualification": {
+    "dock_icon_name": "Screen Studio",
+    "dock_position": [
+      1262,
+      987
+    ],
+    "dock_size": [
+      46,
+      58
+    ],
+    "exposed_actions": [
+      "AXPress",
+      "AXShowMenu",
+      "AXShowExpose"
+    ],
+    "AXShowMenu_issued": true,
+    "menu_lookup_result": "-1719 invalid index; later dock_menu_count=0",
+    "finish_control": "NOT QUALIFIED"
+  },
+  "capture_actions": {
+    "source_selected": false,
+    "start_recording_pressed": false,
+    "owned_recording_started": false,
+    "new_recording_file": null,
+    "unowned_recording_state": "UNVERIFIED; no action taken"
+  },
+  "last_bounded_process": {
+    "pid": 62005,
+    "state": "completed",
+    "exit_code": 0,
+    "operation": "read-only exact Screen Studio Start Recording/widget accessibility metadata"
+  },
+  "blocker": "No observed exact Finish Recording action or configured shortcut; two bounded native menu probes exhausted. Recording remains unstarted to avoid an uncontrollable capture.",
+  "next_action": "Click Shortcuts in the already-open Screen Studio Settings and leave it visible; do not change the binding or begin recording. Read existing Start/Stop shortcut, then revalidate clean dedicated Channels window6014/PID2442 and perform one8-second window-only qualification. No OAuth/MFA capture.",
+  "privacy": "No full display, OAuth URL, codes, token, clipboard or unrelated-window capture. No sharing, export, upload, OS permission change, payment, compilation or encoding command.",
+  "preferences_diagnosis": {
+    "path": "/Users/ouxianxing/Library/Preferences/com.timpler.screenstudio.plist",
+    "operation": "Read-only recursive key-NAMES filter shortcut|hotkey|keyboard|record|stop",
+    "exit_code": 0,
+    "duration_seconds": 0.3,
+    "matching_key_names": [],
+    "values_exposed": false,
+    "result": "No actual start/stop shortcut metadata identified; no shortcut guessed or invoked."
+  },
+  "settings_fallback": {
+    "app_menu_item": "Show settings",
+    "show_settings": "clicked successfully on exact PID59615",
+    "shortcuts_label": {
+      "observed": true,
+      "bounds": [
+        798,
+        238,
+        56,
+        14
+      ]
+    },
+    "settings_raise": "exact Settings AXRaise and frontmost succeeded",
+    "active_window_verified_at": "2026-10-18T16:16:58.806Z",
+    "active_window": "Screen Studio / Settings",
+    "native_pointer_result": {
+      "code": "UI_PROVIDER_ERROR",
+      "message": "The native pointer action failed.",
+      "retryable": false
+    },
+    "semantic_exact_label_result": "Exact Shortcuts label not clickable",
+    "configuration_changed": false,
+    "start_stop_shortcut": "NOT READ / NOT QUALIFIED",
+    "human_step": "Click Shortcuts in the already-open Screen Studio Settings and leave it visible; do not change the binding or begin recording."
+  }
+}

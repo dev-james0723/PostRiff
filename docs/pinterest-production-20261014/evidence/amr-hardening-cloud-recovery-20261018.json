@@ -1,0 +1,47 @@
+{
+  "task": "test",
+  "provider": "depot",
+  "runner": "depot-ubuntu-24.04-8",
+  "sourceHead": "5213aa7dfcbe660bfd39c2e46924b77a4c7a3a0b",
+  "startedAt": "2026-10-18T16:36:21.344442+00:00",
+  "submissionExitCode": 0,
+  "runId": "kg26m0ks8s",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/kg26m0ks8s",
+  "remoteExitCode": 0,
+  "exitCode": 0,
+  "elapsedSeconds": 202.634,
+  "recordedAt": "2026-10-18T16:43:52.639860+00:00",
+  "status": "PASS_SANITIZED_CLOUD_ONLY",
+  "nativeStatus": "finished",
+  "workflowId": "xpsgdbbb2k",
+  "jobId": "lt0xw1q16g",
+  "attemptId": "zplftrpwhf",
+  "productRuntimeSource": "e40f3869df6143c30c7b53f774598e25b9809c12",
+  "sourceFingerprint": "494c26ae00079933d3ee0ce5adafb3db6c996727ef522c7d345e01ba9a51b474",
+  "includedFileCount": 3366,
+  "mappingsRestored": true,
+  "passed": [
+    "Repaired RAPv2 actual disposable PostgreSQL17.11; no regressions",
+    "12frontend bridge Node tests",
+    "Type generation and TypeScript",
+    "Lint0errors/36existingwarnings",
+    "Next production build",
+    "Synthetic Pinterest browser command exit0"
+  ],
+  "reused": [
+    "299unique Python tests from33wsfqbsvl including7newAMR controls",
+    "Six unchanged PG suites from33wsfqbsvl"
+  ],
+  "notProven": [
+    "Real Pinterest refresh/current lifecycle/Pin/schedule/Analytics",
+    "Third-party public customer",
+    "Standard approval",
+    "Production deployment"
+  ],
+  "additionalCiAttempts": 1,
+  "remainingAdditionalCiRuns": 0,
+  "buildAttempts": 0,
+  "promotionAttempts": 0,
+  "actualInvoice": "UNKNOWN",
+  "rawLocalLog": "/private/tmp/rafii-pinterest-amr-recovery-ci-20261018-5213aa7d/run.log"
+}

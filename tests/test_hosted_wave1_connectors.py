@@ -185,30 +185,30 @@ class DiscordAdapter(unittest.TestCase):
 
     def test_bot_install_needs_a_server_keeps_no_user_token_and_resolves_through_the_bot(self):
         wire = Wire([ok({"access_token": "UT", "scope": "identify bot", "guild": {"id": "555555", "name": "Rafii HQ"}}),
-                     ok({"id": "4242424"}), ok({}), ok({"id": "555555", "name": "Rafii HQ", "icon": "abc123"})])
+                     ok({"id": "4242424"}), ok({}), ok({"id": "1234567"}), ok({"id": "9000009", "bot": True}), ok({"id": "555555", "name": "Rafii HQ", "icon": "abc123"})])
         discord = self.adapter(wire)
         query = parse_qs(urlparse(discord.authorize_url(BASE + "/api/oauth/discord/callback", "STATE", "C", ["identify", "bot"])).query)
         self.assertEqual((query["scope"][0], query["permissions"][0]), ("identify bot", str(DiscordProvider.PERMISSIONS)))
         grant = discord.exchange("CODE", "V", BASE + "/api/oauth/discord/callback")
-        self.assertEqual(json.loads(grant["accessToken"]), {"v": 1, "guild": "555555", "channel": None, "user": "4242424"})
+        self.assertEqual(json.loads(grant["accessToken"]), {"v": 2, "guild": "555555", "channel": None, "user": "4242424", "applicationId": "1234567", "botUserId": "9000009"})
         self.assertEqual((wire.calls[1]["url"].endswith("/users/@me"), wire.calls[1]["headers"]["Authorization"]), (True, "Bearer UT"))
         self.assertIn("/oauth2/token/revoke", wire.calls[2]["url"])  # the person's own token is revoked, not stored
         identity = discord.identity(grant["accessToken"])
         self.assertEqual((identity["providerAccountId"], identity["accountType"]), ("555555", "server"))
-        self.assertEqual(wire.calls[3]["headers"]["Authorization"], "Bot bot.token")
-        self.assertTrue(wire.calls[3]["headers"]["User-Agent"].startswith("DiscordBot ("))
+        self.assertEqual(wire.calls[5]["headers"]["Authorization"], "Bot bot.token")
+        self.assertTrue(wire.calls[5]["headers"]["User-Agent"].startswith("DiscordBot ("))
         with self.assertRaises(AlphaError):
             self.adapter(Wire([ok({"access_token": "UT", "scope": "identify bot"})])).exchange("CODE", "V", BASE + "/cb")
 
     def test_destinations_need_the_bot_to_send_and_the_connecting_person_to_see(self):
         VIEW, SEND = DiscordProvider.VIEW_CHANNEL, DiscordProvider.SEND_MESSAGES
-        guild = {"id": "555555", "owner_id": "1000001", "roles": [{"id": "555555", "permissions": str(VIEW | SEND)}, {"id": "7000001", "permissions": "0"}]}
+        guild = {"id": "555555", "owner_id": "1000001", "roles": [{"id": "555555", "permissions": str(DiscordProvider.PERMISSIONS | DiscordProvider.MANAGE_GUILD)}, {"id": "7000001", "permissions": "0"}]}
         hidden = [{"id": "555555", "type": 0, "allow": "0", "deny": str(VIEW)}, {"id": "9000009", "type": 1, "allow": str(VIEW | SEND), "deny": "0"}]
         channels = [{"id": "7777777", "name": "general", "type": 0, "position": 1}, {"id": "8888888", "name": "voice", "type": 2},
                     {"id": "9999999", "name": "news", "type": 5, "position": 0},
                     {"id": "6666666", "name": "staff", "type": 0, "position": 2, "permission_overwrites": hidden + [{"id": "7000001", "type": 0, "allow": str(VIEW), "deny": "0"}]},
                     {"id": "5555556", "name": "readonly", "type": 0, "position": 3, "permission_overwrites": [{"id": "555555", "type": 0, "allow": "0", "deny": str(SEND)}]}]
-        token = json.dumps({"v": 1, "guild": "555555", "channel": None, "user": "4242424"})
+        token = json.dumps({"v": 2, "guild": "555555", "channel": None, "user": "4242424", "applicationId": "1234567", "botUserId": "9000009"})
         outsider = self.adapter(Wire(discord_listing(guild, channels, user_roles=[])))
         self.assertEqual([d["id"] for d in outsider.destinations(token)], ["9999999", "7777777"])  # staff is hidden from this person
         staff = self.adapter(Wire(discord_listing(guild, channels, user_roles=["7000001"])))
@@ -218,13 +218,16 @@ class DiscordAdapter(unittest.TestCase):
         for refused in ("8888888", "5555556", "6666666"):  # voice, bot cannot send, hidden from this person
             with self.subTest(channel=refused), self.assertRaises(AlphaError):
                 self.adapter(Wire(discord_listing(guild, channels, user_roles=[]))).with_destination(token, refused)
-        left = self.adapter(Wire([ok(guild), ok({"id": "9000009"}), ok({"roles": []}), ok({"message": "Unknown Member"}, 404)]))
+        left = self.adapter(Wire([ok(guild), ok({"id": "1234567"}), ok({"id": "9000009", "bot": True}), ok({"user": {"id": "9000009"}, "roles": []}), ok({"message": "Unknown Member"}, 404)]))
         self.assertEqual(left.destinations(token), [])  # the person who connected has left the server
 
 
 def discord_listing(guild, channels, user_roles):
     """Bot-token answers destinations() reads: the server, the bot user, the bot and the person as members, the channels."""
-    return [ok(guild), ok({"id": "9000009"}), ok({"roles": []}), ok({"roles": user_roles}), ok(channels)]
+    return [ok(guild), ok({"id": "1234567"}), ok({"id": "9000009", "bot": True}),
+            ok({"user": {"id": "9000009"}, "roles": [], "pending": False}),
+            ok({"user": {"id": "4242424"}, "roles": user_roles, "pending": False}),
+            ok([{"guild_id": guild["id"], "permission_overwrites": [], **channel} for channel in channels])]
 
 
 # --- Telegram -----------------------------------------------------------------------------------------------------
@@ -334,7 +337,11 @@ class Cursor:
 
     def execute(self, sql, params=()):
         s, db = " ".join(sql.split()), self.db
-        if s.startswith("INSERT INTO public.pr_auth_throttle"):
+        if s.startswith("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1"):
+            assert params[1] == "workspace"
+            db.repository.state = json.loads(params[0])
+            db.repository.revision += 1
+        elif s.startswith("INSERT INTO public.pr_auth_throttle"):
             self.result = (1,)
         elif s.startswith("INSERT INTO public.pr_oauth_transactions"):
             workspace, member, provider, capability, redirect, scopes, state_hash, ciphertext, key_id, ttl = params
@@ -352,11 +359,22 @@ class Cursor:
             self.result = None if not found else (found[0], found[1]["ciphertext"], found[1]["key_id"], found[1]["expires"], found[1]["consumed"])
         elif s.startswith("UPDATE public.pr_oauth_transactions SET verifier_ciphertext"):
             db.txns[params[2]].update(ciphertext=params[0], key_id=params[1])
+        elif s.startswith("SELECT outcome FROM public.pr_oauth_transactions"):
+            found = db.txns.get(params[0])
+            self.result = (found.get('outcome'),) if found and found['workspace'] == params[1] else None
+        elif s.startswith("UPDATE public.pr_oauth_transactions SET outcome='denied'"):
+            for txn in db.txns.values():
+                if txn['workspace'] == params[0] and txn['provider'] == 'pinterest' and (not txn['consumed'] or txn.get('outcome') == 'exchange_started'):
+                    txn.update(consumed=True,outcome='denied')
         elif s.startswith("UPDATE public.pr_oauth_transactions SET consumed_at"):
             db.txns[params[0]]["consumed"] = True
+            db.txns[params[0]]['outcome'] = 'exchange_started' if "outcome='exchange_started'" in s else 'finished'
         elif s.startswith("INSERT INTO public.pr_encrypted_credentials"):
             workspace, connection, provider, account, access, refresh, key_id, scopes, expires, refresh_supported = params
             db.credentials[connection] = {"workspace": workspace, "provider": provider, "account": account, "access": access, "key_id": key_id, "scopes": scopes, "expires": expires, "revoked": False}
+        elif s.startswith("SELECT access_ciphertext,key_id,scopes,authorization_generation::text"):
+            found = db.credentials.get(params[1])
+            self.result = (found["access"], found["key_id"], found["scopes"], "00000000-0000-0000-0000-000000000098") if found and not found["revoked"] and found["workspace"] == params[0] and found["provider"] == "discord" else None
         elif s.startswith("SELECT provider FROM public.pr_encrypted_credentials"):
             found = db.credentials.get(params[1])
             self.result = (found["provider"],) if found and not found["revoked"] and found.get("workspace", "workspace") == params[0] else None
@@ -381,7 +399,18 @@ class Cursor:
         elif s.startswith("SELECT provider,access_ciphertext,key_id,connection_id FROM public.pr_encrypted_credentials"):
             self.rows = [(c["provider"], c["access"], c["key_id"], key) for key, c in db.credentials.items() if c.get("workspace", "workspace") == params[0] and not c["revoked"]]
         elif s.startswith("UPDATE public.pr_encrypted_credentials SET revoked_at=now()"):
-            db.credentials[params[1]]["revoked"] = True
+            workspace, connection = params[-2:]
+            found = db.credentials.get(connection)
+            self.rowcount = 0
+            if found and found.get("workspace", "workspace") == workspace:
+                found["revoked"] = True
+                if "authorization_generation=%s::uuid" in s:
+                    found["authorization_generation"] = params[0]
+                if "access_ciphertext=''" in s:
+                    found["access"] = ""
+                if "refresh_ciphertext=NULL" in s:
+                    found["refresh"] = None
+                self.rowcount = 1
         elif s.startswith("UPDATE public.pr_channel_capabilities"):
             self.result = None
         elif s.startswith("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials"):
@@ -411,6 +440,7 @@ class Cursor:
 class Repository:
     def __init__(self, clock):
         self.db = Database(clock)
+        self.db.repository = self
         self.state = initial_phase2_state("workspace", "owner", "Owner", "studio", 100)
         self.revision = 1
 
@@ -524,20 +554,14 @@ class ServiceFlows(unittest.TestCase):
         query = parse_qs(urlparse(location).query)
         self.assertEqual((query["iss"][0], "other" in query), ("https://auth.example.com", False))
 
-    def test_destination_choice_is_compare_and_swap_on_the_stored_grant(self):
-        guild = {"id": "555555", "owner_id": "1", "roles": [{"id": "555555", "permissions": str(DiscordProvider.VIEW_CHANNEL | DiscordProvider.SEND_MESSAGES)}]}
-        channels = [{"id": "7777777", "name": "general", "type": 0}]
-        # Each request first live-checks the grant through token_for_worker (the bot is still in the server), then lists.
-        discord = DiscordProvider("1234567", "secret", "bot.token", BASE, transport=Wire(([ok(guild)] + discord_listing(guild, channels, [])) * 2))
+    def test_legacy_destination_grant_requires_reconnection(self):
+        discord = DiscordProvider("1234567", "secret", "bot.token", BASE, transport=Wire([]))
         service = self.service({"discord": discord})
         ciphertext, key_id = service.vault.encrypt(json.dumps({"v": 1, "guild": "555555", "channel": None, "user": "4242424"}))
         self.repo.db.credentials["conn"] = {"workspace": "workspace", "provider": "discord", "account": "555555", "access": ciphertext, "key_id": key_id, "scopes": ["bot"], "expires": None, "revoked": False}
-        self.assertEqual(service.destinations("workspace", "session", "conn")["destinations"][0]["id"], "7777777")
-        service.choose_destination("workspace", "session", "conn", "7777777")
-        stored = self.repo.db.credentials["conn"]
-        self.assertEqual(json.loads(service.vault.decrypt(stored["access"], stored["key_id"]))["channel"], "7777777")
         with self.assertRaises(AlphaError):
-            service.choose_destination("workspace", "session", "conn", "not-a-channel")
+            service.choose_destination("workspace", "session", "conn", "7777777")
+        self.assertEqual(self.repo.db.credentials["conn"]["access"], ciphertext)
 
 
 # --- publishing ---------------------------------------------------------------------------------------------------
@@ -613,18 +637,13 @@ class Publishing(unittest.TestCase):
         self.assertEqual(receipt["url"], "https://t.me/jamesau/9")
         self.assertEqual(social.submit(manifest("Telegram", "-100123"))["state"], "published")
 
-    def test_discord_holds_without_a_channel_and_never_pings_everyone(self):
-        wire = Wire([ok({"id": "4444444", "channel_id": "7777777"}),
-                     ok({"id": "4444444", "channel_id": "7777777", "content": manifest("Discord", "555555")["payload"]["text"]})])
+    def test_legacy_discord_submit_is_held_without_provider_io(self):
+        wire = Wire([])
         discord = self.reviewed(DiscordProvider("1234567", "secret", "bot.token", BASE, transport=wire))
-        no_channel = HostedSocial(Grants(json.dumps({"v": 1, "guild": "555555", "channel": None}), ["bot"]), {"discord": discord})
-        self.assertEqual(no_channel.submit(manifest("Discord", "555555"))["state"], "held")
-        social = HostedSocial(Grants(json.dumps({"v": 1, "guild": "555555", "channel": "7777777"}), ["bot", "identify"]), {"discord": discord})
-        result = social.submit(manifest("Discord", "555555"))
-        self.assertEqual(wire.calls[0]["body"]["allowed_mentions"], {"parse": []})
-        self.assertEqual((wire.calls[0]["body"]["nonce"], wire.calls[0]["body"]["enforce_nonce"]), ("k" * 25, True))  # Discord dedupes a repeat
-        verified = social.reconcile(manifest("Discord", "555555"), {"providerReference": result["reference"]})
-        self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Discord"}})["state"], "verified")
+        for selected in (None, "7777777"):
+            social = HostedSocial(Grants(json.dumps({"v": 1, "guild": "555555", "channel": selected}), ["bot", "identify"]), {"discord": discord})
+            self.assertEqual(social.submit(manifest("Discord", "555555"))["state"], "held")
+        self.assertEqual(wire.calls, [])
 
     def test_x_post_and_readback_bind_the_author(self):
         text = manifest("X", "42")["payload"]["text"]
@@ -677,7 +696,7 @@ class DefiniteRejections(unittest.TestCase):
         discord = DiscordProvider("1234567", "secret", "bot.token", BASE, transport=Wire([ok({"message": "Invalid Form Body", "code": 50035}, 400)]))
         discord.production_reviewed = True
         result = HostedSocial(Grants(json.dumps({"v": 1, "guild": "555555", "channel": "7777777"}), ["bot"]), {"discord": discord}).submit(manifest("Discord", "555555"))
-        self.assertEqual((result["state"], "Invalid Form Body" in result["confirmed"]), ("failed", True))
+        self.assertEqual(result["state"], "held")  # no legacy direct-submit bypass
         session = {"v": 1, "at": "AT", "did": DID, "pds": "https://pds.example.com", "iss": "https://auth.example.com", "tokenEndpoint": "x", "jwk": generate_jwk()}
         bluesky = BlueskyProvider(client_jwk(), BASE, transport=Wire([ok({"error": "InvalidRequest", "message": "Record/text must not be longer than 300 graphemes"}, 400),
                                                                      ok({"error": "RecordNotFound"}, 400)]), resolver=PUBLIC)
@@ -758,10 +777,10 @@ class SharedRemoteGrants(unittest.TestCase):
         self.assertEqual((result["disconnected"], result["remoteRevoked"], self.revoked), (True, False, []))
         self.assertTrue(self.repo.db.credentials["conn"]["revoked"])
 
-    def test_the_last_connection_removes_the_bot(self):
+    def test_last_disconnect_does_not_own_the_server_installation(self):
         self.repo.db.credentials["other"]["revoked"] = True
-        self.assertTrue(self.service.disconnect("workspace", "session", "conn")["remoteRevoked"])
-        self.assertEqual(len(self.revoked), 1)
+        self.assertFalse(self.service.disconnect("workspace", "session", "conn")["remoteRevoked"])
+        self.assertEqual(self.revoked, [])
 
     def test_account_deletion_applies_the_same_rule(self):
         from postriff_phase2.account_deletion import revoke_remote_grants
@@ -769,7 +788,7 @@ class SharedRemoteGrants(unittest.TestCase):
         self.assertEqual((revoke_remote_grants(deleting, "workspace"), self.revoked), ([], []))
         self.repo.db.credentials["other"]["revoked"] = True
         self.assertEqual(revoke_remote_grants(deleting, "workspace"), [])
-        self.assertEqual(len(self.revoked), 1)
+        self.assertEqual(self.revoked, [])
 
 
 class StoredEndpointGuard(unittest.TestCase):

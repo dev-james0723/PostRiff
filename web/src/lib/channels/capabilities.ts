@@ -36,12 +36,14 @@ export interface ConnectCapabilityDef {
 
 /** The choices in the Connect sheet; a provider only lists the ones it offers. */
 export const CONNECT_CAPABILITY_OPTIONS: readonly ConnectCapabilityDef[] = [
+  { key: 'boards_read', label: 'Profile and boards', description: 'Reads the connected Pinterest profile and boards. No publishing or scheduling.' },
   { key: 'identity', label: 'Account only', description: 'Confirms the account. No posting.' },
   { key: 'posts_read', label: 'Read my posts', description: 'To learn your voice. You pick the posts and approve analysis. No posting.' },
   { key: 'publish', label: 'Publish', description: 'Posts only what you approve.' },
   { key: 'analytics', label: 'Analytics', description: 'Reads available analytics for this account’s own posts. Historical metadata and analytics require a separate confirmed import when available.' },
   { key: 'comments_read', label: 'Comments', description: 'Reads comments and replies.' },
-  { key: 'reply', label: 'Reply', description: 'Replies only with your approval.' }
+  { key: 'reply', label: 'Reply', description: 'Replies only with your approval.' },
+  ...(['organization_identity', 'organization_publish', 'organization_analytics', 'organization_video_analytics', 'organization_posts_read', 'organization_comments_read', 'organization_reply', 'moderate', 'manage', 'monetary_analytics', 'memberships', 'boards', 'trends', 'upload_inbox', 'delete', 'mentions', 'location', 'audience_insights', 'product_tag', 'messaging', 'commerce', 'commerce_write'] as const).map((key) => ({ key, label: key.replace(/_/g, ' '), description: 'Enable this feature separately. The platform lists the exact permissions before you grant them.' }))
 ];
 
 /** One line per capability level, for hover cards and InfoTips (never inline on the card). */

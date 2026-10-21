@@ -11,11 +11,12 @@ import json
 import re
 import time
 from datetime import datetime, timezone
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit, parse_qs
 from postriff_alpha.domain import AlphaError
 from .atproto_oauth import tid
 from .capabilities import HOSTED_PUBLISHERS
 from .provider_candidates import LinkedInCandidate, little_plain
+from .official_social import THREADS_VERSION
 from .providers import GRAPH_VERSION, http_transport
 from .outcomes import valid_receipt_url
 from .social_connectors import multipart
@@ -46,15 +47,29 @@ def _uncertain(message):
 
 
 class HostedSocial:
-    """Mounted only when at least one production-reviewed provider is registered."""
+    """Mounted only with reviewed provider access or verified member Share access."""
     X_RECONCILE_LIMIT = 3  # billed reads before X reconciliation stops and asks a person
     MASTODON_MEDIA_POLLS, MASTODON_MEDIA_WAIT = 5, 2.0
 
     def __init__(self, oauth, providers, assets=None, transport=None, sleep=time.sleep):
         self.oauth, self.providers, self.assets = oauth, providers, assets
+        pinterest = providers.get('pinterest')
+        if getattr(pinterest, 'private_trial', False) is True:
+            pinterest.private_trial_media_gate = self._pinterest_source_matches
         self.transport = transport or http_transport
         self.sleep = sleep
         self.linkedin = LinkedInCandidate(transport=None, version=LINKEDIN_VERSION)
+        from .official_publishers import OfficialPublishers
+        self.official = OfficialPublishers(self)
+
+    def official_enabled(self, manifest):
+        if manifest['platform'] in ('YouTube', 'Pinterest'):
+            return False  # Preserve their current journal, grant and dispatch fences.
+        provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
+        return bool(provider and getattr(provider, "official_social_enabled", False))
+
+    def advance_official(self, manifest, job, action):
+        return self.official.advance(manifest, job, action)
 
     # --- helpers ------------------------------------------------------------------
     def _grant(self, manifest):
@@ -74,7 +89,20 @@ class HostedSocial:
         # that grant is checked again below against the exact required scopes.
         if manifest['platform'] == 'YouTube':
             return provider if getattr(provider, 'creator_enabled', False) else None
-        if not provider.production_reviewed and not getattr(provider, "account_scoped_direct", False):
+        private_trial = manifest['platform'] == 'Pinterest' and getattr(provider, 'private_trial', False) is True
+        if private_trial:
+            require_manifest = getattr(getattr(provider, 'trial_policy', None), 'require_manifest', None)
+            if not callable(require_manifest):
+                return None
+            try:
+                require_manifest(manifest)
+            except (AlphaError, AttributeError, TypeError, ValueError):
+                return None
+        options = manifest.get('publishOptions') or {}
+        member_product = (getattr(provider, 'id', None) == 'linkedin' and getattr(provider, 'member_publishing_approved', lambda: False)()
+                          and options.get('destinationType', 'member') == 'member'
+                          and not str(options.get('authorUrn', '')).startswith('urn:li:organization:'))
+        if not provider.production_reviewed and not getattr(provider, "account_scoped_direct", False) and not member_product and not private_trial:
             return None
         if getattr(provider, "publisher", None) is not None and (not getattr(provider, "publish_live_tested", False)
                 or not getattr(provider, "publishing_permission", False)):
@@ -89,11 +117,40 @@ class HostedSocial:
         asset = manifest["media"][0]
         return self.assets.storage.signed_url(manifest["workspaceId"], "media", asset.get("objectName") or asset["id"], 600)
 
+    def _pinterest_source_matches(self, manifest, source):
+        """Bind the signed delivery path to the exact immutable approved asset."""
+        try:
+            from .pinterest_safety import https_url
+            if not https_url(source) or self.assets is None or len(manifest.get('media') or []) != 1:
+                return False
+            storage, asset = self.assets.storage, manifest['media'][0]
+            origin, actual = urlsplit(storage.project_url), urlsplit(source)
+            object_name = asset.get('objectName') or asset['id']
+            path = storage._path(manifest['workspaceId'], 'media', object_name)
+            expected = '/storage/v1/object/sign/' + quote(storage._bucket('media')) + '/' + quote(path, safe='/')
+            query = parse_qs(actual.query, keep_blank_values=True)
+            return (actual.scheme == origin.scheme == 'https' and actual.netloc == origin.netloc
+                    and actual.path == expected and not actual.fragment
+                    and set(query) == {'token'} and len(query['token']) == 1 and bool(query['token'][0]))
+        except (AlphaError, AttributeError, KeyError, TypeError, ValueError):
+            return False
+
     # --- submit -------------------------------------------------------------------
-    def submit(self, manifest):
+    def submit(self, manifest, *, dispatch_context=None):
+        if manifest.get('platform') == 'Discord':
+            return {'state': 'held', 'confirmed': 'Discord requires a fenced, destination-bound human approval. Nothing was posted.',
+                    'discordDeliveryEvidence': 'not_sent'}
         provider = self._provider(manifest)
         if provider is None:
             return {"state": "held", "confirmed": "Publishing to this platform isn't available yet. Nothing was posted."}
+        if self.official_enabled(manifest) and manifest["platform"] in ("LinkedIn", "Threads", "Instagram"):
+            return self.advance_official(manifest, {"progress": {"stage": "create_attempted"}}, "create")
+        if manifest['platform'] == 'LinkedIn':
+            options = manifest.get('publishOptions') or {}
+            if (set(options) - {'destinationType', 'authorUrn'}
+                    or options.get('destinationType', 'member') != 'member'
+                    or options.get('authorUrn', manifest['providerAccountId']) != manifest['providerAccountId']):
+                return {'state': 'held', 'confirmed': 'The approved LinkedIn options require the expanded publishing workflow. Nothing was posted; review again after it is enabled.'}
         if manifest['platform'] == 'YouTube':
             try:
                 return self._submit_youtube(manifest, provider, None)
@@ -117,6 +174,8 @@ class HostedSocial:
                 return self._submit_threads(manifest, token)
             if manifest["platform"] == "Instagram":
                 return self._submit_instagram(manifest, token)
+            if manifest['platform'] == 'Pinterest':
+                return self._submit_pinterest(manifest, provider, token, dispatch_context=dispatch_context)
             if manifest["platform"] in WAVE1 + WAVE3:
                 return getattr(self, "_submit_" + manifest["platform"].lower())(manifest, provider, token)
         except AlphaError as error:
@@ -281,32 +340,198 @@ class HostedSocial:
             receipt["url"] = f"https://t.me/{username}/{message['message_id']}"
         return receipt
 
-    def _submit_discord(self, manifest, provider, token):
-        refusal = self._unsupported_media(manifest)
-        if refusal:
-            return refusal
-        session = provider.session(token)
-        channel = session.get("channel")
-        if not channel:
-            return {"state": "held", "confirmed": "Choose a Discord channel for this server first. Nothing was posted."}
-        # enforce_nonce makes Discord return the first message instead of posting again for a repeated nonce.
-        payload = {"content": manifest["payload"]["text"], "allowed_mentions": {"parse": []}, "nonce": str(manifest["idempotencyKey"])[:25], "enforce_nonce": True}
+    def prepare_discord_dispatch(self, manifest, *, read_authorize=None):
+        """Provider checks and immutable media reads outside all worker SQL locks."""
+        from .discord.authorization import grant_matches, wire_content, digest
+        provider = self._provider(manifest)
+        if provider is None or not getattr(provider, 'authorization_v2_enabled', False):
+            raise AlphaError('Discord publishing is paused pending authorization and rollout validation.', 409)
+        grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
+        if not grant_matches(manifest, grant, provider.session(grant['accessToken'])):
+            raise AlphaError('Discord was reconnected or changed. Review the post again.', 409)
+        wire = wire_content(manifest)
+        if digest(wire) != manifest['discord']['wireDigest']:
+            raise AlphaError('The approved Discord payload changed.', 409)
+        if manifest.get('operation') == 'discord.reply' and not callable(read_authorize):
+            raise AlphaError('Discord reply consent must be rechecked before provider reads.', 409)
+        evidence = provider.authorize_destination(grant['accessToken'], manifest['discord']['target'], media=bool(wire['files']), read_authorize=read_authorize)
+        if manifest.get('operation') == 'discord.reply':
+            from .discord.engagement import validate_parent
+            from .discord.message_content import verify as verify_content
+            import time
+            verify_content(provider, manifest['discord']['target'], manifest['engagementReply'], read_authorize, time.time())
+            if not evidence.get('userPermissions', 0) & provider.READ_HISTORY:
+                raise AlphaError('Discord reply history permission changed.', 409)
+            parent = provider._json(provider._bot('GET', f"/channels/{manifest['discord']['target']['channelId']}/messages/{manifest['engagementReply']['parentMessageId']}", read_authorize=read_authorize), dict)
+            validate_parent(manifest, parent)
         image = self._image(manifest)
-        if image:
-            raw, mime, alt = image
-            filename = "image." + {"image/png": "png", "image/gif": "gif", "image/webp": "webp"}.get(mime, "jpg")
-            body, content_type = multipart([("payload_json", json.dumps({**payload, "attachments": [{"id": 0, "filename": filename, "description": alt[:1024]}]}))],
-                                           [("files[0]", filename, mime, raw)])
-            response = provider._bot("POST", f"/channels/{channel}/messages", headers={"Content-Type": content_type}, data=body)
-        else:
-            response = provider._bot("POST", f"/channels/{channel}/messages", body=payload)
-        message_id = str(response.get("body", {}).get("id", "")) if isinstance(response.get("body"), dict) else ""
-        if response.get("status") == 200 and message_id.isdigit():
-            return {"state": "provider_accepted", "reference": f"{channel}/{message_id}", "confirmed": "Discord created the message; read-back pending"}
-        early = self._classify_status(response.get("status"), response.get("body"), "Discord")
-        if early:
-            return early
-        return _uncertain("No conclusive Discord create response; do not resubmit")
+        if image and (hashlib.sha256(image[0]).hexdigest() != wire['files'][0]['sha256']
+                      or len(image[0]) != wire['files'][0]['bytes']):
+            raise AlphaError('The Discord attachment bytes changed after approval. Nothing was posted.', 409)
+        return {'grant': grant, 'evidence': evidence, 'image': image,
+                'wireDigest': digest(wire), 'manifestDigest': digest(manifest)}
+
+    def reserve_discord_send(self, manifest, *, job=None, workspace_id=None, worker_id=None):
+        """Reserve cross-worker capacity outside SQL before sealing the durable intent."""
+        from .discord.rate_limits import RateCoordinatorUnavailable, publish_binding
+        provider = self._provider(manifest)
+        if provider is None or not getattr(provider, 'authorization_v2_enabled', False):
+            raise RateCoordinatorUnavailable()
+        if not getattr(provider, 'rate_v1_enabled', False):
+            return None  # only the historical feature-off synthetic path
+        binding = publish_binding(job, workspace_id, worker_id)
+        channel = manifest['discord']['target']['channelId']
+        return provider.admit_bot_request('POST', f'/channels/{channel}/messages', binding=binding,
+                                         valid_until=min(job['leaseUntil'],manifest['expiresAt']))
+
+    def discord_read_attempt_limit(self):
+        provider = self.providers.get('discord')
+        policy = getattr(getattr(provider,'rate_limiter',None),'policy',None)
+        return policy.read_attempts if policy is not None else 1
+
+    def submit_discord_authorized(self, manifest, dispatch):
+        """Private worker entry point. An ordinary submit cannot reach Discord POST."""
+        provider = self._provider(manifest)
+        if provider is None:
+            return {'state': 'held', 'confirmed': 'Discord transport is unavailable. Nothing was posted.', 'discordDeliveryEvidence': 'not_sent'}
+        return self._submit_discord(manifest, provider, dispatch['grant']['accessToken'], dispatch)
+
+    def _submit_discord(self, manifest, provider, token, dispatch=None):
+        from .discord.authorization import grant_matches, wire_content, digest, snowflake
+        from .discord.rate_limits import Permit, RateDelayed, UnconsumedPublishPermit
+        if (not dispatch or not getattr(provider, 'authorization_v2_enabled', False)
+                or (getattr(provider, 'rate_v1_enabled', False)
+                    and (not isinstance(dispatch.get('ratePermit'), Permit)
+                         or not dispatch['ratePermit'].binding_hash
+                         or not callable(dispatch.get('rateAuthorize'))))
+                or dispatch.get('manifestDigest') != digest(manifest)
+                or dispatch.get('wireDigest') != manifest.get('discord', {}).get('wireDigest')
+                or dispatch.get('intent', {}).get('manifestDigest') != digest(manifest)
+                or dispatch.get('intent', {}).get('publicationId') != manifest.get('discord', {}).get('publicationId')
+                or not grant_matches(manifest, dispatch.get('grant', {}), provider.session(token))):
+            return {'state': 'held', 'confirmed': 'Discord dispatch authorization is missing or stale. Nothing was posted.', 'discordDeliveryEvidence': 'not_sent'}
+        target = manifest['discord']['target']
+        channel = target['channelId']
+        wire = wire_content(manifest)
+        # Discord dedupes nonces only over a recent window. Durable Rafii intents
+        # block a fresh POST after an ambiguous result, including beyond that window.
+        payload = {'content': wire['content'], 'allowed_mentions': wire['allowed_mentions'],
+                   'nonce': hashlib.sha256(manifest['idempotencyKey'].encode()).hexdigest()[:25], 'enforce_nonce': True}
+        if 'message_reference' in wire:
+            payload['message_reference'] = wire['message_reference']
+        image = dispatch.get('image')
+        rate_arguments = {'rate_permit':dispatch.get('ratePermit'), 'rate_binding':dispatch.get('rateBinding'),
+                          'rate_intent_id':dispatch['intent']['id'], 'rate_authorize':dispatch.get('rateAuthorize')}
+        try:
+            if image:
+                raw, mime, _alt = image
+                file = wire['files'][0]
+                if hashlib.sha256(raw).hexdigest() != file['sha256'] or len(raw) != file['bytes']:
+                    return {'state': 'held', 'confirmed': 'Discord attachment changed. Nothing was posted.', 'discordDeliveryEvidence': 'not_sent'}
+                attachment = {k: file[k] for k in ('id', 'filename', 'description')}
+                body, content_type = multipart([('payload_json', json.dumps({**payload, 'attachments': [attachment]}))],
+                                               [('files[0]', file['filename'], mime, raw)])
+                response = provider._bot('POST', f'/channels/{channel}/messages', headers={'Content-Type': content_type}, data=body, **rate_arguments)
+            else:
+                response = provider._bot('POST', f'/channels/{channel}/messages', body=payload, **rate_arguments)
+        except UnconsumedPublishPermit:
+            raise  # Only the fenced worker can verify and archive unsent intent.
+        except RateDelayed:
+            # No HTTP call occurred, but the P0 intent was already sealed.
+            # Keep it for manual reconciliation rather than make another POST.
+            return {'state': 'uncertain', 'confirmed': 'Discord reserved rate slot expired after sealing. No POST was started; manual review required before any fresh approval.', 'discordDeliveryEvidence': 'uncertain'}
+        except Exception:
+            return {'state': 'uncertain', 'confirmed': 'Discord delivery is uncertain. Reconcile before any further publication.', 'discordDeliveryEvidence': 'uncertain'}
+        body = response.get('body') if isinstance(response.get('body'), dict) else {}
+        message_id = str(body.get('id', ''))
+        if response.get('status') == 200 and snowflake(message_id):
+            receipt = {'reference': f'{channel}/{message_id}',
+                       'url': f"https://discord.com/channels/{target['guildId']}/{channel}/{message_id}",
+                       'discordDeliveryEvidence': 'accepted'}
+            if (body.get('channel_id') != channel or body.get('content') != wire['content']
+                    or (body.get('author') or {}).get('id') != target['botUserId']
+                    or ('message_reference' in wire and not self._discord_reply_reference_matches(body, manifest))):
+                return {**receipt, 'state': 'uncertain', 'confirmed': 'Discord returned a message with unexpected identity, destination or text. Review the receipt; do not resubmit.'}
+            return {**receipt, 'state': 'provider_accepted', 'confirmed': 'Discord created the approved channel message; read-back pending'}
+        status = response.get('status')
+        if status == 429:
+            # Shared cooldown is recorded by DiscordProvider; the POST was
+            # attempted, so P0 never silently resubmits this publication.
+            return {'state': 'held', 'discordDeliveryEvidence': 'rejected',
+                    'discordRateLimited': True,
+                    'confirmed': 'Discord returned HTTP 429. The shared cooldown was recorded; this approved publication will not be automatically reposted.'}
+        if status in (400, 401, 403, 404):
+            return {'state': 'failed' if status == 400 else 'held', 'discordDeliveryEvidence': 'rejected',
+                    'confirmed': 'Discord rejected the message before acceptance. Restore permission or review configuration and approve again.'}
+        return {'state': 'uncertain', 'confirmed': 'No conclusive Discord create response; reconcile without resubmitting.', 'discordDeliveryEvidence': 'uncertain'}
+
+    @staticmethod
+    def _discord_reply_reference_matches(body, manifest):
+        reference = body.get('message_reference')
+        target = manifest['discord']['target']
+        return (isinstance(reference, dict) and reference.get('type', 0) == 0
+                and reference.get('message_id') == manifest['engagementReply']['parentMessageId']
+                and reference.get('channel_id') == target['channelId']
+                and reference.get('guild_id', target['guildId']) == target['guildId']
+                and body.get('type') == 19)
+
+    def reconcile_discord(self, manifest, job, *, read_authorize=None):
+        """Only GET a known message in the original channel; never use the default."""
+        from .discord.authorization import SCHEMA, wire_content, digest, snowflake
+        from .discord.rate_limits import RateDelayed, ReadAdmissionDelayed
+        frozen = manifest.get('discord') or {}
+        target = frozen.get('target') or {}
+        reference = job.get('providerReference')
+        if frozen.get('schema') != SCHEMA or not isinstance(reference, str):
+            return _uncertain('The original Discord target or message ID is missing. Manual reconciliation required; do not resubmit.')
+        channel, separator, message_id = reference.partition('/')
+        if not separator or channel != target.get('channelId') or not snowflake(message_id):
+            return _uncertain('The Discord receipt does not match the approved channel. Do not resubmit.')
+        provider = self.providers.get('discord')
+        if (not provider or provider.client_id != target.get('applicationId')
+                or not getattr(provider, 'execution_enabled', True)):
+            return _uncertain('The original Discord application is unavailable. Keep the receipt for manual review.')
+        try:
+            if manifest.get('operation') == 'discord.reply':
+                if not callable(read_authorize) or read_authorize() is not True:
+                    raise AlphaError('Discord reply read consent is unavailable.', 409)
+                grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
+                evidence = provider.authorize_destination(grant['accessToken'], target, read_authorize=read_authorize)
+                if not evidence.get('userPermissions', 0) & provider.READ_HISTORY:
+                    raise AlphaError('Discord history permission changed.', 409)
+            if provider._bot_identity(read_authorize=read_authorize) != target.get('botUserId'):
+                return _uncertain('Discord bot identity changed; keep the original receipt for review.')
+            response = provider._bot('GET', f'/channels/{channel}/messages/{message_id}', read_authorize=read_authorize)
+            if read_authorize is not None and read_authorize() is not True:
+                raise AlphaError('Discord reply read consent changed during lookup.', 409)
+            body = response.get('body') if isinstance(response.get('body'), dict) else {}
+            wire = wire_content(manifest)
+            if (digest(wire) != frozen['wireDigest'] or response.get('status') != 200
+                    or body.get('id') != message_id or body.get('channel_id') != channel
+                    or (body.get('author') or {}).get('id') != target['botUserId']
+                    or (body.get('author') or {}).get('bot') is not True
+                    or body.get('content') != wire['content'] or body.get('mention_everyone') is not False
+                    or body.get('mentions') != [] or body.get('mention_roles') != []
+                    or ('message_reference' in wire and not self._discord_reply_reference_matches(body, manifest))):
+                return _uncertain('Discord read-back did not match the approved message, author, channel and mention policy.')
+            # Discord attachment metadata does not prove the original byte hash.
+            # Keep media receipts pending rather than overstating verification.
+            if wire['files'] or body.get('attachments') != []:
+                return {**_uncertain('Discord media delivery needs byte-level reconciliation; do not resubmit.'), 'reference': reference}
+            return {'state': 'verified', 'reference': reference, 'verification': 'provider_lookup',
+                    'url': f"https://discord.com/channels/{target['guildId']}/{channel}/{message_id}",
+                    'confirmed': 'Discord read-back matched the approved text, bot, channel and mention policy.', 'discordDeliveryEvidence': 'accepted'}
+        except RateDelayed as error:
+            # A denied GET cannot undo an existing create receipt. Resume only
+            # this exact lookup, preserving the message ID and frozen target.
+            import math
+            return {'state': 'provider_accepted', 'reference': reference,
+                    'confirmed': 'Discord message receipt retained; awaiting shared capacity for the exact read-back. Do not resubmit.',
+                    'discordDeliveryEvidence': 'accepted', 'discordReadDeferred': True,
+                    'discordReadAdmissionDenied': isinstance(error, ReadAdmissionDelayed),
+                    'retryAfterSeconds': max(1, math.ceil(error.retry_after_seconds))}
+        except (AlphaError, KeyError, TypeError, ValueError):
+            return _uncertain('Discord receipt lookup is unavailable. Keep the original message ID; do not resubmit.')
 
     def _submit_x(self, manifest, provider, token):
         refusal = self._unsupported_media(manifest)
@@ -374,15 +599,8 @@ class HostedSocial:
             if response.get("status") == 200 and f"{account}@{session['instance']}" == manifest["providerAccountId"] and plain == " ".join(text.split()):
                 return {"state": "verified", "reference": reference, "confirmed": "Mastodon read-back matched the approved text and account", "verification": "provider_lookup"}
             return _uncertain("Mastodon read-back did not match the exact approved post")
-        if platform == "Discord":
-            channel, _, message_id = reference.partition("/")
-            response = provider._bot("GET", f"/channels/{channel}/messages/{message_id}")
-            body = response.get("body") if isinstance(response.get("body"), dict) else {}
-            session = provider.session(token)
-            if response.get("status") == 200 and body.get("content") == text and str(body.get("channel_id")) == channel == str(session.get("channel")):
-                return {"state": "verified", "reference": reference, "url": f"https://discord.com/channels/{session['guild']}/{channel}/{message_id}",
-                        "confirmed": "Discord read-back matched the approved text and channel", "verification": "provider_lookup"}
-            return _uncertain("Discord read-back did not match the exact approved message")
+        if platform == 'Discord':
+            return self.reconcile_discord(manifest, {**(job or {}), 'providerReference': reference})
         if platform == "X":
             # Every X read is billed: after a few inconclusive checks, stop reading and leave it to a person.
             if (job or {}).get("checks", 0) > self.X_RECONCILE_LIMIT:
@@ -526,20 +744,32 @@ class HostedSocial:
             return {"state": "failed", "confirmed": f"This video is longer than TikTok allows this account ({limit} seconds). Nothing was posted."}
         commercial = options.get("commercial") or {}
         chunk, count = provider.chunks(len(raw))
+        source_info = {"source": "FILE_UPLOAD", "video_size": len(raw), "chunk_size": chunk, "total_chunk_count": count}
+        if options.get('transferMode') == 'url':
+            from urllib.parse import urlsplit
+            from .official_publishers import OfficialPublishers
+            address = OfficialPublishers(self).media_url(manifest,media)
+            if urlsplit(address).hostname not in getattr(provider,'verified_media_domains',()):
+                return {'state':'held','confirmed':'TikTok URL transfer requires an explicitly verified media domain; no post initialized.'}
+            source_info = {'source':'PULL_FROM_URL','video_url':address}
         opened = provider.api(token, "POST", "/v2/post/publish/video/init/", body={
             "post_info": {"title": manifest["payload"]["text"], "privacy_level": options["privacyLevel"],
                           # A setting the creator turned off stays off whatever the post allowed.
                           "disable_comment": options.get("allowComment") is not True or info["commentDisabled"],
                           "disable_duet": options.get("allowDuet") is not True or info["duetDisabled"],
                           "disable_stitch": options.get("allowStitch") is not True or info["stitchDisabled"],
-                          "brand_content_toggle": commercial.get("brandedContent") is True, "brand_organic_toggle": commercial.get("yourBrand") is True},
-            "source_info": {"source": "FILE_UPLOAD", "video_size": len(raw), "chunk_size": chunk, "total_chunk_count": count}})
+                          "brand_content_toggle": commercial.get("brandedContent") is True, "brand_organic_toggle": commercial.get("yourBrand") is True,
+                          **({'video_cover_timestamp_ms':options['coverTimestampMs']} if 'coverTimestampMs' in options else {}),
+                          **({'is_aigc':options['isAigc']} if 'isAigc' in options else {})},
+            "source_info": source_info})
         body = opened.get("body") if isinstance(opened.get("body"), dict) else {}
         error = body.get("error") if isinstance(body.get("error"), dict) else {}
         data = body.get("data") if isinstance(body.get("data"), dict) else {}
         publish_id, upload_url = data.get("publish_id"), data.get("upload_url")
-        if opened.get("status") != 200 or error.get("code") not in (None, "ok") or not isinstance(publish_id, str) or not isinstance(upload_url, str):
+        if opened.get("status") != 200 or error.get("code") not in (None, "ok") or not isinstance(publish_id, str) or (source_info['source']=='FILE_UPLOAD' and not isinstance(upload_url, str)):
             return self._tiktok_rejection(opened.get("status"), error) or {"state": "failed", "confirmed": "TikTok did not start the upload, so nothing was posted."}
+        if source_info['source']=='PULL_FROM_URL':
+            return {'state':'provider_accepted','reference':publish_id,'confirmed':'TikTok accepted verified URL transfer; native processing and visibility reconciliation pending.'}
         try:
             provider_host(upload_url, provider.UPLOAD_HOSTS)
         except AlphaError:
@@ -553,35 +783,79 @@ class HostedSocial:
                 sent = {"status": None}
             if sent.get("status") not in (200, 201, 206):
                 return {**_uncertain("The video upload to TikTok was interrupted; reconcile by publish id; do not resubmit"), "reference": publish_id}
-        private = " Until TikTok audits Rafii, the post is private: only you can see it." if options["privacyLevel"] != "SELF_ONLY" else ""
-        return {"state": "provider_accepted", "reference": publish_id, "confirmed": "TikTok received the video and is processing it; it may take a few minutes." + private}
+        return {"state": "provider_accepted", "reference": publish_id, "confirmed": "TikTok received the video and is processing it; final visibility requires native status reconciliation."}
 
-    def _submit_pinterest(self, manifest, provider, token):
+    def _submit_pinterest(self, manifest, provider, token, *, dispatch_context=None):
+        from .publish_options import normalize
+        from .pinterest_safety import https_url
         options = manifest.get("publishOptions") or {}
         media = manifest.get("media") or []
-        if not options.get("boardId") or len(media) != 1 or not str(media[0].get("mime") or "").startswith("image/"):
-            return {"state": "failed", "confirmed": "A Pin needs one image and a board. Review it again; nothing was posted."}
+        def preflight_error(error):
+            if error.code == 'pinterest_rate_limited':
+                return {'state':'scheduled', 'pinterestBudgetDeferred':True,
+                        'confirmed':'Pinterest request budget reached before publication. This approved Pin waits for the next window; nothing was posted.'}
+            return {'state':'held', 'confirmed':str(error)}
+        try:
+            canonical = normalize('Pinterest', options, media, manifest['payload']['text'])
+            if canonical != options:
+                return {'state': 'held', 'confirmed': 'Pin choices changed. Review the exact Pin again; nothing was posted.'}
+            if provider.identity(token)['providerAccountId'] != manifest.get('providerAccountId'):
+                return {'state': 'held', 'confirmed': 'The Pinterest account changed. Reconnect and review again; nothing was posted.'}
+        except AlphaError as error:
+            return preflight_error(error)
         # The board must be one of this person's own boards (the composer offers only those; it may have gone since).
-        if options["boardId"] not in {board["id"] for board in provider.destinations(token)}:
-            return {"state": "failed", "confirmed": "That board isn't one of this Pinterest account's boards any more. Choose another board and review the Pin again; nothing was posted."}
-        pin = {"board_id": options["boardId"], "description": manifest["payload"]["text"], "media_source": {"source_type": "image_url", "url": self._image_url(manifest)}}
+        try:
+            if options["boardId"] not in {board["id"] for board in provider.destinations(token) if board.get('eligible')}:
+                return {"state": "failed", "confirmed": "That board isn't one of this Pinterest account's boards any more. Choose another board and review the Pin again; nothing was posted."}
+            section = options.get('boardSectionId')
+            if section and section not in {s['id'] for s in provider.sections(token, options['boardId'])}:
+                return {'state': 'failed', 'confirmed': 'This section is unavailable on the chosen board. Review again; nothing was posted.'}
+            source = self._image_url(manifest)
+        except AlphaError as error:
+            return preflight_error(error)
+        if not https_url(source):
+            return {'state': 'held', 'confirmed': 'The approved image has no usable HTTPS source. Upload it again; nothing was posted.'}
+        pin = {"board_id": options["boardId"], "description": manifest["payload"]["text"], "media_source": {"source_type": "image_url", "url": source}}
+        if section:
+            pin['board_section_id'] = section
         if options.get("title"):
             pin["title"] = options["title"]
         if options.get("link"):
             pin["link"] = options["link"]
         if media[0].get("alt"):
-            pin["alt_text"] = str(media[0]["alt"])[:500]
-        response = provider.api(token, "POST", "/v5/pins", content=True, body=pin)
+            pin["alt_text"] = media[0]["alt"]
+        dispatch = getattr(self.oauth, 'pinterest_dispatch', None)
+        if dispatch is None:
+            return {'state': 'held', 'confirmed': 'Pinterest dispatch fencing is unavailable. Nothing was posted.'}
+        attempted = False
+        try:
+            trial_context = {'trial_pin': pin} if getattr(provider, 'private_trial', False) is True else {}
+            with dispatch(manifest, token, dispatch_context, **trial_context) as proof:
+                attempted = True
+                response = provider.api(token, 'POST', '/v5/pins', content=True, body=pin)
+                accepted = response.get('body') if isinstance(response.get('body'), dict) else {}
+                candidate_id = str(accepted.get('id') or '')
+                if response.get('status') in (200, 201) and re.fullmatch(r'\d{5,30}', candidate_id):
+                    proof['pinId'] = candidate_id
+        except AlphaError as error:
+            if attempted and error.code not in ('pinterest_rate_limited', 'pinterest_quota_unavailable', 'pinterest_trial_intent_consumed', 'pinterest_trial_denied', 'pinterest_trial_account_mismatch', 'pinterest_oauth_binding_changed'):
+                return _uncertain('Pinterest submission was interrupted. Check the board and reconcile; do not resubmit.')
+            return preflight_error(error)
         body = response.get("body") if isinstance(response.get("body"), dict) else {}
         pin_id = str(body.get("id") or "")
         if response.get("status") in (200, 201) and re.fullmatch(r"\d{5,30}", pin_id):
-            return {"state": "provider_accepted", "reference": pin_id, "confirmed": "Pinterest created the Pin" + (" in its sandbox (Trial access)" if provider.sandbox else "") + "; read-back pending"}
-        reason = _provider_reason(body)
+            visibility = ('creator_only_trial' if getattr(provider, 'private_trial', False) is True
+                          else 'creator_only_sandbox' if provider.sandbox else 'unverified')
+            detail = ' as a creator-only Trial Pin' if visibility == 'creator_only_trial' else ' in its sandbox (Trial access)' if provider.sandbox else ''
+            return {"state": "provider_accepted", "reference": pin_id, 'visibility': visibility,
+                    "confirmed": "Pinterest created the Pin" + detail + "; read-back pending"}
+        # Pinterest error bodies are untrusted and can echo secrets or personal data.
+        reason = ''
         if response.get("status") == 404:
             return {"state": "failed", "confirmed": "Pinterest can't find that board, so nothing was posted" + (f" ({reason})" if reason else "") + ". Choose another board and review the Pin again."}
         if response.get("status") == 403:
             return {"state": "failed", "confirmed": "Pinterest won't let this account pin to that board, so nothing was posted" + (f" ({reason})" if reason else "") + ". Choose another board and review the Pin again."}
-        return self._classify_status(response.get("status"), body, "Pinterest") or _uncertain("No conclusive Pinterest create response; do not resubmit")
+        return self._classify_status(response.get("status"), {}, "Pinterest") or _uncertain("No conclusive Pinterest create response; do not resubmit")
 
     def _reconcile_wave3(self, manifest, provider, token, reference, job=None):
         platform, text = manifest["platform"], manifest["payload"]["text"]
@@ -591,6 +865,41 @@ class HostedSocial:
             page = session.get("page") if isinstance(session.get("page"), dict) else None
             if not reference or not page:
                 return _uncertain("No Facebook reference or Page was recorded; check the Page; do not resubmit")
+            media = manifest.get('media') or []
+            if options.get('format') == 'story':
+                # Stories have their own read surface and expiry semantics. A
+                # successful photo upload or a ready video is not a Story receipt.
+                expected_media = {str(a['id']) for a in (job or {}).get('providerAssets', [])}
+                expected_media.add(str((job or {}).get('container') or reference))
+                after = None
+                for _ in range(3):
+                    params = {'fields':'id,post_id,media_id,status,url,creation_time', 'limit':100}
+                    if after: params['after'] = after
+                    response = provider.graph('GET','/'+page['id']+'/stories',page['token'],params)
+                    body = response.get('body') or {}
+                    if response.get('status') != 200: break
+                    for story in body.get('data') or []:
+                        if str(story.get('post_id') or story.get('id')) != reference and str(story.get('media_id')) not in expected_media: continue
+                        if story.get('status') not in ('PUBLISHED','ARCHIVED'): continue
+                        result = {'state':'verified','reference':reference,'verification':'provider_lookup','confirmed':'Facebook Page Story matched its approved media'+(' and is now archived after expiry' if story['status']=='ARCHIVED' else '; Stories expire after 24 hours')}
+                        if valid_receipt_url(story.get('url'),'Facebook'): result['url'] = story['url']
+                        return result
+                    after = ((body.get('paging') or {}).get('cursors') or {}).get('after') if (body.get('paging') or {}).get('next') else None
+                    if not after: break
+                return _uncertain('Facebook Story publication/expiry is not confirmed; do not create another Story')
+            if media and str(media[0].get('mime') or '').startswith('video/'):
+                response = provider.graph('GET','/'+reference,page['token'],{'fields':'id,from,description,published,status,permalink_url'})
+                body = response.get('body') or {}; status = body.get('status') or {}
+                if response.get('status') != 200 or str((body.get('from') or {}).get('id')) != page['id'] or body.get('description','') != text:
+                    return _uncertain('Facebook video read-back did not match the approved Page and description')
+                if status.get('video_status') == 'error' or any((status.get(phase) or {}).get('status') == 'error' for phase in ('processing_phase','publishing_phase')):
+                    return {'state':'failed','reference':reference,'verification':'provider_lookup','confirmed':'Facebook reports video processing/publication failure'}
+                ready = status.get('video_status') == 'ready' or (status.get('processing_phase') or {}).get('status') == 'complete'
+                if not ready or body.get('published') is not True:
+                    return {'state':'provider_accepted','reference':reference,'confirmed':'Facebook video is still processing or awaiting publication'}
+                result = {'state':'verified','reference':reference,'verification':'provider_lookup','confirmed':'Facebook confirmed the approved video is processed and published on this Page'}
+                if valid_receipt_url(body.get('permalink_url'),'Facebook'): result['url'] = body['permalink_url']
+                return result
             if "_" not in reference:
                 # A bare photo id: a photo carries its caption as `name` and links to its Page post through page_story_id.
                 response = provider.graph("GET", f"/{reference}", page["token"], {"fields": "id,name,page_story_id,from"})
@@ -605,6 +914,10 @@ class HostedSocial:
             if response.get("status") != 200 or str((body.get("from") or {}).get("id")) != page["id"] or body.get("message") != text:
                 return _uncertain("Facebook read-back did not match the exact approved post")
             if body.get("is_published") is False:
+                if manifest.get('nativeScheduleAt'):
+                    check = provider.graph('GET', '/'+reference, page['token'], {'fields':'id,is_published,scheduled_publish_time'})
+                    if check.get('status') == 200 and (check.get('body') or {}).get('scheduled_publish_time') == manifest['nativeScheduleAt']:
+                        return {'state':'native_scheduled','reference':reference,'verification':'provider_lookup','confirmed':'Facebook confirmed the approved native schedule; not yet published'}
                 return _uncertain("Facebook holds the post but shows it as unpublished; check the Page; do not resubmit")
             result = {"state": "verified", "reference": reference, "confirmed": "Facebook read-back matched the approved text and Page", "verification": "provider_lookup"}
             permalink = body.get("permalink_url")
@@ -635,12 +948,33 @@ class HostedSocial:
                         "confirmed": "TikTok reports the post failed" + (f" ({reason})" if isinstance(reason, str) and reason else "") + "."}
             return _uncertain("TikTok did not report this post's status; check the account")
         if platform == "Pinterest":
-            if not reference:
+            if not reference and getattr(provider, 'private_trial', False) is True:
+                recover = getattr(provider, 'private_trial_recover_reference', None)
+                try:
+                    if callable(recover):
+                        reference = recover(provider.trial_policy, manifest.get('idempotencyKey'))
+                except AlphaError:
+                    return _uncertain('The private Trial response journal is unavailable. Reconcile later; do not resubmit.')
+            if not isinstance(reference, str) or not re.fullmatch(r'\d{5,30}', reference):
                 return _uncertain("No Pin id was recorded; check the board; do not resubmit")
+            if provider.identity(token)['providerAccountId'] != manifest.get('providerAccountId'):
+                return _uncertain('The Pinterest account changed. No write or retry is authorized.')
             response = provider.api(token, "GET", f"/v5/pins/{quote(reference)}", content=True)
             body = response.get("body") if isinstance(response.get("body"), dict) else {}
-            if response.get("status") == 200 and str(body.get("board_id")) == options.get("boardId") and body.get("description") == text:
-                result = {"state": "verified", "reference": reference, "confirmed": "Pinterest read-back matched the approved Pin and board", "verification": "provider_lookup"}
+            matches = (str(body.get('id')) == reference and str(body.get('board_id')) == options.get('boardId')
+                       and body.get('description') == text and (body.get('title') or '') == options.get('title', '')
+                       and (body.get('link') or '') == options.get('link', '')
+                       and (body.get('board_section_id') or '') == options.get('boardSectionId', '')
+                       and isinstance(body.get('media'), dict) and body['media'].get('media_type') == 'image')
+            if response.get("status") == 200 and matches:
+                visibility = ('creator_only_trial' if getattr(provider, 'private_trial', False) is True
+                              else 'creator_only_sandbox' if provider.sandbox else 'unverified')
+                detail = (' Creator-only Trial visibility applies.' if visibility == 'creator_only_trial'
+                          else ' Creator-only Sandbox visibility applies.' if provider.sandbox
+                          else ' Public visibility has not been verified.')
+                result = {"state": "verified", "reference": reference,
+                          "confirmed": "Pinterest API read-back matched the approved Pin, account, board and metadata." + detail,
+                          "verification": "provider_lookup", 'visibility': visibility}
                 if not provider.sandbox:
                     result["url"] = f"https://www.pinterest.com/pin/{reference}/"
                 return result
@@ -656,7 +990,11 @@ class HostedSocial:
             return early
         reference = response.get("headers", {}).get("x-restli-id")
         if response.get("status") == 201 and isinstance(reference, str) and reference.startswith(("urn:li:share:", "urn:li:ugcPost:")):
-            return {"state": "provider_accepted", "reference": reference, "confirmed": "LinkedIn accepted the create request; publication verification pending"}
+            result = {"state": "provider_accepted", "reference": reference, "confirmed": "LinkedIn accepted the create request; publication verification pending. Do not resubmit."}
+            url = 'https://www.linkedin.com/feed/update/' + reference + '/'
+            if valid_receipt_url(url, 'LinkedIn'):
+                result['url'] = url
+            return result
         return _uncertain("No conclusive LinkedIn acceptance evidence; do not resubmit")
 
     def _submit_threads(self, manifest, token):
@@ -666,14 +1004,14 @@ class HostedSocial:
         if image_url:
             params["image_url"] = image_url
             params["alt_text"] = manifest["media"][0].get("alt", "")
-        container = self.transport("POST", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(user)}/threads", form=params)
+        container = self.transport("POST", f"https://graph.threads.net/{THREADS_VERSION}/{quote(user)}/threads", form=params)
         early = self._classify_status(container.get("status"))
         if early:
             return early
         container_id = str(container.get("body", {}).get("id", ""))
         if container.get("status") != 200 or not container_id.isdigit():
             return _uncertain("Threads did not return a container id; do not resubmit")
-        publish = self.transport("POST", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(user)}/threads_publish", form={"creation_id": container_id, "access_token": token})
+        publish = self.transport("POST", f"https://graph.threads.net/{THREADS_VERSION}/{quote(user)}/threads_publish", form={"creation_id": container_id, "access_token": token})
         media_id = str(publish.get("body", {}).get("id", ""))
         if publish.get("status") == 200 and media_id.isdigit():
             return {"state": "provider_accepted", "reference": media_id, "container": container_id, "confirmed": "Threads returned a media id; publication verification pending"}
@@ -740,8 +1078,30 @@ class HostedSocial:
         # Even a rate-limit response here must not authorize a second publish.
         return _uncertain('Publish outcome not confirmed; check the platform; do not resubmit')
 
+    def cancel_native(self, manifest, job):
+        provider = self._provider(manifest)
+        if provider is None: return _uncertain('Cannot cancel without provider authorization; native schedule may still publish')
+        if self.oauth.clock() >= manifest['nativeScheduleAt']:
+            return _uncertain('Scheduled time has passed; review publication before requesting deletion')
+        grant = self.oauth.token_for_worker(manifest['workspaceId'], manifest['channelId'])
+        token, reference = grant['accessToken'], job['providerReference']
+        if manifest['platform'] == 'YouTube':
+            if 'https://www.googleapis.com/auth/youtube.force-ssl' not in grant['scopes']:
+                return {'state':'held','confirmed':'Enable YouTube management to delete the scheduled upload; it may still publish until provider cancellation succeeds'}
+            response = provider.api(token, 'DELETE', provider.API+'/videos?'+urlencode({'id':reference}))
+            success = response.get('status') == 204
+        elif manifest['platform'] == 'Facebook':
+            page = provider.revalidate_page(token, 'CREATE_CONTENT')
+            if 'pages_manage_posts' not in grant['scopes']: return _uncertain('Page cancellation permission lost; native schedule may still publish')
+            response = provider.graph('DELETE', '/'+quote(reference, safe=''), page['token'])
+            success = response.get('status') == 200 and (response.get('body') or {}).get('success') is True
+        else: return _uncertain('This provider has no implemented native cancellation')
+        return {'state':'canceled','reference':reference,'verification':'provider_lookup','confirmed':'Provider confirmed deletion of the scheduled content'} if success else _uncertain('Native cancellation outcome is unknown; reconcile before deleting again')
+
     # --- reconcile ----------------------------------------------------------------
     def reconcile(self, manifest, job):
+        if manifest.get('platform') == 'Discord':
+            return self.reconcile_discord(manifest, job)
         provider = self._provider(manifest)
         if provider is None:
             return _uncertain("Provider reconciliation is unavailable; do not resubmit")
@@ -751,6 +1111,31 @@ class HostedSocial:
             return _uncertain(f"Cannot reconcile without a valid grant: {error}")
         token, reference = grant["accessToken"], job.get("providerReference")
         try:
+            if self.official_enabled(manifest) and manifest['platform'] == 'X' and (job.get('providerThread') or (manifest.get('publishOptions') or {}).get('thread')):
+                from .official_operations import OfficialAPI
+                ids = job.get('providerThread') or []
+                parts = [manifest['payload']['text'], *((manifest.get('publishOptions') or {}).get('thread') or [])]
+                if len(ids) != len(parts):
+                    return _uncertain('Thread creation was interrupted; known posts remain. Do not recreate a possibly accepted reply')
+                checked = job.get('threadChecked', 0)
+                for index in range(checked, min(checked+5, len(ids))):
+                    OfficialAPI(provider, grant)._x_budget()
+                    response = provider.api(token, 'GET', '/2/tweets/'+quote(ids[index], safe='')+'?tweet.fields=author_id,referenced_tweets')
+                    item = (response.get('body') or {}).get('data') or {}
+                    parent = ids[index-1] if index else (manifest.get('publishOptions') or {}).get('replyToId')
+                    reply_ids = [str(r.get('id')) for r in item.get('referenced_tweets') or [] if r.get('type') == 'replied_to']
+                    if response.get('status') != 200 or str(item.get('author_id')) != manifest['providerAccountId'] or item.get('text') != parts[index] or (parent and reply_ids != [parent]):
+                        return _uncertain('X thread lookup did not match the approved author, text and parent relationship')
+                    checked += 1
+                result = {'state': 'verified', 'reference': ids[0], 'providerThread': ids, 'threadChecked': checked, 'verification': 'provider_lookup', 'confirmed': 'Every X thread post matched the approved author, text and hierarchy'}
+                if checked < len(ids): result.update(state='processing', verification='thread_lookup', confirmed='Known X thread IDs partly verified; remaining metered lookups pending')
+                return result
+            if self.official_enabled(manifest) and manifest['platform'] == 'Facebook' and job.get('cancelRequested') and manifest.get('nativeScheduleAt') and reference and job.get('progress', {}).get('stage') == 'cancel_attempted':
+                page = provider.revalidate_page(token, 'CREATE_CONTENT')
+                response = provider.graph('GET', '/'+quote(reference,safe=''), page['token'], {'fields':'id'})
+                gone = response.get('status') == 404
+                if gone: return {'state':'canceled','reference':reference,'verification':'provider_lookup','confirmed':'Provider lookup confirms scheduled content was removed'}
+                return _uncertain('Native cancellation is not confirmed; inspect the scheduled content; do not repeat deletion')
             publisher = getattr(provider, "publisher", None)
             if publisher is not None:
                 return publisher.reconcile(manifest, job, provider, token, self)
@@ -759,20 +1144,30 @@ class HostedSocial:
             if manifest["platform"] in WAVE3:
                 return self._reconcile_wave3(manifest, provider, token, reference, job)
             if manifest["platform"] == "LinkedIn":
-                if not reference or "r_member_social" not in grant["scopes"]:
-                    return _uncertain("LinkedIn read scope unavailable; verify the exact post manually")
+                organization = (manifest.get('publishOptions') or {}).get('destinationType') == 'organization'
+                required_read = 'r_organization_social' if organization else 'r_member_social'
+                if not reference:
+                    return _uncertain("LinkedIn post receipt is missing; inspect the account before any new submission")
+                if required_read not in grant["scopes"]:
+                    result = {"state": "provider_accepted", "reference": reference,
+                              "confirmed": "LinkedIn accepted this post. Restricted read permission is unavailable; open the post to confirm publication. Do not resubmit."}
+                    url = 'https://www.linkedin.com/feed/update/' + reference + '/'
+                    if valid_receipt_url(url, 'LinkedIn'):
+                        result.update(reference=reference, url=url)
+                    return result
                 response = self.transport("GET", "https://api.linkedin.com/rest/posts/" + quote(reference, safe=""), headers={"Linkedin-Version": LINKEDIN_VERSION, "X-Restli-Protocol-Version": "2.0.0", "Authorization": "Bearer " + token})
                 body = response.get("body", {})
-                if response.get("status") == 200 and body.get("lifecycleState") == "PUBLISHED" and little_plain(body.get("commentary") or "") == manifest["payload"]["text"]:
+                if response.get("status") == 200 and body.get("lifecycleState") == "PUBLISHED" and (not self.official_enabled(manifest) or body.get("author") == ((manifest.get("publishOptions") or {}).get("authorUrn") or manifest["providerAccountId"])) and little_plain(body.get("commentary") or "") == manifest["payload"]["text"]:
                     return {"state": "verified", "reference": reference, "confirmed": "LinkedIn reports the exact post as PUBLISHED", "verification": "provider_lookup"}
                 if response.get("status") == 200 and body.get("lifecycleState") == "PUBLISH_FAILED":
                     return {"state": "failed", "confirmed": "LinkedIn reports PUBLISH_FAILED"}
                 return _uncertain("LinkedIn lookup did not confirm the exact post")
             if manifest["platform"] in ("Threads", "Instagram"):
+                version = THREADS_VERSION if manifest["platform"] == "Threads" else GRAPH_VERSION
                 base = "https://graph.threads.net" if manifest["platform"] == "Threads" else "https://graph.instagram.com"
                 if reference:
                     fields = "id,text,permalink,owner" if manifest["platform"] == "Threads" else "id,caption,permalink,owner"
-                    response = self.transport("GET", f"{base}/{GRAPH_VERSION}/{quote(reference)}?" + urlencode({"fields": fields, "access_token": token}))
+                    response = self.transport("GET", f"{base}/{version}/{quote(reference)}?" + urlencode({"fields": fields, "access_token": token}))
                     body = response.get("body", {})
                     text_key = "text" if manifest["platform"] == "Threads" else "caption"
                     owner_matches = isinstance(body.get('owner'), dict) and str(body['owner'].get('id')) == manifest['providerAccountId']
@@ -782,10 +1177,10 @@ class HostedSocial:
                 container = job.get("container") or next((e.get("container") for e in reversed(job.get("events", [])) if e.get("container")), None)
                 if container:
                     if manifest['platform'] == 'Instagram':
-                        response = self.transport('GET', f'{base}/{GRAPH_VERSION}/{quote(str(container))}?' + urlencode({'fields': 'status_code', 'access_token': token}))
+                        response = self.transport('GET', f'{base}/{version}/{quote(str(container))}?' + urlencode({'fields': 'status_code', 'access_token': token}))
                         code = response.get('body', {}).get('status_code') if response.get('status') == 200 else None
                         return _uncertain('Container ' + str(code or 'lookup unavailable') + '; publish outcome requires manual review; do not resubmit')
-                    response = self.transport("GET", f"{base}/{GRAPH_VERSION}/{quote(str(container))}?" + urlencode({"fields": "status_code,status", "access_token": token}))
+                    response = self.transport("GET", f"{base}/{version}/{quote(str(container))}?" + urlencode({"fields": "status_code,status", "access_token": token}))
                     code = response.get("body", {}).get("status_code") or response.get("body", {}).get("status")
                     if code == "PUBLISHED":
                         return {"state": "published", "confirmed": "Container reports PUBLISHED; media lookup pending"}

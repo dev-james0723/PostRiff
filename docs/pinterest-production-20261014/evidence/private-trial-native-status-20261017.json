@@ -1,0 +1,34 @@
+{
+  "org_id": "jf34f85hr0",
+  "run_id": "v0czdxw6gg",
+  "status": "finished",
+  "workflows": [
+    {
+      "workflow_id": "3wl66tshzg",
+      "status": "finished",
+      "name": "James Cloud Build",
+      "jobs": [
+        {
+          "job_display_name": "ci",
+          "job_id": "992xwthq3l",
+          "job_key": "_inline_0.yaml:ci",
+          "status": "finished",
+          "attempts": [
+            {
+              "attempt_id": "cqq92b3zg9",
+              "attempt": 1,
+              "status": "finished",
+              "sandbox_id": "lvplh10tqs9psrtnstx4",
+              "session_id": "545feea4-ce6a-4539-8695-e5711cbb4883",
+              "logs_command": "depot ci logs cqq92b3zg9 --org jf34f85hr0",
+              "download_available": true,
+              "download_command": "depot ci logs cqq92b3zg9 --output-file logs.txt --org jf34f85hr0",
+              "view_url": "https://depot.dev/orgs/jf34f85hr0/workflows/3wl66tshzg?job=992xwthq3l&attempt=cqq92b3zg9",
+              "ssh_available": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

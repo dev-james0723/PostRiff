@@ -1,61 +1,35 @@
 'use client';
 
-import { AppIcons } from '../app-icons';
 import { PhoneFrame, STATUS_BAR_HEIGHT } from '../phone-frame';
-import { accountNames, ClampText, firstLine, formatClock, MediaFill, mediaHeight, MissingMedia, Monogram, restAfterFirstLine } from '../parts';
+import { accountNames, ClampText, formatClock, MediaFill, mediaHeight, MissingMedia } from '../parts';
 import type { TemplateProps } from '../types';
 
-// Pinterest Gestalt tokens (light).
-const INK = '#000000';
-const SUBTLE = '#636361';
-const RED = '#e60023';
-
-/**
- * Pinterest pin close-up (no top or tab bar): rounded hero image with back and visual-search buttons, heart /
- * comment / share / more beside the red Save, the creator, title, description with "See more", and a Visit site
- * bar when the pin carries a link.
- */
+/** Rafii's own approval card. It does not imitate Pinterest's layout or interaction controls. */
 export default function PinterestTemplate({ post, scale }: TemplateProps) {
   const names = accountNames(post.account);
-  const image = post.media.find((item) => item.kind !== 'file');
-  const height = Math.min(mediaHeight(image, 385, { min: 0.6, max: 1.5, fallback: 1.5 }), 500);
-  const title = firstLine(post.text);
-  const description = restAfterFirstLine(post.text);
-  const link = /https?:\/\//.test(post.text);
-
+  const image = post.media.find((item) => item.kind === 'image');
+  const height = Math.min(mediaHeight(image, 385, { min: 0.6, max: 1.5, fallback: 1.5 }), 380);
   return (
     <PhoneFrame scale={scale} background='#ffffff' tone='dark' label={`Pinterest preview of the pin by ${names.display}`} clock={formatClock(post)}>
-      <div className='flex h-full flex-col overflow-hidden px-1' style={{ color: INK, paddingTop: STATUS_BAR_HEIGHT }}>
-        <div className='relative shrink-0' style={{ height }}>
-          {image ? <MediaFill media={image} rounded={16} className='size-full' /> : <MissingMedia need='Pins need an image or video.' className='size-full rounded-[16px]' />}
-          <span className='absolute top-3 left-3 flex size-[40px] items-center justify-center rounded-[12px] bg-white'>
-            <AppIcons.back size={24} stroke={2.4} />
-          </span>
-          <span className='absolute right-3 bottom-3 flex size-[40px] items-center justify-center rounded-[12px] bg-white'>
-            <AppIcons.search size={21} stroke={2.4} />
-          </span>
+      <div className='flex h-full flex-col gap-4 overflow-hidden px-4 text-[#20201e]' style={{ paddingTop: STATUS_BAR_HEIGHT + 16 }}>
+        <div className='flex flex-col gap-1 border-b pb-3'>
+          <p className='text-[11px] font-medium uppercase tracking-[0.08em] text-[#696961]'>Rafii review</p>
+          <p className='text-[17px] font-medium'>Pinterest image Pin draft</p>
+          <p className='text-[12px] text-[#696961]'>{names.display}</p>
         </div>
-        <div className='flex h-[64px] shrink-0 items-center gap-5 px-3'>
-          <AppIcons.heart size={27} stroke={1.9} />
-          <AppIcons.commentRound size={27} stroke={1.9} />
-          <AppIcons.forward size={27} stroke={1.9} />
-          <AppIcons.dots size={27} stroke={1.9} />
-          <span className='ml-auto flex h-[48px] items-center rounded-[16px] px-5 text-[16px] font-semibold text-white' style={{ background: RED }}>
-            Save
-          </span>
+        <div className='shrink-0 overflow-hidden rounded-[10px]' style={{ height }}>
+          {image ? <MediaFill media={image} rounded={10} className='size-full' /> : <MissingMedia need='This Pin needs one image.' className='size-full' />}
         </div>
-        <div className='flex flex-col gap-2 px-3'>
-          <p className='flex items-center gap-2 text-[16px] font-medium'>
-            <Monogram name={names.display} size={20} />
-            {names.display}
-          </p>
-          {title && <p className='text-[23px] leading-[28px] font-medium'>{title}</p>}
-          {description && (
-            <ClampText lines={2} background='#ffffff' className='text-[15px] leading-5' style={{ color: SUBTLE }} more={<span className='font-semibold text-black'>See more</span>}>
-              {description}
-            </ClampText>
-          )}
-          {link && <span className='mt-1 flex h-[48px] items-center justify-center rounded-[16px] bg-[#e8e7e1] text-[16px] font-semibold'>Visit site</span>}
+        <div className='flex flex-col gap-2'>
+          {post.pinterestTitle && <p className='text-[23px] leading-[28px] font-medium'>{post.pinterestTitle}</p>}
+          {post.text && <ClampText lines={3} background='#ffffff' className='text-[15px] leading-5 text-[#696961]'>{post.text}</ClampText>}
+          {post.pinterestBoardId && <p className='text-[11px] text-[#696961]'>Rafii draft · Board ID {post.pinterestBoardId}</p>}
+          {post.pinterestSectionId && <p className='text-[11px] text-[#696961]'>Section ID {post.pinterestSectionId}</p>}
+          {post.pinterestLink && <div className='rounded-[8px] border p-2'>
+            <span className='text-[11px] font-medium'>Destination link</span>
+            <p className='mt-1 break-all text-[11px] text-[#696961]'>{post.pinterestLink}</p>
+          </div>}
+          <p className='text-[10px] text-[#696961]'>Draft preview. Publishing and public visibility require separate confirmation.</p>
         </div>
       </div>
     </PhoneFrame>

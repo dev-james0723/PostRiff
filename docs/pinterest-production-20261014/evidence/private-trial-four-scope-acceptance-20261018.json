@@ -1,0 +1,137 @@
+{
+  "observedAt": "2026-10-18T03:43:52.742752Z",
+  "execution": "REAL_PRODUCTION_APP_PRIVATE_TRIAL_READ_ONLY_AND_SYNTHETIC_LOCAL_REPAIR",
+  "appId": "1615884",
+  "canonicalSupabase": "buoyhkbodnhzngaotoel",
+  "liveSource": "730d044078434638f31eb5ca0e57280307ff8317",
+  "liveDeployment": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ",
+  "repairCandidate": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
+  "oauth": {
+    "status": "PASS",
+    "transactionId": "69297f6a-01b4-420e-9452-7c836c8da5bb",
+    "createdAt": "2026-10-18T03:28:08.572042Z",
+    "consumedAt": "2026-10-18T03:29:14.463047Z",
+    "outcome": "exchanged",
+    "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+    "actorId": "b167161d-37f4-4bc3-ae22-2482c982e5a0",
+    "scopes": [
+      "user_accounts:read",
+      "boards:read",
+      "pins:read",
+      "pins:write"
+    ],
+    "humanFinalConsent": true,
+    "agentClickedFinalConsent": false,
+    "priorExpiredTransaction": "9af24e11-72a2-404a-b5cb-4a8b6de456dd preserved in private-trial-live-oauth-20261018.json"
+  },
+  "credential": {
+    "connectionId": "909e9784cdcde21f2bb7cf521ce67f43",
+    "providerAccountId": "1126814906675966091",
+    "revoked": false,
+    "accessPresent": true,
+    "refreshPresent": true,
+    "refreshSupported": true,
+    "rotatedAt": "2026-10-18T03:29:14.463047Z",
+    "accessExpiresAt": "2026-11-17T03:29:15.037084Z",
+    "secretValuesRead": false
+  },
+  "board": {
+    "status": "PASS",
+    "observedAt": "2026-10-18T03:33Z",
+    "method": "Actual API-backed Pinterest boards sheet; native read-only verification of exact name and eligible=Public board label.",
+    "name": "Rafii — Product & Content Workflows",
+    "approvedId": "1126814837958721891",
+    "account": "@jamesaucreates",
+    "eligibility": true,
+    "idEvidence": "Existing actual UI/public-widget ID plus deployed private adapter only labels allowlisted board IDs eligible; numeric response body not exported.",
+    "sections": "NOT_RUN"
+  },
+  "refresh": {
+    "status": "BLOCKED",
+    "attempts": [
+      {
+        "at": "2026-10-18T03:33:23.636Z",
+        "httpStatus": 403,
+        "requestId": "5ql9n-1792294403381-088afc82a567"
+      },
+      {
+        "at": "2026-10-18T03:34:12.857Z",
+        "httpStatus": 403,
+        "requestId": "h5rr8-1792294450862-6b3040aacced"
+      }
+    ],
+    "successStatusAbsent": true,
+    "rotationUnchanged": true,
+    "providerRefreshCall": "NOT_VERIFIED; Rafii403 must not be reported as Pinterest refresh failure",
+    "next": "Human normal same-account Rafii sign-out/sign-in/MFA requested; do not bypass step-up."
+  },
+  "snapshot": {
+    "status": "FAIL",
+    "route": "GET /api/workspaces/568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+    "httpStatus": 500,
+    "exceptionType": "KeyError",
+    "requestId": "79p5r-1792294546454-a245016fe9ba",
+    "appRequestId": "cda4b67a7de7421e8bf295b5b773ec80",
+    "at": "2026-10-18T03:35:46.765Z",
+    "revision": 104,
+    "trialPresent": false,
+    "sqlTrialRows": 0,
+    "libraryListStatus": 200,
+    "libraryMetadataChangesStatus": 503,
+    "ui": "Couldn’t load the library; Upload images disabled",
+    "rootCause": "Phase2Store._present unconditionally indexes phase2.trial; exact missing-field synthetic reproduction gives KeyError: trial."
+  },
+  "repair": {
+    "status": "LOCAL_PASS_NOT_DEPLOYED",
+    "change": "Only decorate an existing dictionary trial; preserve missing/null grant and existing allowances. No SQL repair, fabricated trial or new credits.",
+    "files": [
+      "src/postriff_phase2/store.py",
+      "tests/test_hosted_legacy_trial_projection.py",
+      "scripts/cloud-pinterest-production-validation.sh",
+      "scripts/cloud-pinterest-release-delta-validation.sh"
+    ],
+    "regression": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests python3 -m unittest test_hosted_legacy_trial_projection.HostedLegacyTrialProjectionTests.test_snapshot_without_embedded_trial_preserves_saved_state_and_grants",
+      "red": "Exit1: absent KeyError trial; null TypeError. Active/expired controls passed after narrowing assertion to phase2, excluding existing visuals.ensure top-level defaults.",
+      "green": "Exit0,1test/4subcases,0.003s,process0.903s"
+    },
+    "compatibility": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests python3 -m unittest test_youtube_workspace_projection.YouTubeWorkspaceProjectionTests.test_hosted_workspace_presentation_keeps_stored_provenance_and_hides_internal_branch",
+      "result": "Exit0,1test0.013s/process0.804s; internal authority hidden and saved provenance preserved."
+    },
+    "diffCheck": "PASS",
+    "newRemoteValidation": "NOT_RUN; earlier cloud v0czdxw6gg qualifies unchanged730d base, not new candidate.",
+    "newDeployment": "NOT_RUN; prior1/1build+promotion approvals consumed."
+  },
+  "media": {
+    "status": "BLOCKED",
+    "sourceSha256": "8b0a4150bcf7adcbe8de83baa063b05f8f2246c3a3e918c3f40263b5e37dc030",
+    "matchingAssets": 0,
+    "uploadAttempts": 0,
+    "reason": "Snapshot500 disables revision-fenced product upload; did not force file input or bypass Library."
+  },
+  "publication": {
+    "pinCreates": 0,
+    "pinterestJobs": 0,
+    "immediate": "NOT_RUN",
+    "scheduled": "NOT_RUN",
+    "nativeAnalytics": "NOT_RUN",
+    "exactPinApprovals": 0
+  },
+  "standardAccess": {
+    "status": "BLOCKED",
+    "nativeObservedAt": "2026-10-18~03:41Z",
+    "nativeCard": "Rafii / Trial access active / Upgrade",
+    "standardApproved": false,
+    "submittedByThisTask": false,
+    "recording": "Dedicated subagent progressing no-compile installed OBS qualification; no compliant full OAuth/API video yet."
+  },
+  "policyExpiry": "2026-10-18T18:00:00Z unchanged",
+  "publicFeatures": {
+    "Connect": "NO-GO",
+    "Publish": "NO-GO",
+    "Schedule": "NO-GO",
+    "Analytics": "NO-GO"
+  },
+  "secretsOrOAuthQueryRetained": false
+}

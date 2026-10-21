@@ -8,7 +8,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { now as zonedNow, parseDateTime, toCalendarDateTime, toZoned } from '@internationalized/date';
 import { toast } from 'sonner';
-import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -16,12 +15,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { Asset, SnapshotVariant } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
+import { SocialOptions } from './social-options';
 import { AssetPicker } from '@/components/application/asset-picker';
 import { languageLabel } from '@/lib/locales';
 import { workflowKey } from '@/lib/time-back/active-time';
@@ -174,6 +174,11 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   // Time back: reviewing and scheduling this draft is part of its work; measured only while the dialog is open.
   useActiveWorkTimer({ workflowKey: workflowKey('variant', variantId || preselected), taskKind: 'draft', enabled: open });
   const [chosenChannelId, setChannelId] = useState<string>('');
+  const [extraIds, setExtraIds] = useState<string[]>([]);
+  const [mediaAlt, setMediaAlt] = useState<Record<string, string>>({});
+  const [extraCandidate, setExtraCandidate] = useState('');
+  const [tiktokPhoto, setTiktokPhoto] = useState(false);
+  const [nativeSchedule, setNativeSchedule] = useState(false);
   const [assetId, setAssetId] = useState<string>(preselectedAsset ?? '');
   const [alt, setAlt] = useState('');
   const [rights, setRights] = useState(false);
@@ -186,21 +191,35 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const [fold, setFold] = useState<0 | 1>(0);
   // The server's own word that the time occurs twice, for a zone rule this browser resolves differently.
   const [serverAsksFold, setServerAsksFold] = useState(false);
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [open]);
   const wallTime = useMemo(() => resolveWallTime(localTime, timeZone), [localTime, timeZone]);
   const askFold = wallTime.kind === 'ambiguous' || serverAsksFold;
   const chosenAt = wallTime.kind === 'exact' ? wallTime.at : wallTime.kind === 'ambiguous' ? (fold === 0 ? wallTime.first : wallTime.second) : null;
-  const timePassed = chosenAt !== null && chosenAt <= Date.now();
+  const timePassed = chosenAt !== null && chosenAt <= clock;
 
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
-  const needsVideo = ['YouTube', 'TikTok', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '');
+  const socialPlatform = ['LinkedIn', 'Threads', 'Instagram', 'Facebook', 'X'].includes(variant?.platform ?? '');
+  const flexibleMedia = socialPlatform || variant?.platform === 'Pinterest' || (variant?.platform === 'TikTok' && tiktokPhoto);
+  const needsVideo = ['YouTube', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || (variant?.platform === 'TikTok' && !tiktokPhoto);
   const needsImage = variant?.platform === 'Pixelfed';
   const assets = useMemo(() => (libraryAssets ?? []).filter((candidate) =>
     (needsVideo ? isPostableVideo(candidate, variant?.platform) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
-      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate))), [libraryAssets, needsVideo, variant?.platform]);
+      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate) || (flexibleMedia && isPostableVideo(candidate, variant?.platform)) || (variant?.platform === 'LinkedIn' && kindOf(candidate) === 'document' && candidate.processing === 'validated'))), [libraryAssets, needsVideo, variant?.platform, flexibleMedia]);
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
+  const [discordDestinationId, setDiscordDestinationId] = useState('');
+  useEffect(() => { setDiscordDestinationId(''); }, [channelId]);
   const asset: Asset | undefined = assets.find((a) => a.id === assetId);
+  const selectedMedia = [asset, ...extraIds.map((id) => assets.find((item) => item.id === id))].filter((item): item is Asset => Boolean(item));
+  const multiLimit = ({ LinkedIn: 20, Threads: 20, Instagram: 10, Facebook: 10, X: 4, TikTok: 35 } as Record<string, number>)[variant?.platform ?? ''] ?? 1;
+  const story = publishOptions?.format === 'story';
+  useEffect(() => { setExtraIds([]); setMediaAlt({}); setExtraCandidate(''); setNativeSchedule(false); }, [channelId, assetId]);
   // The draft's own post-role media is the default, unless the dialog was opened for a specific asset.
   const defaultAsset = preselectedAsset ? null : needsVideo
     ? variant?.media?.find((item) => item.role === 'post' && item.kind === 'video' && assets.some((candidate) => candidate.id === item.assetId))?.assetId ?? null
@@ -209,26 +228,30 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
     if (defaultAsset) setAssetId(defaultAsset);
   }, [variant?.id, defaultAsset]);
   const channel = channelsForVariant.find((c) => c.id === channelId);
+  const discordDestinations = channel?.discordDestinations?.filter((d) => d.status === 'authorized' && d.authorizationGeneration === channel.discordAuthorizationGeneration) ?? [];
+  const discordDestination = discordDestinations.find((d) => d.id === discordDestinationId);
   const needsOptions = Boolean(channel && NEEDS_OPTIONS.has(channel.platform));
   const youtubeNow = channel?.platform === 'YouTube' && publishOptions?.publicationMode === 'now';
   const steps = editSteps(variant, activeVoice, canEdit);
   const ready = Boolean(
     variant &&
       channel &&
-      (youtubeNow || localTime) &&
+      (channel.platform !== 'Discord' || Boolean(discordDestination)) &&
+      (youtubeNow || (chosenAt !== null && !timePassed)) &&
       rights &&
       (!assetId || Boolean(asset)) &&
       (!needsVideo || Boolean(asset)) &&
       (!needsImage || Boolean(asset)) &&
       !steps.blocked &&
       (!steps.warnings.length || acknowledge) &&
-      (!asset || kindOf(asset) === 'video' || alt.trim()) &&
+      selectedMedia.every((item, index) => kindOf(item) !== 'image' || (index === 0 ? alt.trim() : mediaAlt[item.id]?.trim())) &&
       (!steps.confirmUnknowns || resolveUnknowns) &&
       (!needsOptions || publishOptions !== null)
   );
 
   async function submit() {
-    if (!variant) return;
+    // A form may stay open across its proposed time; refuse even before the next clock render.
+    if (!variant || !ready || !canPrepare || act.isPending || (!youtubeNow && (chosenAt === null || chosenAt <= Date.now()))) return;
     try {
       let currentRevision = revision;
       let current: SnapshotVariant = variant;
@@ -257,14 +280,18 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
         payload: {
           variantId: current.id,
           channelId,
+          destinationId: channel?.platform === 'Discord' ? discordDestinationId : undefined,
           assetId: asset?.id,
+          assetIds: selectedMedia.length > 1 || tiktokPhoto ? selectedMedia.map((item) => item.id) : undefined,
+          mediaAlt,
+          omitCaption: story || undefined,
           alt: alt.trim(),
           rightsConfirmed: rights,
           localTime,
           timeZone,
           acknowledgedWarnings: acknowledge ? current.warnings : [],
           fold: askFold ? fold : undefined,
-          publishOptions: needsOptions ? publishOptions : undefined
+          publishOptions: needsOptions ? { ...publishOptions, ...(nativeSchedule && channel?.platform === 'YouTube' && wallTime.kind === 'exact' ? { publishAt: new Date(wallTime.at).toISOString(), privacyStatus: 'private' } : {}), ...(nativeSchedule && channel?.platform === 'Facebook' && wallTime.kind === 'exact' ? { scheduledPublishTime: Math.floor(wallTime.at / 1000) } : {}) } : undefined
         }
       });
       // The Queue (or the Calendar) shows the new review; a short toast says where it went.
@@ -326,25 +353,21 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           )}
           <div className='flex flex-col gap-1.5' data-tour='schedule-draft'>
             <Label htmlFor='schedule-draft'>Draft</Label>
-            <Select value={variantId || preselected || ''} onValueChange={(value) => { setVariantId(String(value)); setChannelId(''); setAssetId(''); setPublishOptions(null); }}>
-              <SelectTrigger id='schedule-draft' className='h-12 w-full text-base'>
-                {/* The draft's language exactly as stored, never folded into a two-language label. One line, cut to the field's width. */}
-                <SelectValue className='min-w-0'>
-                  <span className='truncate'>{variant ? `${variant.platform} · ${languageLabel(variant.language)} — ${variant.text.slice(0, 40)}…` : 'Choose a draft'}</span>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {drafts.length === 0 && <SelectItem value='__none' disabled>No drafts yet</SelectItem>}
-                {drafts.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    <span className='flex items-center gap-2'>
-                      <ChannelIcon platform={d.platform} name={d.platform} size='xs' />
-                      {d.platform} · {languageLabel(d.language)} — {d.text.slice(0, 48)}…
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <NativeSelect id='schedule-draft' className='w-full [&>select]:h-12 [&>select]:text-base' value={variantId || preselected || ''} onChange={(event) => { setVariantId(event.target.value); setChannelId(''); setAssetId(''); setPublishOptions(null); }}>
+              <NativeSelectOption value='' disabled>{drafts.length === 0 ? 'No drafts yet' : 'Choose a draft'}</NativeSelectOption>
+              {drafts.map((d) => <NativeSelectOption key={d.id} value={d.id}>{d.platform} · {languageLabel(d.language)} — {d.text.slice(0, 48)}…</NativeSelectOption>)}
+            </NativeSelect>
+            {channel?.platform === 'Discord' && (
+              <div className='flex flex-col gap-1.5'>
+                <Label htmlFor='schedule-discord-destination'>Discord server and channel</Label>
+                <NativeSelect id='schedule-discord-destination' className='w-full [&>select]:h-12' value={discordDestinationId} onChange={(event) => setDiscordDestinationId(event.target.value)}>
+                  <NativeSelectOption value='' disabled>{discordDestinations.length === 0 ? 'Authorize a channel in Connections first' : 'Choose an authorized destination'}</NativeSelectOption>
+                  {discordDestinations.map((d) => <NativeSelectOption key={d.id} value={d.id}>{d.guildName} · {d.channelName}</NativeSelectOption>)}
+                </NativeSelect>
+                {discordDestination && <p className='text-muted-foreground text-xs' data-discord-target>{discordDestination.guildName} ({discordDestination.guildId}) · {discordDestination.channelName} ({discordDestination.channelId})</p>}
+                <p className='text-muted-foreground text-xs'>The preview freezes this destination. Changing the connection default will keep approved posts on their original channel.</p>
+              </div>
+            )}
             {steps.updateWaiting && canEdit && <p className='text-muted-foreground text-xs'>Uses the updated version in your current voice.</p>}
             {steps.updateWaiting && !canEdit && !steps.blocked && <p className='text-muted-foreground text-xs'>Uses the draft as it is; an editor can accept the update.</p>}
             {canPrepare && steps.blocked && (
@@ -365,24 +388,10 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
 
           <div className='flex flex-col gap-1.5' data-tour='schedule-account'>
             <Label htmlFor='schedule-channel'>Account</Label>
-            <Select value={channelId} onValueChange={(value) => setChannelId(String(value))}>
-              <SelectTrigger id='schedule-channel' disabled={!variant || Boolean(variant.channelId)} className='h-12 w-full text-base'>
-                <SelectValue className='min-w-0'>
-                  <span className='truncate'>{channelsForVariant.find((c) => c.id === channelId)?.account ?? (variant ? `Choose ${withArticle(variant.platform)} account` : 'Choose a draft first')}</span>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {channelsForVariant.length === 0 && <SelectItem value='__none' disabled>{variant?.channelId ? `The ${variant.platform} account this draft was written for is not connected` : `No ${variant?.platform ?? ''} account connected`}</SelectItem>}
-                {channelsForVariant.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    <span className='flex items-center gap-2'>
-                      <ChannelIcon platform={c.platform} name={c.platform} size='xs' />
-                      {c.platform} · {c.account}{c.displayState ? ` · ${c.displayState}` : ''}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <NativeSelect id='schedule-channel' className='w-full [&>select]:h-12 [&>select]:text-base' value={channelId} onChange={(event) => setChannelId(event.target.value)} disabled={!variant || Boolean(variant.channelId)}>
+              <NativeSelectOption value='' disabled>{!variant ? 'Choose a draft first' : channelsForVariant.length === 0 ? `No ${variant.platform} account connected` : `Choose ${withArticle(variant.platform)} account`}</NativeSelectOption>
+              {channelsForVariant.map((c) => <NativeSelectOption key={c.id} value={c.id}>{c.platform} · {c.account}{c.displayState ? ` · ${c.displayState}` : ''}</NativeSelectOption>)}
+            </NativeSelect>
             {variant && channelsForVariant.length === 0 && (
               <Link href='/app/channels' className='text-muted-foreground hover:text-foreground w-fit text-xs underline underline-offset-2' onClick={() => onOpenChange(false)}>
                 Connect {withArticle(variant.platform)} account
@@ -407,21 +416,30 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 id='schedule-time'
                 type='datetime-local'
                 className='text-base md:text-sm'
+                aria-describedby='schedule-time-zone schedule-time-preview'
                 value={localTime}
                 onChange={(e) => {
                   setLocalTime(e.target.value);
                   setServerAsksFold(false);
                 }}
               />
-              <span className='text-muted-foreground text-xs'>{timeZone}</span>
+              <span id='schedule-time-zone' className='text-muted-foreground text-xs'>{timeZone}</span>
+              {chosenAt !== null && <p id='schedule-time-preview' data-review-time className='text-muted-foreground text-xs'><time dateTime={new Date(chosenAt).toISOString()}>{localTime.replace('T', ' ')} ({timeZone}) · {new Date(chosenAt).toISOString()}</time></p>}
               {timePassed && <Note>Pick a future time.</Note>}
               {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
             </div>}
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : 'Image (optional)'}</Label>
-              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : ['image']} />
+              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : flexibleMedia ? 'Media' : 'Image (optional)'}</Label>
+              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : flexibleMedia ? variant?.platform === 'LinkedIn' ? ['image', 'video', 'document'] : ['image', 'video'] : ['image']} />
             </div>
           </div>
+
+          {variant?.platform === 'TikTok' && <Label className='flex items-center gap-2'><Checkbox checked={tiktokPhoto} onCheckedChange={(value) => { setTiktokPhoto(value === true); setAssetId(''); }} />Photo post</Label>}
+          {asset && multiLimit > 1 && <section className='flex flex-col gap-2' aria-label='Ordered media'>
+            {extraIds.map((id, index) => <div key={id} className='flex flex-col gap-1.5 rounded-lg border p-2'><span className='text-sm'>Media {index+2} · {assets.find((item) => item.id === id)?.hash.slice(0,8)}</span>{kindOf(assets.find((item) => item.id === id)) === 'image' && <Input aria-label={`Alt text for media ${index+2}`} placeholder='Describe this image' value={mediaAlt[id] ?? ''} onChange={(event) => setMediaAlt((old) => ({ ...old, [id]: event.target.value }))} />}<div className='flex gap-3'><button type='button' disabled={index === 0} className='rafii-focus text-xs underline disabled:opacity-40' onClick={() => setExtraIds((old) => { const next = [...old]; [next[index-1], next[index]] = [next[index], next[index-1]]; return next; })}>Move earlier</button><button type='button' className='rafii-focus text-xs underline' onClick={() => setExtraIds((old) => old.filter((item) => item !== id))}>Remove</button></div></div>)}
+            {selectedMedia.length < multiLimit && <><AssetPicker assets={assets.filter((item) => !selectedMedia.some((selected) => selected.id === item.id) && (['Threads','Instagram'].includes(variant?.platform ?? '') || kindOf(item) === 'image'))} value={extraCandidate} onValueChange={setExtraCandidate} kinds={['image','video']} noneLabel='Choose another media item' /><button type='button' className='rafii-focus self-start text-sm underline disabled:opacity-40' disabled={!extraCandidate} onClick={() => { setExtraIds((old) => [...old, extraCandidate]); setExtraCandidate(''); }}>Add in this order</button></>}
+          </section>}
+          {channel && channel.platform === 'Facebook' && <Label className='flex items-center gap-2'><Checkbox checked={nativeSchedule} onCheckedChange={(value) => setNativeSchedule(value === true)} />Use platform scheduling {channel.platform === 'Facebook' ? '(feed text/photos only)' : '(initially private)'}</Label>}
 
           {!youtubeNow && askFold && (
             <div className='flex flex-col gap-1.5'>
@@ -451,7 +469,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             </div>
           )}
 
-          {channel && needsOptions && (
+          {channel && socialPlatform && <SocialOptions key={channel.id} platform={channel.platform} channelId={channel.id} media={selectedMedia} onChange={setPublishOptions} />}
+          {channel && needsOptions && !socialPlatform && (
             // Keyed by account: switching accounts starts the choices again instead of carrying them over.
             <PublishOptions key={channel.id} platform={channel.platform} channelId={channel.id} asset={asset} text={variant?.text ?? ''} onChange={setPublishOptions} />
           )}

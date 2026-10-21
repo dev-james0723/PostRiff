@@ -42,7 +42,10 @@ def publish_route(state: dict, destination: dict, *, providers: dict | None = No
     adapter = (providers or {}).get(provider_id)
     if adapter is None:
         return {"publish": False, "code": "not_configured", "reason": f"Publishing to {platform} isn't available yet, so the {platform} version is prepared as a draft."}
-    if not getattr(adapter, "production_reviewed", False):
+    member_product = bool(provider_id == 'linkedin' and getattr(adapter, 'member_publishing_approved', lambda: False)())
+    if not getattr(adapter, "production_reviewed", False) and not member_product:
+        if provider_id == 'linkedin':
+            return {"publish": False, "code": "publishing_access_unverified", "reason": "Rafii member publishing access is not yet verified/configured for this deployment; the draft is kept."}
         return {"publish": False, "code": "awaiting_review", "reason": f"{platform} hasn't approved Rafii's publishing access yet, so the {platform} version is prepared as a draft."}
     if not getattr(adapter, "execution_enabled", True):
         return {"publish": False, "code": "paused", "reason": f"Publishing to {platform} is paused for maintenance, so the {platform} version waits as a draft."}
@@ -64,6 +67,9 @@ def publish_route(state: dict, destination: dict, *, providers: dict | None = No
         return {"publish": False, "code": "demo_account", "reason": f"{channel.get('account') or platform} is a demo account, so nothing is really published there."}
     if not channel.get("identityVerified") or not channel.get("capabilityVerified"):
         return {"publish": False, "code": "reauthorize", "reason": f"{channel.get('account') or platform} needs to be reconnected before Rafii can publish there."}
+    if member_product and not adapter.production_reviewed and ('w_member_social' not in (channel.get('scopes') or [])
+            or channel.get('accountType') != 'member'):
+        return {"publish": False, "code": "permission_required", "reason": "Grant LinkedIn member publishing permission for this account before publishing; the draft is kept."}
     if channel_state is not None and channel_state(channel) != "Ready for posting":
         return {"publish": False, "code": "disconnected", "reason": f"{channel.get('account') or platform} needs to be reconnected before Rafii can publish there."}
     if can_publish is False:

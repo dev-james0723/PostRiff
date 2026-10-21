@@ -1,0 +1,27 @@
+{
+  "execution": "cloud Next/Playwright; synthetic provider responses; no live qualification",
+  "checks": [
+    {
+      "callbackThroughNormalUI": true,
+      "restoresOriginatingWorkspaceFromOtherSelection": true,
+      "width": 1280,
+      "granularCapabilities": true,
+      "noReadyFromIdentity": true,
+      "readHierarchy": true,
+      "immutableApproval": true,
+      "noDuplicateAfterUnknown": true,
+      "horizontalOverflow": false
+    },
+    {
+      "callbackThroughNormalUI": true,
+      "restoresOriginatingWorkspaceFromOtherSelection": true,
+      "width": 390,
+      "granularCapabilities": true,
+      "noReadyFromIdentity": true,
+      "readHierarchy": true,
+      "immutableApproval": true,
+      "noDuplicateAfterUnknown": true,
+      "horizontalOverflow": false
+    }
+  ]
+}

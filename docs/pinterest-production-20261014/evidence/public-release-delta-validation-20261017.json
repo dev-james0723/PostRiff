@@ -1,0 +1,97 @@
+{
+  "checkedAt": "2026-10-17T20:57:56.593391+00:00",
+  "sourceState": "Local committed candidate776930ed3851047ee5d9022cc49a1a69fe128830; livee2e5169f unchanged",
+  "reusedCloud": {
+    "source": "e2e5169f",
+    "run": "qd2tzg2hn0",
+    "python": 463,
+    "node": 51,
+    "postgresScripts": 7,
+    "result": "PASS for unchanged baseline only"
+  },
+  "localControlTests": [
+    {
+      "target": "test_pinterest_analytics.PinterestAnalytics.test_scheduler_keeps_no_data_distinct_and_retries_malformed_success",
+      "tests": 1,
+      "seconds": 0.005,
+      "result": "PASS"
+    },
+    {
+      "target": "test_pinterest_schedule_reverification.PinterestScheduleReverification.test_disconnect_reconnect_cancel_and_lease_takeover_during_read_never_post",
+      "tests": 1,
+      "seconds": 0.04,
+      "result": "PASS"
+    },
+    {
+      "target": "test_pinterest_schedule_reverification.PinterestScheduleReverification.test_stale_hour_or_expired_access_reverify_before_first_write_attempt",
+      "tests": 1,
+      "seconds": 0.015,
+      "result": "PASS"
+    },
+    {
+      "target": "test_pinterest_configuration_diagnostics.PinterestConfigurationDiagnostics.test_expired_private_pilot_is_not_misreported_as_blank_credentials",
+      "tests": 1,
+      "seconds": 0.006,
+      "result": "PASS"
+    },
+    {
+      "target": "test_pinterest_analytics.PinterestAnalytics.test_durable_empty_marker_and_failure_never_write_fabricated_observations",
+      "tests": 1,
+      "seconds": 0.003,
+      "result": "PASS"
+    }
+  ],
+  "localControlEnvironment": "Mac existing Python; one narrowly targeted lightweight control test per command, synthetic fixtures only; no installs or fan-out",
+  "preparedTests": {
+    "analyticsCases": 18,
+    "scheduleReverificationCases": 9,
+    "configurationDiagnosticsCases": 7,
+    "newNodeCoverageCases": 3
+  },
+  "remoteDelta": {
+    "status": "BLOCKED",
+    "classification": "validation_unavailable",
+    "command": "jcb doctor",
+    "exitCode": 2,
+    "reason": "Depot authentication unavailable; authorize depot login",
+    "paidRunStarted": false,
+    "freeRemoteCapacity": "NOT_VERIFIED"
+  },
+  "notRun": [
+    "complete new Python modules",
+    "existing YouTube worker regression against delta",
+    "Node coverage",
+    "TypeScript/lint/build/browser against delta",
+    "new actual PostgreSQL read-outcome query regression",
+    "full project CI",
+    "real customer OAuth/Pin/schedule/analytics"
+  ],
+  "static": "Python AST and git diff --check PASS; frozen PNG header/checksum and Pin JSON checked; no production correctness claim",
+  "sourceRevision": "776930ed3851047ee5d9022cc49a1a69fe128830",
+  "newPostgresCoverage": "Prepared actual SQL regression for firstfailure/no_data/tenant+binding/retainedzero/basis/savepoint recovery; execution NOT_RUN",
+  "inputHashes": {
+    "scripts/cloud-pinterest-release-delta-validation.sh": "6b691e9f1102a232ed11f70f6b968f53560ddeddf15407611f88eb951c2b26e9",
+    "src/postriff_phase2/growth/metric_schedule.py": "34d6fb35ac8862acf167074045f38c9dafc05c9d74178af3f977d8e801d2d4a9",
+    "src/postriff_phase2/hosted_worker.py": "a0e3ae8b47e01e002fde326852fd8d42ced0d4133d487d59b5ccd01e84b8f062",
+    "src/postriff_phase2/insights.py": "d042e688036fbee71926a9f7ad11f701edcd7a260760a1112c97fa5b4248fec3",
+    "src/postriff_phase2/oauth.py": "0c4ec1a90c9532f84d8b96c08f7cc708754f112e99bb8dfe7e87ad59bd72e2b8",
+    "src/postriff_phase2/pinterest_analytics.py": "f038da20d3d9eabe92ef051d002b1e2ab93c6e7a3233824eedb70229173348ec",
+    "src/postriff_phase2/store.py": "e8731d6aceaaae7fc0e9ef53aa0180e1ddd4429f3e1a63e04c3d478e6936bb78",
+    "src/postriff_phase2/wave3_connectors.py": "bb92d7382a8717d1ac26261fab3c160e29183ee5f9d0c82dd9fdd5c6f445c5da",
+    "tests/phase2/postgres_growth_metric_reads.py": "79b7727dd3babbe538eabefac209329e46b3a01c469a792a5058eecd83d104ab",
+    "tests/test_pinterest_analytics.py": "ddd178f9efc18f7c682d8b4d4e42cf57e01ebebed73b0149eadd0565002df843",
+    "tests/test_pinterest_configuration_diagnostics.py": "f7dc04b10c4f33b8c74c4a0640d4dd2dce22c4adf29c83da033fdbc01c596678",
+    "tests/test_pinterest_schedule_reverification.py": "81c3ac7109b18095a8246dc096b876fb48417e6b0cacb01c828f5c6f5c793680",
+    "web/src/features/analytics/analytics-view.tsx": "a260ac3ebfc580bbe13386b6c5824c0bb92db560f69a5e90055050ea6d7c495c",
+    "web/src/features/analytics/coverage.ts": "8650c885dc0c9ed271c803d9bf87c6136d60ac41a5c3418fa610d6d9b0b4f090",
+    "web/src/features/analytics/empty-states.tsx": "2cd2d7bb2437a99f4092c289d566f77b3c547165f5fed805940736b9229ee054",
+    "web/src/lib/api/types.ts": "678cd7399762675cdd0f35176e5d4935f8ed132fed1c2bb8d4e5dc78ce7c451d",
+    "web/tests/agent-ui-bridges-coverage.test.cjs": "9f03fd2a4e198747ce82c53e635084cfe9d09ecbbee5ae8759ade8d1ad17ddca"
+  },
+  "laterCorrection20261017": {
+    "earlierReasonSuperseded": "Restricted-network DNS was reported as authentication unavailable. Existing network-enabled auth/doctor laterPASS; no loginrequired.",
+    "currentBlocker": "IncludedDepotCIexhausted; newpaidrunapprovalpending",
+    "followupEvidence": "private-trial-delta-20261017.json",
+    "historicalFailurePreserved": true
+  }
+}

@@ -182,6 +182,11 @@ export function Allowances({
 }) {
   const terms = currentTerms(usage);
   const ent = usage.entitlement;
+  const storage = ent.unlimited === true
+    ? 'No plan limit'
+    : typeof ent.storageMb === 'number' && Number.isFinite(ent.storageMb) && ent.storageMb >= 0
+      ? `${ent.storageMb.toLocaleString()} MB`
+      : 'Unavailable';
 
   const meters: { label: string; mode: MeterMode; state: MeterState; onRetry?: () => void; over?: ReactNode }[] = [
     {
@@ -248,7 +253,7 @@ export function Allowances({
         ))}
         <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-sm'>
           <span className='text-foreground'>Storage</span>
-          <span className='text-muted-foreground tabular-nums'>{ent.storageMb.toLocaleString()} MB</span>
+          <span className='text-muted-foreground tabular-nums'>{storage}</span>
         </div>
         {isOwner && usage.budget && <CostGuard budget={usage.budget} />}
       </Surface>

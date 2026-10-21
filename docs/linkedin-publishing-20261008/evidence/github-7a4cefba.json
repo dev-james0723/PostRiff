@@ -1,0 +1,318 @@
+{
+  "schema": "rafii.github-validation.v1",
+  "observedAtUtc": "2026-10-08T08:04:02.004791+00:00",
+  "sourceSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+  "state": "ALL_REQUIRED_CHECKS_PASSED",
+  "pr": "https://github.com/dev-james0723/PostRiff/pull/131",
+  "isDraft": true,
+  "mergeable": "MERGEABLE",
+  "checks": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-08T07:50:21Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462686/job/113202876400",
+      "name": "founder",
+      "startedAt": "2026-10-08T07:37:21Z",
+      "status": "COMPLETED",
+      "workflowName": "Founder admin browser"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-08T07:38:30Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462541/job/113202543508",
+      "name": "growth-studio",
+      "startedAt": "2026-10-08T07:36:22Z",
+      "status": "COMPLETED",
+      "workflowName": "Growth Studio browser acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-08T07:42:32Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462654/job/113202543146",
+      "name": "native-learning-browser",
+      "startedAt": "2026-10-08T07:36:22Z",
+      "status": "COMPLETED",
+      "workflowName": "Growth metrics acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-08T07:40:17Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462532/job/113202542366",
+      "name": "local-foundation",
+      "startedAt": "2026-10-08T07:36:21Z",
+      "status": "COMPLETED",
+      "workflowName": "Rafii Control foundation"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-08T07:44:54Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462656/job/113202543610",
+      "name": "scenes",
+      "startedAt": "2026-10-08T07:36:22Z",
+      "status": "COMPLETED",
+      "workflowName": "Rafii browser scenes"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-08T07:59:52Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462566/job/113202542832",
+      "name": "local-gates",
+      "startedAt": "2026-10-08T07:36:22Z",
+      "status": "COMPLETED",
+      "workflowName": "Rafii local release gates"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-08T07:43:36Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462560/job/113202543373",
+      "name": "library",
+      "startedAt": "2026-10-08T07:36:22Z",
+      "status": "COMPLETED",
+      "workflowName": "Universal Library release validation"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-08T07:36:20Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462560/job/113202544624",
+      "name": "dependency-lock",
+      "startedAt": "2026-10-08T07:36:20Z",
+      "status": "COMPLETED",
+      "workflowName": "Universal Library release validation"
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "Vercel",
+      "startedAt": "2026-10-08T07:37:27Z",
+      "state": "SUCCESS",
+      "targetUrl": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/HUGEcuSxUJCJYwxaP31XTpNV2mrQ"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-08T07:37:28Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://vercel.com/github",
+      "name": "Vercel Preview Comments",
+      "startedAt": "2026-10-08T07:37:28Z",
+      "status": "COMPLETED",
+      "workflowName": ""
+    }
+  ],
+  "integratedRunId": "37744462566",
+  "integratedJobId": "113202542832",
+  "run": {
+    "conclusion": "success",
+    "headSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+    "jobs": [
+      {
+        "completedAt": "2026-10-08T07:59:52Z",
+        "conclusion": "success",
+        "databaseId": 113202542832,
+        "name": "local-gates",
+        "startedAt": "2026-10-08T07:36:22Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-10-08T07:36:23Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-10-08T07:36:22Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:36:31Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "number": 2,
+            "startedAt": "2026-10-08T07:36:23Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:36:31Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "number": 3,
+            "startedAt": "2026-10-08T07:36:31Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:36:39Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "number": 4,
+            "startedAt": "2026-10-08T07:36:31Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:37:17Z",
+            "conclusion": "success",
+            "name": "Install pinned application and validation tools",
+            "number": 5,
+            "startedAt": "2026-10-08T07:36:39Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:37:33Z",
+            "conclusion": "success",
+            "name": "Install PostgreSQL 17 using its signed official repository",
+            "number": 6,
+            "startedAt": "2026-10-08T07:37:17Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:37:46Z",
+            "conclusion": "success",
+            "name": "Install ffmpeg (media decoding tests render a test image with it)",
+            "number": 7,
+            "startedAt": "2026-10-08T07:37:34Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:42:24Z",
+            "conclusion": "success",
+            "name": "Python domain and security contracts",
+            "number": 8,
+            "startedAt": "2026-10-08T07:37:46Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:52:54Z",
+            "conclusion": "success",
+            "name": "Disposable DB integration, migrations and restore",
+            "number": 9,
+            "startedAt": "2026-10-08T07:42:24Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:53:10Z",
+            "conclusion": "success",
+            "name": "Web contracts and locale checks",
+            "number": 10,
+            "startedAt": "2026-10-08T07:52:54Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:54:53Z",
+            "conclusion": "success",
+            "name": "Types, lint and isolated production build",
+            "number": 11,
+            "startedAt": "2026-10-08T07:53:10Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:54:54Z",
+            "conclusion": "success",
+            "name": "Product copy audit",
+            "number": 12,
+            "startedAt": "2026-10-08T07:54:53Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:55:14Z",
+            "conclusion": "success",
+            "name": "Actual isolated Python function archive",
+            "number": 13,
+            "startedAt": "2026-10-08T07:54:54Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:56:57Z",
+            "conclusion": "success",
+            "name": "Offline source secret scan",
+            "number": 14,
+            "startedAt": "2026-10-08T07:55:14Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:57:06Z",
+            "conclusion": "success",
+            "name": "Dependency audits",
+            "number": 15,
+            "startedAt": "2026-10-08T07:56:57Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:59:48Z",
+            "conclusion": "success",
+            "name": "Real local browser, API and database integration",
+            "number": 16,
+            "startedAt": "2026-10-08T07:57:06Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:59:50Z",
+            "conclusion": "success",
+            "name": "Retain evidence tied to this commit",
+            "number": 17,
+            "startedAt": "2026-10-08T07:59:48Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:59:50Z",
+            "conclusion": "success",
+            "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "number": 32,
+            "startedAt": "2026-10-08T07:59:50Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:59:50Z",
+            "conclusion": "success",
+            "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "number": 33,
+            "startedAt": "2026-10-08T07:59:50Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:59:50Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "number": 34,
+            "startedAt": "2026-10-08T07:59:50Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-08T07:59:50Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 35,
+            "startedAt": "2026-10-08T07:59:50Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462566/job/113202542832"
+      }
+    ],
+    "status": "completed"
+  },
+  "artifacts": [
+    {
+      "created_at": "2026-10-08T07:59:50Z",
+      "digest": "sha256:380adaac0b9d9f73afee9b1630327509d70ff69a5101ba7580399cc7f177bf04",
+      "expired": false,
+      "expires_at": "2026-10-22T07:59:48Z",
+      "id": 11536033176,
+      "name": "local-gates-d8eb4e698da25108b2d82ebdc320241f3d727c69",
+      "size_in_bytes": 4765809
+    }
+  ],
+  "actualTestedPrMerge": {
+    "parents": [
+      "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+      "7a4cefbaba92ac65ca17da8082a208a092faf5ca"
+    ],
+    "sha": "d8eb4e698da25108b2d82ebdc320241f3d727c69",
+    "tree": "97e0a1f7431b5f406ccee19a724fbc4d4f337446",
+    "deployedHeadSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+    "deployedHeadTreeSha": "97e0a1f7431b5f406ccee19a724fbc4d4f337446",
+    "treesIdentical": true
+  }
+}

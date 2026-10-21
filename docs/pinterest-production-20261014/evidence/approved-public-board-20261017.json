@@ -1,0 +1,96 @@
+{
+  "checkedAt": "2026-10-17T22:28:12.182953+00:00",
+  "status": "PASS",
+  "execution": "REAL_APPROVED_PINTEREST_UI_BOARD_CREATION",
+  "authority": "Direct human APPROVE!!!!!!!!! after specificsingleemptyPUBLICboardproposal; noPin/productionSQL/config/deploy/consent/submission scope",
+  "board": {
+    "id": "1126814837958721891",
+    "name": "Rafii — Product & Content Workflows",
+    "description": "Rafii product ideas and practical workflows for planning, reviewing and publishing original content.",
+    "url": "https://www.pinterest.com/jamesaucreates/rafii-product-content-workflows/",
+    "privacy": "PUBLIC",
+    "pinCount": 0,
+    "sectionsCreated": 0,
+    "collaboratorsAdded": 0
+  },
+  "account": {
+    "username": "jamesaucreates",
+    "stableProviderAccountId": "1126814906675966091",
+    "identityProof": "NativeownprofileURL+Editprofile+Yourprofilelink,thenanonymouspublicwidgetuser.idmatchesthepreviouslyacceptedstableID"
+  },
+  "nativeSteps": [
+    "FreshSavedownprofileinspected:noexistingboardcard",
+    "Createboardformprivateunchecked/0,nocollaborators",
+    "NativebrowserfillrenderedtextbutCreatewasdisabled;CUAactualnativeinputtriggeredReactandCreateenabled",
+    "OneCreateclickonly;initialdisabledprocessingstatewaited/reconciled,newboardURLandemptyboardpickerappeared",
+    "ClosedsuggestionswithDonewithoutselectingPins",
+    "Editedonlyexactapproveddescription;privatecheckbox0;Done;visiblepersisteddescription/publicboard0Pins",
+    "Reloadedboard,metadataand0Pinsremained"
+  ],
+  "createSubmitAttempts": 1,
+  "providerBoardCreates": 1,
+  "writeBudgetRemaining": 0,
+  "publicMetadata": {
+    "at": "2026-10-17T22:24:37.505718+00:00",
+    "url": "https://www.pinterest.com/jamesaucreates/rafii-product-content-workflows/",
+    "finalUrl": "https://www.pinterest.com/jamesaucreates/rafii-product-content-workflows/",
+    "httpStatus": 200,
+    "bytes": 1566268,
+    "htmlSha256": "3049c369449a320e99a328464009337a897cacc299c5b98bcce17c9aecd3ca37",
+    "publicMetadata": [
+      {
+        "property": "og:title",
+        "content": "Rafii — Product & Content Workflows on Pinterest"
+      },
+      {
+        "property": "og:description",
+        "content": "Explore a hand-picked collection of Pins about Rafii — Product & Content Workflows on Pinterest."
+      },
+      {
+        "property": "og:url",
+        "content": "https://www.pinterest.com/jamesaucreates/rafii-product-content-workflows/"
+      }
+    ],
+    "credentialsSent": false,
+    "cookiesSent": false
+  },
+  "publicWidgetMetadata": {
+    "at": "2026-10-17T22:25:33.383304+00:00",
+    "url": "https://widgets.pinterest.com/v3/pidgets/boards/jamesaucreates/rafii-product-content-workflows/pins/",
+    "status": 200,
+    "sha256": "92798f6e50cf8b2078fa881fb7df16fa8008d3ed6d0b0e00d198751a855bcecc",
+    "rootKeys": [
+      "status",
+      "code",
+      "message",
+      "endpoint_name",
+      "data"
+    ],
+    "dataKeys": [
+      "pins",
+      "board",
+      "user"
+    ],
+    "board": {
+      "url": "/jamesaucreates/rafii-product-content-workflows/",
+      "id": "1126814837958721891",
+      "description": "Rafii product ideas and practical workflows for planning, reviewing and publishing original content.",
+      "pin_count": 0,
+      "name": "Rafii &#8212; Product &amp; Content Workflows"
+    },
+    "user": {
+      "id": "1126814906675966091",
+      "full_name": "James Au"
+    },
+    "pinsCount": 0,
+    "sourceClassification": "PUBLIC_PINTEREST_WIDGET_METADATA_NOT_V5_ACCEPTANCE",
+    "credentialsSent": false,
+    "cookiesSent": false
+  },
+  "actualPinterestV5IdentityBoardEligibility": "NOT_RUN; no currentgrant/window. Do notsubstitutepublicwidgetforofficialOAuthAPIacceptance",
+  "apiHostChanged": false,
+  "pinsCreated": 0,
+  "productionSupabase": "buoyhkbodnhzngaotoel unchanged",
+  "codeChanged": false,
+  "next": "FreezeactualboardIDinreviewpackage; separatecanonicalSQL/privateconfig/deploy/fresh4scopeconsent/mediaingest approval; finalexact2Pinapprovalafteractualimmutableassetreview"
+}

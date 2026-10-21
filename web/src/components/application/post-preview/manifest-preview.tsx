@@ -23,5 +23,11 @@ export function ManifestPreview({ manifest, timeZone, scale, className }: Manife
 
 function ResolvedPreview({ manifest, timeZone, scale, className }: ManifestPreviewProps & { timeZone: string }) {
   const post = usePreviewPost(manifest, timeZone);
-  return <PostPreview post={post} scale={scale} className={className} />;
+  const destination = manifest.discord?.target;
+  return <>
+    {manifest.platform === 'Discord' && <p className='text-muted-foreground mb-2 text-xs' data-discord-frozen-target>
+      {destination ? `Frozen target: ${destination.guildName} (${destination.guildId}) · ${destination.channelName} (${destination.channelId})` : 'Legacy Discord approval: a new server and channel preview is required before publication.'}
+    </p>}
+    <PostPreview post={post} scale={scale} className={className} />
+  </>;
 }
