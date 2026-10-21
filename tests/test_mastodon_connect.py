@@ -155,6 +155,30 @@ class MastodonConnectContracts(unittest.TestCase):
         self.assertEqual(error.exception.code, 'mastodon_registration_busy')
         provider.transport.assert_not_called()
 
+    def test_registration_rate_limit_is_named_and_nothing_is_cached(self):
+        cursor = Mock(fetchone=Mock(side_effect=[(True,), None]))
+        @contextmanager
+        def connection_factory():
+            @contextmanager
+            def scoped_cursor():
+                yield cursor
+            yield SimpleNamespace(cursor=scoped_cursor)
+        provider = MastodonProvider(BASE, transport=Wire([ok({'error': 'Too many requests'}, 429)]), resolver=PUBLIC)
+        service = SimpleNamespace(repository=SimpleNamespace(connection_factory=connection_factory), clock=lambda: 100)
+        with self.assertRaises(AlphaError) as error:
+            ApplicationCache(service, provider)('mastodon.social', BASE + '/cb', ['read:accounts'])
+        self.assertEqual((error.exception.status, error.exception.code), (429, 'mastodon_registration_rate_limited'))
+        self.assertIn('about 10 minutes', str(error.exception))
+        self.assertFalse(any('INSERT' in call.args[0] for call in cursor.execute.call_args_list))
+
+    def test_uncached_registration_rate_limit_uses_retry_after(self):
+        wire = Wire([ok({'version': '4.3.0'}), ok({}, 404), {'status': 429, 'body': {}, 'headers': {'Retry-After': '150'}}])
+        provider = MastodonProvider(BASE, transport=wire, resolver=PUBLIC)
+        with self.assertRaises(AlphaError) as error:
+            provider.begin(BASE + '/cb', 'state', 'verifier', 'challenge', ['read:accounts'], 'mastodon.social')
+        self.assertEqual(error.exception.code, 'mastodon_registration_rate_limited')
+        self.assertIn('about 3 minutes', str(error.exception))
+
     @patch('postriff_phase2.billing.require_plan_capacity', lambda *a, **k: None)
     def test_reconnect_is_workspace_scoped_and_cannot_replace_another_identity(self):
         harness = wave1.ServiceFlows()
