@@ -99,23 +99,22 @@ export const channels: Channel[] = [
     slug: 'linkedin',
     name: 'LinkedIn',
     group: 'hosted',
-    capability: 'assisted',
-    reviewStatus: 'publishing in review',
+    capability: 'direct',
     capabilities: {
       identity: 'Direct',
-      publish: 'Assisted',
-      schedule: 'Assisted',
+      publish: 'Direct',
+      schedule: 'Direct',
       analytics: 'Unsupported',
       comments_read: 'Unsupported',
       reply: 'Unsupported'
     },
-    description: 'Text posts on your profile. Image posts aren’t available yet.',
+    description: 'Text posts on your profile, published or scheduled after you approve each one. Image posts aren’t available yet.',
     formats: ['Text post'],
     region: 'global',
     notes: [
-      hostedPending,
       'LinkedIn access lasts 60 days. The account card shows when to reconnect.',
-      'Company pages, analytics and comments aren’t available yet; they need LinkedIn’s approval.'
+      'Company pages and post analytics need LinkedIn’s separate approval and aren’t available yet.',
+      'LinkedIn doesn’t let apps read comments on personal profiles, so Rafii can’t show or answer them.'
     ]
   },
   {
