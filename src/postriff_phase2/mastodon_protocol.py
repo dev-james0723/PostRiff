@@ -26,6 +26,17 @@ def instance_host(value):
     return public_host(raw)
 
 
+def refuse_rate_limited_registration(response):
+    """Mastodon allows 5 app registrations per IP per 10 minutes; say so instead of blaming the server name."""
+    if response.get("status") != 429:
+        return
+    headers = {str(k).lower(): str(v) for k, v in (response.get("headers") or {}).items()}
+    seconds = headers.get("retry-after", "")
+    minutes = max(1, min(60, -(-int(seconds) // 60))) if seconds.isdigit() else 10
+    raise AlphaError(f"This Mastodon server is limiting new app sign-ins right now. Nothing changed; try connecting again in about {minutes} minutes.",
+                     429, code="mastodon_registration_rate_limited")
+
+
 def version_at_least(version, minimum):
     match = re.match(r"^(\d+)\.(\d+)\.(\d+)", str(version))
     return bool(match and tuple(map(int, match.groups())) >= minimum)
