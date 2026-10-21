@@ -94,7 +94,7 @@ def validate_structure(root=ROOT):
     checks.append(_result("source-upload-boundary", "pass" if upload_boundary else "fail", "private inputs remain blocked; only the required public binding guard may bypass the scripts block"))
 
     dependencies = set((root / "requirements.txt").read_text().splitlines())
-    pinned = "Pillow==12.3.0" in dependencies and "psycopg[binary]==3.3.5" in dependencies
+    pinned = "Pillow==13.0.0" in dependencies and "psycopg[binary]==3.3.5" in dependencies
     checks.append(_result("python-runtime", "pass" if pinned and (root / ".python-version").read_text().strip() == "3.12" else "fail", "Python 3.12 with pinned Pillow and psycopg binary wheels"))
 
     ignored = (root / ".gitignore").read_text().splitlines()
