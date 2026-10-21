@@ -96,7 +96,7 @@ class PrivateTrial(unittest.TestCase):
     def test_all_four_capabilities_private_and_public_review_stays_false(self):
         registry,p,t=fixture()
         service=OAuthService.__new__(OAuthService);service.providers=registry;service.vault=SimpleNamespace(fernet=True)
-        service.public_base_url='https://rafii.test';service.youtube_public_base_url=None
+        service.public_base_url='https://rafii.test';service.youtube_public_base_url=None;service.clock=time.time
         entry=next(e for e in service.provider_catalog() if e['id']=='pinterest')
         self.assertTrue(entry['connectReady']);self.assertTrue(entry['privateTrial'])
         self.assertFalse(entry['publicConnectionReady']);self.assertFalse(entry['productionReviewed'])

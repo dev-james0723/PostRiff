@@ -5,4 +5,4 @@ class ReceiptPackaging(unittest.TestCase):
  def test_vercel_upload_explicitly_includes_ignored_source_receipt(self):
   lines=(ROOT/'.vercelignore').read_text().splitlines()
   self.assertIn('!src/postriff_phase2/release-source.json',lines)
-  self.assertTrue((ROOT/'src/postriff_phase2/release-source.json').is_file())
+  # The receipt itself is git-ignored and written by the release step, so a CI checkout never has it.

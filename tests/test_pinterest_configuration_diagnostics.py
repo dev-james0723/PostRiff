@@ -32,6 +32,7 @@ def catalog(values):
         service.vault = SimpleNamespace(fernet=True)
         service.public_base_url = 'https://rafii.test'
         service.youtube_public_base_url = None
+        service.clock = lambda: NOW
         result = service.provider_catalog()
     wire.assert_not_called()
     return registry, next(p for p in result if p['id'] == 'pinterest'), result

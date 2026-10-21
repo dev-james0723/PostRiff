@@ -308,7 +308,8 @@ class OAuthService:
             if pid in CATALOG:
                 entry['officialCapabilities'] = capability_states(pid, approvals=getattr(adapter, 'official_approvals', {}), implemented=getattr(adapter, 'official_implemented', ()), connection_approval=getattr(adapter, 'connection_review', {}) if entry.get('publicConnectionReady') else {}, member_publishing_approved=entry.get('memberPublishingApproved', False), now=self.clock())
                 groups = {f.permission_group for f in CATALOG[pid].values() if f.support == 'documented'}
-                entry['capabilities'].update({group: bool(adapter and adapter.capability_scopes(group)) for group in groups})
+                # Add the granular groups only; the base map above already applied trial and publishing-permission limits.
+                entry['capabilities'].update({group: bool(adapter and adapter.capability_scopes(group)) for group in groups if group not in entry['capabilities']})
         return entries
 
     @staticmethod
