@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { StateMessage } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
-import { keys } from '@/lib/api/hooks';
+import { keys, useMe } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { OAuthComplete } from '@/lib/api/types';
 import { takeExpectedReconnect } from '@/lib/channels/connect-expect';
@@ -43,10 +43,12 @@ function discordSingleFlight(key: string, start: () => Promise<OAuthComplete>): 
 export function ConnectReturn() {
   const params = useSearchParams();
   const dc = discordCopy(usePreferences().locale);
+  const me = useMe();
   const router = useRouter();
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const handled = useRef(false);
+  const mounted = useRef(false);
   const { user, status: authStatus } = useAuth();
   const activeDiscordContext = useRef('');
   const startedDiscordContext = useRef('');
@@ -59,6 +61,13 @@ export function ConnectReturn() {
   const discordContext = JSON.stringify([workspaceId, user?.id ?? '', provider, state]);
   activeDiscordContext.current = discordContext;
 
+  // Layout hydration can remount this view while the one-use exchange is shared.
+  // Only the currently mounted view may consume reconnect state or notify.
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
   useEffect(() => {
     // Do not consume a single-use OAuth code before authentication is ready.
     if (provider === 'discord' && (authStatus === 'loading' || !workspaceId)) return;
@@ -66,13 +75,15 @@ export function ConnectReturn() {
       setError(callbackCopy.callbackSignIn);
       return;
     }
+    // Preferences re-key the page when this existing profile query resolves.
+    if (provider === 'discord' && me.isPending) return;
     if (handled.current) {
       if (provider === 'discord' && startedDiscordContext.current !== discordContext) setError(dc.callbackContextChanged);
       return;
     }
     handled.current = true;
     startedDiscordContext.current = discordContext;
-    const staleDiscord = () => provider === 'discord' && activeDiscordContext.current !== discordContext;
+    const staleDiscord = () => provider === 'discord' && (!mounted.current || activeDiscordContext.current !== discordContext);
     if (!provider || !state) {
       setError(callbackCopy.callbackIncomplete);
       return;
@@ -85,14 +96,15 @@ export function ConnectReturn() {
       : start();
     void exchange.then(async (value) => {
         if (staleDiscord()) return;
-        // A reconnect parked the account it was meant for; read it once whatever the outcome.
-        const expected = takeExpectedReconnect();
+        const expectedBeforeRefresh = provider === 'discord' ? null : takeExpectedReconnect();
         // The API returns `connectionId` (oauth.py: complete); the TS type does not list it yet.
         const connectionId = (value as { connectionId?: string }).connectionId;
         await client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
         void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
         await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
         if (staleDiscord()) return;
+        // Consume only after refresh: an old view may have unmounted while awaiting it.
+        const expected = provider === 'discord' ? takeExpectedReconnect() : expectedBeforeRefresh;
         if (value.connected && connectionId) {
           if (value.discordPurpose === 'identity') toast.success(dc.callbackIdentity, { description: dc.identityNotice });
           if (value.discordPurpose === 'webhook') toast.success(dc.callbackWebhook);
@@ -109,7 +121,7 @@ export function ConnectReturn() {
         setResult(value);
       })
       .catch((err) => { if (!staleDiscord()) setError(err instanceof ApiError ? err.message : callbackCopy.callbackRetry); });
-  }, [api, client, params, provider, router, state, workspaceId, dc, callbackCopy, discordContext, authStatus]);
+  }, [api, client, params, provider, router, state, workspaceId, dc, callbackCopy, discordContext, authStatus, me.isPending]);
 
   const back = (
     <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>

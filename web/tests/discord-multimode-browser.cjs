@@ -180,6 +180,8 @@ async function until(check) {
         await page.getByText(copy.permissions, {exact: true}).waitFor();
         await page.getByText(copy.different, {exact: true}).waitFor();
         await page.getByText(copy.unavailable, {exact: false}).first().waitFor();
+        assert.equal(await page.getByText(copy.permissions, {exact: true}).count(), 1, 'only the active callback view may show a permissions warning');
+        assert.equal(await page.getByText(copy.different, {exact: true}).count(), 1, 'the active view must retain exactly one reconnect warning');
         assert.equal(callbacks, beforeCallbacks + 3);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
       }
