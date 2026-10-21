@@ -24,11 +24,9 @@ jobs:
         run: |
           git init .
           git remote add origin https://github.com/dev-james0723/PostRiff.git
-          git fetch --depth=1 origin "$GITHUB_SHA"
-          git checkout --detach FETCH_HEAD
+          git -c protocol.version=2 fetch --no-auto-maintenance --depth=1 origin "$GITHUB_SHA" fe45c568ed65c80f76afebc9911eeaa1a1a59c29 e891af3591d8baabdb54c05d936ccd61c3299e42
+          git checkout --detach "$GITHUB_SHA"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          git fetch --depth=1 origin fe45c568ed65c80f76afebc9911eeaa1a1a59c29
-          git fetch --depth=1 origin e891af3591d8baabdb54c05d936ccd61c3299e42
           git worktree add --detach "$RUNNER_TEMP/ping-upstream" e891af3591d8baabdb54c05d936ccd61c3299e42
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
