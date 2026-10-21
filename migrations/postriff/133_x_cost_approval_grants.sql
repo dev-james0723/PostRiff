@@ -1,5 +1,9 @@
 -- Durable approvals survive process/window/evidence rotation. Candidate only.
+-- Fail closed rather than queue behind an unrelated production writer indefinitely.
+-- These bounds are transaction-local and do not change database-wide settings.
 BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '120s';
 LOCK TABLE postriff.x_cost_windows, postriff.x_cost_workspaces,
  postriff.x_cost_reservations IN ACCESS EXCLUSIVE MODE;
 CREATE TABLE postriff.x_cost_grants (
