@@ -12,6 +12,7 @@ def manifest(root):
     paths = set(source_paths(root))
     paths.update(p.relative_to(root).as_posix() for p in (root / 'tests').glob('test_discord*.py') if p.is_file())
     paths.add('scripts/postriff_pg_suite.py')
+    paths.add('tests/test_pillow_security.py')
     paths.update(p.relative_to(root).as_posix() for p in (root / 'web/src').rglob('*') if p.is_file() and p.suffix in ('.ts', '.tsx', '.json', '.css'))
     paths.update(p.relative_to(root).as_posix() for p in (root / 'web/tests').rglob('*') if p.is_file() and p.suffix in ('.cjs', '.mjs', '.json'))
     paths.update({'tests/test_discord_personal_account_contract.py', 'tests/test_discord_multimode.py', 'tests/test_discord_interactions.py',
