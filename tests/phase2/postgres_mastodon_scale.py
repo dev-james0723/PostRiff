@@ -165,6 +165,30 @@ try:
     metrics['queue'] = {'seededJobs': COUNT*2, 'fencedClaims': CLAIMS, 'distinctFairTenants': len(set(claimed)),
                         'claimP95Ms': round(sorted(timings)[math.ceil(CLAIMS*.95)-1], 3)}
     assert metrics['queue']['claimP95Ms'] <= 2000
+    # Three concurrent cron lanes (main + two publish lanes) share the queue: no job is claimed twice and every lane
+    # makes progress while the claim lock is contended.
+    LANES, PER_LANE = 3, 20
+    lane_claims, lane_busy = [[] for _ in range(LANES)], [0] * LANES
+    def lane(index):
+        worker = PostgresWorker(connection, social=NoEgress(), clock=lambda: NOW)
+        for _ in range(PER_LANE * 20):
+            if len(lane_claims[index]) >= PER_LANE:
+                break
+            result = worker.claim()
+            if result:
+                lane_claims[index].append((result['workspaceId'], result['job']['id']))
+            elif worker.last_claim_busy:
+                lane_busy[index] += 1; time.sleep(0.01)
+            else:
+                break
+    threads = [threading.Thread(target=lane, args=(i,)) for i in range(LANES)]
+    lane_started = time.monotonic()
+    for thread in threads: thread.start()
+    for thread in threads: thread.join(60)
+    all_lane_claims = [c for claims in lane_claims for c in claims]
+    assert len(all_lane_claims) == len(set(all_lane_claims)) == LANES * PER_LANE, (len(all_lane_claims), len(set(all_lane_claims)))
+    metrics['lanes'] = {'lanes': LANES, 'claimsPerLane': [len(c) for c in lane_claims], 'busyRetries': lane_busy,
+                        'duplicateClaims': 0, 'elapsedMs': round((time.monotonic() - lane_started) * 1000, 3)}
     metrics.update(execution='cloud-synthetic-connected-users-and-disposable-sql', providerCalls=0,
                    realAccountAcceptance=False, productionHttpLoadAcceptance=False, seedSeconds=round(seed_seconds, 3),
                    elapsedSeconds=round(time.monotonic()-started, 3), sqlConcurrencyBound=SQL_CONCURRENCY)

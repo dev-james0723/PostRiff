@@ -16,6 +16,9 @@ from .permissions import Membership
 from .learning_service import record_published
 from .youtube.agent import assert_job_authority
 
+# Concurrent cron lanes take turns on the claim lock; a lane waits briefly instead of ending its tick.
+CLAIM_BUSY_RETRIES, CLAIM_BUSY_WAIT = 50, 0.2
+
 
 def configured_worker_limits(values=None):
     """Server-only tuning; existing cron defaults and safe per-invocation bounds."""
@@ -76,6 +79,8 @@ class DisabledHostedSocial:
 
 
 class PostgresWorker:
+    sleep = staticmethod(time.sleep)
+
     def __init__(self, connection_factory, social=None, clock=time.time, worker_id=None, on_verified=None, youtube_maintenance=None):
         self.connection_factory = connection_factory
         self.social = social or DisabledHostedSocial()
@@ -132,10 +137,13 @@ class PostgresWorker:
     def claim(self, *, youtube_only=False, exclude_youtube=False):
         if youtube_only and exclude_youtube:
             raise AlphaError('Worker platform filters conflict.', 503, code='worker_platform_filter')
+        self.last_claim_busy = False
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('postriff-worker-v1',0))")
                 if not cur.fetchone()[0]:
+                    # Another lane is claiming right now; the tick retries instead of treating this as an empty queue.
+                    self.last_claim_busy = True
                     return None
                 cur.execute("SELECT to_regclass('public.pr_worker_tenants')")
                 capacity_ready = cur.fetchone()[0] is not None
@@ -616,8 +624,15 @@ class PostgresWorker:
         def step():
             return (self.step(youtube_only=youtube_only, exclude_youtube=exclude_youtube)
                     if youtube_only or exclude_youtube else self.step())
-        while processed < max_jobs and time.monotonic() - started < max_seconds and step():
-            processed += 1
+        busy_waits = 0
+        while processed < max_jobs and time.monotonic() - started < max_seconds:
+            if step():
+                processed += 1
+            elif getattr(self, 'last_claim_busy', False) and busy_waits < CLAIM_BUSY_RETRIES:
+                busy_waits += 1
+                self.sleep(CLAIM_BUSY_WAIT)
+            else:
+                break
         return {"processed": processed, "execution": "hosted-worker", "externalExecution": not isinstance(self.social, DisabledHostedSocial),
                 "youtubeMaintenance": maintenance, "capacityIntervention": getattr(self, 'capacity_intervention', None),
                 **({'mastodonMaintenance': mastodon_maintenance} if mastodon_maintenance is not None else {}),
