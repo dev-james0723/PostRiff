@@ -1,6 +1,6 @@
 # LAUNCH-READINESS-REPORT (Discord capped Wave 1)
 
-Generated 2026-10-22T20:16:13Z. Candidate: `claude/discord-launch-rc-20261023` at `cd0ff8d0` (draft PR #222, not frozen). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
+Generated 2026-10-22T20:19:17Z. Candidate: `claude/discord-launch-rc-20261023` at `cd0ff8d0` (draft PR #222, not frozen). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
 
 ## Recommendation: **NO-GO today**
 
@@ -33,7 +33,7 @@ A false GO is the worst outcome, and none of the gates that need the owner, Disc
 | H-08 | Approve customer-facing Discord disclosures | HUMAN | **NOT_RUN** | wording drafted and committed on the RC as its own commit; awaiting approval; the build waits for it | P-01-privacy-terms-diff.md |
 | S-00 | Baseline snapshot of facts (Appendix A) | AGENT | **VERIFIED** |  |  |
 | S-01 | Identify the lineage of the build rafii.io serves now | AGENT | **VERIFIED** | live build is c5fc1fd1 (Mastodon production candidate), 257 of 257 listed files identical, 48 of 48 hidden-file probes; no Discord v2 code in production | S-01-lineage-report.md |
-| S-02 | Preserve-live matrix | AGENT | **NOT_RUN** | covered in aggregate by the superset proof and the full Python suite (6,075 tests, same code as the candidate); no per-capability matrix written | scripts/rc_superset_proof.py; S-01-lineage-report.md |
+| S-02 | Preserve-live matrix | AGENT | **NOT_RUN** | matrix written with the code path, route or cron, tests and proof for every live capability, plus the capability levels Discord will show; it flips to VERIFIED when the full CI on the frozen head is green, beca… | S-02-preserve-live-matrix.md; scripts/rc_superset_proof.py |
 | S-03 | Build the RC branch | AGENT | **VERIFIED** | candidate branch built as a merge of the live line c5fc1fd1 and the Discord line b960bfe0 plus the launch controls; 11 conflicted files resolved as unions | branch claude/discord-launch-rc-20261023; merge commit d4572f68 message lists every resolution |
 | S-04 | Superset proof | AGENT | **VERIFIED** | superset proof passes with 29 deliberate, explained rewrites; re-run at freeze | scripts/rc_superset_proof.py; tests/test_rc_superset_proof.py |
 | S-05 | Migration ledger reconciliation | AGENT | **VERIFIED** | nothing to apply for Discord; migrations 108 to 112 are absent in production but also absent from the live build; retired Mastodon 131 to 133 absent everywhere | S-05-migration-reconciliation.md |
