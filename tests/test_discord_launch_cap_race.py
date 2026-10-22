@@ -34,8 +34,8 @@ SCHEMA = """
 CREATE TABLE public.pr_encrypted_credentials (
   provider text NOT NULL, provider_account_id text NOT NULL, scopes text[] NOT NULL, revoked_at timestamptz);
 CREATE TABLE public.pr_oauth_transactions (
-  id bigserial PRIMARY KEY, provider text NOT NULL, scopes text[] NOT NULL, expires_at timestamptz NOT NULL,
-  consumed_at timestamptz, outcome text);
+  id bigserial PRIMARY KEY, workspace_id text NOT NULL, member_id text NOT NULL, provider text NOT NULL,
+  scopes text[] NOT NULL, expires_at timestamptz NOT NULL, consumed_at timestamptz, outcome text);
 """
 
 
@@ -93,10 +93,10 @@ class ConcurrentCapReservation(unittest.TestCase):
                        "('discord','server-a',ARRAY['bot','guilds'],NULL), ('discord','server-b',ARRAY['bot'],now()), "
                        "('discord','user-x',ARRAY['identify'],NULL)")  # an identity link is not a server
             # None of these occupy a slot: expired, finished without an exchange, or somebody else's provider.
-            db.execute("INSERT INTO public.pr_oauth_transactions(provider,scopes,expires_at,consumed_at,outcome) VALUES "
-                       "('discord',ARRAY['bot'],now()-interval '1 minute',NULL,NULL),"
-                       "('discord',ARRAY['bot'],now()+interval '5 minutes',now(),'denied'),"
-                       "('mastodon',ARRAY['bot'],now()+interval '5 minutes',NULL,NULL)")
+            db.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,scopes,expires_at,consumed_at,outcome) VALUES "
+                       "('w-old','m-old','discord',ARRAY['bot'],now()-interval '1 minute',NULL,NULL),"
+                       "('w-denied','m-denied','discord',ARRAY['bot'],now()+interval '5 minutes',now(),'denied'),"
+                       "('w-other','m-other','mastodon',ARRAY['bot'],now()+interval '5 minutes',NULL,NULL)")
 
     def used(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
@@ -107,7 +107,7 @@ class ConcurrentCapReservation(unittest.TestCase):
         gate_open = threading.Barrier(RACERS, timeout=60)
         outcomes, failures = [], []
 
-        def start():
+        def start(racer):
             try:
                 with psycopg.connect(self.dsn) as db:
                     cur = db.cursor()
@@ -119,14 +119,16 @@ class ConcurrentCapReservation(unittest.TestCase):
                         outcomes.append(('refused', refused.status, refused.code))
                         return
                     cur.execute('SELECT pg_sleep(%s)', (pause,))
-                    cur.execute("INSERT INTO public.pr_oauth_transactions(provider,scopes,expires_at) "
-                                "VALUES ('discord',ARRAY['bot','identify'],now()+interval '10 minutes')")
+                    # Every racer is a different person, so each one that is admitted holds its own slot.
+                    cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,scopes,expires_at) "
+                                "VALUES (%s,%s,'discord',ARRAY['bot','identify'],now()+interval '10 minutes')",
+                                (f'w-{racer}', f'm-{racer}'))
                     db.commit()
                     outcomes.append(('admitted', None, None))
             except BaseException as exc:  # a thread must never die silently
                 failures.append(repr(exc))
 
-        threads = [threading.Thread(target=start) for _ in range(RACERS)]
+        threads = [threading.Thread(target=start, args=(n,)) for n in range(RACERS)]
         for thread in threads:
             thread.start()
         for thread in threads:
@@ -160,6 +162,43 @@ class ConcurrentCapReservation(unittest.TestCase):
         outcomes = self.race(pause=0.05)
         self.assertEqual({o[0] for o in outcomes}, {'refused'})
         self.assertEqual(self.used(), CAP)
+
+
+    def hold(self, rows):
+        """In-flight installation starts, as (workspace, member) pairs."""
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            for workspace, member in rows:
+                db.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,scopes,expires_at) "
+                           "VALUES (%s,%s,'discord',ARRAY['bot','identify'],now()+interval '10 minutes')", (workspace, member))
+
+    def reserve(self, guild_id=None):
+        with psycopg.connect(self.dsn) as db:
+            try:
+                return gate.reserve_capacity(db.cursor(), {gate.ENV_CAP: str(CAP)}, guild_id=guild_id)
+            except AlphaError as refused:
+                return refused
+
+    def test_one_person_holds_one_slot_however_often_they_start(self):
+        self.hold([('w-spam', 'm-spam')] * 10)
+        self.assertEqual(self.used(), 2 + 1)
+
+    def test_different_people_each_hold_their_own_slot(self):
+        self.hold([(f'w-{n}', f'm-{n}') for n in range(2)])
+        self.assertEqual(self.used(), 2 + 2)
+
+    def test_one_workspace_cannot_hoard_the_cap_with_a_single_account(self):
+        """The start throttle allows twenty starts in ten minutes per workspace; they must not cost twenty slots."""
+        self.hold([('w-one', 'm-one')] * 20)
+        outcome = self.reserve()
+        self.assertEqual(outcome, {'used': 2 + 1, 'cap': CAP})
+
+    def test_a_server_that_already_has_a_row_is_admitted_at_a_full_house_and_a_new_one_is_not(self):
+        self.hold([(f'w-{n}', f'm-{n}') for n in range(CAP - 2)])  # three more people: 2 stored + 3 in flight = the cap
+        self.assertEqual(self.used(), CAP)
+        self.assertIsInstance(self.reserve(guild_id='server-brand-new'), AlphaError)
+        self.assertEqual(self.reserve(guild_id='server-a'), {'known': True, 'cap': CAP})  # stored, active
+        self.assertEqual(self.reserve(guild_id='server-b'), {'known': True, 'cap': CAP})  # stored, revoked: the bot stays
+        self.assertIsInstance(self.reserve(guild_id='user-x'), AlphaError)  # an identity row is not a server
 
 
 if __name__ == '__main__':

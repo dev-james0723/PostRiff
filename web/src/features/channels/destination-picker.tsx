@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ApiError } from '@/lib/api/client';
+import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordRefusal } from '@/lib/channels/discord-refusal';
+import { usePreferences } from '@/lib/preferences';
 import { keys } from '@/lib/api/hooks';
 import type { ChannelDestination } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -23,6 +26,9 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const isMobile = useIsMobile();
+  const dc = discordCopy(usePreferences().locale);
+  // Discord requests here can be refused by the shared request coordinator: say it in the person's language.
+  const reason = (err: unknown) => (err instanceof ApiError ? (platform === 'Discord' ? discordRefusal(err, dc) : err.message) : 'Try again in a moment.');
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<ChannelDestination[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +41,7 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
     try {
       setItems((await api.channelDestinations(workspaceId, channelId)).destinations);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Try again in a moment.');
+      setError(reason(err));
     }
   }
 
@@ -48,7 +54,7 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
       void client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
       void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Try again in a moment.');
+      toast.error(reason(err));
     } finally {
       setSaving(null);
     }
@@ -64,7 +70,7 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
       void client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
       void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Try again in a moment.');
+      toast.error(reason(err));
     } finally {
       setSaving(null);
     }

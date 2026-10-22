@@ -266,7 +266,7 @@ export function ConnectSheet({
       }
       setDiscordGuilds(value.guilds); setDiscordGuild('');
     } catch (err) {
-      if (generation === discordRequestGeneration.current) setError(err instanceof ApiError ? err.message : 'Could not load Discord servers.');
+      if (generation === discordRequestGeneration.current) setError(err instanceof ApiError ? discordRefusal(err, dc) : 'Could not load Discord servers.');
     } finally { if (generation === discordRequestGeneration.current) setBusy(false); }
   }
   async function disconnectIdentity(id: string) {

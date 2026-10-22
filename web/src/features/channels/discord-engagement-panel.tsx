@@ -8,6 +8,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Textarea } from '@/components/ui/textarea';
 import { StateMessage } from '@/components/rafii';
 import { ApiError } from '@/lib/api/client';
+import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordRefusal } from '@/lib/channels/discord-refusal';
+import { usePreferences } from '@/lib/preferences';
 import { keys } from '@/lib/api/hooks';
 import type { ChannelView } from '@/lib/api/types';
 import type { DiscordEngagementMessage, DiscordEngagementPermissions, DiscordEngagementRead, DiscordEngagementStatus, DiscordReplyReview } from '@/lib/channels/discord-engagement';
@@ -24,6 +27,7 @@ export function DiscordEngagementPanel({ channel, mode = 'all' }: { channel: Cha
   const { api, workspaceId } = useWorkspaceApi();
   const controlId = useId();
   const client = useQueryClient();
+  const copy = discordCopy(usePreferences().locale);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<DiscordEngagementStatus | null>(null);
   const [selected, setSelected] = useState('');
@@ -44,7 +48,7 @@ export function DiscordEngagementPanel({ channel, mode = 'all' }: { channel: Cha
     setError(null);
     try { await action(); }
     catch (cause) {
-      setError(cause instanceof ApiError || cause instanceof Error ? cause.message : 'The request did not complete. Reload its state before trying again.');
+      setError(cause instanceof ApiError ? discordRefusal(cause, copy) : cause instanceof Error ? cause.message : 'The request did not complete. Reload its state before trying again.');
       // Previously delivered provider data is never presented as a fresh read.
       setData(null);
       setReview(null);

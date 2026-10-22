@@ -294,7 +294,7 @@ class StartCapacity(unittest.TestCase):
         s._fresh_identity = Mock(return_value={'connectionId': 'identity-1', 'authorizationGeneration': 'g1'})
         s.user_guilds = Mock(return_value=[{'id': GUILD}])
         s.bind_identity = Mock()
-        reserved = reserve or (lambda cursor, values=None: order.append('reserve'))
+        reserved = reserve or (lambda cursor, values=None, guild_id=None: order.append('reserve'))
         with patch('postriff_phase2.hosted.audit'), patch('postriff_phase2.hosted.throttle'), \
                 patch.object(gate, 'reserve_capacity', side_effect=reserved) as spy:
             try:
@@ -307,6 +307,7 @@ class StartCapacity(unittest.TestCase):
         result, order, spy = self.started({'discordPurpose': 'installation', 'guildId': GUILD, 'identityConnectionId': 'identity-1'})
         self.assertEqual(order, ['reserve', 'insert'])
         self.assertEqual(result['transactionId'], 'transaction-id')
+        self.assertEqual(spy.call_args.kwargs, {'guild_id': GUILD})  # a server that already holds a slot is let through
 
     def test_a_full_house_writes_no_transaction_and_sends_nobody_to_discord(self):
         full = AlphaError('Discord is at capacity.', 409, code='discord_capacity_reached')

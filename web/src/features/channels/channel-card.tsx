@@ -49,6 +49,7 @@ import { ChannelHistorySheet } from './channel-history-sheet';
 import { HistoryImportControl } from './history-import-control';
 import { historyImportCopy } from '@/lib/channels/history-import-copy';
 import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordRefusal } from '@/lib/channels/discord-refusal';
 import { usePreferences } from '@/lib/preferences';
 import type { ConnectRequest } from './connect-sheet';
 import { DestinationPicker } from './destination-picker';
@@ -270,7 +271,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       if (!verified) toast.error(`${channel.platform} not verified`, { description: result.detail || result.state.replace(/_/g, ' ') });
       flashVerifyOutcome(verified ? { state: 'success', label: 'Verified' } : { state: 'error', label: 'Not verified' });
     } catch (err) {
-      toast.error(`Couldn't verify ${channel.platform}`, { description: err instanceof ApiError ? err.message : undefined });
+      toast.error(`Couldn't verify ${channel.platform}`, { description: err instanceof ApiError ? (channel.platform === 'Discord' ? discordRefusal(err, dc) : err.message) : undefined });
       flashVerifyOutcome({ state: 'error', label: 'Try again' });
     } finally {
       setBusy(false);

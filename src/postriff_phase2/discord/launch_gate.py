@@ -12,14 +12,21 @@ Gate, POSTRIFF_DISCORD_CONNECT_WORKSPACES (read at request time, never cached):
 - otherwise a comma or whitespace separated list of workspace UUIDs;
 - anything malformed (a bad id, "*" mixed with ids) closes the gate and is reported as misconfigured.
 
-A workspace that already has a live Discord footprint (an unrevoked server card or a linked identity) is never locked
-out, so closing the gate stops NEW connections only. Existing connections, queued posts and the kill switch
-(POSTRIFF_OAUTH_DISCORD_DISABLED) are unaffected.
+A workspace that already has a live Discord footprint (an unrevoked server card, or a linked identity, including one
+that must be reconnected) is never locked out, so closing the gate stops connections from workspaces with no Discord
+history. Such a workspace may still start any kind of connection, including a new server (which then takes a cap slot).
+Existing connections, queued posts and the kill switch (POSTRIFF_OAUTH_DISCORD_DISABLED) are unaffected.
 
 Cap, POSTRIFF_DISCORD_GUILD_CAP: unset is 90 on hosted production and unlimited elsewhere; "0" blocks every new server;
 garbage becomes 0. The bot joins a server on Discord's consent screen, BEFORE Rafii's callback runs, so the cap is
 enforced when a new installation is STARTED (reservation under an advisory lock), never at the callback. A disconnect
-does not remove the shared bot from a server, so servers whose grant was revoked still count toward the cap.
+does not remove the shared bot from a server, so servers whose grant was revoked still count toward the cap. A server
+that already has a bot credential row holds its slot and is never counted twice.
+
+What the count cannot see (compare with the Developer Portal's own number, monitoring.sql Q9 and Q12): a person who
+picks a different server on Discord's screen than the one reserved, or closes the tab after consenting, or whose
+callback fails, has still put the bot in a server that Rafii holds no row for; so do deleted workspaces and anyone who
+adds the public bot by hand.
 """
 import re
 
@@ -40,15 +47,22 @@ _LOCK = "SELECT pg_advisory_xact_lock(hashtext('rafii.discord.server-cap'))"
 # started or are mid-exchange: the bot may already be in those servers although no credential is stored yet. A
 # disconnect only revokes Rafii's stored grant; the shared bot stays in the server, and the row keeps the server id and
 # scopes, so revoked rows still count. (Deleted workspaces take their rows with them; compare with the Developer
-# Portal's own server count, see monitoring.sql Q9.)
+# Portal's own server count, see monitoring.sql Q9.) In-flight starts count once per person (workspace and member), so
+# a double click, or one account starting again and again, holds one slot and not twenty. Reconnect starts carry the
+# same scope, so they count too for the minutes they are in flight; that over-count is deliberate.
+_IN_FLIGHT = """provider='discord' AND 'bot' = ANY(scopes)
+       AND ((consumed_at IS NULL AND expires_at > now())
+            OR (outcome = 'exchange_started' AND consumed_at > now() - interval '10 minutes'))"""
 _COUNT = """SELECT
   (SELECT count(DISTINCT provider_account_id) FROM public.pr_encrypted_credentials
      WHERE provider='discord' AND 'bot' = ANY(scopes))
   +
-  (SELECT count(*) FROM public.pr_oauth_transactions
-     WHERE provider='discord' AND 'bot' = ANY(scopes)
-       AND ((consumed_at IS NULL AND expires_at > now())
-            OR (outcome = 'exchange_started' AND consumed_at > now() - interval '10 minutes')))"""
+  (SELECT count(*) FROM (SELECT DISTINCT workspace_id, member_id FROM public.pr_oauth_transactions
+     WHERE """ + _IN_FLIGHT + """) AS in_flight)"""
+# A server that already has a bot credential row (revoked or not) holds its slot: starting it again, from this or
+# another workspace, must not need a second one.
+_KNOWN = """SELECT 1 FROM public.pr_encrypted_credentials
+  WHERE provider='discord' AND 'bot' = ANY(scopes) AND provider_account_id = %s LIMIT 1"""
 
 
 class Gate:
@@ -71,8 +85,9 @@ def _values(values):
 
 
 def hosted_production(values=None):
+    """Case and space tolerant on purpose: a misspelt production must close the gate, not open it."""
     values = _values(values)
-    return values.get('VERCEL_ENV') == 'production' or values.get('POSTRIFF_ENVIRONMENT') == 'production'
+    return any(str(values.get(name) or '').strip().lower() == 'production' for name in ('VERCEL_ENV', 'POSTRIFF_ENVIRONMENT'))
 
 
 def configuration(values=None):
@@ -104,14 +119,15 @@ def guild_cap(values=None):
 
 
 def has_footprint(state):
-    """True when this workspace already has a live Discord server card or linked identity."""
+    """True when this workspace already has a live Discord server card or a linked identity. An identity whose refresh
+    failed ('reconnect_required') still counts: its person must be able to reconnect, and its dependants are revoked."""
     phase2 = state.get('phase2') if isinstance(state, dict) else None
     if not isinstance(phase2, dict):
         return False
     channels, links = phase2.get('channels'), phase2.get('discordIdentityLinks')
     if isinstance(channels, list) and any(isinstance(c, dict) and c.get('platform') == 'Discord' and not c.get('revoked') for c in channels):
         return True
-    return isinstance(links, list) and any(isinstance(link, dict) and link.get('status') == 'linked' for link in links)
+    return isinstance(links, list) and any(isinstance(link, dict) and link.get('status') in ('linked', 'reconnect_required') for link in links)
 
 
 def access(workspace_id, state, values=None):
@@ -133,12 +149,18 @@ def require_connect_access(connections, workspace, token, values=None):
         raise AlphaError(CLOSED_MESSAGE, 403, code='discord_access_closed')
 
 
-def reserve_capacity(cur, values=None):
-    """Inside the transaction that records a new installation start: serialise, count, refuse at the cap."""
+def reserve_capacity(cur, values=None, guild_id=None):
+    """Inside the transaction that records a new installation start: serialise, count, refuse at the cap.
+
+    `guild_id` (the server being installed, when known) lets a server that already holds a slot through at any fill."""
     cap, _misconfigured = guild_cap(values)
     if cap is None:
         return None
     cur.execute(_LOCK)
+    if guild_id:
+        cur.execute(_KNOWN, (str(guild_id),))
+        if cur.fetchone():
+            return {'known': True, 'cap': cap}
     cur.execute(_COUNT)
     used = int(cur.fetchone()[0])
     if used >= cap:

@@ -10,7 +10,7 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 test('every language pack words the gate and the capacity refusal', () => {
   const packs = JSON.parse(read('src/lib/channels/discord-copy.json'));
   for (const locale of ['en', 'zh-Hant', 'zh-Hans']) {
-    for (const key of ['accessClosed', 'capacityReached', 'rateDelayed', 'coordinatorUnavailable', 'scheduleTiming']) {
+    for (const key of ['accessClosed', 'capacityReached', 'rateDelayed', 'coordinatorUnavailable', 'returnRateDelayed', 'returnCoordinatorUnavailable', 'scheduleTiming']) {
       assert.ok(typeof packs[locale][key] === 'string' && packs[locale][key].trim(), `${locale}:${key}`);
     }
   }
@@ -18,12 +18,14 @@ test('every language pack words the gate and the capacity refusal', () => {
   assert.notEqual(packs['zh-Hans'].capacityReached, packs.en.capacityReached);
   assert.notEqual(packs['zh-Hant'].rateDelayed, packs.en.rateDelayed);
   assert.notEqual(packs['zh-Hans'].coordinatorUnavailable, packs.en.coordinatorUnavailable);
+  assert.notEqual(packs['zh-Hant'].returnRateDelayed, packs.en.returnRateDelayed);
+  assert.notEqual(packs['zh-Hans'].returnCoordinatorUnavailable, packs.en.returnCoordinatorUnavailable);
 });
 
 test('no refusal promises a waitlist or a date that nothing records, and none shows operator wording', () => {
   const packs = JSON.parse(read('src/lib/channels/discord-copy.json'));
   for (const copy of Object.values(packs)) {
-    for (const key of ['accessClosed', 'capacityReached', 'rateDelayed', 'coordinatorUnavailable']) {
+    for (const key of ['accessClosed', 'capacityReached', 'rateDelayed', 'coordinatorUnavailable', 'returnRateDelayed', 'returnCoordinatorUnavailable']) {
       assert.doesNotMatch(copy[key], /rate policy|coordinat|reviewed|SafetyPolicy|503|429/i, key);
       assert.doesNotMatch(copy[key], /waitlist|等候名單|等候名单|soon|即將|即将/i, key);
     }
@@ -39,7 +41,29 @@ test('one helper maps every launch refusal code to the localized copy, and both 
   const sheet = read('src/features/channels/connect-sheet.tsx');
   assert.match(sheet, /provider\.discordAccess\?\.status === 'closed' \? dc\.accessClosed/);
   assert.match(sheet, /err instanceof ApiError \? discordRefusal\(err, dc\)/);
-  assert.match(read('src/features/channels/connect-return.tsx'), /provider === 'discord' \? discordRefusal\(err, dc\)/);
+  assert.match(read('src/features/channels/connect-return.tsx'), /provider === 'discord' \? discordReturnRefusal\(err, dc\)/);
+});
+
+test('the page Discord returns to never says nothing was connected, because the bot may already be in the server', () => {
+  const helper = read('src/lib/channels/discord-refusal.ts');
+  assert.match(helper, /discord_rate_delayed[\s\S]{0,80}copy\.returnRateDelayed/);
+  assert.match(helper, /discord_rate_coordinator_unavailable[\s\S]{0,80}copy\.returnCoordinatorUnavailable/);
+  const packs = JSON.parse(read('src/lib/channels/discord-copy.json'));
+  for (const copy of Object.values(packs)) {
+    for (const key of ['returnRateDelayed', 'returnCoordinatorUnavailable']) {
+      assert.doesNotMatch(copy[key], /Nothing was connected|沒有連接任何內容|没有连接任何内容/, key);
+    }
+  }
+});
+
+test('every Discord request that the gate, the cap or the request coordinator can refuse shows the localized wording', () => {
+  for (const file of ['connect-sheet.tsx', 'destination-picker.tsx', 'channel-card.tsx', 'discord-engagement-panel.tsx']) {
+    assert.match(read(`src/features/channels/${file}`), /discordRefusal\(/, file);
+  }
+  // The server-list call is the one that used to show the raw server message.
+  assert.match(read('src/features/channels/connect-sheet.tsx'), /Could not load Discord servers/);
+  assert.doesNotMatch(read('src/features/channels/connect-sheet.tsx'), /err instanceof ApiError \? err\.message : 'Could not load Discord servers/);
+  assert.doesNotMatch(read('src/features/channels/destination-picker.tsx'), /err instanceof ApiError \? err\.message/);
 });
 
 test('the provider type carries the per-workspace access verdict', () => {

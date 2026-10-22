@@ -75,6 +75,8 @@
     "capacityReached": "Discord has no room for another server right now. Nothing was connected or posted. Try again later.",
     "rateDelayed": "Discord is busy right now. Nothing was connected or posted. Try again in a minute.",
     "coordinatorUnavailable": "Connecting to Discord is paused for a moment. Nothing was connected or posted. Try again later.",
+    "returnRateDelayed": "Discord is busy right now, so Rafii could not finish connecting. If the bot already appears in your server, start again from Channels in a minute and it will finish. Nothing was posted.",
+    "returnCoordinatorUnavailable": "Connecting to Discord is paused for a moment, so Rafii could not finish connecting. If the bot already appears in your server, start again from Channels later and it will finish. Nothing was posted.",
     "scheduleTiming": "Rafii sends this at the scheduled time. When many posts are due in the same minute, Discord posts can arrive several minutes late."
   },
   "zh-Hant": {
@@ -153,6 +155,8 @@
     "capacityReached": "Discord 目前沒有空位加入新伺服器。沒有連接任何內容，也沒有發佈任何貼文。請稍後再試。",
     "rateDelayed": "Discord 目前較繁忙。沒有連接任何內容，也沒有發佈任何貼文。請一分鐘後再試。",
     "coordinatorUnavailable": "與 Discord 的連接暫時暫停。沒有連接任何內容，也沒有發佈任何貼文。請稍後再試。",
+    "returnRateDelayed": "Discord 目前較繁忙，Rafii 未能完成連接。如機械人已經出現在你的伺服器，請一分鐘後從「頻道」重新開始，即可完成連接。沒有發佈任何貼文。",
+    "returnCoordinatorUnavailable": "與 Discord 的連接暫時暫停，Rafii 未能完成連接。如機械人已經出現在你的伺服器，請稍後從「頻道」重新開始，即可完成連接。沒有發佈任何貼文。",
     "scheduleTiming": "Rafii 會在排程時間發送。若同一分鐘內有大量貼文到期，Discord 貼文可能遲幾分鐘才送出。"
   },
   "zh-Hans": {
@@ -231,6 +235,8 @@
     "capacityReached": "Discord 目前没有空位加入新服务器。没有连接任何内容，也没有发布任何帖子。请稍后再试。",
     "rateDelayed": "Discord 目前较繁忙。没有连接任何内容，也没有发布任何帖子。请一分钟后再试。",
     "coordinatorUnavailable": "与 Discord 的连接暂时暂停。没有连接任何内容，也没有发布任何帖子。请稍后再试。",
+    "returnRateDelayed": "Discord 目前较繁忙，Rafii 未能完成连接。如果机器人已经出现在你的服务器，请一分钟后从“频道”重新开始，即可完成连接。没有发布任何帖子。",
+    "returnCoordinatorUnavailable": "与 Discord 的连接暂时暂停，Rafii 未能完成连接。如果机器人已经出现在你的服务器，请稍后从“频道”重新开始，即可完成连接。没有发布任何帖子。",
     "scheduleTiming": "Rafii 会在排程时间发送。若同一分钟内有大量帖子到期，Discord 帖子可能迟几分钟才送出。"
   }
 }
