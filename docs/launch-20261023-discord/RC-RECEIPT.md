@@ -95,4 +95,5 @@ No Vercel build has been made. GitHub-hosted CI for this public repository is fr
 ## 8. Handoff notes
 
 - The release status in `LAUNCH-READINESS-REPORT.md` is **NO-GO** until the human items (H-01, H-03, H-05, H-07, H-08), the Portal audit, the environment batch and the tester session have evidence.
+- The owner's approvals and their conditions are in `AUTHORIZATION-RECORD.md`; the exact steps for the two builds are in `BUILD-RUNSHEET.md`. This session cannot run `vercel deploy` (no CLI, no token); the owner's MacBook was last seen online 2026-10-22 14:52Z.
 - Nothing in this receipt may be filled from memory. If a cell cannot be read back, write "unverified" and the reason.

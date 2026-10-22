@@ -1,5 +1,7 @@
 # APPROVAL PACKET 1 (rev D), 2026-10-22 22:03 UTC (06:03 Hong Kong, 23 Oct)
 
+**Answered by the owner after this revision: "Approve all from 1 to 15 and rev B+"** (reading, conditions and what is still missing: `AUTHORIZATION-RECORD.md`). Nothing below has been done yet.
+
 Replaces rev A, B and C (the candidate moved again: a second independent review of my own fixes found one more defect, now fixed). Answer in one line, for example `APPROVE 1,2,4,5,14 / DENY 3 / HOLD 6`. Nothing below has been done. Every row is prepared so that your answer is yes or no.
 
 **Release status today: NO-GO.** Nothing is deployed, promoted, sent or changed. The blockers that only you or Discord can clear are in section 2.

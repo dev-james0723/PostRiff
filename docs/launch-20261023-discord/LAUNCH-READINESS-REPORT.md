@@ -1,6 +1,6 @@
 # LAUNCH-READINESS-REPORT (Discord capped Wave 1)
 
-Generated 2026-10-22T22:03:20Z. Candidate: `claude/discord-launch-rc-20261023` at `2a5a523d` (draft PR #222, not frozen). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
+Generated 2026-10-22T22:13:26Z. Candidate: `claude/discord-launch-rc-20261023` at `2a5a523d` (draft PR #222, not frozen). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
 
 ## Recommendation: **NO-GO today**
 
@@ -16,21 +16,21 @@ A false GO is the worst outcome, and none of the gates that need the owner, Disc
 
 **What would flip it:** every row below that is a Wave 1 MUST becomes VERIFIED with evidence, no abort trigger has fired, and the owner says GO. The fastest honest path is in `RUNBOOK-LAUNCH.md` section 2; the owner's part is about 60 minutes in total.
 
-## Wave 1 GO criteria (54 items; 2 BLOCKED_EXTERNAL, 41 NOT_RUN, 11 VERIFIED)
+## Wave 1 GO criteria (54 items; 2 BLOCKED_EXTERNAL, 38 NOT_RUN, 14 VERIFIED)
 
 | ID | Item | Owner | Status | State | Evidence |
 |---|---|---|---|---|---|
 | D-01 | Launch scope for tomorrow | HUMAN | **NOT_RUN** | default applied by the agent (assumption logged); the owner has not replied: capped Wave 1, at most 90 servers | APPROVAL-PACKET-1.md section 4 |
 | D-02 | Which lanes ship in the same RC | HUMAN | **NOT_RUN** | default applied by the agent (assumption logged); the owner has not replied: Discord delta on the live line only | APPROVAL-PACKET-1.md section 4 |
-| D-04 | Exposure rule for 'Direct' publish and schedule | HUMAN | **NOT_RUN** | explicit decision requested (packet row 4): REVIEWED passed on the two RC build commands only | APPROVAL-PACKET-1.md row 4 |
+| D-04 | Exposure rule for 'Direct' publish and schedule | HUMAN | **VERIFIED** | decision taken by the owner with packet row 4: POSTRIFF_OAUTH_DISCORD_REVIEWED=true on the two RC build commands only, never in project env; opening stays a separate step | AUTHORIZATION-RECORD.md |
 | D-05 | Launch time T0 and GO / NO-GO time | HUMAN | **NOT_RUN** | T0 and GO_TIME not given; the agent assumes T0 = 24 hours after its start and says so | APPROVAL-PACKET-1.md section 2 |
 | H-01 | Discord Developer Portal: App Verification status, and start verification today | HUMAN | **NOT_RUN** | human only; preparation done | H-01-verification-prep.md |
 | H-02 | Portal settings audit | HUMAN | **NOT_RUN** | human only (or AUTH-10 read-only); audit sheet prepared | PORTAL-AUDIT-SHEET.md |
 | H-03 | Tester assets and one 20-minute consent session | HUMAN | **NOT_RUN** | human only; session script prepared | TESTER-SESSION-SCRIPT.md |
-| H-04 | Reply to the Approval Packets | HUMAN | **NOT_RUN** | Approval Packet 1 rev A sent to the owner 2026-10-22 ~19:35Z; no reply yet | APPROVAL-PACKET-1.md |
+| H-04 | Reply to the Approval Packets | HUMAN | **VERIFIED** | owner replied after packet rev D (RC head 2a5a523d): "Approve all from 1 to 15 and rev B+"; read as rows 1 to 15 plus the last row of the table, labelled (rev B+); the conditions written in the rows still apply | AUTHORIZATION-RECORD.md |
 | H-05 | Release Captain sign-off and security-review decision | HUMAN | **NOT_RUN** | human only | APPROVAL-PACKET-1.md section 2 |
 | H-07 | Support and on-call for the launch window and first 24 hours | HUMAN | **NOT_RUN** | human only | APPROVAL-PACKET-1.md section 2 |
-| H-08 | Approve customer-facing Discord disclosures | HUMAN | **NOT_RUN** | wording drafted and committed on the RC as its own commit; awaiting approval; the build waits for it | P-01-privacy-terms-diff.md |
+| H-08 | Approve customer-facing Discord disclosures | HUMAN | **VERIFIED** | approved by the owner with packet row 14: the wording as drafted (P-01-privacy-terms-diff.md, commit 4680efce on the RC); the pages keep their draft banner | P-01-privacy-terms-diff.md; AUTHORIZATION-RECORD.md |
 | S-00 | Baseline snapshot of facts (Appendix A) | AGENT | **VERIFIED** |  |  |
 | S-01 | Identify the lineage of the build rafii.io serves now | AGENT | **VERIFIED** | live build is c5fc1fd1 (Mastodon production candidate), 257 of 257 listed files identical, 48 of 48 hidden-file probes; no Discord v2 code in production | S-01-lineage-report.md |
 | S-02 | Preserve-live matrix | AGENT | **NOT_RUN** | matrix written with the code path, route or cron, tests and proof for every live capability, plus the capability levels Discord will show; it flips to VERIFIED when the full CI on the frozen head is green, beca… | S-02-preserve-live-matrix.md; scripts/rc_superset_proof.py |
@@ -49,26 +49,26 @@ A false GO is the worst outcome, and none of the gates that need the owner, Disc
 | R-03 | 429 and ban handling | AGENT | **NOT_RUN** | implemented and passing locally; awaiting exact-SHA CI on the frozen head (15 tests: Cloudflare-style 429, scopes, hints, held routes, operator hold) | tests/test_discord_ban_handling.py |
 | R-05 | Worker throughput | AGENT | **NOT_RUN** | decision recorded with the budget arithmetic; per-step latency not measured; late-post note in the schedule dialog | MEASUREMENTS.md; tests/test_discord_worker_budget.py |
 | C-01 | Env matrix for the RC | AGENT | **VERIFIED** | matrix written; the dangerous values live only on the build commands | C-01-env-matrix.md |
-| C-02 | Names-only readback of production env | AGENT | **BLOCKED_EXTERNAL** | incomplete: the tool returned 100 of 271 production env records and only 48 names; no Discord variable exists in the readable window (created 10-14 or later); the older 223 are unreadable. Needs the owner's nam… | private audit (not in the repository); APPROVAL-PACKET-1.md row 8 |
-| C-03 | Apply non-secret env changes in one batch | AGENT+APPROVAL | **NOT_RUN** | awaiting AUTH-3 and AUTH-4 | APPROVAL-PACKET-1.md rows 1 to 3 |
+| C-02 | Names-only readback of production env | AGENT | **BLOCKED_EXTERNAL** | incomplete: the tool returned 100 of 271 production env records and only 48 names; no Discord variable exists in the readable window (created 10-14 or later); the older 223 are unreadable. Row 8 is approved (na… | private audit (not in the repository); APPROVAL-PACKET-1.md row 8 |
+| C-03 | Apply non-secret env changes in one batch | AGENT+APPROVAL | **NOT_RUN** | AUTH-3 and AUTH-4 approved (rows 1 to 3); applied by the agent just before the D1 build, then read back by name and value (env is project-wide, so not earlier) | AUTHORIZATION-RECORD.md rows 1 to 3 |
 | C-04 | Cron lanes | AGENT | **NOT_RUN** | the candidate keeps the only live cron (/api/cron/worker every minute), proven by the superset proof; the post-promotion check is not done | scripts/rc_superset_proof.py crons check |
 | C-05 | OAuth start URL audit (read-only) | AGENT | **NOT_RUN** | needs the staged build |  |
 | M-02 | RLS, FORCE RLS and grants on Discord tables | AGENT | **VERIFIED** | RLS and FORCE RLS on, anon has no grants, authenticated has no access to the Discord, credential or OAuth tables, service_role grants as migrations 124 to 131 give | private audit (not in the repository); monitoring.sql planned against the schema |
 | M-03 | Backup and restore point | AGENT | **BLOCKED_EXTERNAL** | cannot be determined with the tools available: Pro plan means daily backups kept 7 days; PITR is a paid add-on; WAL archiving is running. The owner must read the dashboard | APPROVAL-PACKET-1.md row 11 |
 | Q-01 | Pre-flight for the build | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
-| Q-02 | Build ONE staged RC | AGENT+APPROVAL | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
+| Q-02 | Build ONE staged RC | AGENT+APPROVAL | **NOT_RUN** | AUTH-1 approved for D1 and D2 (packet rows 5 and 6, nothing more: a third build needs a new yes); waits for exact-SHA CI green, the freeze, the tester workspace id and a machine with the Vercel CLI (the owner's… | AUTHORIZATION-RECORD.md; BUILD-RUNSHEET.md |
 | Q-03 | Provenance of the deployed RC | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
 | Q-04 | Smoke on the RC URL | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
 | Q-05 | Hosted tenant-isolation probe | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
 | Q-06 | Rollback target | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
 | Q-07 | Promotion packet | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
-| X-01 | Dark promotion (gate closed except testers and grandfathered workspaces) | AGENT+APPROVAL | **NOT_RUN** | waits for the dark promotion and the tester session | RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md |
+| X-01 | Dark promotion (gate closed except testers and grandfathered workspaces) | AGENT+APPROVAL | **NOT_RUN** | AUTH-5 approved (the rev B+ row) on condition that Q-01 to Q-07 are VERIFIED and the H-05 sign-off exists; promotion is an API call the agent can make, so it needs no machine | AUTHORIZATION-RECORD.md; BUILD-RUNSHEET.md section G |
 | X-02 | Real OAuth and bot install (PRD A08) | HUMAN | **NOT_RUN** | waits for the dark promotion and the tester session | RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md |
 | X-03 | One real send and read-back (PRD A09) | HUMAN | **NOT_RUN** | waits for the dark promotion and the tester session | RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md |
 | X-04 | Unattended schedule and cancel (PRD A10) | HUMAN | **NOT_RUN** | waits for the dark promotion and the tester session | RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md |
 | X-05 | Revoke and reconnect | HUMAN | **NOT_RUN** | waits for the dark promotion and the tester session | RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md |
 | X-07 | Release receipt (PRD A13) | AGENT | **NOT_RUN** | waits for the dark promotion and the tester session | RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md |
-| X-09 | Post-acceptance exposure decision | AGENT | **NOT_RUN** | waits for the dark promotion and the tester session | RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md |
+| X-09 | Post-acceptance exposure decision | AGENT | **NOT_RUN** | AUTH-6 approved (the rev B+ row) on condition that X-02 to X-05 are VERIFIED in the tester session, every Wave 1 MUST item is VERIFIED, no abort trigger fired and T0 is reached; the agent still sends the GO or … | AUTHORIZATION-RECORD.md |
 | P-01 | Privacy notice and terms | AGENT | **VERIFIED** | wording drafted and committed on the RC; approval is H-08 | P-01-privacy-terms-diff.md |
 | O-01 | Monitoring queries and thresholds (aggregate-only) | AGENT | **VERIFIED** | eleven aggregate-only monitors with thresholds; every statement planned against the production schema with EXPLAIN (no rows read) | monitoring.sql |
 | O-02 | Abort triggers and pre-authorised actions | AGENT | **VERIFIED** | trigger table and abort ladder written for Vercel semantics; AUTH-7 rewritten in the packet | RUNBOOK-INCIDENT.md; APPROVAL-PACKET-1.md row 12 |
@@ -85,6 +85,7 @@ A false GO is the worst outcome, and none of the gates that need the owner, Disc
 - The Discord rate policy last used by the coordinator expires between 10-23 18:47Z and 10-24 18:47Z.
 - **Security, not Discord-specific:** the live site runs Next.js 16.3.8 and @sentry/nextjs 10.74.0. Advisories published 2026-10-14 (Next.js: two critical remote-code-execution findings and one high denial-of-service; patched in 16.4.1) and 2026-09-24 (Sentry tunnel-route middleware bypass; patched in 10.75.2) reached the advisory database on 2026-10-22. From the app's own source the stated preconditions look unmet for three of the four (no `use cache`, no Server Actions, and the build script has no `--webpack` flag while the Sentry advisory needs a webpack build) and unclear for the image-optimizer one, so this is [Likely] not exploitable today, not proven safe. The candidate carries the patch (next 16.4.2, @sentry/nextjs 10.76.2, `npm audit` 0). The same lockfile is on every other branch, so their `npm audit` gates fail from today too (`S-07`).
 - A real-PostgreSQL race test now shows the server cap holds under concurrent starts (`X-08`).
+- **The owner approved packet rows 1 to 15 and the promotion row (labelled rev B+), conditions as written** (`AUTHORIZATION-RECORD.md`). That does not clear the human items it names as conditions: H-05 (Release Captain and security-review decision), H-03 (the tester session), H-07 (on-call) and H-01. The build cannot start from this session: it has no Vercel CLI or token and the owner's MacBook has been offline since 10-22 14:52Z (`BUILD-RUNSHEET.md`).
 - **Two independent reviews of the gate and the cap found defects that are now fixed with tests that fail on the earlier code (24 of them, checked).** The second review caught a mistake in my own first fix: counting each person's starts as one slot let one account start ten different servers for the price of one (cap 5, two servers stored: ten admitted). Every start now holds its own slot and one person may have three in flight. The first review found two serious defects: a refusal by the shared request coordinator (the break-glass hold, an expired rate policy, an open circuit) revoked a person's Discord identity and every server installed through it when their login token had to be refreshed, and the original connect flow (active if a v2 flag is mistyped) added the bot without taking a cap slot. Four smaller defects and four screens that still showed operator wording are fixed too (`G-01`, `G-02`, `G-03`). Discord's own 429 on the login-token refresh no longer revokes either.
 - Two more CI gates failed on any tree that contains the Mastodon lane and are fixed here: the generic PostgreSQL step (the Mastodon fixtures need an explicit opt-in) and `pip-audit` (pypdf, bumped to 6.21.1, a deliberate deviation from the instruction to keep 6.20.1).
 - The cap cannot see servers the bot joins without a stored row; the Portal count must be compared with `monitoring.sql` Q9 and Q12 before opening and every 2 hours on day 1 (`RUNBOOK-LAUNCH.md` section 6).
