@@ -12,6 +12,7 @@
 --   Q6  policy expiry                             < 7 days (renew by the date in RC-RECEIPT.md; this is a cross-check)
 --   Q7  oldest eligible job lag                   > 15 minutes, or held / dead letters rising
 --   Q9  servers in use                            >= 80 percent of POSTRIFF_DISCORD_GUILD_CAP
+--   Q9/Q13 installs_in_flight above 25 for 10 minutes while few installs complete (read Q8)  hoarding: many accounts can each hold three starts; a starting threshold, tune after the first hour
 -- Runtime errors and the 5xx rate of Rafii's own API are not in the database: use the Vercel runtime logs for the
 -- promoted deployment (errors only) and compare with Q4.
 

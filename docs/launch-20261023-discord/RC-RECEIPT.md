@@ -24,23 +24,23 @@ Status: **candidate, not frozen, nothing built, nothing deployed, nothing promot
 | Candidate adds no migration that production lacks | PASS | `S-05-migration-reconciliation.md` |
 | Offline secret scan | fixed on the candidate (171 reviewed digests, scanner untouched); CI result below | PR #222 |
 | Real-PostgreSQL cap tests (race of 12 for 5 slots with 2 held; every start holds its own slot; one account starting ten different servers; at most three starts in flight per person; a reconnect takes no slot; a known server at a full house) | 11 tests OK locally on PG16 with uuid columns like production, including a no-lock control that overshoots; 9 of them fail on `29bc8ab2`. They skip under the qualification's synthetic transport fence (it refuses any database but the guarded runner's) and run in the unfenced full-suite step of both workflows on PostgreSQL 17, and in the `ci-python` step of local-gates | `tests/test_discord_launch_cap_race.py` |
-| Independent review of the gate and cap (code only), two rounds | Round 1: 2 serious and several smaller defects found and fixed with tests that fail on the previous code. Round 2 (re-review of those fixes): one blocker for opening the gate, a flaw in my own round-1 fix (one account could start many different servers for the price of one slot), now fixed (exact count plus three starts in flight per person), and Discord's own 429 on a login-token refresh no longer revokes. 24 of the 105 tests in the four review-related files fail on `29bc8ab2`. A narrow re-verification of round 2 is in progress | the review reports are kept outside the repository |
+| Independent review of the gate and cap (code only), two rounds | Round 1: 2 serious and several smaller defects found and fixed with tests that fail on the previous code. Round 2 (re-review of those fixes): one blocker for opening the gate, a flaw in my own round-1 fix (one account could start many different servers for the price of one slot), now fixed (exact count plus three starts in flight per person), and Discord's own 429 on a login-token refresh no longer revokes. 24 of the 105 tests in the four review-related files fail on `29bc8ab2`. A narrow re-verification of round 2 then confirmed the fixes: nothing blocking, five low residuals (aggregate hoarding across many accounts, the capacity wording shown for three unfinished starts, scan cost at a million never-purged rows, a fixed five-minute wait on Discord's 429, test gaps), recorded in `RUNBOOK-LAUNCH.md` section 7 and `monitoring.sql` | the review reports are kept outside the repository |
 | Generic PostgreSQL step on this tree | The 14 scripts that fail locally also fail on the live commit in the same environment; 5 were permission artefacts of running as another user, the 3 Mastodon scripts pass with the opt-in set; the CI job's own log does not print the failing script (it is in the uploaded artifact, which this session cannot download) | `consumer-ready.yml`, commit `0bce18dd` |
 | Whole Python suite | 6,141 OK, 391 skipped without PostgreSQL, on `2a5a523d` (local); the fenced Discord batch as the qualification runs it: 473 OK, 11 skipped; CI runs the suite with PostgreSQL 17 | CI |
 
-## 3. CI on the exact SHA (fill from the run page, one row per workflow)
+## 3. CI on the exact SHA `2a5a523d788eef67a5c7dbed609a98efa6650eef` (one row per workflow; filled from the run pages at 22:30Z)
 
 | Workflow | Event | Result | Run URL |
 |---|---|---|---|
-| Rafii local release gates | pull_request | - | - |
-| Rafii browser scenes | pull_request | - | - |
-| Founder admin browser | pull_request | - | - |
-| Growth Studio browser acceptance | pull_request | - | - |
-| Growth metrics acceptance | pull_request | - | - |
-| Discord composer input regression | pull_request | - | - |
-| Universal Library release validation | workflow_dispatch | - | - |
-| Rafii Generative UI (agent-ui) | workflow_dispatch | - | - |
-| Discord multi-mode exact-source qualification (35 min, PG17) | workflow_dispatch | - | - |
+| Rafii local release gates | pull_request | **in progress** (started 22:00Z; PostgreSQL step running) | https://github.com/dev-james0723/PostRiff/actions/runs/39861627345 |
+| Rafii browser scenes | pull_request | success (22:12Z) | https://github.com/dev-james0723/PostRiff/actions/runs/39861627327 |
+| Founder admin browser | pull_request | success (22:13Z) | https://github.com/dev-james0723/PostRiff/actions/runs/39861627394 |
+| Growth Studio browser acceptance | pull_request | success (22:03Z) | https://github.com/dev-james0723/PostRiff/actions/runs/39861627341 |
+| Growth metrics acceptance | pull_request | success (22:06Z) | https://github.com/dev-james0723/PostRiff/actions/runs/39861627318 |
+| Discord composer input regression | pull_request | success (22:11Z) | https://github.com/dev-james0723/PostRiff/actions/runs/39861627395 |
+| Universal Library release validation | workflow_dispatch | success (22:10Z; secret scan and npm audit included) | https://github.com/dev-james0723/PostRiff/actions/runs/39861627453 |
+| Rafii Generative UI (agent-ui) | workflow_dispatch | success (22:10Z; the WebKit check that failed once on the previous head passed) | https://github.com/dev-james0723/PostRiff/actions/runs/39861633071 |
+| Discord multi-mode exact-source qualification (35 min, PG17) | workflow_dispatch | success (22:13Z) | https://github.com/dev-james0723/PostRiff/actions/runs/39861637389 |
 
 A cancelled or missing run is not a pass. A run on an earlier SHA is not evidence for this one.
 
