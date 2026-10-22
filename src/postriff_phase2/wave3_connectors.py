@@ -197,6 +197,12 @@ class TikTokProvider(OAuthProvider):
     publish_scope = "video.publish"
     publish_required = frozenset({"video.publish"})
     refresh_margin = 300  # access tokens last 24 hours
+    # TikTok has no publish-later endpoint; the durable worker dispatches the approved post when due and
+    # _submit_tiktok reads creator_info again first.
+    server_schedule = True
+    # Login Kit approval (REVIEWED) opens Connect only. Posting also needs PUBLISH_LIVE_TESTED and
+    # PUBLISH_APPROVED, because TikTok's Content Posting audit is a separate gate.
+    separate_publish_gate = True
     UPLOAD_HOSTS = (".tiktokapis.com",)
     MIN_CHUNK, MAX_CHUNK = 5 * 1024 * 1024, 64 * 1024 * 1024
 

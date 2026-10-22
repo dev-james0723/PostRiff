@@ -94,7 +94,8 @@ class HostedSocial:
                 return None
         if not provider.production_reviewed and not private_trial and not getattr(provider, "account_scoped_direct", False):
             return None
-        if getattr(provider, "publisher", None) is not None and (not getattr(provider, "publish_live_tested", False)
+        publish_gated = getattr(provider, "publisher", None) is not None or getattr(provider, "separate_publish_gate", False)
+        if publish_gated and (not getattr(provider, "publish_live_tested", False)
                 or not getattr(provider, "publishing_permission", False)):
             return None
         return provider

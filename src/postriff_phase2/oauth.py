@@ -183,7 +183,8 @@ class OAuthService:
                 legacy = {
                     'identity': bool(adapter and normalized['identity'] == 'supported' and adapter.capability_scopes('identity')),
                     'posts_read': bool(adapter and normalized['owned_content_read'] == 'supported' and adapter.capability_scopes('posts_read')),
-                    'publish': bool(adapter and (getattr(adapter, 'publisher', None) is None or diagnostic.get('publishingPermission'))
+                    'publish': bool(adapter and ((getattr(adapter, 'publisher', None) is None and not getattr(adapter, 'separate_publish_gate', False))
+                                                 or diagnostic.get('publishingPermission'))
                                     and any(normalized[key] == 'supported' for key in ('publish_text','publish_image','publish_video'))
                                     and adapter.capability_scopes('publish')),
                     'analytics': bool(adapter and normalized['owned_analytics'] == 'supported' and adapter.capability_scopes('analytics')),
@@ -1192,7 +1193,7 @@ class OAuthService:
         publish_scopes = set(adapter.capability_scopes("publish"))
         publish_granted = bool(publish_scopes) and publish_scopes <= granted_set
         publisher_ready = not (
-            getattr(adapter, "publisher", None) is not None and
+            (getattr(adapter, "publisher", None) is not None or getattr(adapter, "separate_publish_gate", False)) and
             (not getattr(adapter, "publish_live_tested", False) or
              not getattr(adapter, "publishing_permission", False) or
              not getattr(adapter, "write_qualified", lambda _token: True)(access_token))
