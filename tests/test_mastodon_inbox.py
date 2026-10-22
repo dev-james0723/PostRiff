@@ -55,6 +55,18 @@ class Send(unittest.TestCase):
         self.assertEqual(kwargs['headers'], {'Idempotency-Key': 'inbox-draft'})
         self.assertEqual(kwargs['body'], {'status': self.TEXT, 'in_reply_to_id': '1', 'visibility': 'public'})
 
+    def test_same_server_mention_rendered_as_short_handle_still_verifies(self):
+        # Live 2026-10-22: Mastodon showed "@jamesaucreates" for "@jamesaucreates@mastodon.social".
+        text = '@alice@social.example Thanks!'
+        readback = {'id': '900', 'account': {'id': '10'}, 'in_reply_to_id': '1',
+                    'content': '<p><span class="h-card"><a href="https://social.example/@alice" class="u-url mention">@<span>alice</span></a></span> Thanks!</p>',
+                    'mentions': [{'id': '20', 'username': 'alice', 'acct': 'alice', 'url': 'https://social.example/@alice'}]}
+        adapter = provider({'status': 200, 'body': {'id': '900'}}, {'status': 200, 'body': readback})
+        self.assertEqual(mastodon_inbox.send(adapter, 'token', '1', text, 'k', OWNER)['state'], 'verified')
+        wrong = {**readback, 'mentions': [{'id': '21', 'username': 'alice', 'acct': 'alice@elsewhere.example', 'url': 'https://elsewhere.example/@alice'}]}
+        adapter = provider({'status': 200, 'body': {'id': '900'}}, {'status': 200, 'body': wrong})
+        self.assertEqual(mastodon_inbox.send(adapter, 'token', '1', text, 'k', OWNER)['state'], 'submitted')
+
     def test_mismatched_read_back_stays_submitted_and_errors_never_claim_success(self):
         other = {'id': '900', 'account': {'id': '99'}, 'in_reply_to_id': '1', 'content': self.TEXT}
         self.assertEqual(mastodon_inbox.send(provider({'status': 200, 'body': {'id': '900'}}, {'status': 200, 'body': other}),

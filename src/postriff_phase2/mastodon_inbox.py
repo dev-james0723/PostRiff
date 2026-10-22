@@ -61,7 +61,10 @@ def send(adapter, access_token, reply_to_id, text, idempotency_key, provider_acc
     check = adapter.api(session, 'GET', '/api/v1/statuses/' + quote(reply_id))
     status = check.get('body') if isinstance(check.get('body'), dict) else {}
     account = str((status.get('account') or {}).get('id', '')) + '@' + session['instance']
+    # Mastodon renders a same-server mention as @name; matches_text binds it to the status's reported mention identities.
+    from .mastodon_status_text import matches_text
+    from .mastodon_threads import plain_content
     if (check.get('status') == 200 and account == provider_account_id and str(status.get('in_reply_to_id')) == str(reply_to_id)
-            and ' '.join(plain(status.get('content')).split()) == ' '.join(text.split())):
+            and matches_text(status, text, session['instance'], plain_content)):
         return {'state': 'verified', 'reference': reply_id, 'confirmed': 'Mastodon read-back matched the approved reply.'}
     return {'state': 'submitted', 'reference': reply_id, 'confirmed': 'Mastodon accepted the reply; read-back did not match yet.'}
