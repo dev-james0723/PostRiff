@@ -6,7 +6,7 @@ Replaces rev A, B and C (the candidate moved again: a second independent review 
 
 **Release status today: NO-GO.** Nothing is deployed, promoted, sent or changed. The blockers that only you or Discord can clear are in section 2.
 
-**Candidate:** `claude/discord-launch-rc-20261023` at `2a5a523d788eef67a5c7dbed609a98efa6650eef` (draft PR #222, "DO NOT MERGE"). Rows 5 and 6 are approvals **for that SHA only**, and only once every row of `RC-RECEIPT.md` section 3 is green on it. If the head moves I send a new revision and an earlier yes does not carry over.
+**Candidate:** `claude/discord-launch-rc-20261023` at `2a5a523d788eef67a5c7dbed609a98efa6650eef` (draft PR #222, "DO NOT MERGE"). The head is frozen: CI is green on every workflow. Rows 5 and 6 are approvals **for that SHA only**, and only once every row of `RC-RECEIPT.md` section 3 is green on it. If the head moves I send a new revision and an earlier yes does not carry over.
 
 ## 0. What changed the plan (read this first)
 
@@ -99,6 +99,6 @@ No secret is read, set or printed. No Portal setting, billing, budget, domain or
 | Candidate | Live `c5fc1fd1` plus Discord line merged, 11 conflicted files resolved as unions; structural superset proof passes at `2a5a523d` (6,301 live paths, 29 listed rewrites) |
 | Dependencies | `npm audit` 0 (was 2 critical); `pip-audit` clean after `pypdf` 6.21.1; Pillow 13.0.0 kept; offline secret scan PASS (171 reviewed fixture digests added, scanner unchanged) |
 | Web | type-check clean, lint 0 errors, 1,010 of 1,010 node tests, production build passes with Sentry on and off |
-| CI on the exact SHA | At 22:30Z on `2a5a523d`: 9 of the 10 workflows are green (including the qualification, the composer-input run and the WebKit check that failed on the previous head); the 10th, `local-gates`, is still running. `RC-RECEIPT.md` section 3 is the source of truth. Earlier head `cd0ff8d0`: 8 of 9 workflows green; `local-gates` failed at the PostgreSQL step (the Mastodon opt-in, fixed here); on `29bc8ab2` that step and the Discord P0-P4 runner passed |
+| CI on the exact SHA | **All ten workflows are green on `2a5a523d` (fourteen check runs: eleven success, three skipped by design), finished 22:34Z; the candidate is frozen (22:37Z).** `RC-RECEIPT.md` section 3 has the run links. Earlier heads: `cd0ff8d0` had `local-gates` fail at the PostgreSQL step (the Mastodon opt-in, fixed); on `29bc8ab2` that step and the Discord P0-P4 runner passed, and the qualification, composer-input and one WebKit check were re-run on the new head and passed |
 | Real OAuth, real send, unattended schedule | Not run. Need the promoted dark build and you. |
 | Portal state, Production env names, PITR | Not verified (rows 7, 8, 11) |
