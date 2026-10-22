@@ -101,6 +101,14 @@ class SandboxOAuthReadiness(unittest.TestCase):
         self.assertNotIn("tiktok", registry)
         self.assertEqual(entry["configurationState"], "sandbox_forbidden_environment")
 
+    def test_sandbox_rejects_default_port_and_case_aliases_of_production(self):
+        for origin in ("https://rafii.io:443", "https://RAFII.IO", "https://www.rafii.io:443", OLD_ORIGIN + ":443"):
+            for name in ("POSTRIFF_PUBLIC_BASE_URL", "POSTRIFF_OAUTH_TIKTOK_CALLBACK_ORIGIN"):
+                with self.subTest(origin=origin, variable=name):
+                    registry, entry, _ = catalog(config(**{name: origin}))
+                    self.assertNotIn("tiktok", registry)
+                    self.assertEqual(entry["configurationState"], "sandbox_forbidden_environment")
+
     def test_review_publish_flags_do_not_unlock_sandbox(self):
         values = config(POSTRIFF_OAUTH_TIKTOK_REVIEWED="true",
                         POSTRIFF_OAUTH_TIKTOK_PUBLISH_APPROVED="true",

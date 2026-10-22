@@ -234,12 +234,23 @@ class TikTokProvider(OAuthProvider):
                                                            ("CLIENT_SECRET", presence["clientSecret"])) if not present]
         valid = _credential_shape(client_id) and _credential_shape(secret)
         environment = str(values.get("VERCEL_ENV", "")).strip().lower()
-        forbidden_origins = {"https://rafii.io", "https://www.rafii.io",
-                             "https://postriff-phase2-private.vercel.app"}
+        forbidden_hosts = {"rafii.io", "www.rafii.io", "postriff-phase2-private.vercel.app"}
         callback_origins = (values.get("POSTRIFF_PUBLIC_BASE_URL"),
                             values.get("POSTRIFF_OAUTH_TIKTOK_CALLBACK_ORIGIN"))
-        blocked = environment == "production" or any(fixed_https_origin(origin) in forbidden_origins
-                                                     for origin in callback_origins)
+
+        def production_origin(origin):
+            # Compare host and effective port, so https://rafii.io:443 or RAFII.IO. cannot slip past.
+            pinned = fixed_https_origin(origin)
+            if pinned is None:
+                return False
+            parts = urlsplit(pinned)
+            try:
+                port = parts.port or 443
+            except ValueError:
+                return True
+            return (parts.hostname or "").rstrip(".") in forbidden_hosts and port == 443
+
+        blocked = environment == "production" or any(production_origin(origin) for origin in callback_origins)
         diagnostic = {"credentialPresence": presence, "missingVariables": missing,
                       "sandboxMode": True,
                       "configurationState": "not_configured" if len(missing) == 2

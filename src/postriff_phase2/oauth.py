@@ -1179,18 +1179,19 @@ class OAuthService:
         event = payload.get("event")
         if event != "authorization.removed":
             return {"ok": True, "outcome": "ignored"}
-        open_id = payload.get("user_openid")
-        if not isinstance(open_id, str) or not 1 <= len(open_id) <= 200:
+        open_id, removed_at = payload.get("user_openid"), payload.get("create_time")
+        if not isinstance(open_id, str) or not 1 <= len(open_id) <= 200 \
+                or type(removed_at) is not int or not 0 < removed_at <= int(self.clock()) + self.TIKTOK_WEBHOOK_TOLERANCE:
             raise AlphaError("Webhook payload invalid.", 400)
         digest = hashlib.sha256(raw).hexdigest()
         try:
-            return self._tiktok_authorization_removed(open_id, event, digest)
+            return self._tiktok_authorization_removed(open_id, removed_at, event, digest)
         except AlphaError:
             raise
         except Exception:  # TikTok retries; never echo database details (e.g. migration 044 not applied yet)
             raise AlphaError("Webhook storage unavailable.", 503)
 
-    def _tiktok_authorization_removed(self, open_id, event, digest):
+    def _tiktok_authorization_removed(self, open_id, removed_at, event, digest):
         with self.repository.connection_factory() as db:
             with db.cursor() as cur:
                 cur.execute(
@@ -1200,10 +1201,13 @@ class OAuthService:
                 )
                 if not cur.fetchone():
                     return {"ok": True, "outcome": "duplicate"}
+                # Fence on the removal time: a reconnect after it issued a new grant (rotated_at), which a delayed or
+                # retried removal must not wipe. A refresh cannot follow a removal because TikTok revoked the token.
                 cur.execute(
                     "SELECT workspace_id::text,connection_id FROM public.pr_encrypted_credentials "
-                    "WHERE provider='tiktok' AND provider_account_id=%s AND revoked_at IS NULL FOR UPDATE",
-                    (open_id,),
+                    "WHERE provider='tiktok' AND provider_account_id=%s AND revoked_at IS NULL "
+                    "AND COALESCE(rotated_at,created_at)<=to_timestamp(%s) FOR UPDATE",
+                    (open_id, removed_at),
                 )
                 affected = cur.fetchall()
                 for workspace_id, connection_id in affected:

@@ -263,7 +263,18 @@ class XiaohongshuOAuth(unittest.TestCase):
         commands = SimpleNamespace(engine=SimpleNamespace(invalidate=lambda _state: None))
         service = OAuthService(WebhookRepository(database), commands, CredentialVault(CredentialVault.generate_key()),
                                {"tiktok": TikTokProvider("fixture-key", "fixture-secret")}, BASE, clock=lambda: now)
+        seen = []
+        execute = WebhookCursor.execute
+        def recording(cursor, sql, params=()):
+            seen.append((" ".join(sql.split()), params))
+            return execute(cursor, sql, params)
+        WebhookCursor.execute = recording
+        self.addCleanup(setattr, WebhookCursor, "execute", execute)
         self.assertEqual(service.tiktok_webhook(sign(now), raw), {"ok": True, "outcome": "revoked"})
+        select = next((sql, params) for sql, params in seen if sql.startswith("SELECT workspace_id::text,connection_id"))
+        # A delayed removal must not wipe a grant issued after it (reconnect after the removal).
+        self.assertIn("COALESCE(rotated_at,created_at)<=to_timestamp(%s)", select[0])
+        self.assertEqual(select[1], ("open-1", now))
         self.assertEqual(service.tiktok_webhook(sign(now), raw), {"ok": True, "outcome": "duplicate"})
         channel = database.state["phase2"]["channels"][0]
         self.assertTrue(database.revoked and database.capabilities_disabled)
