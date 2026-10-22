@@ -1505,6 +1505,8 @@ export interface ChannelView {
 export interface ProviderView {
   discordConnectionsV2?: boolean;
   discordModes?: DiscordModes;
+  /** Whether THIS workspace may start a Discord connection (launch gate); existing connections are unaffected. */
+  discordAccess?: { status: 'open' | 'closed'; reason?: string; capped?: boolean };
   /** Restricted server-side Pinterest pilot; never a public release gate. */
   trialReadonly?: boolean;
   configurationState?: string;

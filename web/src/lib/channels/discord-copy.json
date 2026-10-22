@@ -70,7 +70,9 @@
     "callbackConfirming": "Confirming your account…",
     "callbackFailed": "Couldn't connect",
     "callbackConnected": "Connected {account}",
-    "callbackDenied": "Access not granted"
+    "callbackDenied": "Access not granted",
+    "accessClosed": "Discord isn't open to new connections for this workspace yet. Connections you already have keep working.",
+    "capacityReached": "Discord has no room for another server right now. Nothing was connected or posted. Try again later."
   },
   "zh-Hant": {
     "personalTitle": "個人 Discord 帳戶",
@@ -143,7 +145,9 @@
     "callbackConfirming": "正在確認你的帳戶…",
     "callbackFailed": "無法連接",
     "callbackConnected": "已連接 {account}",
-    "callbackDenied": "未獲授權"
+    "callbackDenied": "未獲授權",
+    "accessClosed": "此工作區暫時未開放新增 Discord 連接。你已有的連接會繼續運作。",
+    "capacityReached": "Discord 目前沒有空位加入新伺服器。沒有連接任何內容，也沒有發佈任何貼文。請稍後再試。"
   },
   "zh-Hans": {
     "personalTitle": "个人 Discord 账户",
@@ -216,6 +220,8 @@
     "callbackConfirming": "正在确认你的账户…",
     "callbackFailed": "无法连接",
     "callbackConnected": "已连接 {account}",
-    "callbackDenied": "未获授权"
+    "callbackDenied": "未获授权",
+    "accessClosed": "此工作区暂未开放新增 Discord 连接。你已有的连接会继续运作。",
+    "capacityReached": "Discord 目前没有空位加入新服务器。没有连接任何内容，也没有发布任何帖子。请稍后再试。"
   }
 }

@@ -20,7 +20,7 @@ import { CONNECT_CAPABILITY_OPTIONS } from '@/lib/channels/capabilities';
 import { historyImportCopy } from '@/lib/channels/history-import-copy';
 import { usePreferences } from '@/lib/preferences';
 import { defaultConnectCapability } from '@/lib/channels/onboarding';
-import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordCopy, type DiscordCopy } from '@/lib/channels/discord-copy';
 import { DiscordModeChoices, type DiscordPurpose } from './discord-mode-choices';
 import { discordDiscoveryState, discordPrivateLinkActions } from '@/lib/channels/discord-personal-account';
 import { rememberExpectedReconnect } from '@/lib/channels/connect-expect';
@@ -48,6 +48,13 @@ function offeredCapabilities(provider: ProviderView | undefined): ConnectCapabil
 }
 
 const defaultCapability = defaultConnectCapability;
+
+/** The launch gate and the server cap refuse with stable codes, so the refusal can be shown in the person's language. */
+function discordRefusal(error: ApiError, copy: DiscordCopy): string {
+  if (error.code === 'discord_access_closed') return copy.accessClosed;
+  if (error.code === 'discord_capacity_reached') return copy.capacityReached;
+  return error.message;
+}
 
 /** A platform that can't be connected says so as icon + words (DNA §4.3); a ready one needs no label. */
 function ProviderReadiness({ provider }: { provider: ProviderView }) {
@@ -211,7 +218,7 @@ export function ConnectSheet({
       setPending(started);
     } catch (err) {
       // Ignore a completion belonging to a closed or changed connection context.
-      if (generation === discordRequestGeneration.current) setError(err instanceof ApiError ? err.message : 'Try again in a moment.');
+      if (generation === discordRequestGeneration.current) setError(err instanceof ApiError ? discordRefusal(err, dc) : 'Try again in a moment.');
     } finally {
       if (generation === discordRequestGeneration.current) setBusy(false);
     }
@@ -406,7 +413,9 @@ export function ConnectSheet({
 
               {provider && (
                 <div className='text-muted-foreground flex flex-col gap-1.5 text-[13px] leading-relaxed'>
-                  {provider.connectReady === false ? <p className='text-foreground'>{provider.platform} isn&apos;t available yet.</p> : <p>{provider.accountRequirement}</p>}
+                  {provider.connectReady === false ? (
+                    <p className='text-foreground'>{provider.id === 'discord' && provider.discordAccess?.status === 'closed' ? dc.accessClosed : `${provider.platform} isn't available yet.`}</p>
+                  ) : <p>{provider.accountRequirement}</p>}
                   {/* Setup detail for whoever runs the workspace: available on request, never the headline. */}
                   {Boolean(provider.setupIssues?.length || (provider.callbackUri && provider.connectReady === false)) && (
                     <details className='text-xs'>
