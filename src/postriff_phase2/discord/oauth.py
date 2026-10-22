@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from urllib.parse import urlencode
 
 from postriff_alpha.domain import AlphaError
+from . import launch_gate
 from .authorization import digest, snowflake
 
 
@@ -223,6 +224,9 @@ class DiscordConnections:
             elif inputs.get('connectionId'):
                 record = identity_record(state, inputs['connectionId'], actor)
                 context['expectedUserId'] = record['userId']
+            if purpose == 'installation' and not inputs.get('connectionId'):
+                # A brand-new server takes one of the shared bot's limited slots (launch_gate).
+                launch_gate.reserve_capacity(cur)
             state_value = secrets.token_urlsafe(32)
             ciphertext, key = self.oauth.vault.encrypt(json.dumps(context))
             cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,'discord',%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>600)) RETURNING id::text", (workspace, actor, capability, redirect, scopes, hashlib.sha256(state_value.encode()).hexdigest(), ciphertext, key))

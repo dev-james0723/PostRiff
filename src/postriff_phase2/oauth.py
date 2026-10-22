@@ -454,6 +454,10 @@ class OAuthService:
         inputs = inputs or {}
         if not isinstance(inputs, dict):
             raise AlphaError('Expected structured connection inputs.', 400)
+        if provider_id == 'discord':
+            # Who may START a Discord connection is decided before any provider request (launch_gate).
+            from .discord import launch_gate
+            launch_gate.require_connect_access(self.discord_connections, workspace_id, token)
         if provider_id == 'discord' and getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
             return self.discord_connections.start(workspace_id, token, capability, inputs)
         lane = inputs.get('authorizationLane', 'standard') if provider_id == 'youtube' else 'standard'
@@ -1335,6 +1339,8 @@ class OAuthService:
             matrices.setdefault(connection_id, unsupported_matrix())[capability] = {"level": level, "evidence": evidence, "capabilityVersion": version, "verifiedAt": float(verified) if verified else None}
         now = self.clock()
         catalog = self.provider_catalog()
+        from .discord import launch_gate
+        launch_gate.annotate_catalog(catalog, workspace_id, snapshot['state'])
         by_platform = {provider['platform']: provider for provider in catalog}
         views = [{**customer_view(with_youtube_credential_status(c, credentials.get((workspace_id, c['id']))), matrices.get(c['id'], unsupported_matrix() if c.get('platform') == 'Discord' else assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
         from .discord.engagement import annotate_capabilities
