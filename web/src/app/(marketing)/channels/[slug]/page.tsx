@@ -50,7 +50,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
   const faq =
     channel.group === 'hosted'
       ? [
-          { q: `Can Rafii publish to ${channel.name} directly today?`, a: `Not yet. ${channel.reviewStatus ?? 'Provider review is pending'}. Until it passes, Rafii prepares the post and you complete the final step; the badge on your channel card says exactly that.` },
+          { q: `Can Rafii publish to ${channel.name} directly today?`, a: `Not yet: ${channel.reviewStatus ?? 'provider review is pending'}. Until it passes, Rafii prepares the post and you complete the final step; the badge on your channel card says exactly that.` },
           { q: 'What permissions does Rafii ask for?', a: 'Only the scopes for the capability you enable — publishing, analytics, comments or replies — and the connection card lists the ones actually granted.' },
           { q: 'How do I disconnect?', a: 'From Channels → Disconnect. The stored token is wiped and revoked with the provider where supported.' }
         ]
