@@ -33,11 +33,16 @@ def set_level(matrix, capability, level, evidence, verified_at, capability_versi
     return matrix
 
 
+# Platforms whose access tokens are short-lived and renewed on use from a stored refresh grant
+# (Bluesky access tokens last minutes): the vault, not the channel JSON, says whether access renews.
+RENEWING_PROVIDERS = {"YouTube": "youtube", "Bluesky": "bluesky"}
+
+
 def youtube_credential_status(cur, workspace_ids):
     """Secret-free vault facts; an access-token deadline is not a grant deadline."""
     if not workspace_ids:
         return {}
-    cur.execute("SELECT workspace_id::text,connection_id,refresh_supported,refresh_ciphertext IS NOT NULL AND refresh_ciphertext<>'',extract(epoch from access_expires_at)::float8,revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=ANY(%s::uuid[]) AND provider='youtube'", (list(workspace_ids),))
+    cur.execute("SELECT workspace_id::text,connection_id,refresh_supported,refresh_ciphertext IS NOT NULL AND refresh_ciphertext<>'',extract(epoch from access_expires_at)::float8,revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=ANY(%s::uuid[]) AND (provider='youtube' OR provider='bluesky')", (list(workspace_ids),))
     return {(workspace, connection): {
         "refreshSupported": bool(supported and present and not revoked),
         # An encrypted refresh retained but intentionally disabled needs new consent;
@@ -50,7 +55,7 @@ def youtube_credential_status(cur, workspace_ids):
 
 def with_youtube_credential_status(channel, status):
     """Overlay current vault facts without changing the persisted channel or inventing grant expiry."""
-    if channel.get("platform") != "YouTube":
+    if channel.get("platform") not in RENEWING_PROVIDERS:
         return channel
     if status is None:
         return {**channel, "refreshSupported": False}
@@ -67,8 +72,8 @@ def connection_state(channel, now):
         return "reauthorization_required"
     if not channel.get("identityVerified"):
         return "identity_known" if channel.get("providerAccountId") else "disconnected"
-    refreshable_youtube = channel.get("platform") == "YouTube" and channel.get("refreshSupported") is True
-    if channel.get("expiresAt", 0) <= now and not refreshable_youtube:
+    renews = channel.get("platform") in RENEWING_PROVIDERS and channel.get("refreshSupported") is True
+    if channel.get("expiresAt", 0) <= now and not renews:
         return "client_binding_missing" if channel.get('refreshBindingRequired') else "token_expired"
     if not channel.get("scopes"):
         return "scope_missing"

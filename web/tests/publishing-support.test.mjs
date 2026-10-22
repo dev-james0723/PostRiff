@@ -9,3 +9,10 @@ for (const [platform, format] of [['LinkedIn','text'],['Threads','image'],['Inst
   });
 }
 test('unknown connector does not imply Direct publishing', () => assert.match(publishingSupport('Unknown'), /isn't available/));
+test('Bluesky copy never claims publishing from an identity connection', () => {
+  const value = publishingSupport('Bluesky');
+  assert.match(value, /identity only/);
+  assert.match(value, /separate permission/);
+  assert.match(value, /approval of each post/);
+  assert.doesNotMatch(value, /automatic|scheduled for you|analytics|replies/i);
+});

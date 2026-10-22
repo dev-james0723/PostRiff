@@ -22,6 +22,7 @@ from .mastodon_release import write_qualified as mastodon_write_qualified
 from .channels import CAPABILITIES, assisted_matrix, customer_view, set_level, unsupported_matrix, with_youtube_credential_status, youtube_credential_status
 
 TRANSACTION_TTL = 600
+BLUESKY_STARTS_PER_MINUTE = 300
 PUBLISH_CAPABILITIES = ("publish", "schedule")
 NON_EXPIRING_HORIZON = 86400 * 365 * 5
 
@@ -263,7 +264,8 @@ class OAuthService:
                 history = 'HISTORICAL_IMPORT_AVAILABLE'
             elif read_scope:
                 history = 'HISTORICAL_IMPORT_PERMISSION_UNAVAILABLE'
-            if publish_scope and publish_scope in scopes:
+            has_publish = getattr(adapter_class, 'has_publish_scopes', None)
+            if publish_scope and (has_publish(scopes) if callable(has_publish) else publish_scope in scopes):
                 if not provider.get('productionReviewed'):
                     publishing = 'PUBLISHING_AWAITING_PROVIDER_REVIEW'
                 elif channel.get('capabilities', {}).get('publish', {}).get('level') == 'Direct':
@@ -486,6 +488,10 @@ class OAuthService:
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(_membership(row), "manage_connections")
             throttle(cur, f"oauth-start:{workspace_id}", 20, 600)
+            if provider_id == 'bluesky':
+                # Every Bluesky start resolves the handle and reads plc.directory before redirecting; a site-wide cap
+                # keeps a launch burst under those services' per-IP limits instead of failing every connect at once.
+                throttle(cur, "oauth-start:bluesky", BLUESKY_STARTS_PER_MINUTE, 60)
             reconnect_id = inputs.get('connectionId') if provider_id == 'mastodon' else None
             if reconnect_id is not None:
                 if not isinstance(reconnect_id, str) or not 1 <= len(reconnect_id) <= 128:
@@ -1178,7 +1184,9 @@ class OAuthService:
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
 
         publish_scopes = set(adapter.capability_scopes("publish"))
-        publish_granted = bool(publish_scopes) and publish_scopes <= granted_set
+        publish_checker = getattr(adapter, 'has_publish_scopes', None)
+        publish_granted = (publish_checker(granted_set) if callable(publish_checker) else
+                           bool(publish_scopes) and publish_scopes <= granted_set)
         publisher_ready = not (
             getattr(adapter, "publisher", None) is not None and
             (not getattr(adapter, "publish_live_tested", False) or
@@ -1257,6 +1265,12 @@ class OAuthService:
             if error.code == 'mastodon_authorization_revoked':
                 self.mark_mastodon_revoked(workspace_id, connection_id,
                     expected_ciphertext=getattr(error, 'mastodon_observed_ciphertext', None))
+            elif error.code == 'reauthorization_required' and getattr(error, 'bluesky_observed_refresh', None):
+                # The refresh transaction rolled back. Record only "no longer renews", conditional on the exact
+                # refresh grant observed, so the Channels card asks for Reconnect; a concurrent new consent wins.
+                with self.repository.connection_factory() as db, db.cursor() as cur:
+                    cur.execute("UPDATE public.pr_encrypted_credentials SET refresh_supported=false,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='bluesky' AND revoked_at IS NULL AND refresh_ciphertext=%s",
+                                (workspace_id, connection_id, error.bluesky_observed_refresh))
             elif error.code == 'youtube_revoked_oauth':
                 self.mark_youtube_revoked(workspace_id, connection_id,
                                          expected_ciphertext=getattr(error, 'credential_revocation_ciphertext', None),
@@ -1456,7 +1470,12 @@ class OAuthService:
                             raise error
                         if not (refresh_supported and refresh_ct):
                             raise AlphaError("Access expired and cannot be refreshed; re-authorization required.", 409)
-                        grant = adapter.refresh(self.vault.decrypt(refresh_ct, key_id))
+                        try:
+                            grant = adapter.refresh(self.vault.decrypt(refresh_ct, key_id))
+                        except AlphaError as error:
+                            if provider == 'bluesky' and error.code == 'reauthorization_required':
+                                error.bluesky_observed_refresh = refresh_ct
+                            raise
                         binding_scopes = None
                         preserve = getattr(adapter, "preserve_destination", None)
                         if preserve is not None:

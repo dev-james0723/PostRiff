@@ -15,12 +15,14 @@ import socket
 import time
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from postriff_alpha.domain import AlphaError
-from .net_guard import public_host, public_https_url
+from .net_guard import public_host, public_https_url, pinned_public_json_transport
 from .provider_base import OAuthProvider, _credential_shape, default_transport, fixed_https_origin
 
 ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 _HANDLE = re.compile(r"^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$")
 _DID = re.compile(r"^did:(plc:[a-z2-7]{24}|web:[a-z0-9.-]{3,253})$")
+# Per-adapter cache of public DID documents and OAuth server metadata (never tokens or account data).
+DOCUMENT_TTL, DOCUMENT_CACHE_MAX = 300, 512
 
 
 # --- JOSE (ES256) ------------------------------------------------------------------------------------------------
@@ -108,14 +110,27 @@ def parse_client_jwk(raw):
 
 # --- adapter ---------------------------------------------------------------------------------------------------
 class BlueskyProvider(OAuthProvider):
-    id, platform, capability_version = "bluesky", "Bluesky", 1
-    SCOPES = {"identity": ["atproto", "transition:generic"], "publish": ["atproto", "transition:generic"], "schedule": ["atproto", "transition:generic"]}
-    EXPLAIN = {"identity": "Connect your Bluesky account. Rafii confirms the account on your own server and posts nothing.",
-               "publish": "Rafii will post to this Bluesky account only when you approve each exact post."}
+    id, platform, capability_version = "bluesky", "Bluesky", 2
+    POST_SCOPE = "repo:app.bsky.feed.post?action=create"
+    IMAGE_SCOPE = "blob:image/*"
+    LEGACY_SCOPE = "transition:generic"  # Existing grants remain usable; never requested by new flows.
+    SCOPES = {"identity": ["atproto"],
+              "publish": ["atproto", POST_SCOPE, IMAGE_SCOPE],
+              "schedule": ["atproto", POST_SCOPE, IMAGE_SCOPE]}
+    EXPLAIN = {"identity": "Confirm your Bluesky identity only. Rafii cannot create posts or upload media with this connection.",
+               "publish": "Allow Rafii to create Bluesky posts and upload images for your account, only after you approve the exact content and destination.",
+               "schedule": "Allow creation of approved Bluesky posts and image uploads at the time you approve. No automatic engagement."}
     account_requirement = "Any Bluesky account, on bsky.social or your own server."
-    publish_scope = "transition:generic"
-    publish_required = frozenset({"atproto", "transition:generic"})
-    start_input = {"name": "handle", "label": "Bluesky handle", "placeholder": "name.bsky.social"}
+    publish_scope = POST_SCOPE
+    publish_required = frozenset({"atproto", POST_SCOPE, IMAGE_SCOPE})
+    start_input = {"name": "handle", "label": "Bluesky handle or DID", "placeholder": "name.bsky.social or did:plc:..."}
+
+    @classmethod
+    def has_publish_scopes(cls, scopes, *, with_image=True):
+        """Recognize both least-privilege new grants and older broad grants without requesting new broad grants."""
+        granted = set(scopes or ())
+        return "atproto" in granted and (cls.LEGACY_SCOPE in granted or
+                (cls.POST_SCOPE in granted and (not with_image or cls.IMAGE_SCOPE in granted)))
     requires_issuer = True
     refresh_margin = 300  # access tokens last at most 15 minutes
     METADATA_PATH = "/api/oauth/bluesky/client-metadata.json"
@@ -134,10 +149,14 @@ class BlueskyProvider(OAuthProvider):
         self.callback_origin = self.public_base_url if client_origin else None
         self.client_id = self.public_base_url + self.METADATA_PATH
         self.client_secret = None
-        self.transport = transport or default_transport()
+        self.clock, self.resolver = clock, resolver
+        # Resolve once, pin the public address to the TLS socket and never follow redirects.
+        # OAuth/JWK/token data never goes through a later, independent DNS resolution.
+        self.transport = transport or (lambda method, url, headers=None, form=None, body=None, data=None:
+            pinned_public_json_transport(method, url, headers, form, body, data,
+                                         resolver=self.resolver, allow_atproto_did=True))
         self.production_reviewed = bool(production_reviewed)
         self.execution_enabled = True
-        self.clock, self.resolver = clock, resolver
 
     @classmethod
     def mount(cls, values, transport=None):
@@ -156,7 +175,11 @@ class BlueskyProvider(OAuthProvider):
                       "clientOriginPinned": client_origin is not None}
         if state != "configured":
             return None, diagnostic
-        return cls(jwk, base, transport=transport, client_origin=client_origin), diagnostic
+        adapter = cls(jwk, base, transport=transport, client_origin=client_origin)
+        # Bluesky's consent screen shows these links; switch on only once /terms and /privacy are final.
+        adapter.consent_links = str(values.get("POSTRIFF_BLUESKY_CONSENT_LINKS", "")).lower() == "true"
+        diagnostic["consentLinks"] = adapter.consent_links
+        return adapter, diagnostic
 
     # --- public documents -------------------------------------------------------------------------------------
     def client_metadata(self):
@@ -164,18 +187,48 @@ class BlueskyProvider(OAuthProvider):
         return {"client_id": self.client_id, "application_type": "web", "client_name": "Rafii", "client_uri": base,
                 "dpop_bound_access_tokens": True, "grant_types": ["authorization_code", "refresh_token"],
                 "redirect_uris": [base + "/api/oauth/bluesky/callback"], "response_types": ["code"],
-                "scope": " ".join(self.SCOPES["publish"]), "token_endpoint_auth_method": "private_key_jwt",
-                "token_endpoint_auth_signing_alg": "ES256", "jwks_uri": base + self.JWKS_PATH}
+                # Include legacy in client metadata only so existing grants can refresh. New PAR requests never seek it.
+                "scope": " ".join([*self.SCOPES["publish"], self.LEGACY_SCOPE]), "token_endpoint_auth_method": "private_key_jwt",
+                "token_endpoint_auth_signing_alg": "ES256", "jwks_uri": base + self.JWKS_PATH,
+                **({"logo_uri": base + "/icon", "tos_uri": base + "/terms", "policy_uri": base + "/privacy"}
+                   if getattr(self, "consent_links", False) else {})}
 
     def jwks(self):
         return {"keys": [public_jwk(self.client_jwk)]}
 
     # --- resolution ---------------------------------------------------------------------------------------------
-    def _get_json(self, url):
-        response = self.transport("GET", public_https_url(url, self.resolver))
+    SLOW = "Bluesky is slow right now. Try again in a minute."
+
+    def _get_json(self, url, *, cache=False):
+        """One public JSON read. Outages and rate limits get one jittered retry, then a calm 503; a cached document
+        (DID documents and server metadata only) is reused for DOCUMENT_TTL seconds so a connect burst does not
+        repeat the same lookups against plc.directory and the account's servers."""
+        now = self.clock()
+        documents = self.__dict__.setdefault("_documents", {})
+        hit = documents.get(url) if cache else None
+        if hit and now - hit[0] < DOCUMENT_TTL:
+            return hit[1]
+        for attempt in (0, 1):
+            try:
+                response = self.transport("GET", public_https_url(url, self.resolver))
+            except AlphaError as error:
+                if error.status != 503:
+                    raise
+                response = {"status": 503}
+            status = response.get("status")
+            if status == 429 or (isinstance(status, int) and status >= 500):
+                if attempt == 0:
+                    time.sleep(0.2 + secrets.randbelow(300) / 1000)
+                    continue
+                raise AlphaError(self.SLOW, 503, code="provider_unavailable")
+            break
         body = response.get("body")
-        if response.get("status") != 200 or not isinstance(body, dict):
+        if status != 200 or not isinstance(body, dict):
             raise AlphaError("Bluesky could not confirm this account right now.", 502)
+        if cache:
+            if len(documents) >= DOCUMENT_CACHE_MAX:
+                documents.pop(next(iter(documents)))
+            documents[url] = (now, body)
         return body
 
     @staticmethod
@@ -203,9 +256,9 @@ class BlueskyProvider(OAuthProvider):
 
     def did_document(self, did):
         if did.startswith("did:plc:"):
-            document = self._get_json(self.PLC_DIRECTORY + quote(did, safe=":"))
+            document = self._get_json(self.PLC_DIRECTORY + quote(did, safe=":"), cache=True)
         else:
-            document = self._get_json(f"https://{public_host(did[len('did:web:'):])}/.well-known/did.json")
+            document = self._get_json(f"https://{public_host(did[len('did:web:'):])}/.well-known/did.json", cache=True)
         if document.get("id") != did:
             raise AlphaError("Bluesky returned a mismatched account record.", 502)
         return document
@@ -220,12 +273,12 @@ class BlueskyProvider(OAuthProvider):
         raise AlphaError("This Bluesky account has no server Rafii can reach.", 502)
 
     def authorization_server(self, pds):
-        resource = self._get_json(pds + "/.well-known/oauth-protected-resource")
+        resource = self._get_json(pds + "/.well-known/oauth-protected-resource", cache=True)
         servers = resource.get("authorization_servers")
         if not isinstance(servers, list) or not servers or not isinstance(servers[0], str):
             raise AlphaError("This Bluesky server does not offer sign-in for apps.", 502)
         issuer = servers[0].rstrip("/")
-        metadata = self._get_json(issuer + "/.well-known/oauth-authorization-server")
+        metadata = self._get_json(issuer + "/.well-known/oauth-authorization-server", cache=True)
         if str(metadata.get("issuer", "")).rstrip("/") != issuer:
             raise AlphaError("This Bluesky server's sign-in details don't match.", 502)
         for key in ("pushed_authorization_request_endpoint", "authorization_endpoint", "token_endpoint"):
@@ -272,10 +325,12 @@ class BlueskyProvider(OAuthProvider):
 
     # --- flow -----------------------------------------------------------------------------------------------------
     def begin(self, redirect, state, verifier, challenge, scopes, handle):
-        handle = self.normalize_handle(handle)
-        did = self.resolve_did(handle)
+        identifier = handle.strip().lower().lstrip("@") if isinstance(handle, str) else ""
+        direct_did = bool(_DID.fullmatch(identifier))
+        handle = None if direct_did else self.normalize_handle(handle)
+        did = identifier if direct_did else self.resolve_did(handle)
         document = self.did_document(did)
-        if f"at://{handle}" not in (document.get("alsoKnownAs") or []):
+        if handle and f"at://{handle}" not in (document.get("alsoKnownAs") or []):
             raise AlphaError("That handle doesn't point back to its Bluesky account.", 409)
         pds = self.pds_endpoint(document)
         public_https_url(pds, self.resolver)
@@ -283,13 +338,13 @@ class BlueskyProvider(OAuthProvider):
         dpop_jwk = generate_jwk()
         response, nonce = self._dpop_post(metadata["pushed_authorization_request_endpoint"], {
             "response_type": "code", "code_challenge": challenge, "code_challenge_method": "S256", "state": state,
-            "redirect_uri": redirect, "scope": " ".join(scopes), "login_hint": handle}, dpop_jwk, audience=issuer)
+            "redirect_uri": redirect, "scope": " ".join(scopes), "login_hint": handle or did}, dpop_jwk, audience=issuer)
         request_uri = response.get("body", {}).get("request_uri") if isinstance(response.get("body"), dict) else None
         if response.get("status") not in (200, 201) or not isinstance(request_uri, str):
             raise AlphaError("Bluesky did not start the sign-in. Try again.", 502)
         authorize = metadata["authorization_endpoint"] + "?" + urlencode({"client_id": self.client_id, "request_uri": request_uri})
         context = {"issuer": issuer, "tokenEndpoint": metadata["token_endpoint"], "revocationEndpoint": metadata.get("revocation_endpoint"),
-                   "did": did, "handle": handle, "pds": pds, "dpopJwk": dpop_jwk, "dpopNonce": nonce}
+                   "did": did, "handle": handle or did, "pds": pds, "dpopJwk": dpop_jwk, "dpopNonce": nonce}
         return {"authorizeUrl": authorize, "context": context}
 
     def _session(self, body, context, nonce):
@@ -324,9 +379,14 @@ class BlueskyProvider(OAuthProvider):
         context = {"issuer": stored["iss"], "tokenEndpoint": stored["tokenEndpoint"], "revocationEndpoint": stored.get("revocationEndpoint"),
                    "did": stored["did"], "pds": stored["pds"], "dpopJwk": stored["jwk"]}
         response, nonce = self._dpop_post(stored["tokenEndpoint"], {"grant_type": "refresh_token", "refresh_token": stored["rt"]}, stored["jwk"], stored.get("nonce"), audience=stored["iss"])
-        if response.get("status") != 200 or not isinstance(response.get("body"), dict):
+        body = response.get("body") if isinstance(response.get("body"), dict) else {}
+        if response.get("status") in (400, 401) and body.get("error") in ("invalid_grant", "invalid_client", "unauthorized_client"):
+            # Definitive: the grant is gone. Only this answer may turn the connection into "reconnect".
             raise AlphaError("Bluesky access expired; reconnect the account.", 409, code="reauthorization_required")
-        return self._session(response["body"], context, nonce)
+        if response.get("status") != 200 or not body:
+            # Outage, rate limit or an unknown answer: the stored grant stays usable for a later retry.
+            raise AlphaError("Bluesky did not renew access right now. Try again shortly.", 503, code="provider_unavailable")
+        return self._session(body, context, nonce)
 
     def identity(self, access_token):
         session = json.loads(access_token)
