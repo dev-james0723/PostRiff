@@ -12,7 +12,7 @@ export function publishingSupport(platform: string): string {
     case 'Mastodon':
       return 'Text or one image on your server. Needs publish permission.';
     case 'Telegram':
-      return "Text or one photo in your channel, sent by Rafii's bot. Needs the bot's permission to post.";
+      return "Telegram formats depend on the destination’s actual permissions and acceptance tests. Scheduling is Rafii-managed.";
     case 'Discord':
       return "Text or one image in the channel you chose. Needs the bot's permission to post there.";
     case 'X':

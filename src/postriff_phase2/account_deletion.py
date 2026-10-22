@@ -179,6 +179,9 @@ def _delete(service, workspace_id, principal):
         cur.execute("SELECT to_regprocedure('public.pr_erase_session_history(uuid)') IS NOT NULL")
         if cur.fetchone()[0]:
             cur.execute('SELECT public.pr_erase_session_history(%s)', (principal,))
+        # Telegram's global identity ownership fence has no workspace cascade.
+        from .telegram.privacy import erase_identity
+        erase_identity(cur, principal)
         cur.execute('DELETE FROM public.pr_profiles WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_workspaces WHERE id=%s', (workspace_id,))
     # A failed identity call cannot undo deleted data. Keep the pending receipt for operator recovery.

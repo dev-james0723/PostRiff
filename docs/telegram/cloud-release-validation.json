@@ -1,0 +1,33 @@
+{
+  "execution": "disposable_cloud_ci_only",
+  "realTelegramE2E": false,
+  "productionChanges": "NONE",
+  "runs": [
+    {
+      "task": "ci",
+      "provider": "depot",
+      "runId": "5z2n596lgb",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/5z2n596lgb",
+      "exitCode": 0,
+      "remoteExitCode": 0,
+      "sourceHead": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "startedAt": "2026-10-11T20:58:11.248297+00:00",
+      "elapsedSeconds": 178.801
+    },
+    {
+      "task": "test",
+      "provider": "depot",
+      "runId": "25wwt344m8",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/25wwt344m8",
+      "exitCode": 0,
+      "remoteExitCode": 0,
+      "sourceHead": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "startedAt": "2026-10-11T21:21:02.042407+00:00",
+      "elapsedSeconds": 101.235
+    }
+  ],
+  "localValidation": [
+    "git diff --check",
+    "source checksum comparison; no database execution"
+  ]
+}

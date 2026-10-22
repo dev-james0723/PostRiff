@@ -305,6 +305,8 @@ def runtime_from_environment(environ=None):
     from .image_runtime import from_environment as image_runtime_from_environment
     service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
     verify.on_first_sighting = lambda principal, session_id, label, eligible: service._alert_new_device(principal, session_id, label, eligible=eligible)
+    from .telegram.login import TelegramLogin
+    service.telegram_login = TelegramLogin(service.telegram, values)
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
         service.legacy_mail_outbox = LegacyMailOutbox(database, mailer, service.oauth.vault, values, service.ledger, service.clock)
@@ -619,6 +621,10 @@ class HostedApplication:
         path = environ.get("PATH_INFO", "/")
         mutation = method in ("POST", "PUT", "PATCH", "DELETE")
         try:
+            telegram_canary = os.environ.get('POSTRIFF_TELEGRAM_CANARY_ENABLED') == 'true'
+            if telegram_canary and path.startswith('/api/cron/') and path != '/api/cron/worker':
+                raise AlphaError('Other background jobs are disabled during Telegram owner acceptance.', 503,
+                                 code='telegram_canary_jobs_isolated')
             if path.startswith("/api/control/v2/"):
                 # Founder Control answers its own prefix through its cookie + CSRF + capability boundary: the consumer
                 # bearer, application guard and runtime never apply to it. Built once, lazily, from the process
@@ -718,6 +724,13 @@ class HostedApplication:
                     raise AlphaError("Webhook body size invalid.", 413)
                 raw = environ["wsgi.input"].read(length)
                 return self._json(start_response, 200, service.oauth.telegram_webhook(environ.get("HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN", ""), raw))
+            telegram_hook = path.strip('/').split('/')
+            if len(telegram_hook) == 5 and telegram_hook[:3] == ['api','telegram','bots'] and telegram_hook[4] == 'webhook' and method == 'POST':
+                service = self._runtime()
+                length = int(environ.get('CONTENT_LENGTH') or '0')
+                if not 0 < length <= 65536: raise AlphaError('Webhook body size invalid.', 413)
+                raw = environ['wsgi.input'].read(length)
+                return self._json(start_response, 200, service.telegram.own_webhook(telegram_hook[3], environ.get('HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN',''), raw))
             if path == "/api/xiaohongshu/webhook" and method == "POST":
                 # Xiaohongshu signs timestamp + '.' + the exact bytes. The endpoint deliberately stays outside
                 # browser-origin and session checks; its HMAC, replay window and event id are the authorization.
@@ -733,6 +746,14 @@ class HostedApplication:
                     "signature": environ.get("HTTP_X_XHS_SIGNATURE"),
                 }
                 return self._json(start_response, 200, service.oauth.xiaohongshu_webhook(headers, raw))
+            if path == '/api/telegram/login/callback' and method == 'GET':
+                from urllib.parse import parse_qs, urlencode
+                login = self._runtime().telegram_login
+                if not login.configured(): raise AlphaError('Telegram Login is unavailable.', 503)
+                query = {k:v[0][:2048] for k,v in parse_qs(environ.get('QUERY_STRING','')).items() if k in ('code','state','error') and len(v)==1}
+                location = login.base + '/app/telegram?' + urlencode(query)
+                start_response('303 See Other', [('Location',location),('Cache-Control','no-store'),('Referrer-Policy','no-referrer')])
+                return [b'']
             oauth_parts = path.strip("/").split("/")
             if len(oauth_parts) == 4 and oauth_parts[:2] == ["api", "oauth"] and oauth_parts[3] == "callback" and method == "GET":
                 # Public provider callback: redirect state/code to the signed-in app; never exchange here.
@@ -774,11 +795,28 @@ class HostedApplication:
                 from .agent_runtime_v2.task_engine import cron as task_cron
                 return self._json(start_response, 200, task_cron.tick(self._runtime()))
             if path == "/api/cron/worker" and method == "GET":
-                service = self._runtime()
-                expected = self.cron_secret or ""
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get('CRON_SECRET', '')
                 supplied = environ.get("HTTP_AUTHORIZATION", "")
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
+                preserved_cron = None
+                if telegram_canary:
+                    from .telegram.canary_cron import preserve_live_cron
+                    preserved_cron = preserve_live_cron(environ, os.environ, expected)
+                service = self._runtime()
+                if telegram_canary:
+                    provider = (getattr(getattr(service, 'oauth', None), 'providers', None) or {}).get('telegram')
+                    try:
+                        result = self.worker.tick_telegram_canary(getattr(provider, 'candidate_scope', None))
+                    except AlphaError as error:
+                        if preserved_cron is None:
+                            raise
+                        # Grant expiry cannot interrupt the preceding accepted cron.
+                        result = {'processed': 0, 'acceptanceState': 'unavailable', 'acceptanceCode': error.code}
+                    result['acceptanceScope'] = 'telegram_owner_only'
+                    if preserved_cron is not None:
+                        result['preservedLiveCron'] = preserved_cron
+                    return self._json(start_response, 200, result)
                 result = self.worker.tick()
                 sign_in_alerts = getattr(service, 'deliver_sign_in_alerts', None)
                 if sign_in_alerts is not None:   # RAP-143: new-sign-in mail leaves the request path in observe mode
@@ -786,6 +824,12 @@ class HostedApplication:
                         result['signInAlerts'] = sign_in_alerts()
                     except Exception as exc:
                         result['signInAlerts'] = {'status': 'unavailable', 'error': type(exc).__name__}
+                telegram = getattr(getattr(service, 'oauth', None), 'telegram', None)
+                if telegram is not None:
+                    try:
+                        result['telegramRetention'] = telegram.controls.prune()
+                    except Exception:
+                        result['telegramRetention'] = {'status': 'unavailable'}
                 history = getattr(service, 'history_import', None)
                 if history is not None:   # before readings, so posts it finds are read in the same minute
                     result['historyImport'] = history.tick()
@@ -966,6 +1010,43 @@ class HostedApplication:
                 body = self._body(environ)
                 return self._json(start_response, 200, service.accept_invitation(token, body.get("token"), client=client_address(environ), client_label=client_label(environ)))
             parts = path.strip("/").split("/")
+            if len(parts) >= 4 and parts[:2] == ['api','workspaces'] and parts[3] == 'telegram':
+                w, tail = parts[2], parts[4:]
+                telegram = service.telegram
+                if tail == ['identities'] and method == 'GET': return self._json(start_response, 200, service.telegram_login.list(w, token))
+                if tail == ['login','start'] and method == 'POST': return self._json(start_response, 201, service.telegram_login.start(w, token))
+                if tail == ['login','complete'] and method == 'POST': return self._json(start_response, 200, service.telegram_login.complete(w, token, self._body(environ)))
+                if len(tail) == 2 and tail[0] == 'identities' and method == 'DELETE': return self._json(start_response, 200, service.telegram_login.disconnect(w, token, tail[1]))
+                if tail == ['controls'] and method == 'GET': return self._json(start_response, 200, telegram.controls.get(w, token))
+                if tail == ['controls'] and method == 'POST': return self._json(start_response, 200, telegram.controls.set(w, token, self._body(environ)))
+                if not tail and method == 'GET': return self._json(start_response, 200, telegram.list(w, token))
+                if tail == ['managed-bots'] and method == 'GET': return self._json(start_response,200,telegram.managed.status(w,token))
+                if tail == ['managed-bots','start'] and method == 'POST': return self._json(start_response,200,telegram.managed.start(w,token,self._body(environ)))
+                if tail == ['managed-bots','connect'] and method == 'POST': return self._json(start_response,200,telegram.managed.connect(w,token,self._body(environ)))
+                if len(tail) == 3 and tail[0] == 'managed-bots' and tail[2] == 'access' and method == 'GET': return self._json(start_response,200,telegram.managed.access(w,token,tail[1]))
+                if len(tail) == 4 and tail[0] == 'managed-bots' and tail[2:] == ['access','prepare'] and method == 'POST': return self._json(start_response,200,telegram.managed.prepare_access(w,token,tail[1],self._body(environ)))
+                if len(tail) == 4 and tail[0] == 'managed-bots' and tail[2:] == ['access','execute'] and method == 'POST': return self._json(start_response,200,telegram.managed.execute_access(w,token,tail[1],self._body(environ)))
+                if tail == ['bots'] and method == 'GET': return self._json(start_response, 200, telegram.bots(w, token))
+                if len(tail)==3 and tail[0]=='bots' and tail[2]=='disconnect' and method=='POST': return self._json(start_response, 200, telegram.disconnect_bot(w, token, tail[1], self._body(environ)))
+                if tail == ['business-inbox'] and method == 'GET': return self._json(start_response, 200, telegram.business_inbox(w, token))
+                if tail == ['business-connections'] and method == 'GET': return self._json(start_response,200,telegram.business_connections(w,token))
+                if tail == ['channel-dm'] and method == 'GET': return self._json(start_response,200,telegram.channel_dms.list(w,token))
+                if tail in (['bots','preview'], ['bots','connect']) and method == 'POST':
+                    return self._json(start_response, 200, telegram.connect_bot(w, token, self._body(environ), preview=tail[-1]=='preview'))
+                if len(tail) == 3 and tail[0] == 'connections':
+                    cid, action = tail[1], tail[2]
+                    if action == 'verify' and method == 'POST': return self._json(start_response, 200, telegram.inspect(w, token, cid))
+                    if action == 'inspect' and method == 'GET': return self._json(start_response, 200, telegram.inspect(w, token, cid, save=False))
+                    if action == 'inbox' and method == 'GET': return self._json(start_response, 200, telegram.inbox(w, token, cid))
+                    if action == 'analytics' and method == 'GET': return self._json(start_response, 200, telegram.analytics(w, token, cid))
+                    if action == 'files' and method == 'GET': return self._json(start_response, 200, telegram.files(w, token, cid))
+                    if action == 'prepare' and method == 'POST': return self._json(start_response, 200, telegram.prepare(w, token, cid, self._body(environ)))
+                    if action == 'execute' and method == 'POST': return self._json(start_response, 200, telegram.execute(w, token, cid, self._body(environ)))
+                    if action == 'business-authorize' and method == 'POST': return self._json(start_response, 200, telegram.authorize_business(w, token, cid, self._body(environ)))
+                    if action == 'channel-dm-authorize' and method == 'POST': return self._json(start_response,200,telegram.channel_dms.authorize(w,token,cid,self._body(environ)))
+                    if action == 'channel-dm-select' and method == 'POST': return self._json(start_response,200,telegram.channel_dms.select(w,token,cid,self._body(environ)))
+                    if action == 'business-select' and method == 'POST': return self._json(start_response, 200, telegram.select_business_chat(w, token, cid, self._body(environ)))
+                raise AlphaError('Telegram route unavailable.', 404)
             if len(parts) in (4, 5) and parts[:2] == ["api", "workspaces"] and parts[3] == "tokens":
                 tokens = service.repository.api_tokens
                 if len(parts) == 4 and method == "GET":

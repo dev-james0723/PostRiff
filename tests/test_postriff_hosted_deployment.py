@@ -43,6 +43,37 @@ class HostedDeploymentPreparationTests(unittest.TestCase):
         self.assertEqual(by_name["production-cron-candidate"], "pass")
         self.assertEqual(by_name["phone-media-duration"], "pass")
 
+    def test_private_upload_exceptions_are_rejected(self):
+        read_text = Path.read_text
+        for extra in ('!/.env*', '!/scripts/private.py', '!/docs/'):
+            def altered(path, *args, **kwargs):
+                value = read_text(path, *args, **kwargs)
+                return value + '\n' + extra if path == ROOT / '.vercelignore' else value
+            with self.subTest(extra=extra), patch.object(Path, 'read_text', altered):
+                statuses = {item['name']: item['status'] for item in validate_structure(ROOT)}
+                self.assertEqual(statuses['source-upload-boundary'], 'fail')
+
+    def test_public_guard_cannot_open_the_entire_scripts_directory(self):
+        read_text = Path.read_text
+        def altered(path, *args, **kwargs):
+            value = read_text(path, *args, **kwargs)
+            return value.replace('/scripts/*\n', '') if path == ROOT / '.vercelignore' else value
+        with patch.object(Path, 'read_text', altered):
+            statuses = {item['name']: item['status'] for item in validate_structure(ROOT)}
+        self.assertEqual(statuses['source-upload-boundary'], 'fail')
+
+    def test_reversed_guard_exception_does_not_hide_a_missing_build_input(self):
+        read_text = Path.read_text
+        def altered(path, *args, **kwargs):
+            value = read_text(path, *args, **kwargs)
+            if path == ROOT / '.vercelignore':
+                return value.replace('/scripts/*\n!/scripts/check_social_release_binding.py',
+                                     '!/scripts/check_social_release_binding.py\n/scripts/*')
+            return value
+        with patch.object(Path, 'read_text', altered):
+            statuses = {item['name']: item['status'] for item in validate_structure(ROOT)}
+        self.assertEqual(statuses['source-upload-boundary'], 'fail')
+
     def test_media_entrypoint_import_and_disabled_upgrade_need_no_credentials(self):
         with patch.dict(os.environ, {}, clear=True), patch(
             'postriff_phase2.hosted_app.runtime_from_environment',

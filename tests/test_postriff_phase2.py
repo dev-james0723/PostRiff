@@ -68,6 +68,60 @@ class Phase2Acceptance(unittest.TestCase):
         self.j.act('p2_approve',reviewId=r['id'],digest=r['digest'],confirmed=True)
         return self.j.state['phase2']['jobs'][-1]
 
+    def test_telegram_publish_now_still_requires_exact_review_approval(self):
+        self.draft();self.channel()
+        # Telegram is not a local simulated account. Supply an explicit synthetic
+        # destination to exercise the shared review/approval engine in memory.
+        state=copy.deepcopy(self.j.state);variant=state['variants'][0];channel=state['phase2']['channels'][-1]
+        variant['platform']='Telegram';channel.update(platform='Telegram',scopes=['can_post_messages'])
+        self.store.apply_phase2(None,state,'review',{'channelId':channel['id'],'variantId':variant['id'],'publishNow':True,'acknowledgedWarnings':variant['warnings']},{'user_id':'synthetic-owner'})
+        review=state['phase2']['reviews'][-1]
+        self.assertEqual(review['manifest']['timing']['timestamp'],self.now)
+        self.assertEqual(review['manifest']['timing']['mode'],'publish_after_approval')
+        self.assertEqual(state['phase2']['jobs'],[])
+        self.store.apply_phase2(None,state,'approve',{'reviewId':review['id'],'digest':review['digest'],'confirmed':True},{'user_id':'synthetic-owner'})
+        job=state['phase2']['jobs'][-1]
+        self.assertEqual(job['state'],'scheduled')
+        self.assertEqual(job['manifest']['timing']['timestamp'],self.now)
+
+    def telegram_schedule_state(self):
+        self.draft();self.channel()
+        state=copy.deepcopy(self.j.state);variant=state['variants'][0];channel=state['phase2']['channels'][-1]
+        variant['platform']='Telegram';channel.update(platform='Telegram',scopes=['can_post_messages'])
+        payload={'channelId':channel['id'],'variantId':variant['id'],'localTime':datetime.fromtimestamp(self.now+60,timezone.utc).replace(tzinfo=None).isoformat(),'timeZone':'UTC','acknowledgedWarnings':variant['warnings'],'publishOptions':{'telegram':{'format':'text','silent':True,'linkPreview':{'is_disabled':True}}}}
+        actor={'user_id':'synthetic-owner'}
+        self.store.apply_phase2(None,state,'review',payload,actor)
+        review=state['phase2']['reviews'][-1]
+        self.store.apply_phase2(None,state,'approve',{'reviewId':review['id'],'digest':review['digest'],'confirmed':True},actor)
+        return state,actor
+
+    def test_telegram_reschedule_requires_review_and_atomically_replaces_once(self):
+        state,actor=self.telegram_schedule_state();original=state['phase2']['jobs'][0];frozen=copy.deepcopy(original['manifest'])
+        self.store.apply_phase2(None,state,'telegram_reschedule',{'jobId':original['id'],'localTime':datetime.fromtimestamp(self.now+3600,timezone.utc).replace(tzinfo=None).isoformat(),'timeZone':'UTC'},actor)
+        review=state['phase2']['reviews'][-1]
+        self.assertEqual(original['state'],'scheduled');self.assertFalse(original['cancelRequested']);self.assertEqual(original['manifest'],frozen)
+        self.assertEqual(review['manifest']['publishOptions'],frozen['publishOptions'])
+        approval={'reviewId':review['id'],'digest':review['digest'],'confirmed':True}
+        self.store.apply_phase2(None,state,'approve',approval,actor)
+        replacement=state['phase2']['jobs'][-1]
+        self.assertEqual(original['state'],'canceled');self.assertTrue(original['cancelRequested']);self.assertEqual(original['replacedByJobId'],replacement['id'])
+        self.assertEqual(replacement['state'],'scheduled');self.assertEqual(replacement['nextAt'],self.now+3600)
+        self.assertEqual(replacement['manifest']['payload'],frozen['payload']);self.assertEqual(original['manifest'],frozen)
+        self.store.apply_phase2(None,state,'approve',approval,actor)
+        self.assertEqual(len(state['phase2']['jobs']),2)
+
+    def test_telegram_reschedule_refuses_worker_claim_or_changed_source(self):
+        state,actor=self.telegram_schedule_state();original=state['phase2']['jobs'][0]
+        choice={'jobId':original['id'],'localTime':datetime.fromtimestamp(self.now+3600,timezone.utc).replace(tzinfo=None).isoformat(),'timeZone':'UTC'}
+        self.store.apply_phase2(None,state,'telegram_reschedule',choice,actor);review=state['phase2']['reviews'][-1]
+        original['state']='publishing'
+        with self.assertRaises(AlphaError):self.store.apply_phase2(None,state,'approve',{'reviewId':review['id'],'digest':review['digest'],'confirmed':True},actor)
+        self.assertEqual(len(state['phase2']['jobs']),1);self.assertFalse(original['cancelRequested']);self.assertEqual(review['status'],'needs_review')
+        with self.assertRaises(AlphaError):self.store.apply_phase2(None,state,'telegram_reschedule',choice,actor)
+        original['state']='scheduled';state['variants'][0]['text']='Changed after approval'
+        with self.assertRaises(AlphaError):self.store.apply_phase2(None,state,'telegram_reschedule',choice,actor)
+        self.assertFalse(original['cancelRequested'])
+
     def test_source_changes_only_invalidate_dependent_drafts_and_posts(self):
         from postriff_phase2 import source_policy
         original_job = copy.deepcopy(self.enqueue())

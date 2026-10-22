@@ -1,0 +1,187 @@
+{
+  "schema": "rafii.telegram.acceptance-plan.v1",
+  "execution": "real_bot_api_components_completed; mandatory_flows_not_run",
+  "qualificationVersion": "rafii.telegram.bot.v2",
+  "expectedBotUsername": "rafiiauthbot",
+  "botCredentialLocation": "Private local input; target server variable POSTRIFF_TELEGRAM_BOT_TOKEN",
+  "destinations": [
+    {
+      "title": "Rafii QA Channel",
+      "type": "channel",
+      "private": true,
+      "evidenceRef": "docs/telegram/evidence/real-api-components-minimum-rights-2026-10-11.json",
+      "privateChatIdRef": "Private local QA receipt, outside checkout"
+    },
+    {
+      "title": "Rafii QA Group",
+      "type": "supergroup",
+      "private": true,
+      "evidenceRef": "docs/telegram/evidence/real-api-components-minimum-rights-2026-10-11.json",
+      "privateChatIdRef": "Private local QA receipt, outside checkout"
+    }
+  ],
+  "externalActionAuthorization": "User authorized @rafiiauthbot disposable create, send, schedule, edit, delete and reply only in the two new private Rafii QA destinations; no existing private chats or paid broadcasts.",
+  "businessAccount": {
+    "displayName": "James",
+    "hasTelegramUsername": false,
+    "grant": "NOT_ESTABLISHED",
+    "eligibleIncomingTest": "BLOCKED_NO_INDEPENDENT_AUTHORIZED_SENDER_OR_CHAT"
+  },
+  "monetizationEnabled": false,
+  "requiredEvidence": [
+    "destination",
+    "botId",
+    "actualRights",
+    "apiMethod",
+    "messageId",
+    "date",
+    "publicOrPrivateDeepLink",
+    "screenshot",
+    "redactedApiResponse",
+    "failureEvidence"
+  ],
+  "cases": {
+    "connection": [
+      "bot_identity",
+      "channel",
+      "group",
+      "forum_supergroup",
+      "permission_removal",
+      "disconnect",
+      "reconnect"
+    ],
+    "publish": [
+      "text",
+      "html_formatting",
+      "structured_entities",
+      "hashtags_links",
+      "link_preview",
+      "photo",
+      "photo_album",
+      "video",
+      "mixed_album",
+      "animation",
+      "live_photo",
+      "live_photo_album",
+      "audio",
+      "voice",
+      "video_note",
+      "document",
+      "poll",
+      "quiz",
+      "cta_buttons",
+      "edit_text",
+      "edit_caption",
+      "edit_media",
+      "edit_buttons",
+      "delete",
+      "pin",
+      "unpin",
+      "forward",
+      "copy"
+    ],
+    "inbox": [
+      "reply",
+      "group_reply",
+      "forum_topic",
+      "channel_discussion",
+      "business_reply",
+      "channel_dm_topic",
+      "unpaid_suggestion_approve",
+      "unpaid_suggestion_decline"
+    ],
+    "schedule": [
+      "schedule",
+      "reschedule",
+      "cancel",
+      "timed_publish",
+      "permission_expired",
+      "rate_limit_retry",
+      "ambiguous_send_no_duplicate",
+      "concurrent_workers"
+    ],
+    "analytics": [
+      "reactions",
+      "reaction_counts",
+      "poll_results",
+      "observed_replies"
+    ],
+    "managed_bot": [
+      "manager_flag",
+      "oidc_verified_owner",
+      "official_creation_link",
+      "authenticated_owner_update",
+      "connect_webhook",
+      "token_or_owner_change_revokes",
+      "cross_tenant_rejection",
+      "access_preview_cancel",
+      "access_exact_confirmation",
+      "access_owner_transfer_fence",
+      "access_change_reconciliation"
+    ]
+  },
+  "disabled": [
+    "paid_media",
+    "paid_suggested_posts",
+    "business_stories",
+    "native_story_publishing",
+    "rich_message",
+    "poll_media",
+    "ephemeral_messages",
+    "callback_buttons",
+    "location",
+    "venue",
+    "topic_management",
+    "custom_emoji"
+  ],
+  "mandatoryFlows": {
+    "A": [
+      "rafii_login",
+      "oidc_pkce_authorization",
+      "signature_identity",
+      "permission_selection",
+      "disconnect",
+      "reconnect"
+    ],
+    "B": [
+      "channel_grant",
+      "rights",
+      "draft",
+      "real_publish",
+      "delivery",
+      "schedule",
+      "scheduled_delivery",
+      "edit",
+      "delete"
+    ],
+    "C": [
+      "consent",
+      "ai_generation",
+      "human_or_scoped_policy",
+      "authorized_action",
+      "verify",
+      "pause",
+      "no_further_dispatch"
+    ],
+    "D": [
+      "secretary_grant",
+      "incoming",
+      "contextual_ai_reply",
+      "approval",
+      "send",
+      "delivery",
+      "revoke",
+      "access_removed"
+    ]
+  },
+  "minimumRightsResult": "FAIL_ADDITIONAL_API_RIGHTS",
+  "infrastructurePolicy": {
+    "ownerIssue": "https://github.com/dev-james0723/PostRiff/issues/179",
+    "vercelProjectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "supabaseRef": "buoyhkbodnhzngaotoel",
+    "productionUrl": "https://rafii.io",
+    "stagingAccess": "STOPPED",
+    "syntheticTests": "disposable_ci_database_only",
+    "status": "NOT_LIVE"
+  }
+}

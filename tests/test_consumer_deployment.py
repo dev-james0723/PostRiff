@@ -14,7 +14,8 @@ class PreviewIsolation(unittest.TestCase):
         value=self.env()
         self.assertEqual(isolated_environment(value)['POSTRIFF_RESEARCH'],'0')
         self.assertNotIn('POSTRIFF_RESEARCH',value)
-        self.assertEqual(isolated_environment({'VERCEL_ENV':'production'}),{'VERCEL_ENV':'production'})
+        self.assertEqual(isolated_environment({'CI':'true'}),{'CI':'true'})
+        with self.assertRaises(ValueError):isolated_environment({'VERCEL_ENV':'production'})
 
     def test_mixed_production_configuration_rejected_before_connect(self):
         mutations=[('POSTRIFF_ENVIRONMENT','production'),('POSTRIFF_PRODUCTION_PROJECT_REF','s'*20),('NEXT_PUBLIC_SUPABASE_URL','https://'+'p'*20+'.supabase.co'),('POSTRIFF_DATABASE_URL','postgresql://postgres:synthetic@db.'+'p'*20+'.supabase.co/postgres?sslmode=require'),('POSTRIFF_DATABASE_URL','host=127.0.0.1'),('POSTRIFF_API_ORIGIN','https://production.example'),('POSTRIFF_PUBLIC_BASE_URL','https://production.example'),('STRIPE_SECRET_KEY','sk_live_synthetic'),('AI_GATEWAY_API_KEY','unpinned'),('POSTRIFF_RESEARCH','1'),('POSTRIFF_LOCAL_CLI','1')]
