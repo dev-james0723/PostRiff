@@ -13,7 +13,7 @@ Sources: TikTok [App Review Guidelines](https://developers.tiktok.com/doc/app-re
 | App name | `Rafii` | Custom, no "TikTok", matches the website name |
 | Icon | Existing Rafii mark | Clear, not confusable with another brand |
 | Category | Productivity / social media management | — |
-| Description (user-facing) | "Rafii helps creators and small teams turn their ideas into posts for each platform. With TikTok, Rafii prepares a video post, shows TikTok's own privacy, interaction and disclosure choices, and posts it to your account only after you approve that exact post." | Describes what the app does and how |
+| Description (user-facing, **max 120 chars**) | Reuse the Sandbox text (100/120): "Draft, schedule and publish posts to your own social accounts, with your approval before every post." | Fits the portal limit; describes what and how |
 | Website URL | `https://rafii.io` | Not a login page; has channel directory, FAQ and pricing. Footer links `/privacy`, `/terms` and `/data-deletion` are visible without a menu (verified 2026-10-21). |
 | Terms of Service URL | `https://rafii.io/terms` | **Still marked Draft with placeholders. Must be final before submitting (C1).** |
 | Privacy Policy URL | `https://rafii.io/privacy` | **Still marked Draft and does not mention TikTok. Must be final before submitting (C1).** |
@@ -22,6 +22,8 @@ Sources: TikTok [App Review Guidelines](https://developers.tiktok.com/doc/app-re
 
 **Risk:** the guidelines say apps still in development or testing are not approved, and `/api/health` reports `phase0: incomplete`, `customerValidated: false`. The reviewer sees the website and the demo, not that endpoint, but the site and demo must look like a finished product.
 
+**Portal state verified 2026-10-22 (Ego Lite, read-only):** the Production config is empty (Draft) and must be filled from scratch. The Sandbox uses `postriff-phase2-private.vercel.app` for its website, Terms and Privacy URLs; Production should use `rafii.io` so it matches the demo domain.
+
 ## C3 — Products and scopes (request only these)
 
 | Product | Scope | Why Rafii needs it | Where it is used |
@@ -29,7 +31,7 @@ Sources: TikTok [App Review Guidelines](https://developers.tiktok.com/doc/app-re
 | Login Kit (Web) | `user.info.basic` | Confirm which TikTok account is connected (open_id, display name, avatar) | `TikTokProvider.identity` (`src/postriff_phase2/wave3_connectors.py`) |
 | Content Posting API: Direct Post | `video.publish` | Post one approved video to the creator's own profile; read creator_info and publish status | `HostedSocial._submit_tiktok`, `_reconcile_wave3` (`src/postriff_phase2/hosted_social.py`) |
 
-**Remove before submitting**, if present on the Production config: `video.upload`, `video.list`, `user.info.profile`, `user.info.stats`, Share Kit, Display API. They are not built or demonstrated, and the guidelines say extra products and scopes delay review.
+**Production currently has no products or scopes.** Add only the two above. The Sandbox also has `video.upload`; leave it out of the Production request unless the inbox-draft flow is built and demonstrated. Do not add: `video.upload`, `video.list`, `user.info.profile`, `user.info.stats`, Share Kit, Display API. They are not built or demonstrated, and the guidelines say extra products and scopes delay review.
 
 ## C4 — URL properties
 

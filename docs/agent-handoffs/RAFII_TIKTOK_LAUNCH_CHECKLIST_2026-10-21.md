@@ -68,6 +68,18 @@
   - The re-run of the corrected lane was refused because another session's JCB run holds the cache lock; retry once it is released.
   - Draft PR: https://github.com/dev-james0723/PostRiff/pull/220 (base `claude/mastodon-connect-prod-candidate`).
 - **B4: no new build needed.** Protected Preview alias `rafii-tiktok-sandbox-650aea72.vercel.app` = `dpl_EH2bH8rZQSveGu4eknTZqJDT2Qbu`, built from `e107bbb5`, READY. H1 uses it as is: James only needs to register its callback in the Sandbox and consent.
+- **Portal read with Ego Lite (2026-10-22 ~03:05Z, read-only, no changes).**
+  - **Production** app = **Draft** and empty: no category, description, Terms or Privacy URL, platform, products or scopes. History shows only "Created Sep 25". It has **never been submitted**.
+  - **Sandbox** `7689479552734136327`:
+    - Category Photo & Video; description (100/120) "Draft, schedule and publish posts to your own social accounts, with your approval before every post."
+    - Terms, Privacy and website URLs all on `postriff-phase2-private.vercel.app`; platform Web.
+    - Login Kit redirect URIs: `https://postriff-phase2-private.vercel.app/api/oauth/tiktok/callback`, `https://rafii.io/api/oauth/tiktok/callback`, `https://rafii-tiktok-sandbox-650aea72.vercel.app/api/oauth/tiktok/callback`.
+    - Content Posting API with Direct Post on; scopes `user.info.basic`, `video.publish`, `video.upload`; target user `jamesaucreates` (added Sep 28).
+  - **Correction to B1:** the Preview callback *is* listed, so the callback-mismatch hypothesis is unlikely. Remaining candidates, all unverified:
+    1. Sandbox edits saved but not applied ("Apply changes");
+    2. the Preview's `POSTRIFF_OAUTH_TIKTOK_SANDBOX_CLIENT_ID` holds the Production (Draft) key;
+    3. a TikTok session or account mismatch at consent time.
+  - **B3 is not needed.** H1 now asks James to retry consent once. If TikTok bounces, he compares the `client_key` in the TikTok URL with the Sandbox client key shown in the portal (a prefix is enough; never paste the secret).
 
 ## 2. Legend
 
@@ -100,7 +112,7 @@ Owner: **A** = agent · **J** = James · **T** = TikTok
 - [x] **B2 (A)** Bring the Sandbox lane onto the live lineage.
   - Port `650aea72`, `b6a647e9`, `e107bbb5` from `codex/rafii-tiktok-sandbox-oauth-20261013`. They give a fail-closed, identity-only Sandbox lane that never falls back to Production keys.
   - Keep the 13 Sandbox tests green.
-- [ ] **B3 (J, portal)** Add the exact Preview callback URL to **Sandbox** Login Kit redirect URIs. Never touch Production app settings.
+- [x] **B3 (J, portal)** Add the exact Preview callback URL to **Sandbox** Login Kit redirect URIs. Never touch Production app settings.
 - [ ] **B4 (J/A)** One bounded hosted Preview for the Sandbox lane (`--skip-domain`, Preview-scoped env that already exists). This needs a release-owner exception under `AGENTS.md`.
 - [ ] **B5 (J)** James signs in to TikTok as the target user and personally approves consent. The agent stops at the consent screen.
 - [ ] **B6 (A)** Read back:
@@ -213,6 +225,7 @@ Owner: **A** = agent · **J** = James · **T** = TikTok
 | 2026-10-22 02:12 | D4 | reached_active_user_cap copy (707dd871) | 45 tests OK |
 | 2026-10-22 02:15 | A3 | TikTok page copy (98d28783) | identity Unsupported, "connecting and publishing in review" |
 | 2026-10-22 02:20 | C4 | Second verification file added (cherry-pick of 91d0872b) | web/public |
+| 2026-10-22 03:05 | Portal | Production Draft and empty; Sandbox callback already registered | Ego Lite read-only, space 36 finished |
 | 2026-10-22 02:40 | D5 | Codex review fixes (2e8c3a12); web checks remote PASS; draft PR #220 | runs cv3c3gshfl, xdbsl600m6, b7n5h8rbz2 |
 
 ## Sources
