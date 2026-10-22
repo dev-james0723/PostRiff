@@ -28,7 +28,7 @@ from postriff_phase2.agent_runtime_v2 import capability_registry as registry, co
 FIXTURES = ROOT / "tests" / "fixtures" / "agent_permissions"
 GOLDEN = FIXTURES / "capability_golden_v1.json"
 BASELINE = FIXTURES / "legacy_baseline_v1.json"
-POST_FREEZE_TOOLS = ("library_browse", "library_metadata_apply", "mastodon_account_context", "mastodon_public_context", "mastodon_analytics_summary", "mastodon_action_prepare")
+POST_FREEZE_TOOLS = ("library_browse", "library_metadata_apply", "mastodon_account_context", "mastodon_public_context", "mastodon_analytics_summary", "mastodon_action_prepare", "mastodon_thread_context")
 
 try:
     import agents  # noqa: F401

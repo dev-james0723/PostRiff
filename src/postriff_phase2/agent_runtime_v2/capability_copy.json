@@ -604,6 +604,10 @@
    "en": "Read public Mastodon mentions and trends",
    "zh-Hant": "讀取 Mastodon 公開提及和趨勢"
   },
+  "tool.mastodon_thread_context": {
+   "en": "Read a public Mastodon thread",
+   "zh-Hant": "讀取 Mastodon 公開討論串"
+  },
   "tool.mastodon_analytics_summary": {
    "en": "Analyze public Mastodon engagement",
    "zh-Hant": "分析 Mastodon 公開互動數據"
