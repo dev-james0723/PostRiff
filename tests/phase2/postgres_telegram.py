@@ -278,7 +278,8 @@ with tempfile.TemporaryDirectory(prefix='rafii-telegram-pg-') as tmp:
    with conn() as db:
     assert db.execute('SELECT pg_try_advisory_xact_lock(hashtextextended(%s,0))',('rafii-managed:123456:222333',)).fetchone()[0] is True
     changed=copy.deepcopy(managed);changed['user']['id']=999111
-    observe(db.cursor(),123456,702,changed);observe(db.cursor(),123456,701,managed)
+    # Exact replays are no-ops; lower IDs are not stale because Telegram may restart update IDs after a quiet week.
+    observe(db.cursor(),123456,702,changed);observe(db.cursor(),123456,702,changed)
     assert db.execute('select owner_user_id from pr_telegram_managed_bots where bot_id=222333').fetchone()[0]==999111
    try:service.managed.connect(W1,A1,{'username':request['username'],'confirmed':True})
    except AlphaError as error:assert error.status==409
