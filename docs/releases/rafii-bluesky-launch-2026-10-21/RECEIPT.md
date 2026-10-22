@@ -4,6 +4,12 @@
 
 Updated 2026-10-22 ~06:10Z by the Bluesky launch agent. No credentials, tokens, account details or environment values are recorded here.
 
+## James's answers (2026-10-22)
+
+- H1 test account: `jamesaucreates.bsky.social` (did:plc:lwc7oniypsw6h6gkvpudufd2), which is James's own creator account, not a throwaway; the baseline grant is disconnected right after the test.
+- T0: tomorrow, 2026-10-23 (hour not given; gates count back from the start of that day in Hong Kong time, 2026-10-22 16:00Z, unless James says otherwise).
+- Legal approver: James. The Bluesky paragraph is now in `/privacy` source; the Draft banner stays until James signs.
+
 ## Source and production
 
 - Live production (rollback target): `dpl_C57zH6ZPWejerDrysB864XDEw3Qo`, CLI deploy 2026-10-22 01:52Z, = `origin/claude/mastodon-full-prod-candidate` `d3366822` (856/856 deployed backend and skills files byte-match). Production moved off `dpl_yKAToJbv…`/`7dc95e2e` overnight; the plan was re-based on `d3366822`.
