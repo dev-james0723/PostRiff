@@ -43,3 +43,16 @@ These assume each step finishes quickly enough for the job budget to be the bind
 Decision (R-05): for Wave 1 the load assumption (at most 600 scheduled posts per day, at most 60 due in one minute) is acceptable at the default budget, but a burst at a popular time such as the top of the hour would run up to about 12 minutes late. Raising the budget to 25 jobs and 40 seconds (Approval Packet 1, row 3) is cheap insurance and affects all providers. The schedule dialog now says plainly that Discord posts due in the same minute can arrive several minutes late. A parallel or dedicated Discord lane (checklist W-02) is a Wave 2 item and needs lease-fence proofs and the capacity run first.
 
 Approval timing interacts with lateness: an approval expires, and a post that cannot be sent before its approval expires is held for a fresh approval, not sent late. The runbook monitor Q7 (oldest eligible lag) shows how late the queue is running.
+
+## R-05 update 23:13Z: the owner wants thousands to tens of thousands of users
+
+The cap is set to 10,000 servers, so the cap is no longer what limits use. The worker is. With the approved budget (25 jobs, 40 seconds) the figures above give 12 Discord posts a minute when only Discord has work and about 6 when other providers are busy, that is 8,640 to 17,280 posts a day at best, spread perfectly. Real traffic is not spread: a day's posts cluster in a few hours.
+
+| Customers who post that day | Posts each | Posts that day | Average per minute | At 5 times the average (a peak) | Reading |
+|---|---|---|---|---|---|
+| 1,000 | 2 | 2,000 | 1.4 | 7 | fits at 12 a minute; may queue at 6 |
+| 5,000 | 2 | 10,000 | 6.9 | 35 | queues for hours at a peak |
+| 10,000 | 3 | 30,000 | 20.8 | 104 | the queue grows all day: needs parallelism |
+
+Arithmetic only, with invented usage; step latency is not measured. What a customer sees when the queue is long: the schedule dialog says posts may arrive several minutes late; a post whose approval expires first is held for a fresh approval. The monitor Q7 (oldest eligible lag) shows it. The next engineering step is W-02 (a parallel or dedicated Discord lane); it needs the lease-fence proofs and the capacity run, and it is a new release candidate, not part of the frozen build.
+

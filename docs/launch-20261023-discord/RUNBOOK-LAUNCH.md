@@ -7,7 +7,7 @@ Status: draft for the owner. Commands marked OWNER need the Vercel CLI or dashbo
 Vercel applies environment variables to **new deployments only**. So the launch uses two staged builds of one frozen SHA and switches between them with `vercel promote` (no rebuild, seconds, reversible):
 
 - **D1, dark twin.** Gate allowlist = the tester workspace (plus workspaces that already have a live Discord server card or linked identity, who are never locked out). Promoted first, so real OAuth works on `rafii.io` and the cron runs, while the public sees "Discord isn't open to new connections for this workspace yet".
-- **D2, open twin.** Same SHA, `POSTRIFF_DISCORD_CONNECT_WORKSPACES=*`, server cap 300 (the owner's decision, `AUTHORIZATION-RECORD.md` reply 4; the code default on production is 90). Built early, promoted only at T0 when every MUST gate is VERIFIED.
+- **D2, open twin.** Same SHA, `POSTRIFF_DISCORD_CONNECT_WORKSPACES=*`, server cap 10,000 (the owner's decision, `AUTHORIZATION-RECORD.md` replies 4 and 5; the code default on production is 90). Built early, promoted only at T0 when every MUST gate is VERIFIED.
 - **Rollback target** for a code defect: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (live today, no Discord v2 code). Primary abort: promote D1 again.
 
 The dangerous values (gate, `POSTRIFF_OAUTH_DISCORD_REVIEWED`) exist only on the build commands, never in project env, so an accidental rebuild can only close things.
@@ -25,7 +25,7 @@ The dangerous values (gate, `POSTRIFF_OAUTH_DISCORD_REVIEWED`) exist only on the
 | 7 | Release Captain named and the security-review decision recorded (H-05) | note |
 | 8 | On-call and customer-support owner named (H-07); privacy and terms wording approved (H-08) | note |
 | 9 | Other lanes told not to deploy to production after D1 is promoted | OWNER message |
-| 10 | The Developer Portal's server count compared with `monitoring.sql` Q9 `servers_counted`; if Discord shows more servers than Q9, the cap passed to both builds is 300 minus the difference (the bot stays in a server after a disconnect, and deleted workspaces take their rows with them) | OWNER number, both figures in the ledger |
+| 10 | The Developer Portal's server count compared with `monitoring.sql` Q9 `servers_counted`; if Discord shows more servers than Q9, the cap passed to both builds is 10,000 minus the difference (the bot stays in a server after a disconnect, and deleted workspaces take their rows with them) | OWNER number, both figures in the ledger |
 
 ## 2. Timeline (T0 = public opening)
 
@@ -57,7 +57,7 @@ vercel deploy --prod --skip-domain --scope team_PgXY5VdAYKcsv0RLoDPHscNq \
   --meta rafiiSourceSha=<frozen sha> --meta rafiiTwin=dark \
   --env 'POSTRIFF_DISCORD_CONNECT_WORKSPACES=<tester workspace uuid>' \
   --env 'POSTRIFF_OAUTH_DISCORD_REVIEWED=true' \
-  --env 'POSTRIFF_DISCORD_GUILD_CAP=<300 minus the difference from precondition 10; 300 when there is none; never leave this line out, the code default on production is 90>'
+  --env 'POSTRIFF_DISCORD_GUILD_CAP=<10000 minus the difference from precondition 10; 10000 when there is none; never leave this line out, the code default on production is 90>'
 
 # D2: same SHA, gate open, same cap line as D1
 vercel deploy --prod --skip-domain --scope team_PgXY5VdAYKcsv0RLoDPHscNq \
@@ -93,7 +93,7 @@ Notes:
 | State | What the customer sees | How it is produced |
 |---|---|---|
 | Closed (before T0, after an abort) | "Discord isn't open to new connections for this workspace yet. Connections you already have keep working." (also in Traditional and Simplified Chinese) | gate closed |
-| Full (at the cap, 300 on this plan) | "Discord has no room for another server right now. Nothing was connected or posted. Try again later." | cap reached, HTTP 409 `discord_capacity_reached` |
+| Full (at the cap, 10,000 on this plan) | "Discord has no room for another server right now. Nothing was connected or posted. Try again later." | cap reached, HTTP 409 `discord_capacity_reached` |
 | Delayed | the existing "delayed" state on the queue item | rate coordinator hold or backoff; nothing was sent |
 | Busy or paused while connecting | "Discord is busy right now ..." / "Connecting to Discord is paused for a moment ..."; after Discord's consent screen the wording is different on purpose: "... could not finish connecting. If the bot already appears in your server, start again from Channels ..." | HTTP 429 `discord_rate_delayed` / 503 `discord_rate_coordinator_unavailable`; no connection is revoked by either |
 
@@ -108,7 +108,7 @@ The cap counts the servers Rafii holds a row for. Discord counts the servers the
 | Before opening (precondition 10), then every 2 hours on day 1, then daily for a week | OWNER (Portal) + AGENT (queries) | Portal server count minus `monitoring.sql` Q9 `servers_counted` = D; Q12 four numbers summed = U | D at most U plus 2: normal. D above U plus 2: someone adds the bot outside Rafii, lower the cap by D and rebuild the twins, or close the gate (promote D1). D at 5 or more: stop opening further. |
 | Portal count reaches 85 | OWNER | Portal | If the app were not verified: close the gate (promote D1) and start verification (H-01); 100 is a hard Discord limit for an unverified app. The owner reports the app is verified (check mark on the bot tag), so on this build the row is a prompt to decide the next cap, not a stop. |
 
-The first opening is at cap 300 (the owner's decision). Raising it again is a third build and needs the owner's yes. Verification (H-01) is reported done by the owner, so Discord's own limit is not what stops a raise: readiness, rate limits and support are.
+The first opening is at cap 10,000 (the owner's decision). Raising it again is a third build and needs the owner's yes. Verification (H-01) is reported done by the owner, so Discord's own limit is not what stops a raise: readiness, rate limits and support are.
 
 ## 7. Behaviour to know about before opening
 

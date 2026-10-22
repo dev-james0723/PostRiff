@@ -32,7 +32,7 @@ Stop and report immediately on any of these. "Q" numbers are statements in `moni
 | A duplicate OAuth code exchange | two Discord token POSTs for one transaction in the logs | step 1; section 4.I |
 | The deployed files do not match the frozen SHA | fingerprint mismatch | step 1, then promote the verified twin; section 4.I |
 | Stored capability rows changing unexpectedly | Q11 against the ledger baseline | step 1; section 4.I |
-| Many accounts each holding three installation starts while few installs complete (a real customer is told there is no room) | Q9 `installs_in_flight` above 60 for 10 minutes, Q13, Q8 | step 1; the holds expire by themselves after ten minutes; no data is touched |
+| Many accounts each holding three installation starts while few installs complete (a real customer is told there is no room) | Q9 `installs_in_flight` above 300 for 10 minutes, Q13, Q8 | step 1; the holds expire by themselves after ten minutes; no data is touched |
 
 ## 3. Evidence to keep (aggregate only)
 
