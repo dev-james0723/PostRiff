@@ -416,7 +416,8 @@ class OAuthCallSiteTests(unittest.TestCase):
         from postriff_phase2.auth import initial_phase2_state
         script = Script()
         service = self.service(script, initial_phase2_state(WS, USER, "Owner", "studio", NOW))
-        ciphertext, key_id = self.vault.encrypt("verifier")
+        # Mastodon custody is the JSON context begin() stores (verifier plus the instance's registered client).
+        ciphertext, key_id = self.vault.encrypt(json.dumps({"verifier": "verifier", "instance": "mastodon.social", "clientId": "client", "clientSecret": "secret"}))
         script.answers = [("FROM public.pr_oauth_transactions WHERE state_hash", [(TXN, USER, "mastodon", "publish", "https://app.example/cb", ["write"], ciphertext, key_id, NOW + 600, False)])]
         result = service.complete(WS, "token", "mastodon", "s" * 32, "CODE")
         connection = hashlib.sha256(b"mastodon:acct-1").hexdigest()[:32]
