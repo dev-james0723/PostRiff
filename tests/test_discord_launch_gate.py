@@ -195,14 +195,14 @@ class ReserveCapacity(unittest.TestCase):
         self.assertIn('pg_advisory_xact_lock', cur.sql[0])
         self.assertEqual(len(cur.sql), 2)
 
-    def test_counts_distinct_servers_and_unexpired_starts(self):
+    def test_counts_distinct_servers_including_revoked_grants_and_unexpired_starts(self):
         cur = ScriptedCursor(0)
         gate.reserve_capacity(cur, {gate.ENV_CAP: '90'})
         count = cur.sql[1]
         self.assertIn("provider='discord'", count)
         self.assertIn('count(DISTINCT provider_account_id)', count)
         self.assertIn("'bot' = ANY(scopes)", count)
-        self.assertIn('revoked_at IS NULL', count)
+        self.assertNotIn('revoked_at', count)  # a disconnect leaves the shared bot in the server
         self.assertIn('consumed_at IS NULL AND expires_at > now()', count)
         self.assertIn("outcome = 'exchange_started'", count)
 

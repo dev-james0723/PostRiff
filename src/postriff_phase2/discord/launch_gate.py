@@ -18,7 +18,8 @@ out, so closing the gate stops NEW connections only. Existing connections, queue
 
 Cap, POSTRIFF_DISCORD_GUILD_CAP: unset is 90 on hosted production and unlimited elsewhere; "0" blocks every new server;
 garbage becomes 0. The bot joins a server on Discord's consent screen, BEFORE Rafii's callback runs, so the cap is
-enforced when a new installation is STARTED (reservation under an advisory lock), never at the callback.
+enforced when a new installation is STARTED (reservation under an advisory lock), never at the callback. A disconnect
+does not remove the shared bot from a server, so servers whose grant was revoked still count toward the cap.
 """
 import re
 
@@ -35,11 +36,14 @@ _WORKSPACE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 _DIGITS = re.compile(r'^[0-9]{1,9}$')
 
 _LOCK = "SELECT pg_advisory_xact_lock(hashtext('rafii.discord.server-cap'))"
-# Servers the bot is already in (one per distinct server, however many workspaces share it) plus installations that
-# were started or are mid-exchange: the bot may already be in those servers although no credential is stored yet.
+# Servers the bot is in (one per distinct server, however many workspaces share it) plus installations that were
+# started or are mid-exchange: the bot may already be in those servers although no credential is stored yet. A
+# disconnect only revokes Rafii's stored grant; the shared bot stays in the server, and the row keeps the server id and
+# scopes, so revoked rows still count. (Deleted workspaces take their rows with them; compare with the Developer
+# Portal's own server count, see monitoring.sql Q9.)
 _COUNT = """SELECT
   (SELECT count(DISTINCT provider_account_id) FROM public.pr_encrypted_credentials
-     WHERE provider='discord' AND revoked_at IS NULL AND 'bot' = ANY(scopes))
+     WHERE provider='discord' AND 'bot' = ANY(scopes))
   +
   (SELECT count(*) FROM public.pr_oauth_transactions
      WHERE provider='discord' AND 'bot' = ANY(scopes)
