@@ -646,6 +646,7 @@ function Queue() {
         jobId={params.job}
         jobs={allJobs}
         ready={loaded}
+        workerBinding={snapshot.data?.workerBinding}
         nowSeconds={nowSeconds}
         canApprove={canApprove}
         canSchedule={canSchedule}

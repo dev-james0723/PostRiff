@@ -1,0 +1,104 @@
+name: Discord multi-mode exact-source qualification
+on:
+  push:
+    branches: ['codex/discord-personal-account-20261019']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: discord-multimode-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_LOCAL_CLI: '0'
+      NEXT_TELEMETRY_DISABLED: '1'
+      OPENUI_TELEMETRY_DISABLED: '1'
+      OPENAI_AGENTS_DISABLE_TRACING: '1'
+      NEXT_PUBLIC_SENTRY_DISABLED: '1'
+      DO_NOT_TRACK: '1'
+    steps:
+      # The repository has a historical gitlink without a .gitmodules entry.
+      # Generic checkout performs submodule cleanup and fails before setup.
+      - name: Exact SHA checkout without submodule recursion
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          git init .
+          git remote add origin https://github.com/dev-james0723/PostRiff.git
+          git -c protocol.version=2 fetch --depth=1 origin "$SOURCE_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+      - name: Exact source and pinned dependency preparation
+        id: prep
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -z "$(git status --porcelain)"
+          python -m pip install -r requirements-dev.txt uv==0.11.16
+          npm install -g npm@11.12.1
+          npm --prefix web ci
+          mkdir -p .depot docs/discord-personal-account-20261019/evidence
+          python scripts/discord_multimode_sources.py docs/discord-personal-account-20261019/evidence/hybrid-ci-before.json
+      - name: Isolated Linux database and document prerequisites
+        id: prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17 ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
+          sudo mkdir -p /var/run/postgresql
+          sudo chmod 1777 /var/run/postgresql
+          (cd web && npx --no-install playwright install --with-deps chromium)
+      - name: Fail-fast fenced multi-mode PostgreSQL acceptance
+        env:
+          RAFII_DISCORD_SYNTHETIC_FENCE: '1'
+        run: |
+          bash scripts/discord-multimode-sql-cases-cloud.sh
+      - name: Full Python domain and security suite
+        id: python
+        continue-on-error: true
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Multi-mode database, web and real isolated browser gates
+        id: multimode
+        if: ${{ steps.prep.outcome == 'success' && steps.prerequisites.outcome == 'success' }}
+        continue-on-error: true
+        run: bash scripts/discord-multimode-validation-cloud.sh
+      - name: Next production build without a deployment
+        id: build
+        if: ${{ steps.prep.outcome == 'success' && steps.prerequisites.outcome == 'success' }}
+        continue-on-error: true
+        run: npm --prefix web run build
+      - name: Exact source preservation and aggregate verdict
+        if: ${{ steps.prep.outcome == 'success' && steps.prerequisites.outcome == 'success' }}
+        env:
+          PYTHON_RESULT: ${{ steps.python.outcome }}
+          MULTIMODE_RESULT: ${{ steps.multimode.outcome }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python scripts/discord_multimode_sources.py docs/discord-personal-account-20261019/evidence/hybrid-ci-after.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path('docs/discord-personal-account-20261019/evidence')
+          before = json.loads((root/'hybrid-ci-before.json').read_text())
+          after = json.loads((root/'hybrid-ci-after.json').read_text())
+          same = before['files'] == after['files'] and before['baseHead'] == after['baseHead'] == os.environ['SOURCE_SHA']
+          results = {name:os.environ[name] for name in ('PYTHON_RESULT','MULTIMODE_RESULT','BUILD_RESULT')}
+          print('DISCORD_HYBRID_CI_VERDICT '+json.dumps({'source':os.environ['SOURCE_SHA'],'fingerprint':after['fingerprint'],'sourceUnchanged':same,'gates':results,'execution':'public-standard-runner-synthetic-provider','liveDiscord':'NOT_RUN','deployment':'NOT_RUN'}))
+          raise SystemExit(0 if same and all(value == 'success' for value in results.values()) else 1)
+          PY
+# Standard public runner only. No cache saves, retained artifacts, paid runner or deployment.

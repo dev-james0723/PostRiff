@@ -96,6 +96,29 @@ def normalize_result(result, job, reconciliation=False):
     if url and job.get('manifest', {}).get('platform') == 'Mastodon' and urlsplit(url).path.rstrip('/').rsplit('/', 1)[-1] != reference:
         return unknown('Mastodon receipt URL does not match the saved post ID')
     normalized = {key: result[key] for key in ('state', 'confirmed', 'verification') if key in result}
+    if job.get('manifest', {}).get('platform') == 'Discord':
+        delivery = result.get('discordDeliveryEvidence', 'uncertain')
+        if (delivery not in ('not_sent', 'rejected', 'accepted', 'uncertain')
+                or delivery == 'accepted' and not reference
+                or delivery in ('not_sent', 'rejected') and (reference or result['state'] not in ('held', 'failed', 'scheduled'))):
+            return unknown('Invalid Discord delivery evidence; reconcile without resubmission')
+        normalized['discordDeliveryEvidence'] = delivery
+        if result.get('discordRateLimited') is True and result['state'] == 'held' and delivery == 'rejected':
+            normalized['discordRateLimited'] = True
+    if 'retryAfterSeconds' in result:
+        delay = result['retryAfterSeconds']
+        discord_read = (job.get('manifest', {}).get('platform') == 'Discord' and reconciliation
+                        and result['state'] == 'provider_accepted' and result.get('discordReadDeferred') is True
+                        and reference and reference == job.get('providerReference')
+                        and normalized.get('discordDeliveryEvidence') == 'accepted')
+        linkedin_wait = job.get('manifest', {}).get('platform') == 'LinkedIn' and result['state'] == 'scheduled'
+        ceiling = 253402300799 if discord_read else 86400
+        if (not (discord_read or linkedin_wait) or type(delay) is not int or not 1 <= delay <= ceiling):
+            return unknown('Invalid provider retry delay; reconcile before retry')
+        normalized['retryAfterSeconds'] = delay
+        if discord_read:
+            normalized['discordReadDeferred'] = True
+            normalized['discordReadAdmissionDenied'] = result.get('discordReadAdmissionDenied') is True
     if job.get('manifest', {}).get('platform') == 'Pinterest':
         visibility = result.get('visibility', job.get('providerVisibility'))
         previous_visibility = job.get('providerVisibility')

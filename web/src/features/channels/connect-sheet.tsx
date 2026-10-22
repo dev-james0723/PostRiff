@@ -15,11 +15,15 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ApiError } from '@/lib/api/client';
 import { keys } from '@/lib/api/hooks';
-import type { OAuthStart, ProviderView } from '@/lib/api/types';
+import type { DiscordIdentity, OAuthStart, ProviderView } from '@/lib/api/types';
 import { CONNECT_CAPABILITY_OPTIONS } from '@/lib/channels/capabilities';
 import { historyImportCopy } from '@/lib/channels/history-import-copy';
 import { usePreferences } from '@/lib/preferences';
 import { defaultConnectCapability } from '@/lib/channels/onboarding';
+import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordRefusal } from '@/lib/channels/discord-refusal';
+import { DiscordModeChoices, type DiscordPurpose } from './discord-mode-choices';
+import { discordDiscoveryState, discordPrivateLinkActions } from '@/lib/channels/discord-personal-account';
 import { mastodonReconnectServer } from '@/lib/channels/mastodon-connect';
 import { rememberExpectedReconnect } from '@/lib/channels/connect-expect';
 import { CONNECT_CAPABILITIES, type ConnectCapability } from '@/lib/channels/state';
@@ -33,6 +37,9 @@ import { YouTubePolicyAcceptance } from '@/features/youtube/policy-acceptance';
 export interface ConnectRequest {
   providerId?: string;
   capability?: ConnectCapability;
+  /** Manage this actor-owned identity; never a publishing-channel reconnect. */
+  discordIdentityId?: string;
+  discordPurpose?: DiscordPurpose;
   /** Reconnect mode: the account this grant has to land on. */
   reconnect?: { channelId: string; account: string };
 }
@@ -61,17 +68,20 @@ function ProviderReadiness({ provider }: { provider: ProviderView }) {
 function ProviderTile({
   provider,
   selected,
-  onSelect
+  onSelect,
+  disabled = false
 }: {
   provider: ProviderView;
   selected: boolean;
   onSelect: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       type='button'
       data-tour='connect-platform' data-guide-safe
       aria-pressed={selected}
+      disabled={disabled}
       onClick={onSelect}
       className={cn(
         'rafii-focus flex min-h-14 items-center gap-3 rounded-[var(--rafii-radius-control)] p-3 text-left transition-colors',
@@ -97,26 +107,34 @@ export function ConnectSheet({
   open,
   onOpenChange,
   providers,
+  discordIdentities = [],
   request
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   providers: ProviderView[];
+  discordIdentities?: DiscordIdentity[];
   request: ConnectRequest | null;
 }) {
   const { api, workspaceId } = useWorkspaceApi();
   const { locale } = usePreferences();
+  const dc = discordCopy(locale);
   const { copy: importCopy, lang: importLang } = historyImportCopy(locale);
   const isMobile = useIsMobile();
   const [providerId, setProviderId] = useState<string>('');
   const [capability, setCapability] = useState<ConnectCapability>('publish');
   const [busy, setBusy] = useState(false);
-  const attempt = useRef(0);
   const [pending, setPending] = useState<OAuthStart | null>(null);
   const [error, setError] = useState<string | null>(null);
   // A Bluesky handle or a Mastodon server, when the platform needs one before connecting.
   const [inputValue, setInputValue] = useState('');
   const [checking, setChecking] = useState(false);
+  const [discordPurpose, setDiscordPurpose] = useState<DiscordPurpose>('identity');
+  const [discordIdentity, setDiscordIdentity] = useState('');
+  const [discordGuild, setDiscordGuild] = useState('');
+  const [discordGuilds, setDiscordGuilds] = useState<{ id: string; name: string }[]>([]);
+  const [discoverGuilds, setDiscoverGuilds] = useState(false);
+  const discordRequestGeneration = useRef(0);
   const [notSeenYet, setNotSeenYet] = useState(false);
   const { user } = useAuth();
   const policyContext = `${workspaceId}:${user?.id}:${providerId}:${capability}`;
@@ -139,7 +157,7 @@ export function ConnectSheet({
   // must not reset an in-progress choice, so depend on the stable provider id signature.
   const providerSignature = providers.map((provider) => provider.id).join('|');
   useEffect(() => {
-    attempt.current += 1;
+    discordRequestGeneration.current += 1;
     if (!open) return;
     const search = new URLSearchParams(window.location.search);
     const urlProviderId = search.get('connect') ?? undefined;
@@ -151,17 +169,22 @@ export function ConnectSheet({
 
     setProviderId(initial?.id ?? '');
     setCapability(defaultCapability(initial, requestedCapability));
+    setDiscordPurpose(request?.discordPurpose ?? (requestedCapability === 'publish' ? 'installation' : 'identity'));
+    const managedIdentity = discordIdentities.find(identity => identity.id === request?.discordIdentityId);
+    setDiscordIdentity(managedIdentity?.id ?? ''); setDiscordGuild(''); setDiscordGuilds([]); setDiscoverGuilds(managedIdentity?.discoverGuilds === true);
     setPending(null);
     setError(null);
     setBusy(false);
     setInputValue(initial?.id === 'mastodon' ? mastodonReconnectServer(request?.reconnect?.account) : '');
     setNotSeenYet(false);
-    return () => { attempt.current += 1; };
-  }, [open, providerSignature, request?.providerId, request?.capability, request?.reconnect?.account, workspaceId]);
+    return () => { discordRequestGeneration.current += 1; };
+  }, [open, workspaceId, providerSignature, request?.providerId, request?.capability, request?.reconnect?.account, request?.discordIdentityId, request?.discordPurpose]);
 
   function choosePlatform(id: string) {
-    attempt.current += 1;
-    setBusy(false);
+    if (busy) return;
+    if (id === providerId) return;
+    discordRequestGeneration.current += 1;
+    setDiscordIdentity(''); setDiscordGuild(''); setDiscordGuilds([]); setDiscoverGuilds(false); setDiscordPurpose('identity');
     const next = providers.find((p) => p.id === id);
     setProviderId(id);
     setCapability(defaultCapability(next, id === 'mastodon' ? undefined : capability));
@@ -170,27 +193,30 @@ export function ConnectSheet({
   }
 
   async function start() {
-    if (!provider) return;
-    const currentAttempt = ++attempt.current;
+    if (!provider || busy || discordPurpose === 'webhook' && !provider.discordModes?.webhook.enabled) return;
+    const generation = ++discordRequestGeneration.current;
     setBusy(true);
     setError(null);
     try {
-      const input = provider.startInput || (provider.id === 'mastodon' && reconnect) ? {
-        ...(provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : {}),
-        ...(provider.id === 'mastodon' && reconnect ? { connectionId: reconnect.channelId } : {})
-      } : undefined;
-      const started = await api.oauthStart(workspaceId, provider.id, capability, input);
-      // A closed sheet or changed workspace/provider must never display an old grant.
-      if (currentAttempt !== attempt.current) return;
+      const input: Record<string, unknown> = { ...(provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : {}), ...((provider.id === 'discord' || provider.id === 'mastodon') && reconnect ? { connectionId: reconnect.channelId } : {}) };
+      if (provider.discordConnectionsV2) {
+        Object.assign(input, { discordPurpose, discoverGuilds, identityConnectionId: discordIdentity, guildId: discordGuild });
+        if (discordPurpose === 'identity') {
+          if (discordIdentity) input.connectionId = discordIdentity; else delete input.connectionId;
+        }
+      }
+      const selectedCapability = provider.discordConnectionsV2 ? discordPurpose === 'identity' ? 'identity' : 'publish' : capability;
+      const started = await api.oauthStart(workspaceId, provider.id, selectedCapability, input);
+      if (generation !== discordRequestGeneration.current) return;
       if (reconnect) {
         rememberExpectedReconnect({ channelId: reconnect.channelId, account: reconnect.account, transactionId: started.transactionId });
       }
       setPending(started);
     } catch (err) {
-      // Shown inline above the choices; no toast on top of it.
-      if (currentAttempt === attempt.current) setError(err instanceof ApiError ? err.message : 'Try again in a moment.');
+      // Ignore a completion belonging to a closed or changed connection context.
+      if (generation === discordRequestGeneration.current) setError(err instanceof ApiError ? discordRefusal(err, dc) : 'Try again in a moment.');
     } finally {
-      if (currentAttempt === attempt.current) setBusy(false);
+      if (generation === discordRequestGeneration.current) setBusy(false);
     }
   }
 
@@ -219,6 +245,60 @@ export function ConnectSheet({
     }
   }
 
+  function prepareDiscordReconnect(identity: DiscordIdentity, requestGuilds = identity.discoverGuilds === true) {
+    if (busy) return;
+    discordRequestGeneration.current += 1;
+    setDiscordPurpose('identity'); setDiscordIdentity(identity.id); setDiscoverGuilds(requestGuilds);
+    setDiscordGuild(''); setDiscordGuilds([]); setError(null);
+  }
+
+  async function loadDiscordGuilds() {
+    const identity = discordIdentities.find(link => link.id === discordIdentity);
+    if (busy || discordDiscoveryState(identity) !== 'ready') return;
+    const generation = ++discordRequestGeneration.current;
+    setBusy(true); setError(null);
+    try {
+      const value = await api.discordGuilds(workspaceId, discordIdentity);
+      if (generation !== discordRequestGeneration.current) return;
+      if (value.identityConnectionId !== discordIdentity) {
+        setError('Discord returned a different identity. Reload this connection.');
+        return;
+      }
+      setDiscordGuilds(value.guilds); setDiscordGuild('');
+    } catch (err) {
+      if (generation === discordRequestGeneration.current) setError(err instanceof ApiError ? discordRefusal(err, dc) : 'Could not load Discord servers.');
+    } finally { if (generation === discordRequestGeneration.current) setBusy(false); }
+  }
+  async function disconnectIdentity(id: string) {
+    setBusy(true); setError(null);
+    try {
+      const value = await api.disconnectDiscordIdentity(workspaceId, id);
+      setDiscordIdentity(''); setDiscordGuild(''); setDiscordGuilds([]);
+      await client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
+      await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+      void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
+      toast.success('Discord identity disconnected', { description: value.note });
+    } catch (err) { setError(err instanceof ApiError ? err.message : 'Could not disconnect the identity.'); }
+    finally { setBusy(false); }
+  }
+  async function updatePrivateLink(identityId: string, remove: boolean) {
+    if (busy) return;
+    const generation = ++discordRequestGeneration.current;
+    setBusy(true); setError(null);
+    try {
+      await api.discordInteractionLink(workspaceId, identityId, remove);
+      if (generation === discordRequestGeneration.current) {
+        toast.success(dc.privateLinked);
+        void client.invalidateQueries({queryKey: keys.channels(workspaceId)});
+        void client.invalidateQueries({queryKey: keys.snapshot(workspaceId)});
+      }
+    } catch (err) {
+      if (generation === discordRequestGeneration.current) setError(err instanceof ApiError ? err.message : dc.requestFailed);
+    } finally { if (generation === discordRequestGeneration.current) setBusy(false); }
+  }
+  const selectedDiscordIdentity = discordIdentities.find(link => link.id === discordIdentity);
+  const discoveryState = discordDiscoveryState(selectedDiscordIdentity);
+  const discordNeedsSelection = provider?.discordConnectionsV2 && discordPurpose === 'installation' && (!discordIdentity || !discordGuild || !discordIdentities.some(x => x.id === discordIdentity && x.status === 'linked'));
   const needsInput = Boolean(provider?.startInput) && inputValue.trim().length === 0;
   const title = reconnect ? `Reconnect ${reconnect.account}` : 'Connect account';
   // Mastodon binds the return to this connection; other providers may add a different account.
@@ -323,7 +403,7 @@ export function ConnectSheet({
                   </h3>
                   <div className='grid gap-2 sm:grid-cols-2'>
                     {providers.map((p) => (
-                      <ProviderTile key={p.id} provider={p} selected={p.id === providerId} onSelect={() => choosePlatform(p.id)} />
+                      <ProviderTile key={p.id} provider={p} selected={p.id === providerId} disabled={busy} onSelect={() => choosePlatform(p.id)} />
                     ))}
                   </div>
                 </section>
@@ -331,7 +411,9 @@ export function ConnectSheet({
 
               {provider && (
                 <div className='text-muted-foreground flex flex-col gap-1.5 text-[13px] leading-relaxed'>
-                  {provider.connectReady === false ? <p className='text-foreground'>{provider.platform} isn&apos;t available yet.</p> : <p>{provider.accountRequirement}</p>}
+                  {provider.connectReady === false ? (
+                    <p className='text-foreground'>{provider.id === 'discord' && provider.discordAccess?.status === 'closed' ? dc.accessClosed : `${provider.platform} isn't available yet.`}</p>
+                  ) : <p>{provider.accountRequirement}</p>}
                   {/* Setup detail for whoever runs the workspace: available on request, never the headline. */}
                   {Boolean(provider.setupIssues?.length || (provider.callbackUri && provider.connectReady === false)) && (
                     <details className='text-xs'>
@@ -384,6 +466,72 @@ export function ConnectSheet({
                   force={capability !== 'identity' && capability !== 'posts_read'}
                   onAvailabilityChange={onPolicyAvailabilityChange} />
               )}
+              {provider?.discordConnectionsV2 && (
+                <section className='flex flex-col gap-3' aria-label='Discord connection steps'>
+                  <p className='text-sm'>{dc.identityStep}</p>
+                  <p className='text-muted-foreground text-xs'>{dc.botStep}</p>
+                  <DiscordModeChoices purpose={discordPurpose} busy={busy} modes={provider.discordModes} copy={dc} onChange={purpose => {
+                    if (busy) return;
+                    discordRequestGeneration.current += 1; setDiscordPurpose(purpose); setDiscordGuild(''); setDiscordGuilds([]); setError(null);
+                    if (purpose === 'webhook' && !discordIdentities.some(x => x.id === discordIdentity && x.status === 'linked' && x.discoverGuilds === true)) setDiscordIdentity('');
+                  }} />
+                  {discordIdentities.map(link => (
+                    <div key={link.id} className='rafii-quiet flex flex-wrap items-center gap-2 rounded-md p-2 text-sm'>
+                      <span className='min-w-0 break-words'>{link.account} · {link.userId} · {link.status === 'linked' ? dc.statusLinked : link.status === 'disconnected' ? dc.statusDisconnected : link.status === 'reconnect_required' ? dc.statusReconnect : dc.statusUnknown}</span>
+                      {link.privateDraftsLinked !== undefined && <span className='text-muted-foreground text-xs'>{link.privateDraftsLinked ? dc.privateStoredLinked : dc.privateStoredUnlinked}</span>}
+                      <Button size='sm' className='min-h-11' variant='glass' disabled={busy} onClick={() => prepareDiscordReconnect(link)}>{dc.reconnectIdentity}</Button>
+                      {discordPrivateLinkActions(link, provider.discordModes?.userInstall.enabled === true).bind &&
+                        <Button size='sm' className='min-h-11' variant='glass' disabled={busy} onClick={() => void updatePrivateLink(link.id, false)}>{dc.linkPrivate}</Button>}
+                      {discordPrivateLinkActions(link, provider.discordModes?.userInstall.enabled === true).remove &&
+                        <Button size='sm' className='min-h-11' variant='glass' disabled={busy} onClick={() => void updatePrivateLink(link.id, true)}>{dc.unlinkPrivate}</Button>}
+                      {link.status !== 'disconnected' && <Button size='sm' className='min-h-11' variant='glass' disabled={busy} onClick={() => void disconnectIdentity(link.id)}>{dc.disconnectIdentity}</Button>}
+                    </div>
+                  ))}
+                  {discordPurpose === 'identity' ? (
+                    <label className='flex items-start gap-2 text-sm'>
+                      <input type='checkbox' aria-label={dc.discoverGuilds}
+                        checked={discoverGuilds} disabled={busy} onChange={e => setDiscoverGuilds(e.target.checked)} />
+                      {dc.discoverGuilds}
+                    </label>
+                  ) : discordPurpose === 'installation' ? (
+                    <>
+                      <label className='flex flex-col gap-1 text-sm'>{dc.identityLabel}
+                        <select aria-label={dc.identityLabel} value={discordIdentity} disabled={busy} onChange={e => { discordRequestGeneration.current += 1; setDiscordIdentity(e.target.value); setDiscordGuild(''); setDiscordGuilds([]); setError(null); }} className='rafii-quiet rounded-md p-2'>
+                          <option value=''>{dc.chooseIdentity}</option>
+                          {discordIdentities.filter(x => x.status === 'linked').map(x => <option key={x.id} value={x.id}>{x.account} · {x.userId}</option>)}
+                        </select>
+                      </label>
+                      {discoveryState === 'scope_required' && <div className='rafii-quiet flex flex-col gap-2 rounded-md p-3 text-sm'>
+                        <p>{dc.scopeNeeded}</p>
+                        <Button variant='glass' disabled={busy} onClick={() => { if (selectedDiscordIdentity) prepareDiscordReconnect(selectedDiscordIdentity, true); }}>{dc.scopeUpgrade}</Button>
+                        <p className='text-muted-foreground text-xs'>{dc.scopeReview}</p>
+                      </div>}
+                      {discoveryState === 'reconnect_required' && <p className='text-muted-foreground text-sm'>{dc.reconnectBeforeServer}</p>}
+                      <Button variant='glass' disabled={discoveryState !== 'ready' || busy} onClick={() => void loadDiscordGuilds()}>{dc.loadServers}</Button>
+                      <label className='flex flex-col gap-1 text-sm'>{dc.serverLabel}
+                        <select aria-label={dc.serverLabel} value={discordGuild} disabled={busy} onChange={e => setDiscordGuild(e.target.value)} className='rafii-quiet rounded-md p-2'>
+                          <option value=''>{dc.chooseServer}</option>
+                          {discordGuilds.map(x => <option key={x.id} value={x.id}>{x.name} · {x.id}</option>)}
+                        </select>
+                      </label>
+                      <p className='text-muted-foreground text-xs'>{dc.separateChannel}</p>
+                    </>
+                  ) : discordPurpose === 'webhook' ? (
+                    <label className='flex flex-col gap-1 text-sm'>{dc.webhookIdentityLabel}
+                      <select aria-label={dc.webhookIdentityLabel} value={discordIdentity} disabled={busy}
+                        onChange={e => { discordRequestGeneration.current += 1; setDiscordIdentity(e.target.value); setError(null); }}
+                        className='rafii-quiet rounded-md p-2'>
+                        <option value=''>{dc.webhookIdentityNone}</option>
+                        {discordIdentities.filter(x => x.status === 'linked' && x.discoverGuilds === true).map(x =>
+                          <option key={x.id} value={x.id}>{x.account} · {x.userId}</option>)}
+                      </select>
+                    </label>
+                  ) : null}
+                  <p className='text-muted-foreground text-xs'>{dc.reconnectNotice}</p>
+                  <p className='text-muted-foreground text-xs'>{dc.disconnectNotice}</p>
+                </section>
+              )}
+              {!provider?.discordConnectionsV2 && (
               <section className='flex flex-col gap-2' aria-labelledby='connect-capability-heading' data-tour='connect-capability'>
                 <h3 id='connect-capability-heading' className='text-sm font-medium'>
                   What Rafii may do
@@ -392,7 +540,7 @@ export function ConnectSheet({
                   <StateMessage kind='unsupported' layout='inline' title={`Nothing to connect on ${provider?.platform ?? 'this platform'} yet.`} />
                 ) : (
                   <RadioGroup value={capability} onValueChange={(value) => {
-                    attempt.current += 1;
+                    discordRequestGeneration.current += 1;
                     setBusy(false);
                     setError(null);
                     setCapability(value as ConnectCapability);
@@ -415,6 +563,7 @@ export function ConnectSheet({
                   </p>
                 )}
               </section>
+              )}
             </>
           )}
         </div>
@@ -461,7 +610,7 @@ export function ConnectSheet({
                 className={cn(STATEFUL_ACTION, CONTROL_48)}
                 state={busy ? 'loading' : 'idle'}
                 loadingText='Preparing…'
-                disabled={!provider || provider.connectReady === false || provider.executionPaused || offered.length === 0 || needsInput || providerId === 'youtube' && !policyAllowed}
+                disabled={!provider || provider.connectReady === false || provider.executionPaused || offered.length === 0 || needsInput || discordNeedsSelection || discordPurpose === 'webhook' && !provider.discordModes?.webhook.enabled || providerId === 'youtube' && !policyAllowed}
                 onClick={() => void start()}
               >
                 Continue

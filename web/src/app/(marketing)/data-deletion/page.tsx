@@ -45,6 +45,9 @@ export default function DataDeletionPage() {
           Open <strong>Channels</strong> and choose <strong>Disconnect</strong> on the account, or <strong>Remove from Rafii</strong> for YouTube.
         </li>
         <li>The stored access token is wiped immediately and revoked with the platform where the platform supports it.</li>
+        <li>
+          <strong>Discord:</strong> Rafii deletes its stored copy of your Discord tokens but does not ask Discord to revoke them, and it does not remove its bot from your server. To end Rafii’s access on Discord, remove Rafii in your Discord Authorized Apps and remove the bot in your server’s settings.
+        </li>
         <li>Metrics and comments for that account stop being collected. Pending Rafii jobs for it are held at the next worker claim. Actions already accepted by a platform require separate reconciliation.</li>
         <li>You can also revoke Rafii from the platform’s own settings (for example LinkedIn → Settings → Permitted services, or Meta → Apps and websites); the next Rafii request will then fail and the connection will be shown as needing re-authorisation.</li>
       </ul>
@@ -81,7 +84,7 @@ export default function DataDeletionPage() {
           </tr>
           <tr>
             <td>Provider tokens</td>
-            <td>Wiped and revoked where supported.</td>
+            <td>Wiped and revoked where supported. Discord: our copy is deleted; Rafii does not ask Discord to revoke it, and its bot stays in your server until you remove it.</td>
           </tr>
           <tr>
             <td>Platform data (post ids, metrics, comments)</td>

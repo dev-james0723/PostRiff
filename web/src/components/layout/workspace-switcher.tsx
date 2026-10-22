@@ -33,6 +33,7 @@ export function WorkspaceSwitcher() {
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger
+            aria-label={`Switch workspace: ${name}`}
             render={
               <SidebarMenuButton
                 size='lg'

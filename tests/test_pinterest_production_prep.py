@@ -295,7 +295,7 @@ class PinterestRafiiSecurityIntegration(unittest.TestCase):
         self.assertEqual((status, body['code']), (403, 'security_account_hold'))
         oauth.start.assert_not_called()
 
-
+    def test_proved_browser_can_start_pinterest_oauth(self):
         import test_postriff_account_security as security
         app, oauth, _ = self.app(fresh_proof=True)
         status, body = security.invoke(app, 'POST', f'/api/workspaces/{security.WORKSPACE}/channels/pinterest/oauth/start',
