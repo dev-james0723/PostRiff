@@ -22,6 +22,8 @@ if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
   sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -y -qq --no-install-recommends install postgresql-16
 fi
 export POSTRIFF_PG_BIN=/usr/lib/postgresql/16/bin
+# A bare postgresql-16 install may not create the default socket/lock directory the disposable cluster needs.
+[ -d /var/run/postgresql ] || sudo -n install -d -m 0775 -o "$(id -un)" /var/run/postgresql
 if [ "$scope" = all ]; then
   "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_pg_suite.py postgres_mastodon_management postgres_mastodon_automation postgres_mastodon_scale postgres_library postgres_library_lifecycle postgres_consumer_migrations
 fi
