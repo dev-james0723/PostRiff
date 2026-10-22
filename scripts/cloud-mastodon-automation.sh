@@ -53,7 +53,9 @@ export POSTRIFF_PG_BIN="/usr/lib/postgresql/$pg_major/bin"
 case "${1:-}" in
   management-after134-only)
     export POSTRIFF_MASTODON_AFTER134_FIXTURE=1
-    "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py tests/phase2/postgres_mastodon_management.py tests/phase2/postgres_mastodon_automation.py tests/phase2/postgres_mastodon_scale.py ;;
+    "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py tests/phase2/postgres_mastodon_management.py tests/phase2/postgres_mastodon_automation.py
+    # Its own cluster: earlier suites consume the shared per-instance admission buckets the scale counts depend on.
+    "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py tests/phase2/postgres_mastodon_scale.py ;;
   youtube-disconnect-only) "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_pg_suite.py postgres_youtube_workspace_provider_data ;;
   release-preflight-only) "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_pg_suite.py postgres_consumer_migrations postgres_mastodon_automation_legacy ;;
   sql-only) "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_pg_suite.py postgres_mastodon_management ;;
