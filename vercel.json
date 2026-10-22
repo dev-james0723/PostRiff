@@ -103,6 +103,14 @@
     {
       "path": "/api/cron/worker",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/worker/publish?lane=2",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/worker/publish?lane=3",
+      "schedule": "* * * * *"
     }
   ],
   "git": {

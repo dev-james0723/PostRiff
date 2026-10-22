@@ -581,16 +581,18 @@ class PostgresWorker:
         self.complete(claimed, result)
         return True
 
-    def tick(self, max_jobs=None, max_seconds=None):
+    def tick(self, max_jobs=None, max_seconds=None, *, publish_only=False):
+        """`publish_only`: an extra concurrent publishing lane. Claims are serialized by the worker lock and leases, so
+        lanes never take the same job; YouTube and Mastodon maintenance stay on the main lane only."""
         from .youtube.fleet import enabled
         fleet_owns_youtube = enabled()
-        return self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
+        return self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube, publish_only=publish_only)
 
     def tick_youtube(self, max_jobs, max_seconds):
         """Dedicated lane: no other platform or maintenance dispatch can run."""
         return self._tick(max_jobs, max_seconds, youtube_only=True)
 
-    def _tick(self, max_jobs=None, max_seconds=None, *, youtube_only=False, exclude_youtube=False):
+    def _tick(self, max_jobs=None, max_seconds=None, *, youtube_only=False, exclude_youtube=False, publish_only=False):
         if max_jobs is None or max_seconds is None:
             configured_jobs, configured_seconds = configured_worker_limits()
             max_jobs = configured_jobs if max_jobs is None else max_jobs
@@ -600,10 +602,11 @@ class PostgresWorker:
         started, processed = time.monotonic(), 0
         youtube = getattr(self.social, 'youtube', None) or getattr(self, 'youtube_maintenance', None)
         maintenance = ({'enabled': False, 'scheduler': 'isolated_upload_lane'} if youtube_only else
+                       {'enabled': False, 'scheduler': 'publish_lane'} if publish_only else
                        youtube.maintenance(dispatch=False) if youtube and exclude_youtube else
                        youtube.maintenance() if youtube else {'enabled': False})
         mastodon_maintenance = None
-        if not youtube_only and getattr(self.social, 'providers', {}).get('mastodon'):
+        if not youtube_only and not publish_only and getattr(self.social, 'providers', {}).get('mastodon'):
             from .mastodon_management import maintain
             mastodon_maintenance = maintain(self.connection_factory)
             if max_seconds >= 4 and getattr(self.social, 'oauth', None):

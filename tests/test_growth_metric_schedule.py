@@ -18,6 +18,20 @@ class Hooks(unittest.TestCase):
         self.assertFalse(M.workspace_enabled(denied, wid))
         self.assertEqual(denied.claim(10), [])  # no DB needed, no claims outside admission
 
+    def test_only_mastodon_can_be_opened_to_every_workspace(self):
+        wid = "267f7d90-b11c-470c-9880-733ea7c1d483"
+        self.assertEqual(M.open_providers({M.OPEN_PROVIDERS: "Mastodon, instagram,threads,pinterest,*"}), {"mastodon"})
+        self.assertFalse(M.open_providers({}))
+        self.assertFalse(M.open_providers({M.OPEN_PROVIDERS: ["mastodon"]}))
+        opened = M.MetricScheduler(None, None, transport=None, open_providers={"mastodon", "instagram"})
+        self.assertEqual(opened.open_providers, {"mastodon"})
+        self.assertTrue(opened.workspace_allowed(wid, "mastodon"))
+        self.assertFalse(opened.workspace_allowed(wid, "instagram"))
+        self.assertFalse(opened.workspace_allowed(wid))
+        listed = M.MetricScheduler(None, None, transport=None, workspace_allowlist={wid})
+        self.assertTrue(listed.workspace_allowed(wid, "instagram"))
+        self.assertFalse(listed.workspace_allowed("other", "mastodon"))
+
     def test_scheduling_runs_after_a_failing_hook_and_the_error_still_reaches_the_worker(self):
         seen = []
         scheduler = SimpleNamespace(on_post_verified=lambda cur, ws, job: seen.append("scheduled"))

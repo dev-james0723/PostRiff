@@ -27,6 +27,10 @@ from .. import insights
 
 FLAG = "POSTRIFF_METRIC_READS"
 WORKSPACE_ALLOWLIST = "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST"
+# Providers whose readings may run for every workspace. Only Mastodon qualifies: its counts are public numbers read with
+# the account's own token, with no platform review behind them. Every other provider stays on the explicit list.
+OPEN_PROVIDERS = "POSTRIFF_METRIC_OPEN_PROVIDERS"
+OPENABLE_PROVIDERS = frozenset({"mastodon"})
 NATIVE_ANALYTICS_SCOPES = {
     "pinterest": frozenset({"user_accounts:read", "boards:read", "pins:read"}),
     "threads": frozenset({"threads_basic", "threads_manage_insights"}),
@@ -54,6 +58,14 @@ def allowed_workspaces(env):
         return frozenset(str(uuid.UUID(value.strip())) for value in raw.split(","))
     except (ValueError, AttributeError):
         return frozenset()
+
+
+def open_providers(env):
+    """Providers named in POSTRIFF_METRIC_OPEN_PROVIDERS that may be opened; anything else is ignored."""
+    raw = (env or {}).get(OPEN_PROVIDERS, "")
+    if not isinstance(raw, str):
+        return frozenset()
+    return frozenset(value.strip().lower() for value in raw.split(",")) & OPENABLE_PROVIDERS
 
 
 def workspace_enabled(scheduler, workspace_id):
@@ -151,7 +163,7 @@ def then_schedule(on_verified, scheduler):
 
 
 class MetricScheduler:
-    def __init__(self, connection_factory, oauth, *, transport, workspace_allowlist=(), clock=time.time, monotonic=time.monotonic, worker_id=None):
+    def __init__(self, connection_factory, oauth, *, transport, workspace_allowlist=(), open_providers=(), clock=time.time, monotonic=time.monotonic, worker_id=None):
         self.connection_factory = connection_factory
         self.oauth = oauth
         self.transport = transport
@@ -159,9 +171,10 @@ class MetricScheduler:
         self.monotonic = monotonic
         self.worker_id = worker_id or f"mr-{uuid.uuid4().hex[:12]}"
         self.workspace_allowlist = frozenset(str(wid) for wid in workspace_allowlist)
+        self.open_providers = frozenset(open_providers) & OPENABLE_PROVIDERS
 
-    def workspace_allowed(self, workspace_id):
-        return str(workspace_id) in self.workspace_allowlist
+    def workspace_allowed(self, workspace_id, provider=None):
+        return str(workspace_id) in self.workspace_allowlist or (provider is not None and provider in self.open_providers)
 
     def provider_allowed(self, provider, workspace_id=None):
         adapter = (getattr(self.oauth, "providers", None) or {}).get(provider)
@@ -271,12 +284,12 @@ class MetricScheduler:
 
     def on_post_verified(self, cur, workspace_id, job):
         def operation():
-            if not self.workspace_allowed(workspace_id):
-                return 0
             manifest = job.get("manifest") or {}
             if manifest.get('platform') == 'Mastodon' and (manifest.get('publishOptions') or {}).get('visibility', 'public') not in ('public', 'unlisted'):
                 return 0
             provider = self.provider_for(manifest.get("platform"))
+            if not self.workspace_allowed(workspace_id, provider):
+                return 0
             reference, verification = job.get("providerReference"), job.get("verification") or {}
             if provider is None or not reference or not isinstance(verification.get("at"), (int, float)):
                 return 0
@@ -299,7 +312,7 @@ class MetricScheduler:
         300-post import (all due at once, anchored weeks back) never delays any workspace's t0/1h/24h/7d readings,
         and no step scans rows that are not yet due."""
         rows = []
-        if not self.workspace_allowlist:
+        if not self.workspace_allowlist and not self.open_providers:
             return rows
         with self.connection_factory() as db, db.cursor() as cur:
             for where, order in self.CLAIM_ORDER:
@@ -308,10 +321,10 @@ class MetricScheduler:
                 cur.execute(f"""UPDATE public.pr_metric_reads r SET status='claimed', lease_owner=%s, lease_until=now() + make_interval(secs => %s),
                                        attempts=attempts+1, updated_at=now()
                                 WHERE r.id IN (SELECT id FROM public.pr_metric_reads WHERE {where}
-                                  AND workspace_id=ANY(%s::uuid[]) ORDER BY {order} LIMIT %s FOR UPDATE SKIP LOCKED)
+                                  AND (workspace_id=ANY(%s::uuid[]) OR provider=ANY(%s::text[])) ORDER BY {order} LIMIT %s FOR UPDATE SKIP LOCKED)
                                 RETURNING r.id::text, r.workspace_id::text, r.job_id, r.connection_id, r.provider, r.provider_post_id,
                                           r.read_offset, extract(epoch from r.anchor_at)::float8, r.attempts, r.max_attempts""",
-                            (self.worker_id, LEASE_SECONDS, sorted(self.workspace_allowlist), limit - len(rows)))
+                            (self.worker_id, LEASE_SECONDS, sorted(self.workspace_allowlist), sorted(self.open_providers), limit - len(rows)))
                 rows += cur.fetchall()
             db.commit()
         keys = ("id", "workspaceId", "jobId", "connectionId", "provider", "postId", "offset", "anchorAt", "attempts", "maxAttempts")
@@ -327,7 +340,7 @@ class MetricScheduler:
     def _eligibility(self, cur, row, *, lock=False):
         # Completion serializes with workspace disconnect/deletion commands;
         # provider I/O still runs outside this short transaction.
-        if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"], row["workspaceId"]):
+        if not self.workspace_allowed(row["workspaceId"], row["provider"]) or not self.provider_allowed(row["provider"], row["workspaceId"]):
             return "cancel"
         cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s" +
                     (" FOR UPDATE" if lock else ""), (row["workspaceId"],))
@@ -350,7 +363,7 @@ class MetricScheduler:
         """Outcome dict: {"state": "done"|"transient"|"unavailable"|"cancelled", ...}. Never raises."""
         requested = False
         try:
-            if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"], row["workspaceId"]):
+            if not self.workspace_allowed(row["workspaceId"], row["provider"]) or not self.provider_allowed(row["provider"], row["workspaceId"]):
                 return {"state": "cancelled", "failure": "not_admitted"}
             eligibility = self._eligible(row)
             if eligibility == "cancel":

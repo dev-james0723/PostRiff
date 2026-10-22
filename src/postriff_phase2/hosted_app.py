@@ -325,7 +325,7 @@ def runtime_from_environment(environ=None):
     from .growth import metric_schedule
     # Explicit interactive canary shares admission, but does not mount the cron step.
     service.metric_probe = metric_schedule.MetricScheduler(database, service.oauth, transport=http_transport,
-        workspace_allowlist=metric_schedule.allowed_workspaces(values))
+        workspace_allowlist=metric_schedule.allowed_workspaces(values), open_providers=metric_schedule.open_providers(values))
     if metric_schedule.enabled(values):
         service.metric_reads = service.metric_probe
         on_verified = metric_schedule.then_schedule(on_verified, service.metric_reads)
@@ -599,7 +599,7 @@ class HostedApplication:
                 'event':'request.completed', 'requestId':request_id,
                 'method':method if method in ('GET','POST','PUT','PATCH','DELETE','OPTIONS','HEAD') else 'OTHER',
                 'status':status_code, 'durationMs':round((time.monotonic()-started)*1000,2),
-                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' or environ.get('PATH_INFO','').startswith('/api/cron/youtube/') else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
+                'route':'cron' if environ.get('PATH_INFO') in ('/api/cron/worker', '/api/cron/worker/publish') or environ.get('PATH_INFO','').startswith('/api/cron/youtube/') else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
             **environ.get('postriff.failure', {})
             }))
             # Founder reliability metrics (CONTRACTS §8.D): one in-memory count per minute x route pattern x status class,
@@ -773,6 +773,14 @@ class HostedApplication:
                     raise AlphaError("Cron authorization failed.", 401)
                 from .agent_runtime_v2.task_engine import cron as task_cron
                 return self._json(start_response, 200, task_cron.tick(self._runtime()))
+            if path == "/api/cron/worker/publish" and method == "GET":
+                # Extra publishing lane: same cron authorization, publishing steps only (no maintenance or recovery).
+                self._runtime()
+                expected = self.cron_secret or ""
+                supplied = environ.get("HTTP_AUTHORIZATION", "")
+                if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
+                    raise AlphaError("Cron authorization failed.", 401)
+                return self._json(start_response, 200, self.worker.tick(publish_only=True))
             if path == "/api/cron/worker" and method == "GET":
                 service = self._runtime()
                 expected = self.cron_secret or ""
@@ -1298,7 +1306,7 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith('/api/cron/youtube/'):
+            if path in ("/api/cron/worker", "/api/cron/worker/publish", "/api/cron/agent-tasks") or path.startswith('/api/cron/youtube/'):
                 # Source locations only: never format exception text, source lines, locals or payloads.
                 frame = error.__traceback__
                 while frame is not None:
