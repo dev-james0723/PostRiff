@@ -413,6 +413,10 @@ class TikTokPublishing(unittest.TestCase):
         refused = self.social(Wire([ok(CREATOR), unaudited])).submit(manifest("TikTok", "OPEN", media=VIDEO, options=tiktok_options()))
         self.assertEqual(refused["state"], "failed")
         self.assertIn("audits Rafii", refused["confirmed"])
+        capped = ok({"error": {"code": "reached_active_user_cap", "message": "cap"}}, 403)
+        held = self.social(Wire([ok(CREATOR), capped])).submit(manifest("TikTok", "OPEN", media=VIDEO, options=tiktok_options()))
+        self.assertEqual(held["state"], "held")
+        self.assertIn("how many people Rafii can post for", held["confirmed"])
 
     def test_a_foreign_upload_host_sends_nothing_and_fails(self):
         init = ok({"data": {"publish_id": "v_pub_2", "upload_url": "https://uploads.evil.example/video"}, "error": {"code": "ok"}})

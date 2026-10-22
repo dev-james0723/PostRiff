@@ -517,7 +517,10 @@ class HostedSocial:
             return {"state": "held", "confirmed": "TikTok rejected the permission or session; reconnect and review again" + reason}
         if code == "rate_limit_exceeded" or status == 429:
             return {"state": "scheduled", "confirmed": "TikTok rate limited the request before acceptance"}
-        if code in ("spam_risk_too_many_posts", "spam_risk_too_many_pending_share", "spam_risk_user_banned_from_posting", "reached_active_user_cap"):
+        if code == "reached_active_user_cap":
+            # App-wide cap (before TikTok's audit: 5 posting users per 24 hours), not this account's fault.
+            return {"state": "held", "confirmed": "TikTok's daily limit on how many people Rafii can post for has been reached. Nothing was posted; review it again later."}
+        if code in ("spam_risk_too_many_posts", "spam_risk_too_many_pending_share", "spam_risk_user_banned_from_posting"):
             return {"state": "held", "confirmed": "TikTok won't take more posts from this account right now" + reason}
         if code == "unaudited_client_can_only_post_to_private_accounts":
             return {"state": "failed", "confirmed": "Until TikTok audits Rafii, it can post only to private TikTok accounts. Make the account private or wait for the audit; nothing was posted."}
