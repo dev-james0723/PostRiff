@@ -61,6 +61,13 @@
 - **Portal read:** Claude in Chrome reached the signed-in portal and listed the app (`Rafii 7689508412459370497`, Individual ownership). Reading the app page failed 3 times because the extension kept dropping its tab group. Production status is still unverified, so it moves into H1.
 - **D2 needs migrations.** `pr_social_provider_events` (migration 044) is **not applied** in prod or staging. The TikTok webhook therefore needs 044 + `20261022_tiktok_provider_webhooks.sql`, both approved by James, before the webhook URL is configured in the portal. Until then it returns 503 and never leaks details.
 - **App Review package draft:** `docs/agent-handoffs/RAFII_TIKTOK_APP_REVIEW_PACK_2026-10-22.md` covers C1–C6, D3 and F1.
+- **Review and validation (02:20–02:50Z).**
+  - An independent Codex CLI review (fallback, read-only) found 3 P2 issues, all fixed in `2e8c3a12`: the stale-revocation fence, the `:443` alias of production origins, and a CI lane that stopped before the web checks.
+  - JCB remote: typecheck `cv3c3gshfl` exit 0; lint `xdbsl600m6` exit 0 (36 warnings); web tests 961/0.
+  - Full Python suite `b7n5h8rbz2`: 12 failures and 9 errors, none in TikTok code (Library LibreOffice, a Mastodon failure that predates this branch, Pinterest order-dependence).
+  - The re-run of the corrected lane was refused because another session's JCB run holds the cache lock; retry once it is released.
+  - Draft PR: https://github.com/dev-james0723/PostRiff/pull/220 (base `claude/mastodon-connect-prod-candidate`).
+- **B4: no new build needed.** Protected Preview alias `rafii-tiktok-sandbox-650aea72.vercel.app` = `dpl_EH2bH8rZQSveGu4eknTZqJDT2Qbu`, built from `e107bbb5`, READY. H1 uses it as is: James only needs to register its callback in the Sandbox and consent.
 
 ## 2. Legend
 
@@ -206,6 +213,7 @@ Owner: **A** = agent · **J** = James · **T** = TikTok
 | 2026-10-22 02:12 | D4 | reached_active_user_cap copy (707dd871) | 45 tests OK |
 | 2026-10-22 02:15 | A3 | TikTok page copy (98d28783) | identity Unsupported, "connecting and publishing in review" |
 | 2026-10-22 02:20 | C4 | Second verification file added (cherry-pick of 91d0872b) | web/public |
+| 2026-10-22 02:40 | D5 | Codex review fixes (2e8c3a12); web checks remote PASS; draft PR #220 | runs cv3c3gshfl, xdbsl600m6, b7n5h8rbz2 |
 
 ## Sources
 
