@@ -248,8 +248,15 @@ def wait_for_lock(pids, blocker):
     raise AssertionError('The intended real PostgreSQL lock conflict was not observed.')
 
 
-def pause_commit(entered, release):
+def pause_commit(entered, release, *, wait_for_revocation=False):
     def paused(db):
+        if wait_for_revocation and not db.execute(
+                'SELECT revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',
+                (ONE, CONNECTION)).fetchone()[0]:
+            # Disconnect authenticates in a preliminary transaction. Hold the
+            # actual revocation commit so the late worker waits behind that write.
+            LOCAL.before_commit = paused
+            return
         entered.put(db.info.backend_pid)
         assert release.wait(6), 'The transaction commit latch was not released.'
     return paused
@@ -329,7 +336,7 @@ with patch('postriff_phase2.hosted_worker.record_published', side_effect=lambda 
     with ThreadPoolExecutor(max_workers=2) as pool:
         entered, release, waiting = Queue(), threading.Event(), Queue()
         def disconnect_first():
-            LOCAL.before_commit = pause_commit(entered, release)
+            LOCAL.before_commit = pause_commit(entered, release, wait_for_revocation=True)
             return disconnect()
         disconnected = pool.submit(disconnect_first)
         pid = entered.get(timeout=6)

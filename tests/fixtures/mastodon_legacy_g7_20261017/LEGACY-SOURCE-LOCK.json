@@ -1,0 +1,11 @@
+{
+  "state": "HISTORICAL G7 SOURCE; NEVER MARKED APPLIED; NOT CURRENT ACCEPTANCE",
+  "originalCommit": "5fa36745320a28de7fff84541bfef2f378b14447",
+  "retiredFrom": "migrations/postriff",
+  "autoDiscovery": false,
+  "files": {
+    "131_mastodon_management.sql": "c85e2d27f79947692a1bf28a7087fcbe7b0d3ea9d3c57e2e0fe2dd654bacf694",
+    "132_mastodon_native_metrics.sql": "c3a887b379958bdb32282120f6b9dc5515b02882da279898453fedb8f7886d3b",
+    "133_mastodon_connection_health.sql": "eeae6a4f48fb7616ce168f672c05d6ba7e169aa91951c17fc1c4c187fb437905"
+  }
+}

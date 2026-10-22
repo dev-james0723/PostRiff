@@ -33,7 +33,7 @@ OWNER, EDITOR, VIEWER, APPROVER = (Membership.from_row(r) for r in ("owner", "ed
 # (docs/design/rafii-agent-os/migrations/109_agent_permissions.sql on the contracts branch, PR #160).
 FROZEN_109_SHA256 = "927b88451d57b270a0d766f9626384a0e41dfe7b62f027de47710d32b24fee48"
 # Capabilities added after the freeze (CF-1 §7: since > 1). They are never part of LEGACY_BASELINE_V1.
-POST_FREEZE = {"tool.library_browse"}
+POST_FREEZE = {"tool.library_browse", "tool.mastodon_account_context", "tool.mastodon_analytics_summary", "tool.mastodon_action_prepare"}
 
 
 def cap(name, **kw):

@@ -111,7 +111,7 @@ export function ConnectReturn() {
           if (value.missingScopes?.length) {
             toast.warning(callbackCopy.callbackPermissionsTitle, { description: provider === 'discord' ? `${dc.callbackMissingPermissions} ${value.missingScopes.join(', ')}. ${dc.publishUnavailable}` : `Missing: ${value.missingScopes.join(', ')}. ${missingScopePublishingMessage(provider)}` });
           }
-          if (expected && expected.channelId !== connectionId) {
+          if (expected && (provider === 'discord' || expected.transactionId === state) && expected.channelId !== connectionId) {
             toast.warning(callbackCopy.callbackDifferentAccount.replace('{account}', () => expected.account));
           }
           // Straight back to Channels: the page scrolls to the new card and plays its check once.

@@ -354,6 +354,8 @@ class Phase2Store(Store):
             if (getattr(self, 'worker_binding', None) is not None
                     and manifest.get('workerBinding') != self.worker_binding):
                 raise AlphaError('This review belongs to another deployment. Prepare a new review.', 409)
+            if manifest.get('mastodonNativePoll') is not None and digest(manifest) != review['digest']:
+                raise AlphaError('The exact poll review changed. Prepare a new review.', 409)
             if not self.current(s, manifest) or manifest["expiresAt"] <= now or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= now) or self.channel_state(find(data["channels"], manifest["channelId"])) != "Ready for posting":
                 raise AlphaError("This approval is stale. Prepare a new review.", 409)
             existing = next((j for j in data["jobs"] if j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"]), None)
@@ -448,11 +450,14 @@ class Phase2Store(Store):
         # Language is not part of the match: a channel can carry drafts in several languages (languages plan §6).
         if v["voiceRevision"] != s["speaker"]["activeRevision"] or v["platform"] != c["platform"]:
             raise AlphaError("The variant and current speaker must match this destination.")
-        # A native format other than the platform's default (a Story, Reel, carousel…) has no format-aware publisher:
-        # it is never approved as a default post. Export it and post it by hand (creation projection, spec §12).
+        # Only default formats and the explicitly bound native Mastodon poll have a publisher.
+        # Other native formats are never silently approved as default posts.
         from .creation_capabilities import DEFAULT_FORMATS, EXPORT_ONLY_NOTE
         native_format = (v.get("native") or {}).get("formatId") if isinstance(v.get("native"), dict) else None
-        if any(f and f != DEFAULT_FORMATS.get(c["platform"]) for f in (v.get("format"), native_format)):
+        allowed_formats = {DEFAULT_FORMATS.get(c["platform"])}
+        if c["platform"] == 'Mastodon':
+            allowed_formats.add('mastodon.poll')
+        if any(f and f not in allowed_formats for f in (v.get("format"), native_format)):
             raise AlphaError(EXPORT_ONLY_NOTE, 409, code="format_not_publishable")
         text = v["text"]
         # Measured the way the platform counts (X weighs CJK and emoji as two), so an over-length post never reaches it.
@@ -465,10 +470,15 @@ class Phase2Store(Store):
         if sorted(acknowledged) != sorted(v["warnings"]):
             raise AlphaError("Acknowledge every displayed draft warning.")
         media = []
-        if p.get("assetId"):
+        if c['platform'] == 'Mastodon':
+            from .mastodon_media import review_media
+            media = review_media(s, p)
+        elif p.get('attachments'):
+            raise AlphaError('Multiple attachment reviews are available for Mastodon only.', 409)
+        elif p.get("assetId"):
             a = find(data["assets"], p["assetId"])
             if asset_kinds.kind_of(a) == "video":
-                if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou"):
+                if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou", "Mastodon"):
                     raise AlphaError("This channel doesn't support video posts from Rafii.", 409)
                 if not asset_kinds.is_postable_video(a, c['platform']) or p.get("rightsConfirmed") is not True:
                     raise AlphaError("This post needs a verified video and rights confirmation.", 409)
@@ -493,13 +503,19 @@ class Phase2Store(Store):
         if c["platform"] in ("Instagram", "Pixelfed") and not media:
             raise AlphaError(f"{c['platform']} requires a decoded image. Upload one and confirm its rights.")
         # Provider-specific choices are frozen into the exact approved manifest and idempotency key.
-        options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text)
+        options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text, now=self.clock())
+        from .mastodon_polls import binding as poll_binding
+        native_poll = poll_binding(v, p.get('publishOptions'), media)
         immediate_youtube = c['platform'] == 'YouTube' and options.get('publicationMode') == 'now'
-        if immediate_youtube:
+        native_mastodon = c['platform'] == 'Mastodon' and bool((options or {}).get('scheduled_at'))
+        if immediate_youtube or native_mastodon:
             from datetime import datetime, timezone
             approved_at = int(self.clock() // 60 * 60 + 60)
             timing = resolve_time(datetime.fromtimestamp(approved_at, timezone.utc).strftime('%Y-%m-%dT%H:%M'), 'UTC', 0, self.clock())
             timing['mode'] = 'now'
+            if native_mastodon:
+                timing['nativeProvider'] = 'Mastodon'
+                timing['nativePublicationAt'] = options['scheduled_at']
         else:
             timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
         if c["platform"] == "YouTube":
@@ -513,12 +529,19 @@ class Phase2Store(Store):
         evidence = c.get("evidenceSource", "synthetic")
         selection = ensure_content_state(s)["selection"]
         manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": s["speaker"]["activeRevision"], "styleRevision": learning.revision(s), "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
+        if p.get('threadParts'):
+            from .mastodon_threads import parts
+            manifest['payload']['threadParts'] = copy.deepcopy(p['threadParts'])
+            parts({**manifest, 'publishOptions': options})
+            manifest['payloadDigest'] = digest({'payload': manifest['payload'], 'media': media})
         manifest["briefRevision"] = s["brief"]["revision"]
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["voiceSourceDigest"] = self.voice_source_digest(s, v)
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
         if options is not None:
             manifest["publishOptions"] = options
+        if native_poll is not None:
+            manifest['mastodonNativePoll'] = native_poll
         if c['platform'] == 'YouTube' and options.get('thumbnailAssetId'):
             image = find(data['assets'], options['thumbnailAssetId'])
             if image.get('deleted') or image.get('processing') != 'decoded' or not str(image.get('mime', '')).startswith('image/') or p.get('rightsConfirmed') is not True:
@@ -606,13 +629,18 @@ class Phase2Store(Store):
                     or m.get("providerAccountId") != c.get("providerAccountId", c["account"])
                     or m["capability"]["scopes"] != c["scopes"]):
                 return False
+            from .mastodon_polls import binding as poll_binding
+            if poll_binding(v, m.get('publishOptions'), m.get('media', [])) != m.get('mastodonNativePoll'):
+                return False
             if m.get("trendLineage") or v.get("trendLineage") or m.get("scoutLineage"):
                 from .growth.trends.opportunities import manifest_current
                 if not manifest_current(s, v, m, self.clock()):
                     return False
             if m.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, m["trendLineage"]):
                 return False
-            media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"] + m.get('youtubeAssets', []))
+            media_ok = all((m['platform'] == 'Mastodon' and a.get('rightsConfirmed') is True) if a.get('normalizedLibrary') else
+                           not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"]
+                           for a in m["media"] + m.get('youtubeAssets', []))
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}
             # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
             # next draft and leaves approved text alone (design decision A1).

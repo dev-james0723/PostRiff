@@ -38,6 +38,7 @@
     "test:discord:p4:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/discord-p4-validation-cloud.sh",
     "e2e:discord:p0:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/discord-browser-cloud.sh --with-node-checks",
     "ci:discord:p0:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/discord-ci-cloud.sh",
+    "test:mastodon:connect:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/mastodon-connect-cloud.sh",
     "ci:pinterest:trial:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-pinterest-trial-validation.sh",
     "e2e:pinterest:preview:jcb": "bash ../scripts/cloud-pinterest-preview-browser.sh",
     "test:pinterest:contracts:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash -c \"cd .. && PYTHONPATH=src:tests python -m unittest -v test_hosted_wave3_connectors test_pinterest_trial_readiness test_pinterest_trial_evidence\"",
@@ -45,7 +46,11 @@
     "test:pinterest:agent:jcb": "bash ../scripts/cloud-python-bootstrap.sh python ../tests/pinterest_agent_registration.py",
     "test:pinterest:postgres:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-pinterest-postgres.sh",
     "ci:discord:engagement:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/discord-engagement-cloud.sh",
-    "ci:discord:integrated:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/discord-integrated-validation-cloud.sh"
+    "ci:discord:integrated:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/discord-integrated-validation-cloud.sh",
+    "ci:mastodon:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-validation.sh",
+    "test:mastodon-automation:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-automation.sh",
+    "ci:mastodon-management-after134:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-management-after134.sh",
+    "e2e:mastodon:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-validation.sh frontend"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

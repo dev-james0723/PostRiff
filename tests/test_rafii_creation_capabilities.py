@@ -280,7 +280,8 @@ class WriterRouteTest(FlagIsolation):
         for row in proj.rows:
             for fmt in row["formats"]:
                 native = cc.native_draft({"platform": row["platform"], "language": "en", "format": fmt["id"], "text": "Copy."}, proj)
-                gate_refuses = fmt["id"] != cc.DEFAULT_FORMATS.get(row["platform"])
+                # store.py also admits the explicitly bound Mastodon poll; every other non-default format is refused.
+                gate_refuses = fmt["id"] != cc.DEFAULT_FORMATS.get(row["platform"]) and fmt["id"] != "mastodon.poll"
                 self.assertEqual(native["readiness"]["publish"], "export_only" if gate_refuses else "not_checked", fmt["id"])
                 self.assertEqual(native["readiness"]["publishNote"], cc.EXPORT_ONLY_NOTE if gate_refuses else cc.PUBLISH_NOTE)
         story = cc.native_draft({"platform": "Instagram", "language": "en", "format": "instagram.story", "text": "Copy."}, proj)

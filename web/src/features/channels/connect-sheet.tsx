@@ -23,6 +23,7 @@ import { defaultConnectCapability } from '@/lib/channels/onboarding';
 import { discordCopy, type DiscordCopy } from '@/lib/channels/discord-copy';
 import { DiscordModeChoices, type DiscordPurpose } from './discord-mode-choices';
 import { discordDiscoveryState, discordPrivateLinkActions } from '@/lib/channels/discord-personal-account';
+import { mastodonReconnectServer } from '@/lib/channels/mastodon-connect';
 import { rememberExpectedReconnect } from '@/lib/channels/connect-expect';
 import { CONNECT_CAPABILITIES, type ConnectCapability } from '@/lib/channels/state';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -180,9 +181,10 @@ export function ConnectSheet({
     setPending(null);
     setError(null);
     setBusy(false);
-    setInputValue('');
+    setInputValue(initial?.id === 'mastodon' ? mastodonReconnectServer(request?.reconnect?.account) : '');
     setNotSeenYet(false);
-  }, [open, workspaceId, providerSignature, request?.providerId, request?.capability, request?.discordIdentityId, request?.discordPurpose]);
+    return () => { discordRequestGeneration.current += 1; };
+  }, [open, workspaceId, providerSignature, request?.providerId, request?.capability, request?.reconnect?.account, request?.discordIdentityId, request?.discordPurpose]);
 
   function choosePlatform(id: string) {
     if (busy) return;
@@ -191,7 +193,7 @@ export function ConnectSheet({
     setDiscordIdentity(''); setDiscordGuild(''); setDiscordGuilds([]); setDiscoverGuilds(false); setDiscordPurpose('identity');
     const next = providers.find((p) => p.id === id);
     setProviderId(id);
-    setCapability(defaultCapability(next, capability));
+    setCapability(defaultCapability(next, id === 'mastodon' ? undefined : capability));
     setError(null);
     setInputValue('');
   }
@@ -202,7 +204,7 @@ export function ConnectSheet({
     setBusy(true);
     setError(null);
     try {
-      const input: Record<string, unknown> = { ...(provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : {}), ...(reconnect ? { connectionId: reconnect.channelId } : {}) };
+      const input: Record<string, unknown> = { ...(provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : {}), ...((provider.id === 'discord' || provider.id === 'mastodon') && reconnect ? { connectionId: reconnect.channelId } : {}) };
       if (provider.discordConnectionsV2) {
         Object.assign(input, { discordPurpose, discoverGuilds, identityConnectionId: discordIdentity, guildId: discordGuild });
         if (discordPurpose === 'identity') {
@@ -305,9 +307,11 @@ export function ConnectSheet({
   const discordNeedsSelection = provider?.discordConnectionsV2 && discordPurpose === 'installation' && (!discordIdentity || !discordGuild || !discordIdentities.some(x => x.id === discordIdentity && x.status === 'linked'));
   const needsInput = Boolean(provider?.startInput) && inputValue.trim().length === 0;
   const title = reconnect ? `Reconnect ${reconnect.account}` : 'Connect account';
-  // Reconnect keeps its one real gotcha visible: signing in as someone else adds a new account.
+  // Mastodon binds the return to this connection; other providers may add a different account.
   const description = reconnect
-    ? `Sign in as ${reconnect.account}${provider ? ` on ${provider.platform}` : ''}. Another account would be added separately.`
+    ? providerId === 'mastodon'
+      ? `Sign in as ${reconnect.account} on Mastodon. A different account cannot replace this connection.`
+      : `Sign in as ${reconnect.account}${provider ? ` on ${provider.platform}` : ''}. Another account would be added separately.`
     : 'Choose a platform and what Rafii may do.';
 
   return (
@@ -448,12 +452,18 @@ export function ConnectSheet({
                     id='connect-start-input'
                     value={inputValue}
                     onChange={(event) => setInputValue(event.target.value)}
-                    placeholder={provider.startInput.placeholder ?? undefined}
+                    placeholder={providerId === 'mastodon' ? 'your-server.example or @name@your-server.example' : provider.startInput.placeholder ?? undefined}
+                    aria-describedby={providerId === 'mastodon' ? 'mastodon-server-help' : undefined}
+                    inputMode={providerId === 'mastodon' ? 'url' : 'text'}
+                    disabled={busy}
                     autoComplete='off'
                     autoCapitalize='none'
                     spellCheck={false}
                     maxLength={253}
                   />
+                  {providerId === 'mastodon' && (
+                    <p id='mastodon-server-help' className='text-muted-foreground text-xs leading-relaxed'>Your Mastodon server hosts your account. Enter its domain, HTTPS URL or @name@server. You will approve access on that server. Each connected account keeps its own permissions.</p>
+                  )}
                 </div>
               )}
 
@@ -535,7 +545,12 @@ export function ConnectSheet({
                 {offered.length === 0 ? (
                   <StateMessage kind='unsupported' layout='inline' title={`Nothing to connect on ${provider?.platform ?? 'this platform'} yet.`} />
                 ) : (
-                  <RadioGroup value={capability} onValueChange={(value) => setCapability(value as ConnectCapability)} aria-labelledby='connect-capability-heading'>
+                  <RadioGroup value={capability} onValueChange={(value) => {
+                    discordRequestGeneration.current += 1;
+                    setBusy(false);
+                    setError(null);
+                    setCapability(value as ConnectCapability);
+                  }} aria-labelledby='connect-capability-heading'>
                     {CONNECT_CAPABILITY_OPTIONS.filter((option) => offered.includes(option.key)).map((option) => (
                       <RadioGroupItem
                         key={option.key}
@@ -550,7 +565,7 @@ export function ConnectSheet({
                 )}
                 {provider && (provider.executionPaused || !provider.productionReviewed) && (
                   <p className='text-muted-foreground text-xs leading-relaxed'>
-                    {provider.executionPaused ? `${provider.platform} is paused.` : 'Publishing awaits platform review. Test accounts can still connect.'}
+                    {provider.executionPaused ? `${provider.platform} is paused.` : providerId === 'mastodon' ? 'Connecting your account does not enable publishing. Publishing is available only when Rafii reports it ready.' : 'Publishing awaits platform review. Test accounts can still connect.'}
                   </p>
                 )}
               </section>

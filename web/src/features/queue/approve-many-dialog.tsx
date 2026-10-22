@@ -1,4 +1,5 @@
 'use client';
+import { MastodonPollDetails } from './mastodon-poll-details';
 import { YouTubeManifestDetails } from '@/features/youtube/manifest-details';
 
 import { toast } from 'sonner';
@@ -86,6 +87,7 @@ export function ApproveManyDialog({ open, onOpenChange, reviews, jobs, revision,
             return (
               <li key={review.id} className='flex flex-col gap-0.5 rounded-[var(--rafii-radius-micro)] px-3 py-2'>
                 <YouTubeManifestDetails manifest={manifest} />
+                <MastodonPollDetails manifest={manifest} />
                 <span className='flex min-w-0 items-center gap-2'>
                   <ChannelIcon platform={manifest.platform} name={manifest.platform} size='xs' />
                   <span className='truncate'>

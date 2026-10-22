@@ -11,12 +11,47 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
+import urllib.error
 import urllib.request
 
 VERSION = '26.2.6'
 BUNDLE_REVISION = VERSION + '-elf-closure-2'
 DYNAMIC_PROVIDERS = ('libseccomp.so.2','libsoftokn3.so','libfreebl3.so','libfreeblpriv3.so','libnssckbi.so')
 SHA256 = '9833c61bfbec0905c6da54f82ef56123818661c9fec99706d9afece3ad7e9988'
+
+
+def download_locked_archive(archive):
+    """Official service, then its published OSU mirror; identical pinned bytes.
+
+    A geo-selected mirror can have unreachable IPv6 on a cloud runner. Retrying
+    a different official mirror must never change the version/checksum.
+    """
+    name = f'LibreOffice_{VERSION}_Linux_x86-64_rpm.tar.gz'
+    sources = (f'https://download.documentfoundation.org/libreoffice/stable/{VERSION}/rpm/x86_64/{name}',
+               f'https://ftp.osuosl.org/pub/tdf/libreoffice/stable/{VERSION}/rpm/x86_64/{name}')
+    for index, url in enumerate(sources):
+        try:
+            deadline = time.monotonic() + 180
+            with urllib.request.urlopen(url, timeout=30) as source, archive.open('wb') as target:
+                total = 0
+                while True:
+                    if time.monotonic() >= deadline: raise TimeoutError('Archive download deadline')
+                    chunk = source.read(1024 * 1024)
+                    if not chunk: break
+                    total += len(chunk)
+                    if total > 300 * 1024 * 1024: raise OSError('Archive download size limit')
+                    target.write(chunk)
+        except (urllib.error.URLError, OSError, TimeoutError):
+            archive.unlink(missing_ok=True)
+            if index == len(sources) - 1: raise
+            print('Official archive mirror unavailable; trying the published checksum-locked alternate.', flush=True)
+            continue
+        with archive.open('rb') as source:
+            if hashlib.file_digest(source, 'sha256').hexdigest() != SHA256:
+                archive.unlink(missing_ok=True)
+                raise SystemExit('Official LibreOffice archive checksum mismatch.')
+        return
 
 def main():
     if os.uname().sysname != 'Linux' or not shutil.which('dnf'):
@@ -29,9 +64,7 @@ def main():
         work = Path(work)
         name = f'LibreOffice_{VERSION}_Linux_x86-64_rpm.tar.gz'
         archive = work / name
-        urllib.request.urlretrieve(f'https://download.documentfoundation.org/libreoffice/stable/{VERSION}/rpm/x86_64/{name}', archive)
-        if hashlib.file_digest(archive.open('rb'), 'sha256').hexdigest() != SHA256:
-            raise SystemExit('Official LibreOffice archive checksum mismatch.')
+        download_locked_archive(archive)
         with tarfile.open(archive) as tar:
             tar.extractall(work / 'rpms', filter='data')
         rpms = sorted(str(p) for p in (work / 'rpms').rglob('*.rpm'))

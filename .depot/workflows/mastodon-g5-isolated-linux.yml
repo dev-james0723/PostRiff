@@ -1,0 +1,99 @@
+# HISTORICAL G7 FORENSIC WORKFLOW; not current Connect/after134 release acceptance.
+# Existing entry scripts fail closed without explicit forensic-only opt-in; no execution authorized.
+# Manual-only two-job Depot Linux acceptance, each submitted separately with --job.
+# Never register on default branch, never automatically retry, no real Mastodon/Production calls.
+name: HISTORICAL Rafii Mastodon G5 isolated Linux synthetic qualification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capacity:
+    runs-on: depot-ubuntu-24.04-4
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      DO_NOT_TRACK: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+      POSTRIFF_RESEARCH: "0"
+      POSTRIFF_OAUTH_MASTODON_DISABLED: "true"
+      OPENAI_API_KEY: ""
+      POSTRIFF_DATABASE_URL: ""
+      NEXT_PUBLIC_SUPABASE_URL: ""
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ""
+      G5_SYNTHETIC_ONLY: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          submodules: false
+      - name: Repair orphan Gitlinks in throwaway runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          git rm --cached -f -- vendor/xiaohongshu-mcp-v2.5.0-login-fix vendor/xiaohongshu-mcp-v2.5.0-rednote-candidate
+          git submodule foreach --quiet true
+          git config --local --unset-all http.https://github.com/.extraheader || true
+      - name: Validate exact local RC and isolated gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f docs/mastodon-production-20261017/G4-DEPOT-PREFLIGHT-20261017.md
+          for f in 131_mastodon_management 132_mastodon_native_metrics 133_mastodon_connection_health; do
+            test -f "tests/fixtures/mastodon_legacy_g7_20261017/$f.sql"
+          done
+          test "$G5_SYNTHETIC_ONLY" = 1
+          echo "LINUX=YES; G5_SOURCE=ISOLATED_LOCAL_PATCH; PROVIDER_EGRESS=MOCKED"
+      - name: Run disposable PostgreSQL real 1000-user/32-worker synthetic capacity
+        shell: bash
+        run: bash scripts/mastodon-g5-capacity.sh
+  browser:
+    runs-on: depot-ubuntu-24.04-4
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      DO_NOT_TRACK: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_SENTRY_DISABLED: "true"
+      NEXT_PUBLIC_SUPABASE_URL: ""
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ""
+      POSTRIFF_RESEARCH: "0"
+      POSTRIFF_OAUTH_MASTODON_DISABLED: "true"
+      OPENAI_API_KEY: ""
+      POSTRIFF_DATABASE_URL: ""
+      G5_SYNTHETIC_ONLY: "1"
+      POSTRIFF_API_ORIGIN: "http://127.0.0.1:4348"
+      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:4448"
+      POSTRIFF_DEV_SSR: "1"
+      OPENUI_TELEMETRY_DISABLED: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          submodules: false
+      - name: Repair orphan Gitlinks in throwaway runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          git rm --cached -f -- vendor/xiaohongshu-mcp-v2.5.0-login-fix vendor/xiaohongshu-mcp-v2.5.0-rednote-candidate
+          git submodule foreach --quiet true
+          git config --local --unset-all http.https://github.com/.extraheader || true
+      - name: Source guard and synthetic only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f scripts/mastodon-g5-browser.sh
+          test "$G5_SYNTHETIC_ONLY" = 1
+          test "$(uname -s)" = Linux
+          test -z "$OPENAI_API_KEY"
+          test -z "$POSTRIFF_DATABASE_URL"
+          test -z "$NEXT_PUBLIC_SUPABASE_URL"
+          echo "LINUX=YES; PROVIDER_CREDENTIALS=ABSENT; SYNTHETIC_FIXTURE=REQUIRED"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - name: Run genuine Linux Chromium and WebKit synthetic browser E2E
+        shell: bash
+        run: bash scripts/mastodon-g5-browser.sh

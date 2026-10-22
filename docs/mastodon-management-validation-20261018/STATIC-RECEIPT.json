@@ -1,0 +1,32 @@
+{
+  "state": "PASS STATIC ONLY",
+  "checks": {
+    "exact_fixture_hash:PROPOSAL-METADATA.json": true,
+    "exact_fixture_hash:20261018160404_mastodon_management_after_connect_134.sql": true,
+    "exact_fixture_hash:SHARED-INDEXES-CONCURRENT-PROPOSAL.sql": true,
+    "exact_fixture_hash:134_mastodon_connect_applications.sql": true,
+    "current134_matches_frozenConnect": true,
+    "AST:tests/mastodon_after134_fixture.py": true,
+    "AST:tests/phase2/postgres_mastodon_management.py": true,
+    "no_old131_133_replay:tests/phase2/postgres_mastodon_management.py": true,
+    "AST:tests/phase2/postgres_mastodon_automation.py": true,
+    "no_old131_133_replay:tests/phase2/postgres_mastodon_automation.py": true,
+    "full_payload_executed_without_preflight_replacement": true,
+    "cloud_and_disposable_guard_before_first_connection": true,
+    "focused_runner_not_generic_allpending": true,
+    "two_existing_targeted_sql_suites": true,
+    "fixtures_not_under_docs_exclusion": true,
+    "exact_future_payload": true,
+    "only_existing_harness_paths_modified": true
+  },
+  "management_test_methods": 32,
+  "new_methods": [
+    "test_management_tables_reject_foreign_workspace_connection_pairs",
+    "test_service_role_crud_on_action_health_and_encrypted_cache",
+    "test_shared_metric_reads_preserve_all_current_providers_and_reject_unknown",
+    "test_optional_quotes_use_actual_native_field_and_persist_missing_as_null"
+  ],
+  "runtime_postgres_tests": "NOT RUN",
+  "cloud_job": "NOT SUBMITTED",
+  "source_base": "057062fb18490fac94443409c59b86a115bd5298"
+}

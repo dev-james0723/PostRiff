@@ -431,6 +431,11 @@ class UniversalLibrary:
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)
             a = self._row(cur,w,i,True)
+            from .store import IN_FLIGHT
+            state = self.service.ideas._state(row)
+            if any(job.get('state') in IN_FLIGHT and any(media.get('normalizedLibrary') and media.get('id') == i
+                    for media in job.get('manifest', {}).get('media', [])) for job in state.get('phase2', {}).get('jobs', [])):
+                raise AlphaError('Reconcile this audio file’s in-flight publishing jobs before deleting it.', 409)
             cur.execute("UPDATE public.pr_library_assets SET processing_status='deleting',lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(w,i))
             self._retract_source(cur,row,w,p,a)
         s.delete(w,'file',a['object_name'])

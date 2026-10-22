@@ -595,6 +595,26 @@
   "tool.library_metadata_apply": {
    "en": "Apply reviewed Library details",
    "zh-Hant": "套用已審閱的資料庫詳細資料"
+  },
+  "tool.mastodon_account_context": {
+   "en": "Read your Mastodon account permissions",
+   "zh-Hant": "讀取 Mastodon 帳戶權限"
+  },
+  "tool.mastodon_public_context": {
+   "en": "Read public Mastodon mentions and trends",
+   "zh-Hant": "讀取 Mastodon 公開提及和趨勢"
+  },
+  "tool.mastodon_thread_context": {
+   "en": "Read a public Mastodon thread",
+   "zh-Hant": "讀取 Mastodon 公開討論串"
+  },
+  "tool.mastodon_analytics_summary": {
+   "en": "Analyze public Mastodon engagement",
+   "zh-Hant": "分析 Mastodon 公開互動數據"
+  },
+  "tool.mastodon_action_prepare": {
+   "en": "Prepare a Mastodon action for your review",
+   "zh-Hant": "準備 Mastodon 操作供你審核"
   }
  },
  "providers": {

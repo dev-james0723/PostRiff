@@ -471,6 +471,7 @@ function ChannelsPage() {
                       {visible.map((channel, index) => (
                         <motion.div
                           key={channel.id}
+                          className='min-w-0'
                           layout={!reduced}
                           initial={reduced ? { opacity: 1 } : { opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}

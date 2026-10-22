@@ -1,0 +1,1787 @@
+{
+  "schema": "rafii.mastodon.candidate.validation.v1",
+  "execution": "candidate; known two-account actions authorized; real A-E awaiting secure staging; cross-instance gate blocked separately; NOT MERGED; NOT DEPLOYED",
+  "allMissionRequirementsMet": false,
+  "ci": {
+    "sourceFingerprint": "cf2dfb55ff434b525d20f658025dc7d3a34f4351f551242779ac1764dc347f90",
+    "patchSha256": "fdafa4611494797844d26bc938a264cc04be3e349746e69ff16699577d8e892f",
+    "patchBytes": 557830,
+    "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+    "transportMode": "remote_patch",
+    "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+    "runId": "5kwfw329zp",
+    "task": "ci",
+    "exitCode": 0,
+    "elapsedSeconds": 161.139,
+    "provider": "Depot/JCB",
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T103905398078Z-ci.json",
+    "scope": "Full candidate before Time Back rollback repair; affected contracts and actual PostgreSQL repair validated by targetedWorkerValidation. Small paragraph whitespace change validated by one lightweight local unit; final commit broad CI remains required."
+  },
+  "checks": {
+    "pythonContracts": {
+      "passed": 493,
+      "runId": "5kwfw329zp"
+    },
+    "sqlActionIsolation": {
+      "passed": 24,
+      "runId": "5kwfw329zp",
+      "postgresVersion": 16
+    },
+    "migrationReplayUpgradeRestore": "PASS; disposable database only",
+    "webContracts": {
+      "passed": 35
+    },
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "productionBuild": "PASS",
+    "browser": {
+      "status": "PASS",
+      "realMastodonAcceptance": false,
+      "productionAcceptance": false,
+      "checks": [
+        {
+          "width": 1440,
+          "checks": [
+            "two synthetic instance-qualified OAuth accounts",
+            "bounded native analytics excludes private content",
+            "foreground live window private excerpt not persisted to workspace",
+            "exact action preview and receipt",
+            "Agent preview link hydration",
+            "4.6.1 descriptions, advertised limits, explicit language clear, metadata and website attribution exact approval",
+            "no runtime errors or page overflow"
+          ]
+        },
+        {
+          "width": 390,
+          "checks": [
+            "two synthetic instance-qualified OAuth accounts",
+            "bounded native analytics excludes private content",
+            "foreground live window private excerpt not persisted to workspace",
+            "exact action preview and receipt",
+            "Agent preview link hydration",
+            "4.6.1 descriptions, advertised limits, explicit language clear, metadata and website attribution exact approval",
+            "no runtime errors or page overflow"
+          ]
+        },
+        {
+          "width": 320,
+          "checks": [
+            "two synthetic instance-qualified OAuth accounts",
+            "bounded native analytics excludes private content",
+            "foreground live window private excerpt not persisted to workspace",
+            "exact action preview and receipt",
+            "Agent preview link hydration",
+            "4.6.1 descriptions, advertised limits, explicit language clear, metadata and website attribution exact approval",
+            "no runtime errors or page overflow"
+          ]
+        }
+      ],
+      "queueChecks": [
+        {
+          "width": 1440,
+          "checks": [
+            "exact UI thread approval and three verified saved IDs",
+            "two decoded immutable images with separate alt text",
+            "validated Library WAV through immutable custody and media upload",
+            "native accepted pending then unique media-bound publication without resubmission",
+            "actual shared Queue worker and SQL",
+            "responsive final receipt and no runtime error"
+          ],
+          "execution": "synthetic provider; explicitly advanced fixture clock",
+          "realMastodonAcceptance": false
+        },
+        {
+          "width": 390,
+          "checks": [
+            "exact UI thread approval and three verified saved IDs",
+            "two decoded immutable images with separate alt text",
+            "validated Library WAV through immutable custody and media upload",
+            "native accepted pending then unique media-bound publication without resubmission",
+            "actual shared Queue worker and SQL",
+            "responsive final receipt and no runtime error"
+          ],
+          "execution": "synthetic provider; explicitly advanced fixture clock",
+          "realMastodonAcceptance": false
+        },
+        {
+          "width": 320,
+          "checks": [
+            "exact UI thread approval and three verified saved IDs",
+            "two decoded immutable images with separate alt text",
+            "validated Library WAV through immutable custody and media upload",
+            "native accepted pending then unique media-bound publication without resubmission",
+            "actual shared Queue worker and SQL",
+            "responsive final receipt and no runtime error"
+          ],
+          "execution": "synthetic provider; explicitly advanced fixture clock",
+          "realMastodonAcceptance": false
+        }
+      ],
+      "scope": "Actual Channels/Profile/Queue, 1440/390/320; all external identity/provider calls are synthetic."
+    },
+    "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only",
+    "threadContracts": "PASS: exact rendered mention URL/acct identities with remote domains, aware approved poll expiry, committed child intents and no unknown-write resends; single/native paths use the same matcher.",
+    "nativeScheduleSynchronization": "PASS: exact approved time, preserved manifest, canceled schedule and old-worker fencing in disposable SQL",
+    "foregroundStreaming": "PASS: bounded SSE, current tenant/credential recheck; private excerpt absent from workspace persistence",
+    "simulatedConcurrentConnectedUsers": {
+      "simulatedConnectedUsers": 1000,
+      "concurrentPendingRequestsPeak": 1000,
+      "pendingSqlOperationsPeak": 32,
+      "actualSqlConnectionsPeak": 31,
+      "completedRequests": 1000,
+      "admitted": 400,
+      "deferred": 600,
+      "requestP95Ms": 740.687,
+      "requestMaxMs": 759.366,
+      "queue": {
+        "seededJobs": 2000,
+        "fencedClaims": 40,
+        "distinctFairTenants": 40,
+        "claimP95Ms": 7.837
+      },
+      "execution": "cloud-synthetic-connected-users-and-disposable-sql",
+      "providerCalls": 0,
+      "realAccountAcceptance": false,
+      "productionHttpLoadAcceptance": false,
+      "seedSeconds": 0.095,
+      "elapsedSeconds": 1.208,
+      "sqlConcurrencyBound": 32,
+      "evidenceRunId": "blvhrhvvwn"
+    },
+    "connectionHealth": "PASS: exact credential fencing, bounded due lease/jitter/backoff, migrated/suspended/revoked identity guards; absolute request deadline includes bounded DNS admission.",
+    "optionalVerifiedHook": "PASS: actual PostgreSQL failed insights callback rolls back to savepoint; conclusive receipt survives and independent Time Back credit is restored exactly once; repeated completion/maintenance does not duplicate it.",
+    "nativeQueueReview": "PASS: exact canonical native time frozen into Queue approval using service clock; no provider effect before approval.",
+    "automationSqlWorker": {
+      "status": "PASS",
+      "realMastodonAcceptance": false,
+      "syntheticWrites": 4,
+      "paidModelCalls": 0,
+      "evidence": "evidence/CLOUD-SYNTHETIC-automation.json",
+      "writesByInstance": {
+        "mastodon.social": 2,
+        "mastodon.online": 2
+      },
+      "runId": "phxgfwj25s"
+    },
+    "phoneAccessibility": {
+      "status": "PASS",
+      "headRevision": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "checkRunId": 114445381337,
+      "scope": "Unchanged GitHub Scenes/Phone Mode axe; revoke/delete button uses existing foreground text utility."
+    },
+    "publicAgentContext": "PASS: actual Agents SDK scripted model gets exact selected instance public mentions; private/direct/unknown/CW/sensitive omitted before model. Explicit request matchers registered for permission enforcement. Serialized excerpt budget fits the SDK envelope; no external actions.",
+    "responseAuthorizationFence": "PASS: actual SQL private notification response is rejected after revocation; current membership, exact credential/identity and scopes are checked after network reads."
+  },
+  "capacity": {
+    "simulatedConnectedUsers": 1000,
+    "concurrentPendingRequestsPeak": 1000,
+    "pendingSqlOperationsPeak": 32,
+    "actualSqlConnectionsPeak": 31,
+    "completedRequests": 1000,
+    "admitted": 400,
+    "deferred": 600,
+    "requestP95Ms": 749.815,
+    "requestMaxMs": 773.928,
+    "queue": {
+      "seededJobs": 2000,
+      "fencedClaims": 40,
+      "distinctFairTenants": 40,
+      "claimP95Ms": 8.201
+    },
+    "execution": "cloud-synthetic-connected-users-and-disposable-sql",
+    "providerCalls": 0,
+    "realAccountAcceptance": false,
+    "productionHttpLoadAcceptance": false,
+    "seedSeconds": 0.096,
+    "elapsedSeconds": 1.233,
+    "sqlConcurrencyBound": 32
+  },
+  "securityReview": "candidate source review; security-review.md; release review incomplete",
+  "liveAcceptance": {
+    "A": "NOT_RUN",
+    "B": "NOT_RUN",
+    "C": "NOT_RUN",
+    "D": "NOT_RUN",
+    "E": "NOT_RUN",
+    "actualPostUrls": [],
+    "ownerAccounts": [
+      "@jamesaucreates@mastodon.social",
+      "@jamesau0723@mastodon.social"
+    ],
+    "scopedActionsAuthorized": true,
+    "crossInstance": {
+      "status": "BLOCKED_NO_VERIFIED_SECOND_INSTANCE_ACCOUNT",
+      "mailboxSearches": {
+        "connectedMailboxes": 2,
+        "queries": [
+          "in:anywhere {from:mastodon from:mstdn subject:mastodon subject:mstdn}",
+          "in:anywhere {mastodon mstdn}"
+        ],
+        "matchingMessages": 0,
+        "paginationComplete": true,
+        "coverageLimit": "Only two connected mailboxes; absence does not prove no independent-server account exists."
+      },
+      "sameInstanceAcceptanceBlockedByCrossInstance": false
+    },
+    "sameInstance": {
+      "A": "NOT_RUN_PENDING_SECURE_STAGING",
+      "B": "NOT_RUN_PENDING_SECURE_STAGING",
+      "C": "NOT_RUN_PENDING_SECURE_STAGING",
+      "D": "NOT_RUN_PENDING_SECURE_STAGING",
+      "E": "NOT_RUN_PENDING_SECURE_STAGING"
+    },
+    "deletionReceipts": []
+  },
+  "production": {
+    "migration113Applied": false,
+    "publicExecutionGatesChanged": false,
+    "merged": false,
+    "deployedToRafiiIo": false,
+    "migration114Applied": false,
+    "migration115Applied": false,
+    "executionByThisMission": "NONE",
+    "liveReleaseSha": "UNKNOWN",
+    "smokeTests": "NOT_RUN",
+    "backupReadiness": "BLOCKED: production dashboard Last backup No backups; separately stored backup UNKNOWN",
+    "rollbackReadiness": "Release procedures documented; real production backup/restoration and feature-disable rehearsal NOT_RUN",
+    "currentBaseline": {
+      "domain": "https://rafii.io",
+      "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+      "domainVerified": true,
+      "deploymentId": "dpl_6NGweKP5ytbqeiRrow8ALq5yTJSv",
+      "deploymentReadyState": "READY",
+      "platformGitSha": "7e993563be9841f7f98758fb0c8c52f158ea7252",
+      "headRequestUtc": "2026-10-11T19:38:04Z",
+      "headHttpStatus": 200,
+      "headPreloadDeploymentIdMatches": true,
+      "releaseByThisMission": false,
+      "releaseSmoke": "NOT_RUN",
+      "managedDatabaseBackups": "NONE_DISPLAYED",
+      "separateBackup": "UNKNOWN",
+      "restoreRehearsal": "NOT_RUN"
+    },
+    "rollbackRunbook": "release-gates.md; prepared, NOT_REHEARSED"
+  },
+  "externalInputNeeded": [
+    "Existing paid Supabase organization ID/dashboard URL and connection access, within approved USD 1 /24 hours",
+    "Owner OAuth completion for both known mastodon.social accounts when exact staged URLs are ready",
+    "Maximum attributable USD budget for real Brand Brain model call; no purchase or top-up",
+    "For cross-instance gate only: owner authorization of an existing or new account on an independent instance"
+  ],
+  "remainingEngineering": [
+    "Provision secure isolated hosted staging when accessible paid organization and verified quote are available; infrastructure cost cap already approved",
+    "Verify real app registration, redirect URL/state/PKCE/scopes/callback; present exact owner OAuth URLs",
+    "Execute real A\u2013E with actual post IDs/URLs and provider-side cleanup receipts",
+    "Test migrations 113\u2013115 upgrade/restoration/compatibility on isolated hosted staging",
+    "Final repair GitHub CI and independent release review; verify backup and rollback before conditional release",
+    "Conditional production migration/gates/merge/deployment and real smoke, including live SHA"
+  ],
+  "evidence": [
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-browser.json",
+      "sha256": "3d874d4724936f6c36c6aa7f7b196ab95b915cc61515a20a8b23c699a106e236",
+      "bytes": 3373,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-channels-1440.png",
+      "sha256": "c98615bd5fe6fdcf57bcbfc289b7b8220a12011f7a5b11d4a2f56676e9acdb76",
+      "bytes": 386572,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-channels-390.png",
+      "sha256": "51872367ee01c8d99a93caeafad27e00f1cb1dca57d40601ff98341c4aba6895",
+      "bytes": 144517,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-channels-320.png",
+      "sha256": "8426513b1231f000c7f26846bf1f45bf4c735339916958e4a7b83d777f942013",
+      "bytes": 120973,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-profile-1440.png",
+      "sha256": "1ea3981684f628e82c89dc992594eed8f1983028191e7825d4ab2b0d781c5984",
+      "bytes": 248438,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-profile-390.png",
+      "sha256": "5e5a8b9447ae25577216ec7bf917fea1fdf36cb74f3cc7387dc7a5d4dbc16a19",
+      "bytes": 120262,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-profile-320.png",
+      "sha256": "7ac1cc2ae2df4fabae0e572ffaf685a8ba4907de0b92f32a92e40127152c9edb",
+      "bytes": 108443,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-thread-1440.png",
+      "sha256": "95ee9438542ddd28f849c2c07607666e66953e2926ce70b8000b6171270afd97",
+      "bytes": 269155,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-thread-390.png",
+      "sha256": "23c55088497ca4a3601ff176c8695f303b1adfb8317f9fc5e6c659ddc0117a79",
+      "bytes": 109321,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-thread-320.png",
+      "sha256": "6f3da75d0c36bd959c07896101bd420e6a0b7c9158360983542caa84c48460bc",
+      "bytes": 100126,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-images-1440.png",
+      "sha256": "265614a56874c8751af37f5f517c3f05abfee21f16e4aefe14d7b3ff62c91bdc",
+      "bytes": 282761,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-images-390.png",
+      "sha256": "4d82d49787a1fc2e4290530d49a6a78915f4c8da619196b348c89a60baca54a7",
+      "bytes": 104205,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-images-320.png",
+      "sha256": "25ebab00fa61d826958e372591889081f88a72aad0419a3e196081a2df60627d",
+      "bytes": 95500,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-audio-1440.png",
+      "sha256": "574ac560d7d0e0c0a99c101d0f293a0d51f930f226465719b5da0faa89c99994",
+      "bytes": 297769,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-audio-390.png",
+      "sha256": "ca4b5ac689b164988180efc2a28c3fc56cb204af15e1a33309ec7fe7cff9af5e",
+      "bytes": 113254,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-audio-320.png",
+      "sha256": "dfc5cf218f171ade281d9e653ab4a2b6f255c9419d88c1c59ab076db0489d170",
+      "bytes": 103298,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-native-1440.png",
+      "sha256": "8e4029123dee278fcb244b173eb823a3a49f228a01be21252884bcd38d868056",
+      "bytes": 304728,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-native-390.png",
+      "sha256": "50b46ce20cfb6569a57e05edf0ae9fe4b6647abf546d3999ddc560866ac41e59",
+      "bytes": 113518,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-native-320.png",
+      "sha256": "52b243313d57573c65e0cd529dc12a547f8994d55aba985afbfa00fc0243d64a",
+      "bytes": 103970,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "s1wnp53m8z"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-capacity.json",
+      "sha256": "96850c1d1ecbe4fbd2253461d18fc3f42d9900427aa05ce8ae723d5198082abe",
+      "bytes": 635,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "bh9k9crx4c"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-automation.json",
+      "sha256": "2039bda7b8ad83b1b6fe40d6da0302b9f9599c35ae3825da156fc1933b5775af",
+      "bytes": 779,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "phxgfwj25s"
+    },
+    "oauth-discovery-receipt.json",
+    "ci-a827-receipt.json"
+  ],
+  "localChecks": [
+    "Source AST parsing, JSON validation and git diff --check; no local heavy validation",
+    {
+      "check": "Phase9 Python AST, cloud-script bash syntax and source diff whitespace",
+      "status": "PASS",
+      "scope": "Lightweight local only; all Node/TS/build/browser/SQL ran remotely."
+    },
+    {
+      "check": "Changed Python AST/JSON/bash syntax, git diff whitespace; one test_local_mentions_and_paragraphs_preserve_exact_other_text unit (0.15s process)",
+      "status": "PASS",
+      "scope": "One narrowly targeted lightweight Python unit allowed by compute policy; all Node/TS/SQL/browser/full suites remain remote."
+    }
+  ],
+  "priorCloudRuns": [
+    {
+      "provider": "Depot/JCB",
+      "runId": "bj8165qq6b",
+      "exitCode": 0,
+      "elapsedSeconds": 120.841,
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T054714340373Z-ci.json"
+    },
+    {
+      "provider": "Depot/JCB",
+      "runId": "5fcpqc7q5r",
+      "exitCode": 0,
+      "sourceHead": "dbbcd85d64b3c9686b1c77077ddb5043ec75d21f",
+      "sourceFingerprint": "7d5d3fc1cdc4939a58884d06eea97ac8712898e7e86ad2f34816f83dd6bc34ee",
+      "patchSha256": "39ee61b67fe1c50ce7649c76b8c23c12f8cba4d317a6a0c62a069dbc6d58d9f5",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T063630761666Z-ci.json"
+    },
+    {
+      "runId": "rt29pnr3dm",
+      "exitCode": 0,
+      "sourceHead": "c0dd82fb9943dd437558e61125102030a7745a66",
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T070015535957Z-ci.json",
+      "sourceFingerprint": "988d6bf81fb98c4db5b7d03170d5c05571e2ac15b17b51faee1453ea64ec95b7",
+      "patchSha256": "ccd9735242dbe0bb4b5775c1e5abd9643b9c90415d92c08c55c7415a5e20e8a9"
+    },
+    {
+      "sourceHead": "9f4690ab24d8296ecaefad75ff1b39ff8ae9281b",
+      "sourceFingerprint": "bcce579d08dc38c9a0516b2b14be3687f84ec458335a16c360d19d8925282d14",
+      "patchSha256": "55c6c455ba8b4dd35d4c8018cbd7b6f5b50c3327b048e92c49f64351e9b0907e",
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "patchBytes": 481759,
+      "runId": "blvhrhvvwn",
+      "exitCode": 0,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T085648508351Z-ci.json",
+      "elapsedSeconds": 177.438
+    },
+    {
+      "sourceHead": "662d0888f3927d7127fce7e42f08ebbdc6a4d7c8",
+      "sourceFingerprint": "0a7e83a60cf47d3e0a775871d6d62d6d7d9c846ede7c9a528502200f5651e880",
+      "patchSha256": "6c66f183a15d3fcb827e4e78f183cda52b5f20f2e8f86a419855ea11e87687d3",
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "patchBytes": 515708,
+      "runId": "bh9k9crx4c",
+      "exitCode": 0,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T093700221976Z-ci.json",
+      "elapsedSeconds": 177.984
+    },
+    {
+      "sourceHead": "65eb45707d63784c1dafeafdb2d51475dd37aa15",
+      "sourceFingerprint": "714d8d28ff76bdf98744a4190122e9a9338a23abe8d623d18e4d755cb997c31b",
+      "patchSha256": "fbb058ce176cbe901b07cd8cfbc55b7b91a2a5acfcac874bd29d8bb8dd651af3",
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "patchBytes": 536074,
+      "task": "e2e",
+      "scope": "frontend: lint/typecheck/build and actual browser; unchanged backend checks reused below. Phone contrast utility candidate awaits GitHub axe.",
+      "runId": "s1wnp53m8z",
+      "exitCode": 0,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T100353059196Z-e2e.json",
+      "elapsedSeconds": 127.997
+    },
+    {
+      "sourceFingerprint": "8f5902a7597f7585baeddc1bf310842c79cbb8569d0f0f30cb44bc23389234c5",
+      "patchSha256": "853151819b56efed03485f1e5bf2fbf483ccf314039919c9ae07caa25c1e424a",
+      "patchBytes": 540430,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "t9cpc1glf6",
+      "task": "ci",
+      "exitCode": 0,
+      "elapsedSeconds": 164.72,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T102221376989Z-ci.json",
+      "observation": "Phase10 full pass; superseded by phase11"
+    },
+    {
+      "sourceFingerprint": "74cf58dab8ced1a0ad7c31d1112dcc4f536d587930d99fe8c6bac8973ce5c5fe",
+      "patchSha256": "a160e6e0ae80091b4be43b39e8c4f30993309275256e85c8a668f03b4bb511ec",
+      "patchBytes": 550591,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "vk2bht71cc",
+      "task": "ci",
+      "exitCode": 1,
+      "elapsedSeconds": 126.198,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T102941745642Z-ci.json",
+      "observation": "Backend/build pass; browser preflight address-in-use; socket guard repaired"
+    },
+    {
+      "sourceFingerprint": "680a665225803f2bcbc780ed83a4dff2310efdff524ae86d904f3bd94a625115",
+      "patchSha256": "e56957f09b5ab3d984e007beff0c9137ae93e726f5c1bacaca4e3a981e834355",
+      "patchBytes": 556734,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "zcvthfd39b",
+      "task": "ci",
+      "exitCode": 1,
+      "elapsedSeconds": 98.553,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T103202923832Z-ci.json",
+      "observation": "493 Python/24 SQL pass; second synthetic OAuth occurred after advancing fixture time; connection moved before time advance"
+    },
+    {
+      "sourceFingerprint": "8d1308a5f258f7738eb0cfb934f55861a44e9017c8a5fc8c49fbd430cac9e5e4",
+      "patchSha256": "fe4f458f5b61d36bb2ba1f5d712405be9cf15f807344717576bea0ff92abf050",
+      "patchBytes": 572011,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "lrl15sn9s7",
+      "task": "test",
+      "exitCode": 0,
+      "elapsedSeconds": 71.618,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T103357204177Z-test.json",
+      "observation": "Two synthetic independent-instance Automation pass"
+    },
+    {
+      "sourceFingerprint": "0517c600c402c7cc0bc84f72484147cdc3f5420ee58bb295ad76625a49e7d41a",
+      "patchSha256": "c49953d2a915625a56dcebbe4ce103f50b55aa327e232d955585b693adebdaf7",
+      "patchBytes": 557141,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "795zd19wz8",
+      "task": "e2e",
+      "exitCode": 1,
+      "elapsedSeconds": 97.637,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T103551238512Z-e2e.json",
+      "observation": "Google Font/Turbopack build failure; never reached browser; full CI existing cache passed"
+    },
+    {
+      "sourceFingerprint": "e51382f5ba0ca9ac832c06396787a271ac7f017529b9e81bf8e7425d9570f553",
+      "patchSha256": "5eb82dd098ce8a693461471f15548fe9eae673a3e4a590d0629f0d0322d76044",
+      "patchBytes": 575696,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "z20mrl9jwd",
+      "task": "test",
+      "exitCode": 1,
+      "elapsedSeconds": 82.093,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T104110799024Z-test.json",
+      "observation": "Rollback repair passed; new fixture altered later aggregate expectations"
+    },
+    {
+      "sourceFingerprint": "b93cf6f1fe455465b5887dfcd7f90b126325a9dd6ff40a3c577e559faf82e937",
+      "patchSha256": "0bfb6cd450676cf1aceb3c144f6415b45f551b6774bda76cab4111cbb52b3020",
+      "patchBytes": 577380,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "v1jz2jzx13",
+      "task": "test",
+      "exitCode": 1,
+      "elapsedSeconds": 71.215,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T104310062155Z-test.json",
+      "observation": "New fixture still affected later RLS aggregate; moved after original baseline assertions"
+    }
+  ],
+  "githubCI": {
+    "headRevision": "a8273335860e6d386694f8a622a89ef03cfb78cc",
+    "testedMergeSha": "2189aac03eed1c71365c9836c03410f4aabda45b",
+    "status": "PASS",
+    "runId": 38171786322,
+    "artifactId": 11714538986,
+    "artifactName": "local-gates-2189aac03eed1c71365c9836c03410f4aabda45b",
+    "artifactLocalPath": "/private/tmp/rafii-mastodon-a827-ci.zip",
+    "ci-python": {
+      "name": "ci-python",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_*.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:22:20.739572+00:00",
+      "finishedAt": "2026-10-11T20:28:10.818808+00:00",
+      "seconds": 350.08,
+      "exitCode": 0,
+      "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+      "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-python.log"
+    },
+    "ci-postgres": {
+      "name": "ci-postgres",
+      "command": [
+        "python",
+        "scripts/postriff_pg_suite.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:28:11.245920+00:00",
+      "finishedAt": "2026-10-11T20:41:46.440304+00:00",
+      "seconds": 815.19,
+      "exitCode": 0,
+      "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+      "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-postgres.log"
+    },
+    "ci-browser": {
+      "name": "ci-browser",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:47:58.136996+00:00",
+      "finishedAt": "2026-10-11T20:48:50.340167+00:00",
+      "seconds": 52.2,
+      "exitCode": 0,
+      "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+      "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-browser.log"
+    },
+    "ci-performance": {
+      "name": "ci-performance",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py",
+        "--performance"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:48:50.745628+00:00",
+      "finishedAt": "2026-10-11T20:50:02.333308+00:00",
+      "seconds": 71.59,
+      "exitCode": 0,
+      "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+      "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-performance.log"
+    },
+    "ci-history-import": {
+      "name": "ci-history-import",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py",
+        "--history-import"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:50:02.738617+00:00",
+      "finishedAt": "2026-10-11T20:50:24.018605+00:00",
+      "seconds": 21.28,
+      "exitCode": 0,
+      "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+      "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-history-import.log"
+    },
+    "pythonSummary": [
+      "Ran 5126 tests in 340.776s",
+      "OK (skipped=378)"
+    ],
+    "postgresSummary": {
+      "executed": 131,
+      "passed": 131,
+      "failed": 0
+    },
+    "scope": "All applicable protected checks PASS on this PR merge snapshot; synthetic provider tests do not prove real A-E. Later OAuth source repair requires new final CI.",
+    "checks": [
+      {
+        "conclusion": "SKIPPED",
+        "context": null,
+        "name": "dependency-lock",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "founder",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "growth-studio",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "native-learning-browser",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "scenes",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "local-gates",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "library",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SKIPPED",
+        "context": null,
+        "name": "generate-assets",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "document-runtime",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SKIPPED",
+        "context": null,
+        "name": "dependency-lock",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "agent-ui",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "agent-ui-browser",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "Vercel Preview Comments",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": null,
+        "context": "Vercel \u2013 postriff-phase2-private",
+        "name": null,
+        "state": "SUCCESS",
+        "status": null
+      },
+      {
+        "conclusion": null,
+        "context": "Vercel \u2013 rafii-consumer-staging",
+        "name": null,
+        "state": "SUCCESS",
+        "status": null
+      }
+    ]
+  },
+  "browserArtifact": {
+    "provider": "Depot CI",
+    "runId": "5kwfw329zp",
+    "artifactId": "01a12a8b-3ecf-7a99-adfb-9ae816c743cc",
+    "name": "rafii-mastodon-synthetic-browser",
+    "zipBytes": 3136741,
+    "files": 20,
+    "manifest": "evidence/CLOUD-SYNTHETIC-manifest.json",
+    "sha256Verified": true
+  },
+  "incompleteEvidenceRuns": [
+    {
+      "runId": "txxsvh7tmk",
+      "exitCode": 0,
+      "reason": "terminal Queue logs and browser artifacts absent; superseded by retained blvhrhvvwn artifact"
+    },
+    {
+      "runId": "vcd1n5pwck",
+      "exitCode": 0,
+      "reason": "terminal Queue logs and browser artifacts absent; superseded by retained blvhrhvvwn artifact"
+    }
+  ],
+  "priorGithubCI": [
+    {
+      "observedAt": "2026-10-11T08:26:00Z",
+      "headRevision": "9f4690ab24d8296ecaefad75ff1b39ff8ae9281b",
+      "checks": [
+        {
+          "name": "Vercel Preview Comments",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422461323
+        },
+        {
+          "name": "local-gates",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422110056
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114422060703
+        },
+        {
+          "name": "generate-assets",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114422060558
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114422060538
+        },
+        {
+          "name": "agent-ui-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059968
+        },
+        {
+          "name": "native-learning-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059861
+        },
+        {
+          "name": "agent-ui",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059859
+        },
+        {
+          "name": "growth-studio",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059825
+        },
+        {
+          "name": "scenes",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059781
+        },
+        {
+          "name": "document-runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059749
+        },
+        {
+          "name": "library",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059581
+        },
+        {
+          "name": "founder",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059562
+        }
+      ],
+      "statuses": [
+        {
+          "context": "Vercel",
+          "state": "success"
+        }
+      ],
+      "scope": "GitHub CI and Vercel Preview; no production deployment"
+    },
+    {
+      "observedAt": "2026-10-11T09:17:00Z",
+      "headRevision": "662d0888f3927d7127fce7e42f08ebbdc6a4d7c8",
+      "checks": [
+        {
+          "name": "Vercel Preview Comments",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114433049524
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114432607475
+        },
+        {
+          "name": "generate-assets",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114432607388
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114432607093
+        },
+        {
+          "name": "native-learning-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606780
+        },
+        {
+          "name": "scenes",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606736
+        },
+        {
+          "name": "founder",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606732
+        },
+        {
+          "name": "document-runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606705
+        },
+        {
+          "name": "growth-studio",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606648
+        },
+        {
+          "name": "agent-ui-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606602
+        },
+        {
+          "name": "local-gates",
+          "status": "completed",
+          "conclusion": "failure",
+          "id": 114432606584
+        },
+        {
+          "name": "agent-ui",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606488
+        },
+        {
+          "name": "library",
+          "status": "completed",
+          "conclusion": "failure",
+          "id": 114432606339
+        }
+      ],
+      "statuses": [
+        {
+          "context": "Vercel",
+          "state": "success"
+        }
+      ],
+      "scope": "GitHub CI on phase7 head: local-gates and library failed; exact fixes included in phase8 candidate, new commit CI pending. Vercel Preview only."
+    },
+    {
+      "observedAt": "2026-10-11T10:06:00Z",
+      "headRevision": "65eb45707d63784c1dafeafdb2d51475dd37aa15",
+      "checks": [
+        {
+          "name": "Vercel Preview Comments",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114440219824
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114439838963
+        },
+        {
+          "name": "generate-assets",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114439838937
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114439838622
+        },
+        {
+          "name": "founder",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439838450
+        },
+        {
+          "name": "agent-ui-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439838264
+        },
+        {
+          "name": "local-gates",
+          "status": "in_progress",
+          "conclusion": null,
+          "id": 114439838160
+        },
+        {
+          "name": "document-runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439838130
+        },
+        {
+          "name": "agent-ui",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439838028
+        },
+        {
+          "name": "library",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439837938
+        },
+        {
+          "name": "growth-studio",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439837853
+        },
+        {
+          "name": "native-learning-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439837810
+        },
+        {
+          "name": "scenes",
+          "status": "completed",
+          "conclusion": "failure",
+          "id": 114439837707
+        }
+      ],
+      "statuses": [
+        {
+          "context": "Vercel",
+          "state": "success"
+        }
+      ],
+      "scope": "Phase8 GitHub CI: library regression fixed; scenes fails phone revoke button contrast, with scoped foreground-text repair in phase9 candidate. local-gates pending. Vercel Preview only."
+    },
+    {
+      "observedAt": "2026-10-11T10:40:00Z",
+      "headRevision": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "localGates": {
+        "checkRunId": 114445381385,
+        "conclusion": "failure",
+        "python": "PASS",
+        "postgres": "FAIL: Time Back credit rolled back with failing optional insights hook; repaired and targeted SQL passes above"
+      },
+      "scenes": "PASS",
+      "otherChecks": "PASS; exact final commit checks pending after push",
+      "scope": "Prior pushed commit only; final source has not yet been pushed."
+    },
+    {
+      "observedAt": "2026-10-11T19:04:47.608984+00:00",
+      "headRevision": "7842f874f9100a98eaef98f68c2839a9368b27e3",
+      "status": "PASS",
+      "checks": [
+        {
+          "name": "dependency-lock",
+          "conclusion": "SKIPPED",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204736/job/114451629726"
+        },
+        {
+          "name": "founder",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204688/job/114451628766"
+        },
+        {
+          "name": "growth-studio",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204790/job/114451629157"
+        },
+        {
+          "name": "native-learning-browser",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204722/job/114451628960"
+        },
+        {
+          "name": "scenes",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204741/job/114451629070"
+        },
+        {
+          "name": "local-gates",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204721/job/114451629043"
+        },
+        {
+          "name": "library",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204734/job/114451629423"
+        },
+        {
+          "name": "generate-assets",
+          "conclusion": "SKIPPED",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204736/job/114451629594"
+        },
+        {
+          "name": "document-runtime",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204734/job/114451629255"
+        },
+        {
+          "name": "dependency-lock",
+          "conclusion": "SKIPPED",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204734/job/114451629930"
+        },
+        {
+          "name": "agent-ui",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204736/job/114451628873"
+        },
+        {
+          "name": "agent-ui-browser",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204736/job/114451629031"
+        },
+        {
+          "context": "Vercel",
+          "state": "SUCCESS",
+          "targetUrl": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/871gFsFdiDUj4xj8efG6x5uoGFDH"
+        },
+        {
+          "name": "Vercel Preview Comments",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://vercel.com/github"
+        }
+      ],
+      "scope": "All applicable checks passed on prior candidate 7842f874. Repair source is a later revision; its final pushed-head checks remain pending."
+    },
+    {
+      "observedAt": "2026-10-11T19:43:16.024087+00:00",
+      "headRevision": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+      "testedMergeSha": "e437a376a80a5345c7db63cf2bfc6e33fe3bd75d",
+      "status": "FAIL",
+      "runId": 38167373961,
+      "checks": [
+        {
+          "link": "https://vercel.com/github",
+          "name": "Vercel Preview Comments",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373926/job/114552689386",
+          "name": "founder",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552631775",
+          "name": "agent-ui-browser",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632021",
+          "name": "agent-ui",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552627734",
+          "name": "library",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373996/job/114552627535",
+          "name": "scenes",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373961/job/114552627433",
+          "name": "local-gates",
+          "state": "FAILURE"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552627566",
+          "name": "document-runtime",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373974/job/114552627494",
+          "name": "native-learning-browser",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373989/job/114552627302",
+          "name": "growth-studio",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632917",
+          "name": "dependency-lock",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632292",
+          "name": "generate-assets",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552628699",
+          "name": "dependency-lock",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/9ZTKqN3E5G18TSL5yUjEvxKCj6yw",
+          "name": "Vercel \u2013 postriff-phase2-private",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/8UbghE1vBToijMBhc8WJipuqHsWG",
+          "name": "Vercel \u2013 rafii-consumer-staging",
+          "state": "SUCCESS"
+        }
+      ],
+      "scope": "Full Python PASS; all Mastodon SQL and disposable migration/restore PASS; YouTube revocation synchronization fixture FAIL. Targeted repair pending; final candidate CI required."
+    },
+    {
+      "headRevision": "a5678d0aeb140c7625d8937420f1065756ab878b",
+      "testedMergeSha": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "status": "PASS",
+      "runId": 38169821209,
+      "artifactId": 11714128969,
+      "artifactName": "local-gates-087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "artifactLocalPath": "/private/tmp/rafii-mastodon-a567-ci.zip",
+      "checks": [
+        {
+          "link": "https://vercel.com/github",
+          "name": "Vercel Preview Comments",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890591",
+          "name": "library",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890379",
+          "name": "document-runtime",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821155/job/114559890195",
+          "name": "native-learning-browser",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821157/job/114559890088",
+          "name": "scenes",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821209/job/114559890202",
+          "name": "local-gates",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890388",
+          "name": "agent-ui",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821211/job/114559890331",
+          "name": "growth-studio",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890196",
+          "name": "agent-ui-browser",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821149/job/114559889904",
+          "name": "founder",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891407",
+          "name": "generate-assets",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559891190",
+          "name": "dependency-lock",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891223",
+          "name": "dependency-lock",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/CgdSoW2vWvzJSJ7KFL96KmPafo1c",
+          "name": "Vercel \u2013 postriff-phase2-private",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/ECuyPLmvnzfeZcVUSS6qWwwK1p5u",
+          "name": "Vercel \u2013 rafii-consumer-staging",
+          "state": "SUCCESS"
+        }
+      ],
+      "ci-python": {
+        "name": "ci-python",
+        "command": [
+          "python",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests",
+          "-p",
+          "test_*.py"
+        ],
+        "cwd": "/home/runner/work/PostRiff/PostRiff",
+        "startedAt": "2026-10-11T19:53:57.113252+00:00",
+        "finishedAt": "2026-10-11T19:58:36.235991+00:00",
+        "seconds": 279.12,
+        "exitCode": 0,
+        "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+        "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+        "sourceUnchanged": true,
+        "status": "PASS",
+        "log": "docs/consumer-ready/evidence/ci-python.log"
+      },
+      "pythonSummary": [
+        "Ran 5126 tests in 270.920s",
+        "OK (skipped=378)"
+      ],
+      "ci-postgres": {
+        "name": "ci-postgres",
+        "command": [
+          "python",
+          "scripts/postriff_pg_suite.py"
+        ],
+        "cwd": "/home/runner/work/PostRiff/PostRiff",
+        "startedAt": "2026-10-11T19:58:36.540689+00:00",
+        "finishedAt": "2026-10-11T20:10:05.800108+00:00",
+        "seconds": 689.26,
+        "exitCode": 0,
+        "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+        "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+        "sourceUnchanged": true,
+        "status": "PASS",
+        "log": "docs/consumer-ready/evidence/ci-postgres.log"
+      },
+      "postgresSummary": {
+        "executed": 130,
+        "passed": 130,
+        "failed": 0
+      },
+      "ci-browser": {
+        "name": "ci-browser",
+        "command": [
+          "python",
+          "scripts/consumer_ready_browser.py"
+        ],
+        "cwd": "/home/runner/work/PostRiff/PostRiff",
+        "startedAt": "2026-10-11T20:14:43.481224+00:00",
+        "finishedAt": "2026-10-11T20:15:26.240746+00:00",
+        "seconds": 42.76,
+        "exitCode": 0,
+        "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+        "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+        "sourceUnchanged": true,
+        "status": "PASS",
+        "log": "docs/consumer-ready/evidence/ci-browser.log"
+      },
+      "ci-performance": {
+        "name": "ci-performance",
+        "command": [
+          "python",
+          "scripts/consumer_ready_browser.py",
+          "--performance"
+        ],
+        "cwd": "/home/runner/work/PostRiff/PostRiff",
+        "startedAt": "2026-10-11T20:15:26.531224+00:00",
+        "finishedAt": "2026-10-11T20:16:32.113430+00:00",
+        "seconds": 65.58,
+        "exitCode": 0,
+        "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+        "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+        "sourceUnchanged": true,
+        "status": "PASS",
+        "log": "docs/consumer-ready/evidence/ci-performance.log"
+      },
+      "ci-history-import": {
+        "name": "ci-history-import",
+        "command": [
+          "python",
+          "scripts/consumer_ready_browser.py",
+          "--history-import"
+        ],
+        "cwd": "/home/runner/work/PostRiff/PostRiff",
+        "startedAt": "2026-10-11T20:16:32.406327+00:00",
+        "finishedAt": "2026-10-11T20:16:50.078441+00:00",
+        "seconds": 17.67,
+        "exitCode": 0,
+        "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+        "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+        "sourceUnchanged": true,
+        "status": "PASS",
+        "log": "docs/consumer-ready/evidence/ci-history-import.log"
+      },
+      "scope": "All applicable protected checks PASS on PR merge snapshot. External provider responses in CI are synthetic; no real A-E or production release."
+    }
+  ],
+  "priorBackendValidation": {
+    "runId": "b6kfs31dn5",
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T094956180705Z-ci.json",
+    "runExitCode": 1,
+    "stageResults": {
+      "pythonContracts": 485,
+      "mastodonSql": 23,
+      "automationSqlWorker": "PASS",
+      "LibraryAndMigrations": "PASS",
+      "webContracts": 35
+    },
+    "whyRunFailed": "Frontend browser assumed account display order; fixed to exact instance-qualified selectors. Backend files unchanged since these passed stages."
+  },
+  "targetedWorkerValidation": {
+    "sourceFingerprint": "17fe6f23adf7965d2f02e9d0ae9e860161c037f5557ebe8ea415d6f10fbb065a",
+    "patchSha256": "5070b7d888505683e5adb1a550975acf7fa27ccc84e0db5bf5dd82a1d99460ad",
+    "patchBytes": 575589,
+    "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+    "transportMode": "remote_patch",
+    "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+    "runId": "phxgfwj25s",
+    "task": "test",
+    "exitCode": 0,
+    "elapsedSeconds": 73.003,
+    "provider": "Depot/JCB",
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T104515800660Z-test.json",
+    "checks": [
+      "169 Python contracts",
+      "24 Mastodon SQL tests",
+      "actual Time Back SQL/RLS/aggregate/failed optional hook regression",
+      "two-instance Automation/Brand Brain/Queue/SQL with revoke A while B remains functional"
+    ]
+  },
+  "repairSourceRevision": "27ff4437221d9e96269bdae8fbaa268bc42fef41",
+  "securityRepairValidation": {
+    "status": "PASS",
+    "receipt": "security-repair-receipt.json",
+    "pythonContracts": 211,
+    "postgresMastodonManagement": 27,
+    "pythonRunId": "1n8ck8fxq6",
+    "postgresRunId": "hplrp9v3sn",
+    "providerResponses": "synthetic",
+    "scope": "Dirty JCB snapshots above candidate sourceHead, exact fingerprints retained. Python source unchanged after its successful check; SQL fixture cleanup changed and was rerun. Final GitHub CI required."
+  },
+  "independentRepairReview": {
+    "status": "SOURCE_PASS_SCOPED",
+    "reviewer": "mastodon_security_review independent read-only agent",
+    "committedSourceRevision": "27ff4437221d9e96269bdae8fbaa268bc42fef41",
+    "priorFindings": [
+      "P1 stale cached credential at worker write admission",
+      "P2 split credential/channel disconnect and late callback consent race"
+    ],
+    "remainingLimits": [
+      "Gate depends on healthy retained database transaction through HTTP; staging pool/timeout verification pending",
+      "Pause/cancel/reconnect/health mutations use per-intent checks; already admitted effects can finish",
+      "Previously accepted native schedules require explicit provider cancellation"
+    ],
+    "releaseReview": "INCOMPLETE; no GitHub approval; real A\u2013E remains required",
+    "laterCandidateSourceIdentical": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+    "sourceTreeAtBothRevisions": "15427cc9e4a021d5ecb36998f5a8eeacde03891a"
+  },
+  "instancePreflight": [
+    {
+      "origin": "https://mastodon.social",
+      "observedAt": "2026-10-11T18:47:06.251953+00:00",
+      "status": "PUBLIC_API_OBSERVED",
+      "domain": "mastodon.social",
+      "version": "4.8.0-nightly.2026-10-06",
+      "title": "Mastodon",
+      "registrations": {
+        "enabled": true,
+        "approval_required": false,
+        "reason_required": false,
+        "message": null,
+        "min_age": 16,
+        "url": null
+      },
+      "operatorAccount": {
+        "acct": "Mastodon",
+        "url": "https://mastodon.social/@Mastodon"
+      },
+      "ownerAccountAuthorized": true,
+      "independentHostingVerified": true,
+      "independenceEvidence": {
+        "source": "https://mastodon.social/about",
+        "method": "native Chrome accessibility inspection",
+        "operator": "Mastodon GmbH",
+        "basis": "Different publicly identified server operators, separate origins and running versions. Physical infrastructure and cloud vendors are not attested.",
+        "recordedAt": "2026-10-11T19:02:17.210765+00:00"
+      },
+      "browserOwnerSignIn": "Both known accounts observed signed in on 2026-10-11; Rafii identity/scopes NOT_RUN",
+      "signupUrl": "https://mastodon.social/auth/sign_up",
+      "signInUrl": "https://mastodon.social/auth/sign_in",
+      "authorizedHandles": [
+        "@jamesaucreates@mastodon.social",
+        "@jamesau0723@mastodon.social"
+      ]
+    },
+    {
+      "origin": "https://mstdn.social",
+      "observedAt": "2026-10-11T18:47:06.251953+00:00",
+      "status": "PUBLIC_API_OBSERVED",
+      "domain": "mstdn.social",
+      "version": "4.7.2",
+      "title": "Mastodon \ud83d\udc18",
+      "registrations": {
+        "enabled": true,
+        "approval_required": true,
+        "reason_required": true,
+        "message": null,
+        "min_age": 18,
+        "url": null
+      },
+      "operatorAccount": {
+        "acct": "stux",
+        "url": "https://mstdn.social/@stux"
+      },
+      "ownerAccountAuthorized": false,
+      "independentHostingVerified": true,
+      "independenceEvidence": {
+        "source": "https://mstdn.social/about",
+        "method": "native Chrome accessibility inspection",
+        "operator": "stux / Stuxhost",
+        "basis": "Different publicly identified server operators, separate origins and running versions. Physical infrastructure and cloud vendors are not attested.",
+        "recordedAt": "2026-10-11T19:02:17.211001+00:00"
+      },
+      "browserOwnerSignIn": "NOT_SIGNED_IN in inspected Chrome window; Create account and Login visible",
+      "signupUrl": "https://mstdn.social/auth/sign_up",
+      "signInUrl": "https://mstdn.social/auth/sign_in"
+    }
+  ],
+  "staging": {
+    "status": "BLOCKED_PAID_ORGANIZATION_TARGET_OR_ACCESS",
+    "actionPreview": "staging-action-preview.json",
+    "vercelProject": "rafii-consumer-staging",
+    "existingStagingDatabase": "oxacvkhpfgytkepxcaqh",
+    "existingDatabaseIsIsolatedForThisMission": false,
+    "reason": "Recent x_request_admission migration shows shared staging is active for another release. No migrations/restoration or credentials changed there.",
+    "dedicatedDatabase": "NOT_CREATED",
+    "ownerAuthorizationUrls": [],
+    "appRegistration": "NOT_RUN",
+    "callbackConfiguration": "NOT_APPLIED",
+    "connectorCostQuote": "validation_unavailable: supabase get_cost not returned by tools/list",
+    "approvedInfrastructureCapUsd": 1,
+    "approvedLifetimeHours": 24,
+    "ownerChoice": "existing paid organization",
+    "accessibleOrganizations": [
+      {
+        "id": "cqzroammvtzkzfixpmdx",
+        "plan": "free"
+      },
+      {
+        "id": "aotyovtnbdsuattccukm",
+        "plan": "free"
+      },
+      {
+        "id": "gztpsyvraqdcoklwpvdo",
+        "plan": "free"
+      },
+      {
+        "id": "vercel_icfg_tqFVWkEbv1Mq6S4GHeQXLcBK",
+        "plan": "free"
+      }
+    ],
+    "paidOrganizationTarget": "UNKNOWN_OWNER_INPUT_PENDING",
+    "subscriptionUpgradeAuthorized": false
+  },
+  "migrationHostedStaging": {
+    "113": "NOT_RUN; dedicated isolated staging not provisioned",
+    "114": "NOT_RUN; dedicated isolated staging not provisioned",
+    "115": "NOT_RUN; dedicated isolated staging not provisioned"
+  },
+  "costReport": {
+    "acceptancePaidModelCalls": 0,
+    "modelTokenUsage": "UNKNOWN",
+    "attributableModelCostUsd": "UNKNOWN",
+    "attributableInfrastructureCostUsd": "UNKNOWN",
+    "tokenPilotSavings": "UNKNOWN",
+    "comparableBaseline": "UNKNOWN",
+    "note": "No measured provider token counters, attributable billing or comparable baseline available; no invented savings."
+  },
+  "engineeringCandidate": "Commit containing oauth-discovery-receipt.json; resolve via Git history and immutable CI head, not the prior a827 SHA",
+  "preflightReceipt": "release-preflight-receipt.json",
+  "targetedDisconnectFixtureValidation": {
+    "runId": "sxgrpmll3n",
+    "exitCode": 0,
+    "sourceHead": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+    "sourceFingerprint": "c39e4ebb0010a92ae0afd03a55fb2104aa21703bcb408f79311f25c011ed1351",
+    "patchSha256": "6d031e9aa67f6dd1f85ace1d0ff7c2f49c3c6b1e7928cc8d23f311eab7cd042c",
+    "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+    "status": "PASS",
+    "execution": "cloud PostgreSQL 17; disposable DB; synthetic provider; zero provider requests",
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T194802908508Z-test.json",
+    "scope": "YouTube workspace provider-data/disconnect race, privacy retention and tenant-isolation regression",
+    "validatedFiles": {
+      "tests/phase2/postgres_youtube_workspace_provider_data.py": "17648018481a1d47754cf66c1a6ad658080813ef023265129e2e15d2a367b067",
+      "scripts/cloud-mastodon-automation.sh": "f63b0e3031106fad535b32a92883f2f572de04be2300f39f31088f8f7aacc083"
+    },
+    "priorBootstrapFailure": {
+      "runId": "2mfn3b3jct",
+      "exitCode": 1,
+      "sourceHead": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+      "sourceFingerprint": "601cab7fcd8098548d9d4d00ad3f4b69a4aca27d58dfd08fb2badbd5e390059a",
+      "patchSha256": "391aebc1354429fd1836506cd2734934d034ff9f25ece9046da7619689acffb5",
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "testExecution": "NOT_RUN",
+      "reason": "Ubuntu base package repository lacks PostgreSQL 17; fixed by the signed official PostgreSQL repository used in GitHub CI"
+    }
+  },
+  "finalCandidateCI": {
+    "statusAtReceiptWrite": "REQUIRED_AFTER_OAUTH_SOURCE_REPAIR_COMMIT",
+    "priorPassedHead": "a8273335860e6d386694f8a622a89ef03cfb78cc",
+    "priorPassedRunId": 38171786322,
+    "priorPassedMergeSha": "2189aac03eed1c71365c9836c03410f4aabda45b",
+    "scope": "a827 passed all applicable checks and 131 PostgreSQL scripts. The new issuer source change passed targeted dirty-snapshot cloud regression and real public discovery, but final protected CI must run on its committed revision."
+  },
+  "migrationPreflight": "migration-preflight-receipt.json",
+  "independentChecklistReview": {
+    "status": "PASS_SOURCE_ONLY",
+    "reviewedRevision": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "srcTree": "15427cc9e4a021d5ecb36998f5a8eeacde03891a",
+    "reviewer": "mastodon_security_review",
+    "realAcceptance": "NOT_RUN",
+    "hostedPoolAndRollback": "NOT_RUN",
+    "githubApproval": "NOT_RECORDED",
+    "checklist": [
+      "OAuth state/PKCE/scopes/redirect",
+      "encrypted credentials/revocation/instance routing",
+      "exact approvals and duplicates",
+      "media custody and validation",
+      "worker recovery",
+      "private context exclusion",
+      "prepared rollback/disable procedures"
+    ]
+  },
+  "targetedMigrationCompatibility": {
+    "status": "PASS",
+    "provider": "Depot/JCB",
+    "runId": "jb1kxc82qm",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/jb1kxc82qm",
+    "exitCode": 0,
+    "elapsedSeconds": 86.747,
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T200831893993Z-test.json",
+    "sourceHead": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "snapshot": {
+      "sourceFingerprint": "3dc6b2ffc85c61051e498f774123365216c5a8bd8eefbc8cfe89a2ee149b580d",
+      "patchSha256": "c6dbb9459038b5f518c85334c1034584c9ccb568b9107397c3f42ea53597f448",
+      "patchBytes": 600715,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "sourceHead": "a5678d0aeb140c7625d8937420f1065756ab878b",
+      "transportMode": "remote_patch"
+    },
+    "scope": "PG17 disposable: full 85 migrations; populated upgrade boundary113-115; enrollment/workspace preservation; checksum replay/refusal; database dump and separate restore; exact legacy automation assertions with permission state and grants absent.",
+    "realMastodonAcceptance": false,
+    "paidModelCalls": 0,
+    "hostedStaging": "NOT_RUN",
+    "production": "NOT_RUN",
+    "backupBytes": 1230328,
+    "backupSeconds": 0.112,
+    "restoreSeconds": 0.368,
+    "scriptExitCodes": {
+      "postgres_consumer_migrations": 0,
+      "postgres_mastodon_automation_legacy": 0
+    },
+    "sourceFileSha256": {
+      "migrations/postriff/103_feature_enrollments.sql": "b3b8b681bf78100202ec15f0a37e05417d304663d19623e4930a2b02f67cd40c",
+      "scripts/postriff_pg_suite.py": "8984d13f5ff702aece7522e2acd1966cdfd04687b6d38e653a6880f64c6f37e7",
+      "scripts/cloud-mastodon-automation.sh": "3db6b943a90a6c3e9c0cb9fbb2ae18dde094b0b4d533093c2d4e992e55c8c67e",
+      "tests/phase2/postgres_consumer_migrations.py": "e881b09fbb186c51f50bab45c83b23a95a6dd53782dd59b369c563d628185d30",
+      "tests/phase2/postgres_mastodon_automation_legacy.py": "7ec146475bd372ce1abcb891779b31f3a40fc9e4f2b301dbb955422af7664ae8"
+    },
+    "priorAttempt": {
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T200603985207Z-test.json",
+      "status": "VALIDATION_UNAVAILABLE",
+      "remoteTests": "NOT_RUN",
+      "reason": "Temporary JCB workflow did not yet match reviewed task mapping; regenerated only that reversible workflow, then restored defaults byte-for-byte after successful run."
+    },
+    "modelTokens": "UNKNOWN",
+    "attributableCost": "UNKNOWN",
+    "tokenPilotComparableBaseline": "UNKNOWN",
+    "tokenPilotSavings": "UNKNOWN"
+  },
+  "oauthDiscoveryPreflight": "oauth-discovery-receipt.json",
+  "independentOAuthIssuerReview": {
+    "status": "PASS_SOURCE_ONLY",
+    "reviewer": "mastodon_security_review",
+    "baseRevision": "a8273335860e6d386694f8a622a89ef03cfb78cc",
+    "twoFileDiffSha256": "44e3f4903c826c8f7297e6b892550787c460ed1cf6b09bddc0aa3959564d65c2",
+    "scope": "Only exact origin or one root slash accepted as issuer; endpoints, S256 and scopes remain strict. No tests or provider calls by reviewer; registration/grants/actual PKCE remain NOT_RUN."
+  }
+}

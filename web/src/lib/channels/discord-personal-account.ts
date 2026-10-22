@@ -19,7 +19,9 @@ export function discordCanConnect(provider: ProviderView | undefined, canManage:
 export function missingScopePublishingMessage(provider: string): string {
   return provider === 'discord'
     ? 'Discord publishing is unavailable until the required server and channel authorization is verified.'
-    : 'Publishing stays Assisted.';
+    : provider === 'mastodon'
+      ? 'Capabilities requiring those permissions remain unavailable.'
+      : 'Publishing stays Assisted.';
 }
 
 /** Revoking an existing local mapping does not need a live provider grant. */

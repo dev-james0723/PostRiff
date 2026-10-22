@@ -68,3 +68,23 @@ test('the calendar component exposes navigation only and no mutation controls', 
   assert.match(source, /Open Calendar/);
   assert.match(source, /Read-only snapshot/);
 });
+
+test('Mastodon calendar shows native publication time, while worker submission stays separate', () => {
+  const K = load('src/features/calendar/calendar-kinds.ts');
+  const manifest = {platform:'Mastodon',timing:{utc:'2026-10-11T01:00:00Z',nativeProvider:'Mastodon',nativePublicationAt:'2026-10-12T10:00:00Z'}};
+  assert.equal(K.calendarPublicationTime(manifest), '2026-10-12T10:00:00Z');
+  assert.equal(K.calendarPublicationTime({...manifest,platform:'Instagram'}), manifest.timing.utc);
+  assert.equal(K.calendarPublicationTime({...manifest,timing:{...manifest.timing,nativePublicationAt:'invalid'}}), manifest.timing.utc);
+});
+
+
+test('Mastodon verified native amendment changes calendar time without changing manifest', () => {
+  const K = load('src/features/calendar/calendar-kinds.ts');
+  const manifest = {platform:'Mastodon',providerAccountId:'10@mastodon.social',channelId:'one',timing:{utc:'2026-10-11T01:00:00Z',nativeProvider:'Mastodon',nativePublicationAt:'2026-10-12T10:00:00Z'}};
+  const change = {verification:'native_schedule_lookup',accountId:'10@mastodon.social',connectionId:'one',scheduleId:'41',scheduledAt:'2026-10-13T11:00:00Z'};
+  const receipt = {state:'verified',verification:'native_schedule_lookup',reference:'41',scheduledAt:change.scheduledAt};
+  assert.equal(K.calendarPublicationTime(manifest, {nativeScheduleChange:change,nativeScheduleReceipt:receipt}), change.scheduledAt);
+  assert.equal(K.calendarPublicationTime(manifest, {nativeScheduleChange:change,nativeScheduleReceipt:{...receipt,state:'accepted'}}), manifest.timing.nativePublicationAt);
+  assert.equal(K.calendarPublicationTime(manifest, {nativeScheduleChange:{...change,connectionId:'other'},nativeScheduleReceipt:receipt}), manifest.timing.nativePublicationAt);
+  assert.equal(manifest.timing.nativePublicationAt,'2026-10-12T10:00:00Z');
+});

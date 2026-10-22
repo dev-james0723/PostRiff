@@ -48,6 +48,7 @@ class Script:
         self.answers, self.fail = list(answers), fail
         self.statements, self.pending, self.committed, self.marks = [], [], [], {}
         self.rows, self.rowcount = [], 0
+        self.credentials = {}
 
     def __enter__(self):
         return self
@@ -67,6 +68,13 @@ class Script:
     def execute(self, sql, params=None):
         text = " ".join(sql.split())
         self.statements.append((text, params))
+        if text.startswith('INSERT INTO public.pr_encrypted_credentials'):
+            self.credentials[(params[0], params[1])] = params
+        if text.startswith('SELECT provider_account_id,access_ciphertext,key_id,scopes,extract(epoch from access_expires_at)'):
+            stored = self.credentials.get((params[0], params[1]))
+            self.rows = [(stored[3], stored[4], stored[6], stored[7], stored[8])] if stored and stored[2] == 'mastodon' else []
+            self.rowcount = len(self.rows)
+            return
         if self.fail and self.fail[0] in text:
             raise self.fail[1]
         if text.startswith("SAVEPOINT "):
@@ -408,7 +416,8 @@ class OAuthCallSiteTests(unittest.TestCase):
         from postriff_phase2.auth import initial_phase2_state
         script = Script()
         service = self.service(script, initial_phase2_state(WS, USER, "Owner", "studio", NOW))
-        ciphertext, key_id = self.vault.encrypt("verifier")
+        # Mastodon custody is the JSON context begin() stores (verifier plus the instance's registered client).
+        ciphertext, key_id = self.vault.encrypt(json.dumps({"verifier": "verifier", "instance": "mastodon.social", "clientId": "client", "clientSecret": "secret"}))
         script.answers = [("FROM public.pr_oauth_transactions WHERE state_hash", [(TXN, USER, "mastodon", "publish", "https://app.example/cb", ["write"], ciphertext, key_id, NOW + 600, False)])]
         result = service.complete(WS, "token", "mastodon", "s" * 32, "CODE")
         connection = hashlib.sha256(b"mastodon:acct-1").hexdigest()[:32]
@@ -423,7 +432,9 @@ class OAuthCallSiteTests(unittest.TestCase):
         script = Script()
         service = self.service(script, state)
         ciphertext, key_id = self.vault.encrypt("AT")
-        script.answers = [("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials", [("mastodon", ciphertext, key_id)])]
+        script.answers = [("SELECT provider FROM public.pr_encrypted_credentials", [("mastodon",)]),
+                          ('SELECT pg_try_advisory_xact_lock', [(True,)]),
+                          ("SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials", [("mastodon", ciphertext, key_id)])]
         with mock.patch("postriff_phase2.growth.history_import.mark_for_purge", lambda *a: None), \
              mock.patch("postriff_phase2.growth.history_import.purge_after_disconnect", lambda *a: None):
             result = service.disconnect(WS, "token", connection)

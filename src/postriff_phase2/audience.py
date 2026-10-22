@@ -11,7 +11,8 @@ from .permissions import require
 from .providers import GRAPH_VERSION
 
 REPLY_LIMIT = 500
-COMMENT_READ_PROVIDERS = ("threads", "instagram")
+COMMENT_READ_PROVIDERS = ("threads", "instagram", "mastodon")
+MASTODON_REFRESH_POSTS, MASTODON_REFRESH_SECONDS = 5, 120
 
 
 class AudienceService:
@@ -32,11 +33,17 @@ class AudienceService:
 
     # --- ingestion (server-only) ---------------------------------------------------
     def ingest_replies(self, cur, workspace_id, connection_id, provider, provider_post_id, now):
-        if provider not in COMMENT_READ_PROVIDERS or self.transport is None:
+        if provider not in COMMENT_READ_PROVIDERS or (self.transport is None and provider != "mastodon"):
             return {"availability": "not_supported", "reason": "Comments are not readable for this provider in this release."}
         if self._capability(cur, workspace_id, connection_id, "comments_read") != "Direct":
             return {"availability": "unavailable", "reason": "comments_read is not Direct for this connection."}
         grant = self.oauth.token_for_worker(workspace_id, connection_id)
+        if provider == "mastodon":
+            from . import mastodon_inbox
+            ok, items = mastodon_inbox.replies(self.oauth.providers["mastodon"], grant["accessToken"], provider_post_id, grant.get("providerAccountId"))
+            for item in items:
+                cur.execute("INSERT INTO public.pr_audience_threads(workspace_id,connection_id,provider,provider_post_id,provider_comment_id,author_handle,text,created_at_provider) VALUES(%s,%s,%s,%s,%s,%s,%s,%s::timestamptz) ON CONFLICT(workspace_id,provider,provider_comment_id) DO UPDATE SET text=excluded.text,ingested_at=now()", (workspace_id, connection_id, provider, provider_post_id, item["id"], clean(item["author"], 100), clean(item["text"], 4000), item["createdAt"] if isinstance(item["createdAt"], str) else None))
+            return {"availability": "available" if ok else "unavailable", "ingested": len(items)}
         if provider == "threads":
             url = f"https://graph.threads.net/{GRAPH_VERSION}/{quote(provider_post_id)}/replies?" + urlencode({"fields": "id,text,username,timestamp", "access_token": grant["accessToken"]})
         else:
@@ -67,9 +74,28 @@ class AudienceService:
         finally:
             cur.execute("RELEASE SAVEPOINT audience_ingestion")
 
+    def _refresh_mastodon(self, cur, workspace_id, state):
+        """Mastodon replies keep arriving after publication: re-read the newest verified posts, at most every two minutes."""
+        jobs = [j for j in ((state or {}).get("phase2") or {}).get("jobs", [])
+                if isinstance(j, dict) and j.get("state") == "verified" and (j.get("manifest") or {}).get("platform") == "Mastodon" and j.get("providerReference")]
+        if not jobs or "mastodon" not in getattr(self.oauth, "providers", {}):
+            return
+        from .hosted import throttle
+        cur.execute("SAVEPOINT mastodon_refresh")
+        try:
+            throttle(cur, f"mastodon-inbox:{workspace_id}", 1, MASTODON_REFRESH_SECONDS)
+            for job in sorted(jobs, key=lambda j: j.get("approvedAt", 0), reverse=True)[:MASTODON_REFRESH_POSTS]:
+                self.ingest_replies(cur, workspace_id, job["manifest"]["channelId"], "mastodon", job["providerReference"], self.clock())
+        except Exception:
+            # A throttled or failed refresh never blocks reading the Inbox.
+            cur.execute("ROLLBACK TO SAVEPOINT mastodon_refresh")
+        finally:
+            cur.execute("RELEASE SAVEPOINT mastodon_refresh")
+
     # --- customer surface ------------------------------------------------------------
     def threads(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
+            self._refresh_mastodon(cur, workspace_id, row[1])
             cur.execute("SELECT id::text,connection_id,provider,provider_post_id,provider_comment_id,author_handle,text,extract(epoch from ingested_at),tombstoned_at IS NOT NULL,extract(epoch from created_at_provider) FROM public.pr_audience_threads WHERE workspace_id=%s AND (provider<>'youtube' OR ingested_at>now()-interval '30 days') ORDER BY ingested_at DESC LIMIT 200", (workspace_id,))
             items = []
             for r in cur.fetchall():
@@ -119,19 +145,26 @@ class AudienceService:
 
     def reply_preview(self, workspace_id, token, draft_id):
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
-            cur.execute("SELECT d.text,d.status,t.connection_id,t.provider,t.provider_post_id,t.provider_comment_id FROM public.pr_reply_drafts d JOIN public.pr_audience_threads t ON t.id=d.thread_id WHERE d.id::text=%s AND d.workspace_id=%s AND (t.provider<>'youtube' OR t.ingested_at>now()-interval '30 days')", (draft_id, workspace_id))
+            cur.execute("SELECT d.text,d.status,t.connection_id,t.provider,t.provider_post_id,t.provider_comment_id,t.author_handle FROM public.pr_reply_drafts d JOIN public.pr_audience_threads t ON t.id=d.thread_id WHERE d.id::text=%s AND d.workspace_id=%s AND (t.provider<>'youtube' OR t.ingested_at>now()-interval '30 days')", (draft_id, workspace_id))
             r = cur.fetchone()
             if not r:
                 raise AlphaError("Draft unavailable.", 404)
             cur.execute("SELECT provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, r[2]))
             account = cur.fetchone()
-            manifest = {"schema": "postriff.reply-approval.v1", "workspaceId": workspace_id, "draftId": draft_id, "connectionId": r[2], "providerAccountId": account[0] if account else None, "provider": r[3], "threadPostId": r[4], "replyToCommentId": r[5], "text": r[0], "textDigest": digest(r[0])}
+            text = r[0]
+            if r[3] == 'mastodon':
+                from .mastodon_inbox import addressed
+                text = addressed(text, r[6])
+            manifest = {"schema": "postriff.reply-approval.v1", "workspaceId": workspace_id, "draftId": draft_id, "connectionId": r[2], "providerAccountId": account[0] if account else None, "provider": r[3], "threadPostId": r[4], "replyToCommentId": r[5], "text": text, "textDigest": digest(text)}
             if r[3] == 'youtube':
                 cur.execute('SELECT provider_parent_id FROM public.pr_audience_threads WHERE workspace_id=%s AND provider_comment_id=%s AND connection_id=%s', (workspace_id, r[5], r[2]))
                 parent = cur.fetchone()
                 if parent and parent[0]:
                     manifest['replyToCommentId'] = parent[0]
-            return {"manifest": manifest, "digest": digest(manifest), "action": f"Record approval for this reply as {account[0] if account else 'an unconnected account'}", "replyLevel": self._capability(cur, workspace_id, r[2], "reply")}
+            level = self._capability(cur, workspace_id, r[2], "reply")
+            # Mastodon and YouTube replies are sent by approve_reply itself; the other providers only record the approval.
+            sends = bool(self.reply_sender_enabled and level == "Direct" and r[3] in ("mastodon", "youtube"))
+            return {"manifest": manifest, "digest": digest(manifest), "action": f"Record approval for this reply as {account[0] if account else 'an unconnected account'}", "replyLevel": level, "sendsOnApproval": sends}
 
     def approve_reply(self, workspace_id, token, draft_id, manifest_digest, confirmed):
         preview = self.reply_preview(workspace_id, token, draft_id)
@@ -156,6 +189,19 @@ class AudienceService:
             with self.repository.transaction(token, workspace_id) as (cur, _, _):
                 cur.execute('UPDATE public.pr_reply_drafts SET status=%s,provider_reference=%s,events=events||%s::jsonb,updated_at=now() WHERE workspace_id=%s AND id::text=%s', (status, receipt.get('receipt', {}).get('result', {}).get('id'), json.dumps([{'state': status, 'actionId': review['id'], 'at': self.clock()}]), workspace_id, draft_id))
             result.update(status=status, creatorActionId=review['id'], note='Exact YouTube reply submitted; official read-back is recorded separately.')
+        if preview['manifest']['provider'] == 'mastodon' and self.reply_sender_enabled:
+            from . import mastodon_inbox
+            manifest = preview['manifest']
+            try:
+                grant = self.oauth.token_for_worker(workspace_id, manifest['connectionId'])
+                outcome = mastodon_inbox.send(self.oauth.providers['mastodon'], grant['accessToken'], manifest['replyToCommentId'], manifest['text'],
+                                              'inbox-' + draft_id, manifest['providerAccountId'])
+            except AlphaError as error:
+                outcome = {'state': 'uncertain', 'confirmed': f'Send inconclusive: {error}'}
+            with self.repository.transaction(token, workspace_id) as (cur, _, _):
+                cur.execute('UPDATE public.pr_reply_drafts SET status=%s,provider_reference=%s,events=events||%s::jsonb,updated_at=now() WHERE workspace_id=%s AND id::text=%s',
+                            (outcome['state'], outcome.get('reference'), json.dumps([{'state': outcome['state'], 'message': outcome['confirmed'], 'at': self.clock()}]), workspace_id, draft_id))
+            result.update(status=outcome['state'], note=outcome['confirmed'])
         return result
 
     # --- executor (worker path) -----------------------------------------------------

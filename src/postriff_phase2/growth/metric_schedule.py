@@ -31,6 +31,7 @@ NATIVE_ANALYTICS_SCOPES = {
     "pinterest": frozenset({"user_accounts:read", "boards:read", "pins:read"}),
     "threads": frozenset({"threads_basic", "threads_manage_insights"}),
     "instagram": frozenset({"instagram_business_basic", "instagram_business_manage_insights"}),
+    "mastodon": frozenset({"read:accounts", "read:statuses"}),
 }
 OFFSETS = (("t0", 0), ("1h", 3600), ("24h", 86400), ("7d", 7 * 86400))
 LEASE_SECONDS = 120            # token_for_worker plus one insights GET can take 40 s
@@ -273,6 +274,8 @@ class MetricScheduler:
             if not self.workspace_allowed(workspace_id):
                 return 0
             manifest = job.get("manifest") or {}
+            if manifest.get('platform') == 'Mastodon' and (manifest.get('publishOptions') or {}).get('visibility', 'public') not in ('public', 'unlisted'):
+                return 0
             provider = self.provider_for(manifest.get("platform"))
             reference, verification = job.get("providerReference"), job.get("verification") or {}
             if provider is None or not reference or not isinstance(verification.get("at"), (int, float)):
@@ -372,6 +375,8 @@ class MetricScheduler:
             if row['provider'] == 'pinterest':
                 extra = {'provider_adapter': self.oauth._provider_for_access('pinterest', grant['accessToken']),
                          'period_start': row['anchorAt'], 'now': self.clock()}
+            if row['provider'] == 'mastodon':
+                extra = {'mastodon': self.oauth.providers.get('mastodon'), 'account_id': grant.get('providerAccountId')}
             fetched = insights.fetch_post_insights(self.transport, grant["accessToken"], row["provider"], row["postId"], **extra)
         except AlphaError as error:
             status = getattr(error, "status", None)
@@ -389,6 +394,8 @@ class MetricScheduler:
             if status == 200 and analytics["analyticsOutcome"] not in ("success", "no_data"):
                 return {"state": "transient", "failure": "summary_unavailable" if fetched.get("failure") == "summary_unavailable" else "invalid_response",
                         "http": 200, "providerRead": True, "analyticsOutcome": "read_failed"}
+        if fetched.get('privacyExcluded'):
+            return {'state': 'cancelled', 'failure': 'privacy_excluded', 'http': status, 'providerRead': True}
         if status == 200:
             return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True,
                     **analytics, **({"periodStart": fetched["periodStart"]} if "periodStart" in fetched else {})}

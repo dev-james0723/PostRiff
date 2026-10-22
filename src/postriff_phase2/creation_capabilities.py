@@ -48,7 +48,8 @@ _FORMAT_ROW = re.compile(r"^\|\s*`([a-z0-9._-]+)`\s*\|\s*([a-z]+)\s*\|\s*(.+?)\s
 _FIELD = re.compile(r"`([a-z0-9_]+)`")
 # The flag-off default format per original platform: what a request without `format` meant before this projection.
 DEFAULT_FORMATS = {"LinkedIn": "linkedin.post", "Instagram": "instagram.post", "Threads": "threads.post", "X": "x.post",
-                   "Xiaohongshu": "xiaohongshu.note", "Facebook": "facebook.page_post"}
+                   "Xiaohongshu": "xiaohongshu.note", "Facebook": "facebook.page_post",
+                   "Mastodon": "mastodon.status"}
 # Stable error codes for rejected requests (spec §3).
 ERRORS = {
     "unknown_platform": "Choose supported destinations.",
@@ -391,9 +392,9 @@ def native_draft(variant, proj=None):
         "media": {"required": fmt["mediaKind"], "state": media_state, "reason": fmt["media"]["reason"]},
         "constraints": {"verified": False, "limits": row["limits"]},
         # The same rule as the approval gate (`store` refuses `format_not_publishable`): only a platform's default format
-        # has a publisher, so any other format is export-only and the review says so before anyone tries to schedule it.
+        # has a publisher, except the explicitly bound Mastodon poll. All other native formats stay export-only.
         "readiness": {"draft": "ready", "export": "ready", "publish": "not_checked", "publishNote": PUBLISH_NOTE}
-        if fmt_id == DEFAULT_FORMATS.get(platform) else
+        if fmt_id == DEFAULT_FORMATS.get(platform) or (platform == "Mastodon" and fmt_id == "mastodon.poll") else
         {"draft": "ready", "export": "ready", "publish": "export_only", "publishNote": EXPORT_ONLY_NOTE},
     }
 
