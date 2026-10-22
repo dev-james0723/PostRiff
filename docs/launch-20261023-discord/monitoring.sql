@@ -109,10 +109,15 @@ WHERE provider = 'discord'
 GROUP BY 1, 2, 3
 ORDER BY 1 DESC, 2, 3;
 
--- Q9. Servers in use against the cap: the same expression the connect gate uses (distinct servers the bot is in,
--- plus installations started or mid-exchange). Page at 80 percent of POSTRIFF_DISCORD_GUILD_CAP.
+-- Q9. Servers counted against the cap: the same expression the connect gate uses (distinct servers with a bot-install
+-- grant, revoked ones included because a disconnect leaves the shared bot in the server, plus installations started or
+-- mid-exchange). It can UNDERCOUNT Discord's own number (deleted workspaces take their rows with them, and server
+-- admins can add or remove the bot without us): compare with the server count in the Developer Portal and lower
+-- POSTRIFF_DISCORD_GUILD_CAP by the difference. Page at 80 percent of the cap.
 SELECT (SELECT count(DISTINCT provider_account_id) FROM public.pr_encrypted_credentials
-         WHERE provider = 'discord' AND revoked_at IS NULL AND 'bot' = ANY (scopes)) AS servers_joined,
+         WHERE provider = 'discord' AND 'bot' = ANY (scopes)) AS servers_counted,
+       (SELECT count(DISTINCT provider_account_id) FROM public.pr_encrypted_credentials
+         WHERE provider = 'discord' AND revoked_at IS NULL AND 'bot' = ANY (scopes)) AS servers_with_a_live_grant,
        (SELECT count(*) FROM public.pr_oauth_transactions
          WHERE provider = 'discord' AND 'bot' = ANY (scopes)
            AND ((consumed_at IS NULL AND expires_at > now())
