@@ -718,6 +718,16 @@ class HostedApplication:
                     raise AlphaError("Webhook body size invalid.", 413)
                 raw = environ["wsgi.input"].read(length)
                 return self._json(start_response, 200, service.oauth.telegram_webhook(environ.get("HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN", ""), raw))
+            if path == "/api/tiktok/webhook" and method == "POST":
+                # TikTok signs "<t>.<exact body>" with the client secret (TikTok-Signature header). Like the other
+                # provider webhooks it stays outside browser-origin and session checks; the HMAC and replay window
+                # are the authorization.
+                service = self._runtime()
+                length = int(environ.get("CONTENT_LENGTH") or "0")
+                if not 0 < length <= 65536:
+                    raise AlphaError("Webhook body size invalid.", 413)
+                raw = environ["wsgi.input"].read(length)
+                return self._json(start_response, 200, service.oauth.tiktok_webhook(environ.get("HTTP_TIKTOK_SIGNATURE", ""), raw))
             if path == "/api/xiaohongshu/webhook" and method == "POST":
                 # Xiaohongshu signs timestamp + '.' + the exact bytes. The endpoint deliberately stays outside
                 # browser-origin and session checks; its HMAC, replay window and event id are the authorization.

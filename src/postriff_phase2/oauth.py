@@ -1149,6 +1149,100 @@ class OAuthService:
         except Exception:  # provider should retry transient database failures; never echo database details
             return {"code": 3001, "msg": "internal_error"}
 
+    TIKTOK_WEBHOOK_TOLERANCE = 300
+
+    def tiktok_webhook(self, signature_header, raw):
+        """Ingest TikTok's authorization.removed event (developers.tiktok.com/doc/webhooks-events).
+
+        TikTok signs `t=<unix seconds>,s=<hex>` over "<t>.<exact body>" with the app's client_secret. TikTok has
+        already revoked the token when this arrives, so Rafii only wipes its copy and marks the channel
+        disconnected. Events carry no id, so the body digest is the idempotency key. Other events are
+        acknowledged and ignored."""
+        adapter = self.providers.get("tiktok")
+        if adapter is None or not getattr(adapter, "client_secret", None):
+            raise AlphaError("Webhook unavailable.", 404)
+        parts = dict(item.split("=", 1) for item in str(signature_header or "").split(",") if "=" in item)
+        timestamp, supplied = parts.get("t", "").strip(), parts.get("s", "").strip().lower()
+        if not re.fullmatch(r"[0-9]{9,11}", timestamp) or not re.fullmatch(r"[0-9a-f]{64}", supplied):
+            raise AlphaError("Webhook signature invalid.", 401)
+        expected = hmac.new(adapter.client_secret.encode(), timestamp.encode() + b"." + raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, supplied):
+            raise AlphaError("Webhook signature invalid.", 401)
+        if abs(self.clock() - int(timestamp)) > self.TIKTOK_WEBHOOK_TOLERANCE:
+            raise AlphaError("Webhook timestamp outside the replay window.", 401)
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError, UnicodeDecodeError):
+            raise AlphaError("Webhook payload invalid.", 400)
+        if not isinstance(payload, dict) or payload.get("client_key") != adapter.client_id:
+            raise AlphaError("Webhook payload invalid.", 400)
+        event = payload.get("event")
+        if event != "authorization.removed":
+            return {"ok": True, "outcome": "ignored"}
+        open_id = payload.get("user_openid")
+        if not isinstance(open_id, str) or not 1 <= len(open_id) <= 200:
+            raise AlphaError("Webhook payload invalid.", 400)
+        digest = hashlib.sha256(raw).hexdigest()
+        try:
+            return self._tiktok_authorization_removed(open_id, event, digest)
+        except AlphaError:
+            raise
+        except Exception:  # TikTok retries; never echo database details (e.g. migration 044 not applied yet)
+            raise AlphaError("Webhook storage unavailable.", 503)
+
+    def _tiktok_authorization_removed(self, open_id, event, digest):
+        with self.repository.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO public.pr_social_provider_events(provider,event_id,event_type,payload_digest) "
+                    "VALUES('tiktok',%s,%s,%s) ON CONFLICT(provider,event_id) DO NOTHING RETURNING event_id",
+                    (digest, event, digest),
+                )
+                if not cur.fetchone():
+                    return {"ok": True, "outcome": "duplicate"}
+                cur.execute(
+                    "SELECT workspace_id::text,connection_id FROM public.pr_encrypted_credentials "
+                    "WHERE provider='tiktok' AND provider_account_id=%s AND revoked_at IS NULL FOR UPDATE",
+                    (open_id,),
+                )
+                affected = cur.fetchall()
+                for workspace_id, connection_id in affected:
+                    cur.execute(
+                        "UPDATE public.pr_encrypted_credentials SET access_ciphertext='',refresh_ciphertext=NULL,"
+                        "scopes=ARRAY[]::text[],access_expires_at=now(),revoked_at=now(),updated_at=now() "
+                        "WHERE workspace_id=%s AND connection_id=%s",
+                        (workspace_id, connection_id),
+                    )
+                    cur.execute(
+                        "UPDATE public.pr_channel_capabilities SET level='Unsupported',"
+                        "evidence='TikTok reported that this authorization was removed.',updated_at=now() "
+                        "WHERE workspace_id=%s AND connection_id=%s",
+                        (workspace_id, connection_id),
+                    )
+                    cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
+                    row = cur.fetchone()
+                    state = json.loads(row[0]) if row and isinstance(row[0], str) else row[0] if row else None
+                    if isinstance(state, dict):
+                        channel = next((item for item in state.get("phase2", {}).get("channels", [])
+                                        if item.get("id") == connection_id), None)
+                        if channel is not None:
+                            channel.update({"revoked": True, "identityVerified": False,
+                                            "capabilityVerified": False, "expiresAt": self.clock()})
+                            self.commands.engine.invalidate(state)
+                            cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s",
+                                        (json.dumps(state), workspace_id))
+                    from .hosted import audit
+                    audit(cur, workspace_id, None, "channel.revoked_by_provider", connection_id,
+                          {"provider": "tiktok", "eventId": digest[:16]})
+                    from . import product_events
+                    product_events.record(cur, workspace_id, None, "channel.disconnected", connection_id,
+                                          digest[:16], {"provider": "tiktok", "cause": "provider"})
+                cur.execute(
+                    "UPDATE public.pr_social_provider_events SET processed_at=now(),outcome=%s WHERE provider='tiktok' AND event_id=%s",
+                    ("revoked" if affected else "acknowledged", digest),
+                )
+        return {"ok": True, "outcome": "revoked" if affected else "acknowledged"}
+
     # --- Bluesky: public client documents -------------------------------------------------
     def bluesky_document(self, name):
         adapter = self.providers.get("bluesky")

@@ -250,6 +250,54 @@ class XiaohongshuOAuth(unittest.TestCase):
         bad = {**headers, "signature": "0" * 64}
         self.assertEqual(service.xiaohongshu_webhook(bad, raw)["code"], 1001)
 
+    def test_tiktok_authorization_removed_is_signed_idempotent_and_revokes_the_channel(self):
+        from postriff_phase2.wave3_connectors import TikTokProvider
+        now = 1_786_608_000
+        payload = {"client_key": "fixture-key", "event": "authorization.removed", "create_time": now,
+                   "user_openid": "open-1", "content": "{\"reason\": 1}"}
+        raw = json.dumps(payload, separators=(",", ":")).encode()
+        sign = lambda t, body=raw, secret="fixture-secret": f"t={t},s=" + hmac.new(secret.encode(), str(t).encode() + b"." + body, hashlib.sha256).hexdigest()
+        state = {"phase2": {"channels": [{"id": "connection", "revoked": False, "identityVerified": True,
+                                             "capabilityVerified": True, "expiresAt": 1_900_000_000}]}}
+        database = WebhookDatabase(state)
+        commands = SimpleNamespace(engine=SimpleNamespace(invalidate=lambda _state: None))
+        service = OAuthService(WebhookRepository(database), commands, CredentialVault(CredentialVault.generate_key()),
+                               {"tiktok": TikTokProvider("fixture-key", "fixture-secret")}, BASE, clock=lambda: now)
+        self.assertEqual(service.tiktok_webhook(sign(now), raw), {"ok": True, "outcome": "revoked"})
+        self.assertEqual(service.tiktok_webhook(sign(now), raw), {"ok": True, "outcome": "duplicate"})
+        channel = database.state["phase2"]["channels"][0]
+        self.assertTrue(database.revoked and database.capabilities_disabled)
+        self.assertEqual((channel["revoked"], channel["identityVerified"], channel["capabilityVerified"]), (True, False, False))
+        self.assertEqual(database.audit, ["channel.revoked_by_provider"])
+        self.assertEqual(list(database.events.values())[0]["outcome"], "revoked")
+
+        for header in (sign(now, secret="other-secret"), sign(now, body=raw + b" "), sign(now - 301), "t=abc,s=" + "0" * 64, ""):
+            with self.subTest(header=header[:12]):
+                with self.assertRaises(AlphaError) as raised:
+                    service.tiktok_webhook(header, raw)
+                self.assertEqual(raised.exception.status, 401)
+        foreign = json.dumps({**payload, "client_key": "someone-else"}, separators=(",", ":")).encode()
+        with self.assertRaises(AlphaError):
+            service.tiktok_webhook(sign(now, body=foreign), foreign)
+        other = json.dumps({**payload, "event": "video.upload.failed"}, separators=(",", ":")).encode()
+        self.assertEqual(service.tiktok_webhook(sign(now, body=other), other), {"ok": True, "outcome": "ignored"})
+        class Broken:
+            @contextmanager
+            def connection_factory(self):
+                raise RuntimeError("relation pr_social_provider_events does not exist")
+                yield
+        fresh = json.dumps({**payload, "create_time": now + 1}, separators=(",", ":")).encode()
+        broken = OAuthService(Broken(), commands, CredentialVault(CredentialVault.generate_key()),
+                              {"tiktok": TikTokProvider("fixture-key", "fixture-secret")}, BASE, clock=lambda: now)
+        with self.assertRaises(AlphaError) as storage_down:
+            broken.tiktok_webhook(sign(now, body=fresh), fresh)
+        self.assertEqual(storage_down.exception.status, 503)
+        self.assertNotIn("relation", str(storage_down.exception))
+        unavailable = OAuthService(WebhookRepository(database), commands, CredentialVault(CredentialVault.generate_key()), {}, BASE, clock=lambda: now)
+        with self.assertRaises(AlphaError) as missing:
+            unavailable.tiktok_webhook(sign(now), raw)
+        self.assertEqual(missing.exception.status, 404)
+
     def test_invalid_provider_payloads_are_mapped_without_upstream_details(self):
         provider = XiaohongshuProvider("fixture-client", "fixture-credential", transport=Wire([response({"code": 50001, "success": False, "msg": "private detail"})]))
         with self.assertRaisesRegex(AlphaError, "did not complete") as caught:
