@@ -31,6 +31,8 @@ export interface ReplyPreview {
   digest: string;
   action: string;
   replyLevel: string;
+  /** The server posts this reply when it is approved (otherwise approval is only recorded). */
+  sendsOnApproval?: boolean;
 }
 
 /** Approved and later states: a reply was approved and not cancelled or held back. */

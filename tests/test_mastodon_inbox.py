@@ -63,6 +63,26 @@ class Send(unittest.TestCase):
         self.assertEqual(mastodon_inbox.send(provider({'status': 403, 'body': {}}), 'token', '1', self.TEXT, 'k', OWNER)['state'], 'failed')
 
 
+class Preview(unittest.TestCase):
+    def preview(self, provider, level, sender_enabled):
+        from contextlib import contextmanager
+        cur = Mock()
+        cur.fetchone.side_effect = [('Thanks!', 'draft', 'conn', provider, '123', '1', 'alice@social.example'), (OWNER,), (level,)]
+        @contextmanager
+        def transaction(token, workspace):
+            yield cur, None, None
+        service = AudienceService(SimpleNamespace(transaction=transaction), None, lambda: 1, reply_sender_enabled=sender_enabled)
+        return service.reply_preview('ws', 'token', 'draft')
+
+    def test_preview_says_whether_approval_sends_and_includes_the_mention(self):
+        sent = self.preview('mastodon', 'Direct', True)
+        self.assertTrue(sent['sendsOnApproval'])
+        self.assertEqual(sent['manifest']['text'], '@alice@social.example Thanks!')
+        for provider, level, enabled in (('mastodon', 'Direct', False), ('mastodon', 'Unsupported', True), ('threads', 'Direct', True)):
+            with self.subTest(provider=provider, level=level, enabled=enabled):
+                self.assertFalse(self.preview(provider, level, enabled)['sendsOnApproval'])
+
+
 class Ingestion(unittest.TestCase):
     def test_audience_ingests_mastodon_replies_when_comments_read_is_direct(self):
         adapter = provider({'status': 200, 'body': {'ancestors': [], 'descendants': [status(1), status(3, visibility='private')]}})

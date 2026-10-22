@@ -289,6 +289,8 @@ export function ReplyComposer({
             <p className='text-destructive text-xs'>
               Reconnect {accountLabel} on {platform} before approving.
             </p>
+          ) : preview?.replyLevel === 'Direct' && preview.sendsOnApproval ? (
+            <p className='text-muted-foreground text-xs leading-relaxed'>Approving posts this exact reply to {platform} now. A sent reply can&apos;t be recalled from Rafii.</p>
           ) : preview?.replyLevel === 'Direct' ? (
             <p className='text-muted-foreground text-xs leading-relaxed'>Sending isn&apos;t available yet. Approving doesn&apos;t post to {platform}.</p>
           ) : (

@@ -606,7 +606,7 @@ export function createApi(getToken: TokenSource) {
         body
       ),
     replyPreview: (w: string, draftId: string) =>
-      send<{ manifest: Record<string, unknown>; digest: string; action: string; replyLevel: string }>(
+      send<{ manifest: Record<string, unknown>; digest: string; action: string; replyLevel: string; sendsOnApproval?: boolean }>(
         'POST',
         `${ws(w)}/audience/reply-drafts/${encodeURIComponent(draftId)}/reply-preview`
       ),

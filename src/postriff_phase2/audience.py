@@ -161,7 +161,10 @@ class AudienceService:
                 parent = cur.fetchone()
                 if parent and parent[0]:
                     manifest['replyToCommentId'] = parent[0]
-            return {"manifest": manifest, "digest": digest(manifest), "action": f"Record approval for this reply as {account[0] if account else 'an unconnected account'}", "replyLevel": self._capability(cur, workspace_id, r[2], "reply")}
+            level = self._capability(cur, workspace_id, r[2], "reply")
+            # Mastodon and YouTube replies are sent by approve_reply itself; the other providers only record the approval.
+            sends = bool(self.reply_sender_enabled and level == "Direct" and r[3] in ("mastodon", "youtube"))
+            return {"manifest": manifest, "digest": digest(manifest), "action": f"Record approval for this reply as {account[0] if account else 'an unconnected account'}", "replyLevel": level, "sendsOnApproval": sends}
 
     def approve_reply(self, workspace_id, token, draft_id, manifest_digest, confirmed):
         preview = self.reply_preview(workspace_id, token, draft_id)
