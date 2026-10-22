@@ -1,5 +1,7 @@
 # Bluesky patch manifest (A7)
 
+> **Update 2026-10-22 ~06:40Z:** production is now `dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM` = `claude/mastodon-full-prod-candidate` `f6edf90a` (d3366822 + a Mastodon schedule read-back fix). The Bluesky commits were rebased onto `75c7a6be` (current branch head) and passed JCB `h8v537cdh7`. Use `dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM` as the rollback target; older IDs below are history. The Mastodon session builds and promotes production.
+
 Commit `01cf90a3` on branch `claude/rafii-bluesky-launch-20261022`, parent `d3366822` (the live source). 21 files, +1025 / −63.
 
 ## Files

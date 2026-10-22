@@ -1,5 +1,7 @@
 # Human checkpoints for James (H1, H2, H3)
 
+> **Update 2026-10-22 ~06:40Z:** production is now `dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM` = `claude/mastodon-full-prod-candidate` `f6edf90a` (d3366822 + a Mastodon schedule read-back fix). The Bluesky commits were rebased onto `75c7a6be` (current branch head) and passed JCB `h8v537cdh7`. Use `dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM` as the rollback target; older IDs below are history. The Mastodon session builds and promotes production.
+
 Prepared 2026-10-22 ~05:50Z. Each is one message; nothing below has been executed.
 
 ## H1 Baseline connect test on today's production code (about 10 minutes, then one click 20 minutes later)
@@ -18,12 +20,12 @@ I watch read-only with `WATCH.sql` (W1–W3) and runtime logs; no production set
 
 Reply "approve H2" or strike any line:
 
-a. **Build one release candidate** (billable, one Vercel production build of about 2.5 to 4 minutes; no second build for the same SHA). Built by the deploy owner (the Mastodon session) or by me, from a clean checkout of `01cf90a3` = `d3366822` + Bluesky:
+a. **Build one release candidate** (billable, one Vercel production build of about 2.5 to 4 minutes; no second build for the same SHA). Built by the deploy owner (the Mastodon session) or by me, from a clean checkout of the rebased Bluesky head on `75c7a6be`:
    `vercel deploy --prod --skip-domain --scope jamesau0723-6572s-projects` (after confirming the linked project is `postriff-phase2-private`).
 b. **Move the Bluesky client identity to rafii.io** (production env, applies from the build in a):
    `POSTRIFF_BLUESKY_CLIENT_ORIGIN = https://rafii.io` (today it pins the vercel.app origin; 0 real grants exist).
 c. **Promote that same build**: `vercel promote <staged-deployment-id> --scope jamesau0723-6572s-projects`, then I run the connect acceptance (G2) on rafii.io with the test account (you sign in once more).
-d. **Conditional rollback**: if any kill criterion K1–K6 trips, I run `vercel rollback dpl_C57zH6ZPWejerDrysB864XDEw3Qo --scope jamesau0723-6572s-projects` at once and report.
+d. **Conditional rollback**: if any kill criterion K1–K6 trips, I run `vercel rollback dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM --scope jamesau0723-6572s-projects` at once and report.
 e. **Confirm**: T0, the legal approver for `/privacy` and `/terms`, and that launch is connect-only (DEC1).
 
 Evidence pack for H2: CI `td07wtg4xp` exit 0, PR #221, `PATCH-MANIFEST.md`, `LOADTEST.md`, `ROLLBACK.md`, the independent review result.

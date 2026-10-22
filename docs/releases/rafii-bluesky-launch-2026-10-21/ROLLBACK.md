@@ -1,5 +1,7 @@
 # Bluesky launch rollback and kill switch (A8, D6)
 
+> **Update 2026-10-22 ~06:40Z:** production is now `dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM` = `claude/mastodon-full-prod-candidate` `f6edf90a` (d3366822 + a Mastodon schedule read-back fix). The Bluesky commits were rebased onto `75c7a6be` (current branch head) and passed JCB `h8v537cdh7`. Use `dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM` as the rollback target; older IDs below are history. The Mastodon session builds and promotes production.
+
 Recorded 2026-10-22 ~05:45Z.
 
 ## Current production (rollback target)
@@ -18,7 +20,7 @@ Recorded 2026-10-22 ~05:45Z.
 ## Lever 1: roll back (fastest, no build)
 
 ```
-vercel rollback dpl_C57zH6ZPWejerDrysB864XDEw3Qo --scope jamesau0723-6572s-projects
+vercel rollback dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM --scope jamesau0723-6572s-projects
 ```
 Pre-check: `vercel api /v2/deployments/dpl_C57zH6ZPWejerDrysB864XDEw3Qo/aliases?teamId=team_PgXY5VdAYKcsv0RLoDPHscNq` must show the deployment is still READY. Time to take effect: alias swap, seconds.
 

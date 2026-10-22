@@ -1,5 +1,7 @@
 # Bluesky launch receipt
 
+> **Update 2026-10-22 ~06:40Z:** production is now `dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM` = `claude/mastodon-full-prod-candidate` `f6edf90a` (d3366822 + a Mastodon schedule read-back fix). The Bluesky commits were rebased onto `75c7a6be` (current branch head) and passed JCB `h8v537cdh7`. Use `dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM` as the rollback target; older IDs below are history. The Mastodon session builds and promotes production.
+
 Updated 2026-10-22 ~06:10Z by the Bluesky launch agent. No credentials, tokens, account details or environment values are recorded here.
 
 ## Source and production
@@ -17,6 +19,8 @@ Updated 2026-10-22 ~06:10Z by the Bluesky launch agent. No credentials, tokens, 
 | `z7bvzfctkm` | exit 0 | after review fixes: 500 Python tests, both PostgreSQL suites (renewal p95 62.3 ms, burst 300/700), 26 web tests, lint, typecheck |
 
 The `jcb ci` task was temporarily remapped to `ci:bluesky:jcb` for each run and restored; the remap is not committed.
+
+| `h8v537cdh7` | exit 0 | rebased onto `75c7a6be`; full `test_founder_product_events` restored (501 tests), both PostgreSQL suites, web tests, lint, typecheck |
 
 ## Independent review (B6)
 
