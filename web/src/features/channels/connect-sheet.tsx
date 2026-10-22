@@ -20,7 +20,8 @@ import { CONNECT_CAPABILITY_OPTIONS } from '@/lib/channels/capabilities';
 import { historyImportCopy } from '@/lib/channels/history-import-copy';
 import { usePreferences } from '@/lib/preferences';
 import { defaultConnectCapability } from '@/lib/channels/onboarding';
-import { discordCopy, type DiscordCopy } from '@/lib/channels/discord-copy';
+import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordRefusal } from '@/lib/channels/discord-refusal';
 import { DiscordModeChoices, type DiscordPurpose } from './discord-mode-choices';
 import { discordDiscoveryState, discordPrivateLinkActions } from '@/lib/channels/discord-personal-account';
 import { mastodonReconnectServer } from '@/lib/channels/mastodon-connect';
@@ -49,13 +50,6 @@ function offeredCapabilities(provider: ProviderView | undefined): ConnectCapabil
 }
 
 const defaultCapability = defaultConnectCapability;
-
-/** The launch gate and the server cap refuse with stable codes, so the refusal can be shown in the person's language. */
-function discordRefusal(error: ApiError, copy: DiscordCopy): string {
-  if (error.code === 'discord_access_closed') return copy.accessClosed;
-  if (error.code === 'discord_capacity_reached') return copy.capacityReached;
-  return error.message;
-}
 
 /** A platform that can't be connected says so as icon + words (DNA §4.3); a ready one needs no label. */
 function ProviderReadiness({ provider }: { provider: ProviderView }) {

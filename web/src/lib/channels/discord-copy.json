@@ -72,7 +72,10 @@
     "callbackConnected": "Connected {account}",
     "callbackDenied": "Access not granted",
     "accessClosed": "Discord isn't open to new connections for this workspace yet. Connections you already have keep working.",
-    "capacityReached": "Discord has no room for another server right now. Nothing was connected or posted. Try again later."
+    "capacityReached": "Discord has no room for another server right now. Nothing was connected or posted. Try again later.",
+    "rateDelayed": "Discord is busy right now. Nothing was connected or posted. Try again in a minute.",
+    "coordinatorUnavailable": "Connecting to Discord is paused for a moment. Nothing was connected or posted. Try again later.",
+    "scheduleTiming": "Rafii sends this at the scheduled time. When many posts are due in the same minute, Discord posts can arrive several minutes late."
   },
   "zh-Hant": {
     "personalTitle": "個人 Discord 帳戶",
@@ -147,7 +150,10 @@
     "callbackConnected": "已連接 {account}",
     "callbackDenied": "未獲授權",
     "accessClosed": "此工作區暫時未開放新增 Discord 連接。你已有的連接會繼續運作。",
-    "capacityReached": "Discord 目前沒有空位加入新伺服器。沒有連接任何內容，也沒有發佈任何貼文。請稍後再試。"
+    "capacityReached": "Discord 目前沒有空位加入新伺服器。沒有連接任何內容，也沒有發佈任何貼文。請稍後再試。",
+    "rateDelayed": "Discord 目前較繁忙。沒有連接任何內容，也沒有發佈任何貼文。請一分鐘後再試。",
+    "coordinatorUnavailable": "與 Discord 的連接暫時暫停。沒有連接任何內容，也沒有發佈任何貼文。請稍後再試。",
+    "scheduleTiming": "Rafii 會在排程時間發送。若同一分鐘內有大量貼文到期，Discord 貼文可能遲幾分鐘才送出。"
   },
   "zh-Hans": {
     "personalTitle": "个人 Discord 账户",
@@ -222,6 +228,9 @@
     "callbackConnected": "已连接 {account}",
     "callbackDenied": "未获授权",
     "accessClosed": "此工作区暂未开放新增 Discord 连接。你已有的连接会继续运作。",
-    "capacityReached": "Discord 目前没有空位加入新服务器。没有连接任何内容，也没有发布任何帖子。请稍后再试。"
+    "capacityReached": "Discord 目前没有空位加入新服务器。没有连接任何内容，也没有发布任何帖子。请稍后再试。",
+    "rateDelayed": "Discord 目前较繁忙。没有连接任何内容，也没有发布任何帖子。请一分钟后再试。",
+    "coordinatorUnavailable": "与 Discord 的连接暂时暂停。没有连接任何内容，也没有发布任何帖子。请稍后再试。",
+    "scheduleTiming": "Rafii 会在排程时间发送。若同一分钟内有大量帖子到期，Discord 帖子可能迟几分钟才送出。"
   }
 }

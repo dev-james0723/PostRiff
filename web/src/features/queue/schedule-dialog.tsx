@@ -384,6 +384,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             {channel?.platform === 'Discord' && (
               <div className='flex flex-col gap-1.5'>
                 <p className='text-sm' data-discord-sender>{channel.discordConnectionKind === 'webhook' ? discordUiCopy.senderWebhook : discordUiCopy.senderBot}</p>
+                <p className='text-muted-foreground text-xs' data-discord-timing>{discordUiCopy.scheduleTiming}</p>
                 <Label htmlFor='schedule-discord-destination'>Discord server and channel</Label>
                 <NativeSelect id='schedule-discord-destination' className='w-full [&>select]:h-12' value={discordDestinationId} onChange={(event) => setDiscordDestinationId(event.target.value)}>
                   <NativeSelectOption value='' disabled>{discordDestinations.length === 0 ? 'Authorize a channel in Connections first' : 'Choose an authorized destination'}</NativeSelectOption>

@@ -15,6 +15,7 @@ import { takeExpectedReconnect } from '@/lib/channels/connect-expect';
 import { missingScopePublishingMessage } from '@/lib/channels/discord-personal-account';
 import { usePreferences } from '@/lib/preferences';
 import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordRefusal } from '@/lib/channels/discord-refusal';
 import { useAuth } from '@/lib/auth/session';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
@@ -120,7 +121,7 @@ export function ConnectReturn() {
         }
         setResult(value);
       })
-      .catch((err) => { if (!staleDiscord()) setError(err instanceof ApiError ? err.message : callbackCopy.callbackRetry); });
+      .catch((err) => { if (!staleDiscord()) setError(err instanceof ApiError ? (provider === 'discord' ? discordRefusal(err, dc) : err.message) : callbackCopy.callbackRetry); });
   }, [api, client, params, provider, router, state, workspaceId, dc, callbackCopy, discordContext, authStatus, me.isPending]);
 
   const back = (
