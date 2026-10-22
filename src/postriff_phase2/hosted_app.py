@@ -805,7 +805,7 @@ class HostedApplication:
                     preserved_cron = preserve_live_cron(environ, os.environ, expected)
                 service = self._runtime()
                 if telegram_canary:
-                    provider = getattr(getattr(service, 'oauth', None), 'telegram', None)
+                    provider = (getattr(getattr(service, 'oauth', None), 'providers', None) or {}).get('telegram')
                     try:
                         result = self.worker.tick_telegram_canary(getattr(provider, 'candidate_scope', None))
                     except AlphaError as error:

@@ -126,6 +126,11 @@ class Capabilities(unittest.TestCase):
     def test_api_tokens_have_no_telegram_authority(self):
         for method in ('GET','POST','DELETE'):
             self.assertIsNone(route_scope(method,['api','workspaces','w','telegram','connections','c','execute']))
+    def test_resolved_own_bot_serves_its_own_session(self):
+        from postriff_phase2.social_connectors import TelegramConnector
+        child=TelegramConnector('synthetic','synthetic','https://synthetic.example');child.bot_ref='11111111-1111-4111-8111-111111111111'
+        self.assertIs(child.for_session({'botRef':child.bot_ref,'workspace':'w'}),child)
+        with self.assertRaises(AlphaError):child.for_session({'botRef':'22222222-2222-4222-8222-222222222222','workspace':'w'})
     def test_group_connection_requires_administrator_proof(self):
         from postriff_phase2.social_connectors import TelegramConnector
         bot=TelegramConnector('synthetic','synthetic','https://synthetic.example');bot._me={'id':999}
@@ -197,6 +202,10 @@ class Publishing(unittest.TestCase):
         chat={'id':-88,'type':'supergroup','is_forum':True}
         with self.assertRaises(AlphaError):self.build({},chat)
         _,body,_,_=self.build({'messageThreadId':19},chat);self.assertEqual(body['message_thread_id'],19)
+    def test_approved_topic_is_not_taken_from_the_reconnected_credential(self):
+        chat={'id':-88,'type':'supergroup','is_forum':True}
+        with self.assertRaises(AlphaError):payload(manifest({}),{'chat':-88,'thread':23},chat,SimpleNamespace(assets=None),file_check=lambda *a:True)
+        with self.assertRaises(AlphaError):payload(manifest({'messageThreadId':19}),{'chat':-88,'thread':23},chat,SimpleNamespace(assets=None),file_check=lambda *a:True)
     def test_dm_topic_required(self):
         chat={'id':-88,'type':'supergroup','is_direct_messages':True}
         with self.assertRaises(AlphaError):self.build({},chat)

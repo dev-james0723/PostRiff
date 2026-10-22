@@ -78,7 +78,7 @@ class TelegramLogin:
             try:
                 from ..social_release import require_production_binding
                 require_production_binding(values)
-                scope = getattr(getattr(telegram.oauth, "telegram", None), "candidate_scope", None)
+                scope = getattr((getattr(telegram.oauth, "providers", None) or {}).get("telegram"), "candidate_scope", None)
                 expires = scope.get("expiresAt") if isinstance(scope, dict) else None
                 host = values.get("VERCEL_URL", "")
                 if (values.get("VERCEL_ENV") == "production" and values.get("POSTRIFF_TELEGRAM_CANARY_ENABLED") == "true"

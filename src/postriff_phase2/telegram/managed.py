@@ -173,7 +173,8 @@ def observe(cur, manager_id, update_id, event):
     cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))',('rafii-managed:'+str(manager_id)+':'+str(bot['id']),))
     cur.execute('SELECT owner_user_id,last_update_id FROM pr_telegram_managed_bots WHERE manager_bot_id=%s AND bot_id=%s FOR UPDATE',(manager_id,bot['id']))
     prior=cur.fetchone()
-    if prior and update_id<=prior[1]:return
+    # The webhook already dropped replays (pr_telegram_updates); Telegram may restart update IDs after a quiet week.
+    if prior and update_id==prior[1]:return
     if prior:
         # Never leave an earlier owner's or earlier token's destinations dispatchable.
         cur.execute("UPDATE pr_encrypted_credentials SET revoked_at=now() WHERE provider='telegram' AND workspace_id IN(SELECT workspace_id FROM pr_telegram_bot_grants WHERE bot_id=%s) AND connection_id IN(SELECT connection_id FROM pr_telegram_destinations WHERE bot_id=%s)",(bot['id'],bot['id']))
@@ -181,4 +182,4 @@ def observe(cur, manager_id, update_id, event):
         cur.execute("UPDATE pr_telegram_bot_grants SET revoked_at=now(),token_ciphertext='',webhook_ciphertext='',key_id='' WHERE bot_id=%s",(bot['id'],))
         if prior[0]!=user['id']:
             cur.execute('DELETE FROM pr_telegram_bot_grants WHERE bot_id=%s AND revoked_at IS NOT NULL',(bot['id'],))
-    cur.execute('INSERT INTO pr_telegram_managed_bots(manager_bot_id,bot_id,owner_user_id,username,last_update_id) VALUES(%s,%s,%s,%s,%s) ON CONFLICT(manager_bot_id,bot_id) DO UPDATE SET owner_user_id=excluded.owner_user_id,username=excluded.username,last_update_id=excluded.last_update_id WHERE excluded.last_update_id>pr_telegram_managed_bots.last_update_id',(manager_id,bot['id'],user['id'],bot['username'].lower(),update_id))
+    cur.execute('INSERT INTO pr_telegram_managed_bots(manager_bot_id,bot_id,owner_user_id,username,last_update_id) VALUES(%s,%s,%s,%s,%s) ON CONFLICT(manager_bot_id,bot_id) DO UPDATE SET owner_user_id=excluded.owner_user_id,username=excluded.username,last_update_id=excluded.last_update_id',(manager_id,bot['id'],user['id'],bot['username'].lower(),update_id))

@@ -418,7 +418,7 @@ class TelegramConnector(OAuthProvider):
         self.destination_authorizer=None
 
     def for_session(self, session):
-        if not session.get("botRef"): return self
+        if not session.get("botRef") or session.get("botRef") == self.bot_ref: return self
         if not self.credential_resolver or not session.get("workspace"):
             raise AlphaError("Bot credential unavailable.", 409)
         return self.credential_resolver(session["workspace"], session["botRef"])

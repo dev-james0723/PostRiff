@@ -64,8 +64,10 @@ def payload(manifest, session, chat, host, *, file_check=None):
     chat_kind = destination_type(chat)
     body = {"chat_id": session["chat"]}
     if mode == "business": body["business_connection_id"] = session["business_connection_id"]
-    thread = options.get("messageThreadId", session.get("thread"))
-    dm_topic = options.get("directMessagesTopicId", session.get("dm_topic"))
+    thread = options.get("messageThreadId")
+    dm_topic = options.get("directMessagesTopicId")
+    if session.get("thread") and not thread: fail("Approve this post again with its forum topic selected.")
+    if session.get("dm_topic") and not dm_topic: fail("Approve this post again with its DM topic selected.")
     if chat_kind == "forum_supergroup" and not thread: fail("Select a verified forum topic before publishing.")
     if thread:
         if chat_kind != "forum_supergroup" and not (chat_kind == "user_dm" and chat.get("is_forum")): fail("This destination has no forum-topic surface.")
