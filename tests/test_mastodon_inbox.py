@@ -41,6 +41,34 @@ class Replies(unittest.TestCase):
         self.assertEqual(mastodon_inbox.addressed('@Alice@social.example thanks', 'alice@social.example'), '@Alice@social.example thanks')
 
 
+class Mentions(unittest.TestCase):
+    def note(self, identifier, **changes):
+        return {'type': 'mention', 'status': status(identifier, **{'in_reply_to_id': '77', 'in_reply_to_account_id': '10', **changes})}
+
+    def test_only_public_replies_to_the_accounts_own_posts_are_kept(self):
+        rows = [self.note(1), self.note(2, visibility='direct'), self.note(3, in_reply_to_account_id='99'),
+                self.note(4, in_reply_to_id=None), self.note(5, spoiler_text='CW'), self.note(6, account_id='10', acct='me'),
+                {'type': 'favourite', 'status': status(7, in_reply_to_id='77', in_reply_to_account_id='10')}]
+        adapter = provider({'status': 200, 'body': rows})
+        ok, items = mastodon_inbox.mentions(adapter, 'token', OWNER)
+        self.assertTrue(ok)
+        self.assertEqual([(i['id'], i['postId'], i['author']) for i in items], [('1', '77', 'alice@social.example')])
+        self.assertEqual(adapter.api.call_args.args[1:3], ('GET', '/api/v1/notifications?types[]=mention&limit=40'))
+        self.assertEqual(mastodon_inbox.mentions(provider({'status': 401, 'body': {}}), 'token', OWNER), (False, []))
+
+    def test_inbox_refresh_reads_mentions_for_direct_connections(self):
+        adapter = provider({'status': 200, 'body': [self.note(1)]})
+        oauth = SimpleNamespace(providers={'mastodon': adapter},
+                                token_for_worker=Mock(return_value={'accessToken': 'token', 'providerAccountId': OWNER}))
+        cur = Mock()
+        cur.fetchall.return_value = [('conn',)]
+        cur.fetchone.return_value = (1,)
+        AudienceService(None, oauth, lambda: 1)._refresh_mastodon(cur, 'ws', {'phase2': {'jobs': []}})
+        inserts = [c for c in cur.execute.call_args_list if 'INSERT INTO public.pr_audience_threads' in c.args[0]]
+        self.assertEqual(len(inserts), 1)
+        self.assertEqual(inserts[0].args[1][:5], ('ws', 'conn', '77', '1', 'alice@social.example'))
+
+
 class Send(unittest.TestCase):
     TEXT = '@alice@social.example Thanks!'
 
@@ -106,7 +134,7 @@ class Ingestion(unittest.TestCase):
         self.assertEqual(result, {'availability': 'available', 'ingested': 1})
         inserts = [c for c in cur.execute.call_args_list if 'INSERT INTO public.pr_audience_threads' in c.args[0]]
         self.assertEqual(len(inserts), 1)
-        self.assertEqual(inserts[0].args[1][:7], ('ws', 'conn', 'mastodon', '123', '1', 'alice@social.example', 'Nice & clear'))
+        self.assertEqual(inserts[0].args[1][:6], ('ws', 'conn', '123', '1', 'alice@social.example', 'Nice & clear'))
 
     def test_nothing_is_read_unless_comments_read_is_direct(self):
         oauth = SimpleNamespace(providers={'mastodon': provider()}, token_for_worker=Mock())

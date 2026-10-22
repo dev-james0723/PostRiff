@@ -42,7 +42,7 @@ class AudienceService:
             from . import mastodon_inbox
             ok, items = mastodon_inbox.replies(self.oauth.providers["mastodon"], grant["accessToken"], provider_post_id, grant.get("providerAccountId"))
             for item in items:
-                cur.execute("INSERT INTO public.pr_audience_threads(workspace_id,connection_id,provider,provider_post_id,provider_comment_id,author_handle,text,created_at_provider) VALUES(%s,%s,%s,%s,%s,%s,%s,%s::timestamptz) ON CONFLICT(workspace_id,provider,provider_comment_id) DO UPDATE SET text=excluded.text,ingested_at=now()", (workspace_id, connection_id, provider, provider_post_id, item["id"], clean(item["author"], 100), clean(item["text"], 4000), item["createdAt"] if isinstance(item["createdAt"], str) else None))
+                self._store_mastodon(cur, workspace_id, connection_id, provider_post_id, item)
             return {"availability": "available" if ok else "unavailable", "ingested": len(items)}
         if provider == "threads":
             url = f"https://graph.threads.net/{GRAPH_VERSION}/{quote(provider_post_id)}/replies?" + urlencode({"fields": "id,text,username,timestamp", "access_token": grant["accessToken"]})
@@ -74,16 +74,32 @@ class AudienceService:
         finally:
             cur.execute("RELEASE SAVEPOINT audience_ingestion")
 
+    @staticmethod
+    def _store_mastodon(cur, workspace_id, connection_id, post_id, item):
+        cur.execute("INSERT INTO public.pr_audience_threads(workspace_id,connection_id,provider,provider_post_id,provider_comment_id,author_handle,text,created_at_provider) VALUES(%s,%s,'mastodon',%s,%s,%s,%s,%s::timestamptz) ON CONFLICT(workspace_id,provider,provider_comment_id) DO UPDATE SET text=excluded.text,ingested_at=now()",
+                    (workspace_id, connection_id, post_id, item["id"], clean(item["author"], 100), clean(item["text"], 4000), item["createdAt"] if isinstance(item["createdAt"], str) else None))
+
     def _refresh_mastodon(self, cur, workspace_id, state):
-        """Mastodon replies keep arriving after publication: re-read the newest verified posts, at most every two minutes."""
+        """Mastodon replies keep arriving after publication, on any of the account's posts: read each connection's mention
+        notifications and re-read the newest verified Rafii posts, at most every two minutes per workspace."""
+        if "mastodon" not in getattr(self.oauth, "providers", {}):
+            return
         jobs = [j for j in ((state or {}).get("phase2") or {}).get("jobs", [])
                 if isinstance(j, dict) and j.get("state") == "verified" and (j.get("manifest") or {}).get("platform") == "Mastodon" and j.get("providerReference")]
-        if not jobs or "mastodon" not in getattr(self.oauth, "providers", {}):
+        cur.execute("SELECT c.connection_id FROM public.pr_encrypted_credentials c JOIN public.pr_channel_capabilities k ON k.workspace_id=c.workspace_id AND k.connection_id=c.connection_id AND k.capability='comments_read' AND k.level='Direct' WHERE c.workspace_id=%s AND c.provider='mastodon' AND c.revoked_at IS NULL", (workspace_id,))
+        connections = [r[0] for r in cur.fetchall()]
+        if not jobs and not connections:
             return
         from .hosted import throttle
+        from . import mastodon_inbox
         cur.execute("SAVEPOINT mastodon_refresh")
         try:
             throttle(cur, f"mastodon-inbox:{workspace_id}", 1, MASTODON_REFRESH_SECONDS)
+            for connection_id in connections:
+                grant = self.oauth.token_for_worker(workspace_id, connection_id)
+                _, items = mastodon_inbox.mentions(self.oauth.providers["mastodon"], grant["accessToken"], grant.get("providerAccountId"))
+                for item in items:
+                    self._store_mastodon(cur, workspace_id, connection_id, item["postId"], item)
             for job in sorted(jobs, key=lambda j: j.get("approvedAt", 0), reverse=True)[:MASTODON_REFRESH_POSTS]:
                 self.ingest_replies(cur, workspace_id, job["manifest"]["channelId"], "mastodon", job["providerReference"], self.clock())
         except Exception:

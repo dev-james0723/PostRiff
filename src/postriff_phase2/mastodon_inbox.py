@@ -41,6 +41,35 @@ def replies(adapter, access_token, post_id, provider_account_id):
     return True, items
 
 
+MENTION_LIMIT = 40
+
+
+def mentions(adapter, access_token, provider_account_id):
+    """(ok, [{id, postId, author, text, createdAt}]) for public replies to any of the account's own posts, read from its
+    mention notifications. Private mentions and replies to other people's posts are never kept."""
+    session = adapter.session(access_token)
+    own_id = str(provider_account_id).split('@', 1)[0]
+    response = adapter.api(session, 'GET', f'/api/v1/notifications?types[]=mention&limit={MENTION_LIMIT}')
+    rows = response.get('body')
+    if response.get('status') != 200 or not isinstance(rows, list):
+        return False, []
+    items = []
+    for row in rows[:MENTION_LIMIT]:
+        status = row.get('status') if isinstance(row, dict) and isinstance(row.get('status'), dict) else {}
+        post_id = str(status.get('in_reply_to_id') or '')
+        if (row.get('type') != 'mention' or not ID.fullmatch(str(status.get('id', ''))) or not ID.fullmatch(post_id)
+                or str(status.get('in_reply_to_account_id') or '') != own_id
+                or status.get('visibility') not in ('public', 'unlisted') or status.get('sensitive') or status.get('spoiler_text')):
+            continue
+        account = status.get('account') if isinstance(status.get('account'), dict) else {}
+        acct = account.get('acct') if isinstance(account.get('acct'), str) else ''
+        if not acct or str(account.get('id', '')) == own_id:
+            continue
+        items.append({'id': str(status['id']), 'postId': post_id, 'author': acct if '@' in acct else f"{acct}@{session['instance']}",
+                      'text': plain(status.get('content')), 'createdAt': status.get('created_at')})
+    return True, items
+
+
 def addressed(text, author):
     """The exact text to approve: Mastodon notifies the person replied to only when they are mentioned."""
     mention = '@' + author
