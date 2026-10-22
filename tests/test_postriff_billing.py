@@ -109,6 +109,17 @@ class Routes(unittest.TestCase):
                                             "timestamp": "1786608000000", "signature": "a" * 64})
         self.assertEqual(json.loads(seen["raw"]), body)
 
+    def test_tiktok_webhook_forwards_exact_bytes_and_signature_without_browser_auth(self):
+        service = FakeService()
+        seen = {}
+        service.oauth = SimpleNamespace(tiktok_webhook=lambda signature, raw: seen.update(signature=signature, raw=raw) or {"ok": True, "outcome": "acknowledged"})
+        app = HostedApplication(service, FakeWorker(), {"provider": "dev", "flow": "dev"}, "c" * 24)
+        body = {"client_key": "k", "event": "authorization.removed", "create_time": 1786608000, "user_openid": "open-1", "content": "{\"reason\": 1}"}
+        status, _, receipt = invoke(app, "POST", "/api/tiktok/webhook", body, {"TikTok-Signature": "t=1786608000,s=" + "a" * 64})
+        self.assertEqual((status, receipt), (200, {"ok": True, "outcome": "acknowledged"}))
+        self.assertEqual(seen["signature"], "t=1786608000,s=" + "a" * 64)
+        self.assertEqual(json.loads(seen["raw"]), body)
+
 
 
 class LiveBillingRoutes(unittest.TestCase):

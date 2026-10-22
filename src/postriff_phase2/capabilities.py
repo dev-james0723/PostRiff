@@ -42,7 +42,9 @@ def publish_route(state: dict, destination: dict, *, providers: dict | None = No
     adapter = (providers or {}).get(provider_id)
     if adapter is None:
         return {"publish": False, "code": "not_configured", "reason": f"Publishing to {platform} isn't available yet, so the {platform} version is prepared as a draft."}
-    if not getattr(adapter, "production_reviewed", False):
+    publish_gate_open = not getattr(adapter, "separate_publish_gate", False) or (
+        getattr(adapter, "publish_live_tested", False) is True and getattr(adapter, "publishing_permission", False) is True)
+    if not getattr(adapter, "production_reviewed", False) or not publish_gate_open:
         return {"publish": False, "code": "awaiting_review", "reason": f"{platform} hasn't approved Rafii's publishing access yet, so the {platform} version is prepared as a draft."}
     if not getattr(adapter, "execution_enabled", True):
         return {"publish": False, "code": "paused", "reason": f"Publishing to {platform} is paused for maintenance, so the {platform} version waits as a draft."}

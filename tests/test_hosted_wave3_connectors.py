@@ -356,10 +356,43 @@ class YouTubePublishing(unittest.TestCase):
         self.assertEqual(wire.calls, [])
 
 
+def publish_cleared(adapter):
+    """Login Kit review plus the separate TikTok posting gate (live-tested and approved)."""
+    reviewed(adapter)
+    adapter.publish_live_tested = adapter.publishing_permission = True
+    return adapter
+
+
 class TikTokPublishing(unittest.TestCase):
-    def social(self, wire, raw=b"\x00" * 4096):
-        tiktok = reviewed(TikTokProvider("key", "secret", transport=wire))
+    def social(self, wire, raw=b"\x00" * 4096, clear=publish_cleared):
+        tiktok = clear(TikTokProvider("key", "secret", transport=wire))
         return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["video.publish"], "openId": "OPEN"}), ["video.publish"]), {"tiktok": tiktok}, storage(raw))
+
+    def test_login_kit_review_alone_never_dispatches_a_post(self):
+        for clear in (reviewed, lambda a: setattr(reviewed(a), "publish_live_tested", True) or a,
+                      lambda a: setattr(reviewed(a), "publishing_permission", True) or a):
+            wire = Wire([])
+            social = self.social(wire, clear=clear)
+            self.assertIsNone(social._provider(manifest("TikTok", "OPEN", media=VIDEO, options=tiktok_options())))
+            self.assertEqual(wire.calls, [])
+        self.assertIsNotNone(self.social(Wire([]))._provider(manifest("TikTok", "OPEN", media=VIDEO, options=tiktok_options())))
+        from postriff_phase2.capabilities import publish_route
+        route = publish_route({}, {"platform": "TikTok"}, providers={"tiktok": reviewed(TikTokProvider("k", "s"))}, live=True)
+        self.assertEqual(route["code"], "awaiting_review")
+
+    def test_capability_levels_follow_the_two_tiktok_gates(self):
+        from postriff_phase2.oauth import OAuthService
+        granted, now = ["user.info.basic", "video.publish"], 1_800_000_000
+        connect_only = OAuthService._capabilities(reviewed(TikTokProvider("k", "s")), "publish", granted, [], now)
+        self.assertEqual(connect_only["identity"]["level"], "Direct")
+        self.assertEqual(connect_only["publish"]["level"], "Assisted")
+        self.assertNotEqual(connect_only["schedule"]["level"], "Direct")
+        cleared = OAuthService._capabilities(publish_cleared(TikTokProvider("k", "s")), "publish", granted, [], now)
+        self.assertEqual(cleared["publish"]["level"], "Direct")
+        self.assertEqual(cleared["schedule"]["level"], "Direct")
+        self.assertIn("scheduled time", cleared["schedule"]["evidence"])
+        for name in ("analytics", "comments_read", "reply"):
+            self.assertEqual(cleared[name]["level"], "Unsupported")
 
     def test_creator_settings_are_read_again_and_win(self):
         init = ok({"data": {"publish_id": "v_pub_1", "upload_url": "https://open-upload.tiktokapis.com/video/?upload_id=1"}, "error": {"code": "ok"}})
@@ -380,6 +413,10 @@ class TikTokPublishing(unittest.TestCase):
         refused = self.social(Wire([ok(CREATOR), unaudited])).submit(manifest("TikTok", "OPEN", media=VIDEO, options=tiktok_options()))
         self.assertEqual(refused["state"], "failed")
         self.assertIn("audits Rafii", refused["confirmed"])
+        capped = ok({"error": {"code": "reached_active_user_cap", "message": "cap"}}, 403)
+        held = self.social(Wire([ok(CREATOR), capped])).submit(manifest("TikTok", "OPEN", media=VIDEO, options=tiktok_options()))
+        self.assertEqual(held["state"], "held")
+        self.assertIn("how many people Rafii can post for", held["confirmed"])
 
     def test_a_foreign_upload_host_sends_nothing_and_fails(self):
         init = ok({"data": {"publish_id": "v_pub_2", "upload_url": "https://uploads.evil.example/video"}, "error": {"code": "ok"}})

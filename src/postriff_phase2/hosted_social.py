@@ -74,6 +74,10 @@ class HostedSocial:
         provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
         if provider is None or not getattr(provider, "execution_enabled", True):
             return None
+        # Identity-only TikTok Sandbox can never be used by the publishing worker,
+        # even if an unrelated caller accidentally mutates the review flags.
+        if getattr(provider, "sandbox_mode", False):
+            return None
         # Provider-wide review unlocks public accounts. Instagram Standard Access can also
         # issue a real grant to an app-role owned/managed account before Advanced Access;
         # that grant is checked again below against the exact required scopes.
@@ -90,7 +94,8 @@ class HostedSocial:
                 return None
         if not provider.production_reviewed and not private_trial and not getattr(provider, "account_scoped_direct", False):
             return None
-        if getattr(provider, "publisher", None) is not None and (not getattr(provider, "publish_live_tested", False)
+        publish_gated = getattr(provider, "publisher", None) is not None or getattr(provider, "separate_publish_gate", False)
+        if publish_gated and (not getattr(provider, "publish_live_tested", False)
                 or not getattr(provider, "publishing_permission", False)):
             return None
         return provider
@@ -512,7 +517,10 @@ class HostedSocial:
             return {"state": "held", "confirmed": "TikTok rejected the permission or session; reconnect and review again" + reason}
         if code == "rate_limit_exceeded" or status == 429:
             return {"state": "scheduled", "confirmed": "TikTok rate limited the request before acceptance"}
-        if code in ("spam_risk_too_many_posts", "spam_risk_too_many_pending_share", "spam_risk_user_banned_from_posting", "reached_active_user_cap"):
+        if code == "reached_active_user_cap":
+            # App-wide cap (before TikTok's audit: 5 posting users per 24 hours), not this account's fault.
+            return {"state": "held", "confirmed": "TikTok's daily limit on how many people Rafii can post for has been reached. Nothing was posted; review it again later."}
+        if code in ("spam_risk_too_many_posts", "spam_risk_too_many_pending_share", "spam_risk_user_banned_from_posting"):
             return {"state": "held", "confirmed": "TikTok won't take more posts from this account right now" + reason}
         if code == "unaudited_client_can_only_post_to_private_accounts":
             return {"state": "failed", "confirmed": "Until TikTok audits Rafii, it can post only to private TikTok accounts. Make the account private or wait for the audit; nothing was posted."}

@@ -147,7 +147,10 @@ class OAuthService:
                     'pinterest_trial_environment_invalid': 'The private Pinterest Trial API environment and Sandbox setting do not match. Connections stay closed; review the approved environment configuration.',
                     'pinterest_callback_origin_invalid': 'The Pinterest callback origin must be a fixed HTTPS origin without a path, query or fragment. Connections stay closed; review it against the registered callback.',
                 }.get(diagnostic.get('configurationIssueCode')) if pid == 'pinterest' else None
-                issues.append(pinterest_issue or ('Server setup required: configure ' + ' and '.join(missing) + '. These are channel credentials, not app sign-in providers.' if missing else 'The OAuth credential pair contains a blank, whitespace or placeholder value. Correct it in secure server configuration.'))
+                if diagnostic.get('configurationState') == 'sandbox_forbidden_environment':
+                    issues.append('TikTok Sandbox OAuth is blocked on Production or a canonical production callback domain. Use a separate HTTPS Preview origin and sandbox credentials.')
+                else:
+                    issues.append(pinterest_issue or ('Server setup required: configure ' + ' and '.join(missing) + '. These are channel credentials, not app sign-in providers.' if missing else 'The OAuth credential pair contains a blank, whitespace or placeholder value. Correct it in secure server configuration.'))
             if not self.vault.fernet:
                 issues.append('Server setup required: POSTRIFF_CREDENTIAL_KEY must protect connected-account tokens.')
             try:
@@ -180,7 +183,8 @@ class OAuthService:
                 legacy = {
                     'identity': bool(adapter and normalized['identity'] == 'supported' and adapter.capability_scopes('identity')),
                     'posts_read': bool(adapter and normalized['owned_content_read'] == 'supported' and adapter.capability_scopes('posts_read')),
-                    'publish': bool(adapter and (getattr(adapter, 'publisher', None) is None or diagnostic.get('publishingPermission'))
+                    'publish': bool(adapter and ((getattr(adapter, 'publisher', None) is None and not getattr(adapter, 'separate_publish_gate', False))
+                                                 or diagnostic.get('publishingPermission'))
                                     and any(normalized[key] == 'supported' for key in ('publish_text','publish_image','publish_video'))
                                     and adapter.capability_scopes('publish')),
                     'analytics': bool(adapter and normalized['owned_analytics'] == 'supported' and adapter.capability_scopes('analytics')),
@@ -1145,6 +1149,104 @@ class OAuthService:
         except Exception:  # provider should retry transient database failures; never echo database details
             return {"code": 3001, "msg": "internal_error"}
 
+    TIKTOK_WEBHOOK_TOLERANCE = 300
+
+    def tiktok_webhook(self, signature_header, raw):
+        """Ingest TikTok's authorization.removed event (developers.tiktok.com/doc/webhooks-events).
+
+        TikTok signs `t=<unix seconds>,s=<hex>` over "<t>.<exact body>" with the app's client_secret. TikTok has
+        already revoked the token when this arrives, so Rafii only wipes its copy and marks the channel
+        disconnected. Events carry no id, so the body digest is the idempotency key. Other events are
+        acknowledged and ignored."""
+        adapter = self.providers.get("tiktok")
+        if adapter is None or not getattr(adapter, "client_secret", None):
+            raise AlphaError("Webhook unavailable.", 404)
+        parts = dict(item.split("=", 1) for item in str(signature_header or "").split(",") if "=" in item)
+        timestamp, supplied = parts.get("t", "").strip(), parts.get("s", "").strip().lower()
+        if not re.fullmatch(r"[0-9]{9,11}", timestamp) or not re.fullmatch(r"[0-9a-f]{64}", supplied):
+            raise AlphaError("Webhook signature invalid.", 401)
+        expected = hmac.new(adapter.client_secret.encode(), timestamp.encode() + b"." + raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, supplied):
+            raise AlphaError("Webhook signature invalid.", 401)
+        if abs(self.clock() - int(timestamp)) > self.TIKTOK_WEBHOOK_TOLERANCE:
+            raise AlphaError("Webhook timestamp outside the replay window.", 401)
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError, UnicodeDecodeError):
+            raise AlphaError("Webhook payload invalid.", 400)
+        if not isinstance(payload, dict) or payload.get("client_key") != adapter.client_id:
+            raise AlphaError("Webhook payload invalid.", 400)
+        event = payload.get("event")
+        if event != "authorization.removed":
+            return {"ok": True, "outcome": "ignored"}
+        open_id, removed_at = payload.get("user_openid"), payload.get("create_time")
+        if not isinstance(open_id, str) or not 1 <= len(open_id) <= 200 \
+                or type(removed_at) is not int or not 0 < removed_at <= int(self.clock()) + self.TIKTOK_WEBHOOK_TOLERANCE:
+            raise AlphaError("Webhook payload invalid.", 400)
+        digest = hashlib.sha256(raw).hexdigest()
+        try:
+            return self._tiktok_authorization_removed(open_id, removed_at, event, digest)
+        except AlphaError:
+            raise
+        except Exception:  # TikTok retries; never echo database details (e.g. migration 044 not applied yet)
+            raise AlphaError("Webhook storage unavailable.", 503)
+
+    def _tiktok_authorization_removed(self, open_id, removed_at, event, digest):
+        with self.repository.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO public.pr_social_provider_events(provider,event_id,event_type,payload_digest) "
+                    "VALUES('tiktok',%s,%s,%s) ON CONFLICT(provider,event_id) DO NOTHING RETURNING event_id",
+                    (digest, event, digest),
+                )
+                if not cur.fetchone():
+                    return {"ok": True, "outcome": "duplicate"}
+                # Fence on the removal time: a reconnect after it issued a new grant (rotated_at), which a delayed or
+                # retried removal must not wipe. A refresh cannot follow a removal because TikTok revoked the token.
+                cur.execute(
+                    "SELECT workspace_id::text,connection_id FROM public.pr_encrypted_credentials "
+                    "WHERE provider='tiktok' AND provider_account_id=%s AND revoked_at IS NULL "
+                    "AND COALESCE(rotated_at,created_at)<=to_timestamp(%s) FOR UPDATE",
+                    (open_id, removed_at),
+                )
+                affected = cur.fetchall()
+                for workspace_id, connection_id in affected:
+                    cur.execute(
+                        "UPDATE public.pr_encrypted_credentials SET access_ciphertext='',refresh_ciphertext=NULL,"
+                        "scopes=ARRAY[]::text[],access_expires_at=now(),revoked_at=now(),updated_at=now() "
+                        "WHERE workspace_id=%s AND connection_id=%s",
+                        (workspace_id, connection_id),
+                    )
+                    cur.execute(
+                        "UPDATE public.pr_channel_capabilities SET level='Unsupported',"
+                        "evidence='TikTok reported that this authorization was removed.',updated_at=now() "
+                        "WHERE workspace_id=%s AND connection_id=%s",
+                        (workspace_id, connection_id),
+                    )
+                    cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
+                    row = cur.fetchone()
+                    state = json.loads(row[0]) if row and isinstance(row[0], str) else row[0] if row else None
+                    if isinstance(state, dict):
+                        channel = next((item for item in state.get("phase2", {}).get("channels", [])
+                                        if item.get("id") == connection_id), None)
+                        if channel is not None:
+                            channel.update({"revoked": True, "identityVerified": False,
+                                            "capabilityVerified": False, "expiresAt": self.clock()})
+                            self.commands.engine.invalidate(state)
+                            cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s",
+                                        (json.dumps(state), workspace_id))
+                    from .hosted import audit
+                    audit(cur, workspace_id, None, "channel.revoked_by_provider", connection_id,
+                          {"provider": "tiktok", "eventId": digest[:16]})
+                    from . import product_events
+                    product_events.record(cur, workspace_id, None, "channel.disconnected", connection_id,
+                                          digest[:16], {"provider": "tiktok", "cause": "provider"})
+                cur.execute(
+                    "UPDATE public.pr_social_provider_events SET processed_at=now(),outcome=%s WHERE provider='tiktok' AND event_id=%s",
+                    ("revoked" if affected else "acknowledged", digest),
+                )
+        return {"ok": True, "outcome": "revoked" if affected else "acknowledged"}
+
     # --- Bluesky: public client documents -------------------------------------------------
     def bluesky_document(self, name):
         adapter = self.providers.get("bluesky")
@@ -1189,7 +1291,7 @@ class OAuthService:
         publish_scopes = set(adapter.capability_scopes("publish"))
         publish_granted = bool(publish_scopes) and publish_scopes <= granted_set
         publisher_ready = not (
-            getattr(adapter, "publisher", None) is not None and
+            (getattr(adapter, "publisher", None) is not None or getattr(adapter, "separate_publish_gate", False)) and
             (not getattr(adapter, "publish_live_tested", False) or
              not getattr(adapter, "publishing_permission", False) or
              not getattr(adapter, "write_qualified", lambda _token: True)(access_token))

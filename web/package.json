@@ -39,6 +39,7 @@
     "e2e:pinterest:preview:jcb": "bash ../scripts/cloud-pinterest-preview-browser.sh",
     "test:pinterest:contracts:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash -c \"cd .. && PYTHONPATH=src:tests python -m unittest -v test_hosted_wave3_connectors test_pinterest_trial_readiness test_pinterest_trial_evidence\"",
     "ci:pinterest:production:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-pinterest-production-validation.sh",
+    "ci:tiktok:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-tiktok-validation.sh",
     "test:pinterest:agent:jcb": "bash ../scripts/cloud-python-bootstrap.sh python ../tests/pinterest_agent_registration.py",
     "test:pinterest:postgres:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-pinterest-postgres.sh"
   },

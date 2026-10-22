@@ -260,13 +260,17 @@ export const channels: Channel[] = [
     name: 'TikTok',
     group: 'hosted',
     capability: 'assisted',
-    reviewStatus: 'publishing in review',
-    capabilities: { ...identityOnly },
+    reviewStatus: 'connecting and publishing in review',
+    // Connecting needs TikTok's app review, so identity is not Direct until it passes.
+    capabilities: { ...identityOnly, identity: 'Unsupported' },
     description:
       'Short vertical video with TikTok’s own privacy, interaction and disclosure choices.',
     formats: ['Video'],
     region: 'global',
-    notes: [hostedPending, 'Until TikTok audits Rafii, posts are private: only you can see them.']
+    notes: [
+      'Connecting TikTok opens after TikTok approves Rafii. Until then, prepare posts in Rafii and export them.',
+      'Until TikTok audits Rafii, posts are private: only you can see them.'
+    ]
   },
   {
     slug: 'pinterest',
