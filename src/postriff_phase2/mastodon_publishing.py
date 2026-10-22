@@ -80,8 +80,14 @@ def native_reconcile(provider, token, manifest, job, now):
             return {'state': 'processing', 'reference': reference, 'progress': progress, 'verification': 'provider_lookup',
                     'confirmed': 'The exact server schedule is pending. A saved schedule is not a published post.'}
         return {'state': 'uncertain', 'reference': reference, 'confirmed': 'The server schedule changed after approval; check it manually. Nothing was resubmitted.'}
-    if response.get('status') != 404 or not progress['attachments']:
+    if response.get('status') != 404:
         return {'state': 'uncertain', 'reference': reference, 'confirmed': 'Native schedule lookup is unavailable or the schedule disappeared. Absence does not prove publication; check Mastodon before any new post.'}
+    # Without media IDs only Rafii's own application, a five-minute window after the due time and a unique exact match
+    # identify the published post; anything looser stays uncertain.
+    text_only = not progress['attachments']
+    website = str(getattr(provider, 'website', '') or '').rstrip('/')
+    if text_only and not website:
+        return {'state': 'uncertain', 'reference': reference, 'confirmed': 'Native schedule disappeared and a text-only post cannot be identified. Check Mastodon before any new post.'}
     account_id, host = manifest['providerAccountId'].split('@', 1)
     response = provider.api(session, 'GET', '/api/v1/accounts/' + account_id + '/statuses?limit=40&exclude_reblogs=true')
     rows = response.get('body')
@@ -96,6 +102,9 @@ def native_reconcile(provider, token, manifest, job, now):
         except (ValueError, TypeError): continue
         identifier = str(row.get('id', ''))
         from .mastodon_threads import matches
+        application = row.get('application') if isinstance(row.get('application'), dict) else {}
+        if text_only and (str(application.get('website') or '').rstrip('/') != website or created > due + 300):
+            continue
         if (re.fullmatch(r'[0-9]{1,40}', identifier) and due - 60 <= created <= now + 60
                 and matches(row, manifest, [identifier], 0, host, progress['attachments'])):
             matched.append(row)
@@ -104,11 +113,12 @@ def native_reconcile(provider, token, manifest, job, now):
         progress.update(stage='provider_accepted', reference=str(row['id']))
         progress.pop('retryAt', None)
         result = {'state': 'verified', 'reference': str(row['id']), 'progress': progress, 'verification': 'provider_lookup',
-                  'confirmed': 'Account read-back found the exact approved media IDs, content and visibility after the server schedule disappeared. Fediverse delivery is not guaranteed.'}
+                  'confirmed': ('Account read-back found one exact approved post from Rafii at the scheduled time after the server schedule disappeared.' if text_only else
+                                'Account read-back found the exact approved media IDs, content and visibility after the server schedule disappeared.') + ' Fediverse delivery is not guaranteed.'}
         from .outcomes import valid_receipt_url
         if valid_receipt_url(row.get('url'), 'Mastodon', manifest['providerAccountId']): result['url'] = row['url']
         return result
-    return {'state': 'uncertain', 'reference': reference, 'confirmed': 'No unique publication matched the saved native media and approved content in the latest 40 posts. Check Mastodon; do not resubmit.'}
+    return {'state': 'uncertain', 'reference': reference, 'confirmed': 'No unique publication matched the approved native schedule in the latest 40 posts. Check Mastodon; do not resubmit.'}
 
 
 def checked_progress(value, manifest):

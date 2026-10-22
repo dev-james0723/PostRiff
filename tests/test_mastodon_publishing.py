@@ -245,3 +245,30 @@ class DurablePublishingTests(unittest.TestCase):
         p = self.native_progress(); p['attachments'] = []; self.manifest['media'] = []
         self.replies = [response(status=404)]
         self.assertEqual(native_reconcile(self.social._provider(None), '', self.manifest, {'progress': p}, self.now)['state'], 'uncertain')
+
+    def test_text_only_native_needs_one_exact_rafii_post_at_the_due_time(self):
+        from datetime import datetime, timedelta
+        p = self.native_progress(); p['attachments'] = []; self.manifest['media'] = []
+        provider = self.social._provider(None); provider.website = 'https://rafii.io'
+        due = datetime.fromisoformat(p['scheduledAt'].replace('Z', '+00:00'))
+        published = {'id': '51', 'account': {'id': '10'}, 'created_at': (due + timedelta(seconds=14)).isoformat(),
+                     'content': '<p>An approved post</p>', 'visibility': 'public', 'sensitive': False, 'spoiler_text': '',
+                     'media_attachments': [], 'application': {'name': 'Rafii', 'website': 'https://rafii.io/'},
+                     'url': 'https://mastodon.social/@alice/51'}
+        self.now += 900
+        for rows, expected in [([], 'uncertain'), ([published], 'verified'),
+                               ([{**published, 'application': {'name': 'Other', 'website': 'https://other.example'}}], 'uncertain'),
+                               ([{**published, 'application': None}], 'uncertain'),
+                               ([{**published, 'created_at': (due + timedelta(seconds=301)).isoformat()}], 'uncertain'),
+                               ([{**published, 'content': '<p>Another post</p>'}], 'uncertain'),
+                               ([published, {**published, 'id': '52'}], 'uncertain')]:
+            with self.subTest(rows=len(rows), expected=expected):
+                self.replies = [response(status=404), response(rows)]
+                result = native_reconcile(provider, '', self.manifest, {'progress': p}, self.now)
+                self.assertEqual(result['state'], expected)
+                if expected == 'verified':
+                    self.assertEqual(result['reference'], '51')
+        provider.website = ''
+        self.replies = [response(status=404)]
+        self.assertEqual(native_reconcile(provider, '', self.manifest, {'progress': p}, self.now)['state'], 'uncertain')
+        self.assertTrue(all(method == 'GET' for method, _, _ in self.calls))
