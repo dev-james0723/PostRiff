@@ -41,6 +41,7 @@
     "ci:pinterest:production:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-pinterest-production-validation.sh",
     "test:pinterest:agent:jcb": "bash ../scripts/cloud-python-bootstrap.sh python ../tests/pinterest_agent_registration.py",
     "test:pinterest:postgres:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-pinterest-postgres.sh",
+    "ci:bluesky:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-bluesky-validation.sh",
     "ci:mastodon:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-validation.sh",
     "test:mastodon-automation:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-automation.sh",
     "ci:mastodon-management-after134:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-management-after134.sh",

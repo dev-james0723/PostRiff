@@ -5,8 +5,10 @@
 `uncertain`; permission failures are `held`; explicit pre-acceptance rejections are
 `scheduled` (429) or `failed`. HTTP 200 alone is never `published`.
 """
+import base64
 import hashlib
 import html
+import io
 import json
 import re
 import time
@@ -15,6 +17,7 @@ from urllib.parse import quote, urlencode, urlsplit, parse_qs
 from postriff_alpha.domain import AlphaError
 from .atproto_oauth import tid
 from .capabilities import HOSTED_PUBLISHERS
+from .text_measure import measure
 from .provider_candidates import LinkedInCandidate, little_plain
 from .providers import GRAPH_VERSION, http_transport
 from .outcomes import valid_receipt_url
@@ -146,7 +149,10 @@ class HostedSocial:
         grant = self.oauth.token_for_worker(manifest["workspaceId"], manifest["channelId"])
         required = ({"LinkedIn": {"w_member_social"}, "Threads": {"threads_basic", "threads_content_publish"}, "Instagram": {"instagram_business_basic", "instagram_business_content_publish"}}.get(manifest["platform"])
                     or set(getattr(provider, "publish_required", ())))
-        if not required or not required.issubset(grant.get("scopes", [])):
+        publish_checker = getattr(provider, "has_publish_scopes", None)
+        permitted = (publish_checker(grant.get("scopes"), with_image=bool(manifest.get("media")))
+                     if callable(publish_checker) else bool(required) and required.issubset(grant.get("scopes", [])))
+        if not permitted:
             return {"state": "held", "confirmed": "Publishing permissions changed or are unverified; reconnect and review again."}
         token = grant["accessToken"]
         if getattr(provider, "publisher", None) is not None and not getattr(provider, "write_qualified", lambda _token: True)(token):
@@ -200,32 +206,110 @@ class HostedSocial:
         seconds = int(timestamp) if isinstance(timestamp, (int, float)) and 0 < timestamp < 2 ** 40 else 1_700_000_000
         return tid(seconds * 1_000_000 + seed % 1_000_000, (seed >> 20) & 0x3FF)
 
+    @staticmethod
+    def _bluesky_facets(text):
+        facets = []
+        for match in _URL.finditer(text):
+            url = match.group(0).rstrip(".,;:!?)")
+            start = len(text[:match.start()].encode("utf-8"))
+            facets.append({"index": {"byteStart": start, "byteEnd": start + len(url.encode("utf-8"))},
+                           "features": [{"$type": "app.bsky.richtext.facet#link", "uri": url}]})
+        return facets
+
+    @staticmethod
+    def _bluesky_blob_cid(raw):
+        # CIDv1 raw codec + sha2-256 multihash; a returned blob must match the approved bytes.
+        return "b" + base64.b32encode(b"\x01\x55\x12\x20" + hashlib.sha256(raw).digest()).decode("ascii").lower().rstrip("=")
+
+    @staticmethod
+    def _bluesky_record_cid_valid(cid):
+        """Validate CIDv1 DAG-CBOR sha2-256 structure, not merely a nonempty string."""
+        if not isinstance(cid, str) or not re.fullmatch(r"b[a-z2-7]{58}", cid):
+            return False
+        try:
+            encoded = cid[1:].upper()
+            raw = base64.b32decode(encoded + "=" * (-len(encoded) % 8))
+        except ValueError:
+            return False
+        return len(raw) == 36 and raw[:4] == bytes((1, 0x71, 0x12, 0x20))
+
+    @staticmethod
+    def _bluesky_image_valid(raw, mime):
+        if not isinstance(raw, bytes) or not 0 < len(raw) <= 2_000_000:
+            return False
+        try:
+            from PIL import Image, UnidentifiedImageError
+            with Image.open(io.BytesIO(raw)) as picture:
+                expected = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp", "GIF": "image/gif"}
+                if expected.get(picture.format) != mime or picture.width * picture.height > 25_000_000:
+                    return False
+                # No invisible re-encoding of a human-approved attachment.
+                if picture.getexif() or any(key.lower() in
+                        ("exif", "gps", "comment", "description", "author", "xml:com.adobe.xmp")
+                        for key in picture.info):
+                    return False
+                picture.load()  # Decode after metadata inspection; verify() requires an untouched parser.
+            return True
+        except (ValueError, OSError, UnidentifiedImageError, Image.DecompressionBombError):
+            return False
+
+    def _bluesky_record_matches(self, manifest, session, response, reference):
+        """A lookup is proof only when DID, URI, CID, text, facets and image bytes match approval."""
+        body = response.get("body") if isinstance(response.get("body"), dict) else {}
+        value = body.get("value") if isinstance(body.get("value"), dict) else {}
+        if (response.get("status") != 200 or body.get("uri") != reference or
+                not self._bluesky_record_cid_valid(body.get("cid")) or
+                session.get("did") != manifest.get("providerAccountId") or
+                value.get("$type") not in (None, "app.bsky.feed.post") or
+                value.get("text") != manifest["payload"]["text"] or
+                (value.get("facets") or []) != self._bluesky_facets(value["text"])):
+            return False
+        media = manifest.get("media") or []
+        embed = value.get("embed")
+        if not media:
+            return embed is None
+        if len(media) != 1 or not isinstance(embed, dict) or embed.get("$type") != "app.bsky.embed.images":
+            return False
+        images = embed.get("images")
+        if not isinstance(images, list) or len(images) != 1 or not isinstance(images[0], dict):
+            return False
+        raw, mime, alt = self._image(manifest)
+        blob = images[0].get("image")
+        return (images[0].get("alt") == alt and isinstance(blob, dict) and
+                isinstance(blob.get("ref"), dict) and blob["ref"].get("$link") == self._bluesky_blob_cid(raw) and
+                blob.get("mimeType") == mime and blob.get("size") == len(raw))
+
     def _submit_bluesky(self, manifest, provider, token):
         refusal = self._unsupported_media(manifest)
         if refusal:
             return refusal
         session = json.loads(token)
         text = manifest["payload"]["text"]
+        if session.get("did") != manifest.get("providerAccountId"):
+            return {"state": "held", "confirmed": "Bluesky account changed since approval; choose the correct account and approve again."}
+        counted = measure("Bluesky", text) if isinstance(text, str) else None
+        if not counted or not text.strip() or counted["used"] > 300 or counted["bytes"] > counted["byteLimit"]:
+            return {"state": "failed", "confirmed": "Bluesky requires a non-empty post of at most 300 Unicode graphemes and 3,000 bytes. Review the exact draft; nothing was posted."}
         rkey = self.bluesky_rkey(manifest)
         reference = f"at://{session['did']}/app.bsky.feed.post/{rkey}"
         record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")}
-        facets = []
-        for match in _URL.finditer(text):
-            url = match.group(0).rstrip(".,;:!?)")
-            start = len(text[:match.start()].encode())
-            facets.append({"index": {"byteStart": start, "byteEnd": start + len(url.encode())}, "features": [{"$type": "app.bsky.richtext.facet#link", "uri": url}]})
+        facets = self._bluesky_facets(text)
         if facets:
             record["facets"] = facets
         image = self._image(manifest)
         if image:
             raw, mime, alt = image
+            if not self._bluesky_image_valid(raw, mime) or not alt.strip():
+                return {"state": "failed", "confirmed": "Bluesky needs a valid image (JPEG, PNG, WebP or GIF; 2 MB maximum) and accessible alt text. Nothing was posted."}
             uploaded = provider.xrpc_post(session, "com.atproto.repo.uploadBlob", data=raw, content_type=mime)
             early = self._classify_status(uploaded.get("status"), uploaded.get("body"), "Bluesky")
             if early:
                 return early
             blob = uploaded.get("body", {}).get("blob") if isinstance(uploaded.get("body"), dict) else None
-            if uploaded.get("status") != 200 or not isinstance(blob, dict):
-                return {"state": "failed", "confirmed": "Bluesky did not accept the image, so nothing was posted."}
+            if (uploaded.get("status") != 200 or not isinstance(blob, dict) or
+                    not isinstance(blob.get("ref"), dict) or blob["ref"].get("$link") != self._bluesky_blob_cid(raw) or
+                    blob.get("size") != len(raw) or blob.get("mimeType") != mime):
+                return {"state": "held", "confirmed": "Bluesky could not verify the uploaded image against the approved bytes. Nothing was posted."}
             record["embed"] = {"$type": "app.bsky.embed.images", "images": [{"image": blob, "alt": alt}]}
         try:
             response = provider.xrpc_post(session, "com.atproto.repo.createRecord", body={"repo": session["did"], "collection": "app.bsky.feed.post", "rkey": rkey, "record": record})
@@ -235,11 +319,13 @@ class HostedSocial:
         if response.get("status") == 200 and uri == reference:
             return {"state": "provider_accepted", "reference": reference, "confirmed": "Bluesky created the post record; read-back pending"}
         if response.get("status") == 400:
-            # The key is fixed per job, so an earlier attempt that did land shows up here as an existing record.
+            # A conflict is never sufficient proof: compare the earlier record with this exact approved job.
             existing = provider.xrpc_get(session, "com.atproto.repo.getRecord", {"repo": session["did"], "collection": "app.bsky.feed.post", "rkey": rkey})
-            value = existing.get("body", {}).get("value") if isinstance(existing.get("body"), dict) else None
-            if existing.get("status") == 200 and isinstance(value, dict) and value.get("text") == text:
-                return {"state": "provider_accepted", "reference": reference, "confirmed": "Bluesky already holds this job's post from an earlier attempt; read-back pending"}
+            if self._bluesky_record_matches(manifest, session, existing, reference):
+                return {"state": "provider_accepted", "reference": reference, "cid": existing["body"]["cid"],
+                        "confirmed": "Bluesky holds the exact previously approved post; read-back pending"}
+            if existing.get("status") == 200:
+                return {**_uncertain("Bluesky record key is occupied by different or unverified content; do not resubmit"), "reference": reference}
         early = self._classify_status(response.get("status"), response.get("body"), "Bluesky")
         if early:
             return early
@@ -450,11 +536,11 @@ class HostedSocial:
             if not match or match.group(1) != session["did"]:
                 return _uncertain("Bluesky reference does not belong to this account; do not resubmit")
             response = provider.xrpc_get(session, "com.atproto.repo.getRecord", {"repo": match.group(1), "collection": "app.bsky.feed.post", "rkey": match.group(2)})
-            value = response.get("body", {}).get("value") if isinstance(response.get("body"), dict) else None
-            if response.get("status") == 200 and isinstance(value, dict) and value.get("text") == text:
-                return {"state": "verified", "reference": reference, "url": f"https://bsky.app/profile/{match.group(1)}/post/{match.group(2)}",
-                        "confirmed": "Bluesky read-back matched the approved text and account", "verification": "provider_lookup"}
-            return _uncertain("Bluesky read-back did not match the exact approved post")
+            if self._bluesky_record_matches(manifest, session, response, reference):
+                return {"state": "verified", "reference": reference, "cid": response["body"]["cid"],
+                        "url": f"https://bsky.app/profile/{match.group(1)}/post/{match.group(2)}",
+                        "confirmed": "Bluesky read-back matched the approved DID, text, facets, images and CID", "verification": "provider_lookup"}
+            return _uncertain("Bluesky read-back did not match the approved account, text, facets, image or record")
         if platform == "Mastodon":
             if (job or {}).get('progress', {}).get('version') == 3 and job['progress'].get('stage') == 'native_scheduled':
                 from .mastodon_publishing import native_reconcile
