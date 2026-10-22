@@ -13,7 +13,12 @@ Production has been served by CLI builds of whichever lane deployed last. In fiv
 3. **Record the live SHA.** CLI builds carry no git metadata and `/api/health` reports `sourceRevision: null` on the live lineage. Pass `--meta rafiiSourceSha=<sha>` on every build, and port the provenance stamp that exists in the LinkedIn lineage (`release_provenance.py`, `runtime/stamp_release_source.py` and the health reader) so the answer is in the product, not in a fingerprint exercise.
 4. **Land the lanes in one order on one integration branch.** Suggested order after the Discord candidate is accepted: (a) the Discord candidate onto the live Mastodon line (this branch already is that merge); (b) the Bluesky head (a descendant of the live commit, 4 commits ahead) on top; (c) the LinkedIn lane (#218, live on 10-20 and 10-21 and currently NOT live); (d) Pinterest and the rest. Each step is a merge commit, never a rebase of another lane's branch, and each step reruns the superset proof against the previous head.
 5. **Retire stale numbering hazards.** The Mastodon migrations numbered 131 to 133 are retired and 131 now belongs to Discord. Keep the migration-number test (`tests/test_migration_numbers.py`) on every candidate.
-6. **Fix inherited gate failures once.** The offline secret scan failed on the live commit itself (174 digests in Mastodon fixtures). On this candidate they are reviewed with reasons (171 allowlist entries). The Mastodon lane will hit the same conflict in `docs/consumer-ready/secret-allowlist.json` when it merges; it can take the candidate's file as is.
+6. **Fix inherited gate failures once.** Four gates fail on the live commit itself, whichever lane builds on it, and each lane would otherwise fix them separately and conflict:
+   - the offline secret scan (174 digests in Mastodon fixtures; on this candidate 171 allowlist entries with reasons in `docs/consumer-ready/secret-allowlist.json`; a lane can take that file as is);
+   - `npm audit` (since 2026-10-22: `next` 16.3.8 and `@sentry/nextjs` 10.74.0; on this candidate `next` 16.4.2 and `@sentry/nextjs` 10.76.2, a lockfile written with npm 11);
+   - `pip-audit` (since 2026-10-22: `pypdf` 6.20.1 has four advisories; this candidate and the Telegram lane use 6.21.1);
+   - the generic PostgreSQL step of `consumer-ready.yml`, which runs the Mastodon management fixtures without their explicit opt-in (`POSTRIFF_MASTODON_AFTER134_FIXTURE=1`); the candidate sets it on that step.
+   Land these four once on the integration branch; the other lanes then merge it.
 
 ## What stays out of scope
 

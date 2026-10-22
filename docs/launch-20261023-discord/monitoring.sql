@@ -118,10 +118,12 @@ SELECT (SELECT count(DISTINCT provider_account_id) FROM public.pr_encrypted_cred
          WHERE provider = 'discord' AND 'bot' = ANY (scopes)) AS servers_counted,
        (SELECT count(DISTINCT provider_account_id) FROM public.pr_encrypted_credentials
          WHERE provider = 'discord' AND revoked_at IS NULL AND 'bot' = ANY (scopes)) AS servers_with_a_live_grant,
-       (SELECT count(*) FROM public.pr_oauth_transactions
+       (SELECT count(*) FROM (SELECT DISTINCT workspace_id, member_id FROM public.pr_oauth_transactions
          WHERE provider = 'discord' AND 'bot' = ANY (scopes)
            AND ((consumed_at IS NULL AND expires_at > now())
-                OR (outcome = 'exchange_started' AND consumed_at > now() - interval '10 minutes'))) AS installs_in_flight;
+                OR (outcome = 'exchange_started' AND consumed_at > now() - interval '10 minutes'))) AS in_flight) AS installs_in_flight;
+-- installs_in_flight counts one slot per workspace and member (the gate does the same), so repeated starts by one
+-- account are one row here. servers_counted + installs_in_flight is the number the gate compares with the cap.
 
 -- Q10. Grants by kind and recent revocations (counts only).
 SELECT ('bot' = ANY (scopes)) AS bot_install,
@@ -140,3 +142,17 @@ WHERE EXISTS (SELECT 1 FROM public.pr_encrypted_credentials e
               WHERE e.workspace_id = c.workspace_id AND e.connection_id = c.connection_id AND e.provider = 'discord')
 GROUP BY 1, 2
 ORDER BY 1, 2;
+
+-- Q12. Installs that may have put the bot in a server Rafii holds no row for (an UPPER BOUND, last 24 hours, counts only).
+-- The bot joins on Discord's consent screen, BEFORE our callback runs. These bot-install attempts ended without a stored
+-- connection: consent never came back (tab closed), the callback failed or was refused, a different server was picked
+-- than the one reserved, or consent arrived after the ten-minute window. Not every one added the bot. Read it with Q9
+-- and the Developer Portal: if (Portal server count - servers_counted) is larger than the sum of these four numbers plus
+-- two, someone is adding the public bot outside Rafii and the cap should be lowered or the gate closed.
+SELECT count(*) FILTER (WHERE consumed_at IS NULL AND expires_at <= now()) AS never_returned,
+       count(*) FILTER (WHERE outcome IN ('expired', 'mismatch')) AS expired_or_mismatched,
+       count(*) FILTER (WHERE outcome = 'exchange_started' AND consumed_at <= now() - interval '10 minutes') AS exchange_never_finished,
+       count(*) FILTER (WHERE outcome = 'denied') AS denied_or_callback_error
+FROM public.pr_oauth_transactions
+WHERE provider = 'discord' AND 'bot' = ANY (scopes)
+  AND created_at > now() - interval '24 hours';

@@ -55,23 +55,24 @@ Both builds come from a clean checkout of the frozen SHA that is linked to the p
 # D1: gate closed except the tester workspace and workspaces that already have a Discord footprint
 vercel deploy --prod --skip-domain --scope team_PgXY5VdAYKcsv0RLoDPHscNq \
   --meta rafiiSourceSha=<frozen sha> --meta rafiiTwin=dark \
-  --env POSTRIFF_DISCORD_CONNECT_WORKSPACES=<tester workspace uuid> \
-  --env POSTRIFF_OAUTH_DISCORD_REVIEWED=true \
-  --env POSTRIFF_DISCORD_GUILD_CAP=<90 minus the difference from precondition 10; leave out when there is none>
+  --env 'POSTRIFF_DISCORD_CONNECT_WORKSPACES=<tester workspace uuid>' \
+  --env 'POSTRIFF_OAUTH_DISCORD_REVIEWED=true' \
+  --env 'POSTRIFF_DISCORD_GUILD_CAP=<90 minus the difference from precondition 10; leave out this line when there is none>'
 
 # D2: same SHA, gate open (cap stays 90 by default on production)
 vercel deploy --prod --skip-domain --scope team_PgXY5VdAYKcsv0RLoDPHscNq \
   --meta rafiiSourceSha=<frozen sha> --meta rafiiTwin=open \
-  --env POSTRIFF_DISCORD_CONNECT_WORKSPACES=* \
-  --env POSTRIFF_OAUTH_DISCORD_REVIEWED=true \
-  --env POSTRIFF_DISCORD_GUILD_CAP=<same value as D1>
+  --env 'POSTRIFF_DISCORD_CONNECT_WORKSPACES=*' \
+  --env 'POSTRIFF_OAUTH_DISCORD_REVIEWED=true' \
+  --env 'POSTRIFF_DISCORD_GUILD_CAP=<same value as D1>'
 ```
 
 Notes:
 
 - `--meta` attaches the frozen SHA and the twin name to the deployment record, because a CLI build has no git metadata and `/api/health` reports `sourceRevision: null` on this lineage. The file fingerprint is still the proof; the metadata is a label.
 - `--skip-domain` stages a production-target build without moving `rafii.io`. Crons run on the deployment that serves the production domain, so a staged build runs none [Likely, confirm in the first minute after promoting D1].
-- If a flag is silently ignored the result is closed, not open: an unset gate on production means nobody (except grandfathered workspaces), and an unset reviewed flag shows Discord publishing as Unsupported. A failed readback at the promotion step is therefore a stop, not a risk.
+- Quote every `--env` assignment. The wildcard in `'POSTRIFF_DISCORD_CONNECT_WORKSPACES=*'` is a shell glob character: unquoted, zsh (the macOS default) stops with "no matches found" and other shells may expand it. After the build, read the value back from the deployment (names and values of these non-secret variables) before promoting.
+- If a flag is silently ignored the result is closed, not open: an unset gate on production means nobody (except workspaces that already have a Discord footprint), and an unset reviewed flag shows Discord publishing as Unsupported. A mistyped Discord v2 flag (the code reads only the exact string `true`) leaves the v2 flows OFF and the original Discord flow ON; the original flow is behind the same gate and, on this candidate, under the same cap. A failed readback at the promotion step is therefore a stop, not a risk.
 - If the CLI does not accept `--env`, set the same names in project env for the build, then remove them again afterwards; every production build of any lane made in between would inherit them, so tell the lanes first.
 - Cost: previous builds of this project took about 2.5 minutes. The approval cap is $5 per build. Post a cost note before building.
 - Do not rebuild a SHA that already has a READY twin of the same kind. An infrastructure failure is the only reason for a retry, with a written reason.
@@ -82,7 +83,7 @@ Notes:
 |---|---|
 | Which deployment serves `rafii.io`? | alias readback (`get_alias` on `rafii.io`) and compare the deployment ID with D1, D2 or the rollback target |
 | Is the gate open for workspace W? | the provider catalog entry for Discord has `discordAccess.status` (`open` or `closed`, with a reason) |
-| Servers in use against the cap | `monitoring.sql` Q9 |
+| Servers in use against the cap | `monitoring.sql` Q9, read with Q12 and the Developer Portal's server count (section 6) |
 | Is the worker draining Discord jobs? | `monitoring.sql` Q7 (queue depth, oldest eligible lag, held, uncertain, dead letters) |
 | Are we near a Discord restriction? | `monitoring.sql` Q2 (invalid requests in 10 minutes, page above 1,000) and Q3 (open circuits and manual holds) |
 | When does the rate policy expire? | `monitoring.sql` Q6 and the renew-by date printed by `scripts/discord_rate_policy.py` |
@@ -94,5 +95,23 @@ Notes:
 | Closed (before T0, after an abort) | "Discord isn't open to new connections for this workspace yet. Connections you already have keep working." (also in Traditional and Simplified Chinese) | gate closed |
 | Full (90 servers) | "Discord has no room for another server right now. Nothing was connected or posted. Try again later." | cap reached, HTTP 409 `discord_capacity_reached` |
 | Delayed | the existing "delayed" state on the queue item | rate coordinator hold or backoff; nothing was sent |
+| Busy or paused while connecting | "Discord is busy right now ..." / "Connecting to Discord is paused for a moment ..."; after Discord's consent screen the wording is different on purpose: "... could not finish connecting. If the bot already appears in your server, start again from Channels ..." | HTTP 429 `discord_rate_delayed` / 503 `discord_rate_coordinator_unavailable`; no connection is revoked by either |
 
 Neither refusal promises a waitlist or a date. Do not add one unless something records it.
+
+## 6. Keeping the server count honest after opening
+
+The cap counts the servers Rafii holds a row for. Discord counts the servers the bot is in. They differ in ways Rafii cannot see (`launch_gate.py` lists them): a person who picks another server on Discord's screen than the one reserved, who closes the tab after consenting, whose callback fails, a deleted workspace, anyone who adds the public bot by hand.
+
+| When | Who | Check | Act |
+|---|---|---|---|
+| Before opening (precondition 10), then every 2 hours on day 1, then daily for a week | OWNER (Portal) + AGENT (queries) | Portal server count minus `monitoring.sql` Q9 `servers_counted` = D; Q12 four numbers summed = U | D at most U plus 2: normal. D above U plus 2: someone adds the bot outside Rafii, lower the cap by D and rebuild the twins, or close the gate (promote D1). D at 5 or more: stop opening further. |
+| Portal count reaches 85 | OWNER | Portal | Close the gate (promote D1) and start verification (H-01); 100 is a hard Discord limit for an unverified app. |
+
+Opening wider than 90 needs H-01 (verification) first.
+
+## 7. Behaviour to know about before opening
+
+- Workspaces with a Discord footprint (an unrevoked server card, or a linked identity including one that must be reconnected) pass the gate even when it is closed, and may start any kind of connection, including a new server, which then takes a cap slot. The public sees the closed message. Decision D-08 (packet section 4): kept broad; the narrow reading (reconnect only) is a small change if you want it.
+- A slot is held for ten minutes per person (workspace and member) while an install is in flight, and a server that already has a stored bot credential holds its slot for good, so reinstalling after a disconnect does not need a second one.
+- The original (non-v2) connect flow also adds the bot to a server of the person's choice, and is capped.
