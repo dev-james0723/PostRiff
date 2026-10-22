@@ -61,3 +61,12 @@ Question put to the owner (one line to answer):
 1. keep the first launch as the capped bot route and start the webhook track in parallel (the agent's recommendation): the safe counting experiment first, then qualification; or
 2. also try the webhook route once in the tester session on the dark build (needs two extra flags on that build only, so a new yes); or
 3. make the webhook route the public launch path (the agent advises against: untested with real Discord, bot-free mode only covers server owners and administrators, and the counting question is open).
+
+## Reply 3, received 2026-10-22 about 23:00Z (new facts from the owner; they change the scale plan, not an approved row)
+
+> I think my Discord app has been verified, actually I remember. [a screenshot of the Developer Portal menu] ... There is a tick. [a screenshot of the Rafii bot's profile in the owner's test server showing the "check mark + APP" tag] ... I am sure [the Rafii in the screenshot is the app the website uses in production].
+
+**Reading:** the check mark on the application tag is how Discord shows a verified app, and the owner states it is the production app (the install message and test server date from 2026-10-17, which matches the first production installs). So H-01 is treated as done on the owner's word, and Discord's 100-server limit for unverified apps does not apply. Not stored in the repository: the screenshots (the H-01 notes say none belongs here). Still to do for certainty and at no cost to the owner: when the staged build exists, compare the `client_id` in the authorize URL (C-05) with the Application ID in the Portal.
+
+**What changes:** the first cap of 90 is no longer Discord's limit; it is a rollout throttle. The limits that remain are Rafii's own: no real Discord flow has been tested, scheduled posts drain at about 5 to 12 per minute, nobody is staffed for support at scale, the rate policy allows 25 requests per second. The plan becomes a staged ramp (first cap 90, then raise in steps), and every raise is a new build, so it needs a yes: question put to the owner (one line): 1) first open at 90 and ask again before each raise; 2) pre-approve up to two more builds of at most $5 each to raise the cap in steps (the agent's recommendation); 3) open with a larger cap at once, for example 300 (the agent advises against). **Nothing changes in the approved rows until the owner answers.**
+

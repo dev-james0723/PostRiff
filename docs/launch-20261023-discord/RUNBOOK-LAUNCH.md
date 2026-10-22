@@ -106,9 +106,9 @@ The cap counts the servers Rafii holds a row for. Discord counts the servers the
 | When | Who | Check | Act |
 |---|---|---|---|
 | Before opening (precondition 10), then every 2 hours on day 1, then daily for a week | OWNER (Portal) + AGENT (queries) | Portal server count minus `monitoring.sql` Q9 `servers_counted` = D; Q12 four numbers summed = U | D at most U plus 2: normal. D above U plus 2: someone adds the bot outside Rafii, lower the cap by D and rebuild the twins, or close the gate (promote D1). D at 5 or more: stop opening further. |
-| Portal count reaches 85 | OWNER | Portal | Close the gate (promote D1) and start verification (H-01); 100 is a hard Discord limit for an unverified app. |
+| Portal count reaches 85 | OWNER | Portal | If the app were not verified: close the gate (promote D1) and start verification (H-01); 100 is a hard Discord limit for an unverified app. The owner reports the app is verified (check mark on the bot tag), so on this build the row is a prompt to decide the next cap, not a stop. |
 
-Opening wider than 90 needs H-01 (verification) first.
+Opening wider than 90 needs a new build with a higher `POSTRIFF_DISCORD_GUILD_CAP` and the owner's yes. Verification (H-01) is reported done by the owner, so Discord's own limit is not what stops a raise: readiness, rate limits and support are.
 
 ## 7. Behaviour to know about before opening
 

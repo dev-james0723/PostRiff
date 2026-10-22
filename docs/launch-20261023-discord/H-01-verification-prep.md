@@ -2,6 +2,8 @@
 
 Prepared 2026-10-22 (UTC) for the 2026-10-23 launch. Checklist item H-01 (HUMAN, MUST). Companion files in this folder: `PORTAL-AUDIT-SHEET.md` (H-02), `P-02-discord-policy-compliance.md`, `W-03-webhook-server-limit.md`.
 
+**Update 23:00Z (owner):** the owner showed the verified-app check mark on the production bot's tag and confirmed it is the production app. Sections below on how to start verification are kept for the record; they are not needed now. Re-check only if Discord flags the app.
+
 Status: preparation notes only. Nothing here submits, saves or changes anything in the Discord Developer Portal.
 
 This repository is public. Never paste tokens, secrets, Discord IDs of real servers or people, ID documents, or Portal screenshots into this file or the ledger.

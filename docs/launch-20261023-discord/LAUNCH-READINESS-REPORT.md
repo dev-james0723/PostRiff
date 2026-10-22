@@ -1,6 +1,6 @@
 # LAUNCH-READINESS-REPORT (Discord capped Wave 1)
 
-Generated 2026-10-22T22:38:25Z. Candidate: `claude/discord-launch-rc-20261023` at `2a5a523d` (draft PR #222, frozen, CI green on the exact SHA). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
+Generated 2026-10-22T23:00:35Z. Candidate: `claude/discord-launch-rc-20261023` at `2a5a523d` (draft PR #222, frozen, CI green on the exact SHA). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
 
 ## Recommendation: **NO-GO today**
 
@@ -11,11 +11,11 @@ A false GO is the worst outcome. The candidate is frozen and green; what is miss
 1. **No build exists yet, so nothing real has been proven.** Real OAuth and bot install, one real send with read-back, and an unattended schedule with cancel (X-02 to X-05) all need the dark promotion and the owner's 20-minute session. This session has no Vercel CLI or token and the owner's MacBook has been offline since 10-22 14:52Z, so the two approved builds cannot start until the owner brings a machine online or creates a short-lived token for a protected CI run (`BUILD-RUNSHEET.md`).
 2. **Owner-only gates are open:** the tester assets (tester workspace id, Discord ids) and T0 (H-03, D-05), the Release Captain and security-review decision (H-05, a condition of the promotion row), on-call (H-07), Portal verification status and settings (H-01, H-02). The privacy wording (H-08) and the packet rows are approved.
 3. **Backup and restore point are unverified** (M-03) and Production env names cannot be fully listed with the tools available (C-02, row 8 needs the owner's machine).
-4. **Scale:** "thousands" is not possible tomorrow. An unverified app is limited to 100 servers [Likely; the official page could not be read from this environment] and verification is Discord's timeline. The capped plan is at most 90 servers.
+4. **Scale:** the owner reports the app is already verified (check mark on the bot tag; the owner confirms it is the production app), so Discord's 100-server limit does not apply [owner-attested]. What limits "thousands" now is Rafii's own readiness: no real Discord flow has been tested, scheduled posts drain at about 5 to 12 per minute, support is not staffed, and the rate policy allows 25 requests per second. So the plan is a staged ramp (first cap 90, then raise in steps), and each raise is a new build that needs the owner's yes.
 
 **What would flip it:** every row below that is a Wave 1 MUST becomes VERIFIED with evidence, no abort trigger has fired, and the owner says GO. The fastest honest path is in `RUNBOOK-LAUNCH.md` section 2; the owner's part is about 60 minutes in total, plus the machine or token for the builds.
 
-## Wave 1 GO criteria (54 items; 2 BLOCKED_EXTERNAL, 29 NOT_RUN, 23 VERIFIED)
+## Wave 1 GO criteria (54 items; 2 BLOCKED_EXTERNAL, 28 NOT_RUN, 24 VERIFIED)
 
 | ID | Item | Owner | Status | State | Evidence |
 |---|---|---|---|---|---|
@@ -23,7 +23,7 @@ A false GO is the worst outcome. The candidate is frozen and green; what is miss
 | D-02 | Which lanes ship in the same RC | HUMAN | **NOT_RUN** | default applied by the agent (assumption logged); the owner has not replied: Discord delta on the live line only | APPROVAL-PACKET-1.md section 4 |
 | D-04 | Exposure rule for 'Direct' publish and schedule | HUMAN | **VERIFIED** | decision taken by the owner with packet row 4: POSTRIFF_OAUTH_DISCORD_REVIEWED=true on the two RC build commands only, never in project env; opening stays a separate step | AUTHORIZATION-RECORD.md |
 | D-05 | Launch time T0 and GO / NO-GO time | HUMAN | **NOT_RUN** | T0 and GO_TIME not given; the agent assumes T0 = 24 hours after its start and says so | APPROVAL-PACKET-1.md section 2 |
-| H-01 | Discord Developer Portal: App Verification status, and start verification today | HUMAN | **NOT_RUN** | human only; preparation done | H-01-verification-prep.md |
+| H-01 | Discord Developer Portal: App Verification status, and start verification today | HUMAN | **VERIFIED** | owner-attested: the verified-app check mark is shown on the production bot tag (screenshot seen, not stored) and the owner confirms it is the production app; compare the client id in the authorize URL (C-05) on… | AUTHORIZATION-RECORD.md reply 3; H-01-verification-prep.md |
 | H-02 | Portal settings audit | HUMAN | **NOT_RUN** | human only (or AUTH-10 read-only); audit sheet prepared | PORTAL-AUDIT-SHEET.md |
 | H-03 | Tester assets and one 20-minute consent session | HUMAN | **NOT_RUN** | human only; session script prepared | TESTER-SESSION-SCRIPT.md |
 | H-04 | Reply to the Approval Packets | HUMAN | **VERIFIED** | owner replied after packet rev D (RC head 2a5a523d): "Approve all from 1 to 15 and rev B+"; read as rows 1 to 15 plus the last row of the table, labelled (rev B+); the conditions written in the rows still apply | AUTHORIZATION-RECORD.md |
