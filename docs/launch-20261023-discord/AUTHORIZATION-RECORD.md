@@ -49,3 +49,15 @@ Decisions taken by default and not objected to: D-01 to D-03, D-06, D-07, and D-
 ## Order from here
 
 Exact-SHA CI green and the independent re-verification closed, then freeze (S-08) and the superset proof on the frozen SHA. Then, in this order and each with a readback: Production env batch (rows 1 to 3) and policy (row 2); pre-flight (Q-01, cost note); D1 (Q-02); provenance, smoke, tenant probe, rollback target, OAuth URL audit (Q-03 to Q-07, C-05); Packet 2 with the evidence; H-05; dark promotion (X-01); tester session (X-02 to X-06); D2; soak; GO or NO-GO at GO_TIME; opening only on GO. A failed or missing gate at any step is reported as NO-GO, not worked around.
+
+## Reply 2, received 2026-10-22 about 22:41Z (a statement of direction; it changes no approved row)
+
+> 最重要係將「帳號直連」同「以本人身份發佈」分開。 [Certain] Discord 官方容許用戶透過 OAuth 直接連接 Rafii，再授權 Rafii App、Bot 或 Webhook 喺指定 Channel 發佈。但一般 OAuth 唔提供第三方 SaaS 自動以普通 Discord 用戶本人身份發訊息嘅通用權限；使用 Self-Bot 繞過限制亦違反 Discord 規則。所以我會將 Agent 嘅必達目標定為：用戶直接連接自己嘅 Discord → 選擇有權管理嘅 Channel → 正式授權 → Rafii 幫佢發佈、排程、取消、驗證及管理。用戶唔需要自己建立 Bot；優先完成官方支援嘅 Webhook 直連路線，同時保留 Bot 模式。Webhook 顯示嘅仍然係 Webhook 身份，唔會假扮個人帳號。
+
+**Reading (the agent's, to be confirmed):** the first half matches the product as built: Rafii's one shared bot posts, never the person, and nobody creates a bot. The last sentence asks to make the webhook route the priority. That is a scope change: packet row 1 keeps the webhook flags unset on purpose, the webhook mode has never run against real Discord, and it needs a second flag that attests a real qualification. Whether a webhook-only install counts toward Discord's 100-server rule is not documented (\`W-03-webhook-server-limit.md\`). **No build command, env value or approved row changes until the owner answers the question below.**
+
+Question put to the owner (one line to answer):
+
+1. keep the first launch as the capped bot route and start the webhook track in parallel (the agent's recommendation): the safe counting experiment first, then qualification; or
+2. also try the webhook route once in the tester session on the dark build (needs two extra flags on that build only, so a new yes); or
+3. make the webhook route the public launch path (the agent advises against: untested with real Discord, bot-free mode only covers server owners and administrators, and the counting question is open).
