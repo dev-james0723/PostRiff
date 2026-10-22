@@ -53,10 +53,11 @@ The repository is public, so the clone needs no credentials. The last line must 
 vercel deploy --prod --skip-domain --yes --scope team_PgXY5VdAYKcsv0RLoDPHscNq \
   --meta rafiiSourceSha="$SHA" --meta rafiiTwin=dark \
   --env 'POSTRIFF_DISCORD_CONNECT_WORKSPACES=<tester workspace uuid>' \
-  --env 'POSTRIFF_OAUTH_DISCORD_REVIEWED=true'
+  --env 'POSTRIFF_OAUTH_DISCORD_REVIEWED=true' \
+  --env 'POSTRIFF_DISCORD_GUILD_CAP=300'
 ```
 
-Add `--env 'POSTRIFF_DISCORD_GUILD_CAP=<90 minus the difference>'` only if the Portal count was higher than monitoring Q9 (packet section 2). `--yes` only suppresses prompts. Run it once. Paste back the deployment URL line and nothing else.
+The cap line is mandatory: the owner chose a cap of 300 (`AUTHORIZATION-RECORD.md` reply 4) and the code default on production is 90. Use 300 minus the difference when the Portal count was higher than monitoring Q9 (packet section 2). `--yes` only suppresses prompts. Run it once. Paste back the deployment URL line and nothing else.
 
 ## E. What the agent checks after D1 (through the API; READY alone is not acceptance)
 
@@ -67,7 +68,7 @@ Add `--env 'POSTRIFF_DISCORD_GUILD_CAP=<90 minus the difference>'` only if the P
 
 ## F. D2 (open twin): only after the tester session passes
 
-Same commands with `--meta rafiiTwin=open` and `--env 'POSTRIFF_DISCORD_CONNECT_WORKSPACES=*'`. Quote the star: unquoted, zsh stops with "no matches found". The same checks, plus a fingerprint match against D1. D2 is never promoted before T0 and before the GO.
+Same commands with `--meta rafiiTwin=open` and `--env 'POSTRIFF_DISCORD_CONNECT_WORKSPACES=*'`, and the same cap line (300). Quote the star: unquoted, zsh stops with "no matches found". The same checks, plus a fingerprint match against D1. D2 is never promoted before T0 and before the GO.
 
 ## G. Promotion and rollback (agent, API tools, no machine needed)
 
