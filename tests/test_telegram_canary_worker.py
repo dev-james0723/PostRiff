@@ -113,7 +113,7 @@ class CanaryCronContinuityTests(unittest.TestCase):
         app._runtime.assert_not_called()
 
     def test_grant_expiry_preserves_accepted_cron_without_shared_candidate_worker(self):
-        service = SimpleNamespace(oauth=SimpleNamespace(telegram=SimpleNamespace(candidate_scope={})))
+        service = SimpleNamespace(oauth=SimpleNamespace(providers={'telegram': SimpleNamespace(candidate_scope={})}))
         worker = Mock()
         worker.tick_telegram_canary.side_effect = AlphaError('Expired', 503, code='telegram_canary_unavailable')
         app = HostedApplication(service, worker, cron_secret='c' * 24)
@@ -377,7 +377,7 @@ class CanaryWorkerTests(unittest.TestCase):
 
     def test_authorized_cron_uses_only_telegram_lane(self):
         scope = grant()
-        service = SimpleNamespace(oauth=SimpleNamespace(telegram=SimpleNamespace(candidate_scope=scope)),
+        service = SimpleNamespace(oauth=SimpleNamespace(providers={'telegram': SimpleNamespace(candidate_scope=scope)}),
                                   run_reminders=Mock(side_effect=AssertionError('No shared reminders')))
         worker = PostgresWorker(Mock(), clock=lambda: NOW)
         worker.tick = Mock(side_effect=AssertionError('No shared worker'))

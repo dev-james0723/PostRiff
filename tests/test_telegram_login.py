@@ -75,7 +75,7 @@ class TelegramLoginSecurity(unittest.TestCase):
     def test_canary_callback_requires_actual_production_binding_and_active_grant(self):
         from postriff_phase2.social_release import PRODUCTION_PROJECT, PRODUCTION_REF, PRODUCTION_URL
         provider = SimpleNamespace(candidate_scope={'expiresAt': 1600, 'workspaceId': 'owner-workspace', 'actorId': 'owner'})
-        telegram = SimpleNamespace(repository=None, vault=None, oauth=SimpleNamespace(public_base_url='https://rafii.io', telegram=provider))
+        telegram = SimpleNamespace(repository=None, vault=None, oauth=SimpleNamespace(public_base_url='https://rafii.io', providers={'telegram': provider}))
         values = {'VERCEL_ENV': 'production', 'VERCEL_PROJECT_ID': PRODUCTION_PROJECT,
                   'POSTRIFF_SUPABASE_URL': PRODUCTION_URL, 'NEXT_PUBLIC_SUPABASE_URL': PRODUCTION_URL,
                   'POSTRIFF_DATABASE_URL': 'host=db.' + PRODUCTION_REF + '.supabase.co user=postgres sslmode=require',
