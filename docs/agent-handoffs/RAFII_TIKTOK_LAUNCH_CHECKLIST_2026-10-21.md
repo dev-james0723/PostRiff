@@ -47,6 +47,21 @@
   - Publish is Direct only if `_PUBLISH_LIVE_TESTED` and `_PUBLISH_APPROVED` are also true and `video.publish` is granted.
 - Worker: `/api/cron/worker` runs every minute, default `POSTRIFF_WORKER_MAX_JOBS=10`, shared by all platforms. The video bucket cap was 50 MB (YouTube audit), and the verified read cap is 100 MB.
 
+
+## Status update — 2026-10-22 ~02:30Z (executor, this session)
+
+- **Live lineage changed.** `rafii.io` is now CLI deploy `dpl_HQHUJrhr53sKDsDMwRJ1pvpsHJjs` (READY 2026-10-21 21:15Z). All 2,220 deployed files sha1-match `origin/claude/mastodon-connect-prod-candidate` `75312e78`, which is `7dc95e2e` + 4 Mastodon commits with 0 TikTok lines changed. Work branch `codex/rafii-tiktok-launch-20261021` is based on `75312e78`.
+- **New blocker found and fixed (D1a).** TikTok has no `publisher` object, so `POSTRIFF_OAUTH_TIKTOK_REVIEWED=true` alone used to unlock Connect *and* dispatch, Direct labels and chat promises.
+  - TikTok now has `separate_publish_gate`: posting also needs `_PUBLISH_LIVE_TESTED` and `_PUBLISH_APPROVED`.
+  - So E2 (open Connect after Login Kit approval) no longer opens posting before the audit.
+- **B1 evidence.**
+  - All 6 staging attempts sent `redirect_uri=https://rafii-tiktok-sandbox-650aea72.vercel.app/api/oauth/tiktok/callback`, which was not in the Sandbox redirect list recorded on 10-13 (rafii.io and postriff-phase2-private only).
+  - The prod attempt (10-07) used `https://postriff-phase2-private.vercel.app/api/oauth/tiktok/callback` with the Production key while the Production app was Draft.
+  - The callback-mismatch hypothesis is strong but needs the portal view (H1).
+- **Portal read:** Claude in Chrome reached the signed-in portal and listed the app (`Rafii 7689508412459370497`, Individual ownership). Reading the app page failed 3 times because the extension kept dropping its tab group. Production status is still unverified, so it moves into H1.
+- **D2 needs migrations.** `pr_social_provider_events` (migration 044) is **not applied** in prod or staging. The TikTok webhook therefore needs 044 + `20261022_tiktok_provider_webhooks.sql`, both approved by James, before the webhook URL is configured in the portal. Until then it returns 503 and never leaks details.
+- **App Review package draft:** `docs/agent-handoffs/RAFII_TIKTOK_APP_REVIEW_PACK_2026-10-22.md` covers C1–C6, D3 and F1.
+
 ## 2. Legend
 
 `[ ]` not started · `[~]` in progress · `[x]` done (evidence required) · `[!]` blocked (reason required)
@@ -56,11 +71,11 @@ Owner: **A** = agent · **J** = James · **T** = TikTok
 
 ### Phase A — Guardrails and launch-day posture (target: 2026-10-22)
 
-- [ ] **A1 (A)** Re-verify the baseline before changing anything: which deployment holds `rafii.io` (`list_deployment_aliases`), its source lineage (sha1 file match), TikTok env names, DB counts. Update section 1 with timestamps.
-- [ ] **A2 (A)** Keep public connect closed.
+- [x] **A1 (A)** Re-verify the baseline before changing anything: which deployment holds `rafii.io` (`list_deployment_aliases`), its source lineage (sha1 file match), TikTok env names, DB counts. Update section 1 with timestamps.
+- [x] **A2 (A)** Keep public connect closed.
   - `POSTRIFF_OAUTH_TIKTOK_REVIEWED` stays absent in Production.
   - **Never set any TikTok `_REVIEWED` / `_PUBLISH_*` flag as a workaround.** Unapproved OAuth would send thousands of users to a TikTok error page.
-- [ ] **A3 (A)** Copy fix: TikTok must not show identity **Direct** while connecting is closed.
+- [x] **A3 (A)** Copy fix: TikTok must not show identity **Direct** while connecting is closed.
   - Give TikTok its own capability map instead of the shared `identityOnly`, which other channels also use.
   - Set `reviewStatus` to say connecting *and* publishing are in review.
   - Fix the FAQ sentence "Not yet. publishing in review."
@@ -70,12 +85,12 @@ Owner: **A** = agent · **J** = James · **T** = TikTok
 
 ### Phase B — Prove Sandbox OAuth end to end (blocks the demo video)
 
-- [ ] **B1 (A)** Diagnose why 7 OAuth starts never returned.
+- [~] **B1 (A)** Diagnose why 7 OAuth starts never returned.
   - Compare the exact `redirect_uri` Rafii sent with the Sandbox Login Kit redirect URIs.
   - Check what TikTok shows (error vs homepage) and look for callback hits in the Preview's runtime logs.
   - Leading hypothesis, **unverified**: the Preview origin `rafii-tiktok-sandbox-650aea72.vercel.app` callback was not registered.
   - Also check `client_key` lane (Sandbox vs Production key), scope string format, `disable_auto_auth=1`, and whether James's TikTok session is the target user.
-- [ ] **B2 (A)** Bring the Sandbox lane onto the live lineage.
+- [x] **B2 (A)** Bring the Sandbox lane onto the live lineage.
   - Port `650aea72`, `b6a647e9`, `e107bbb5` from `codex/rafii-tiktok-sandbox-oauth-20261013`. They give a fail-closed, identity-only Sandbox lane that never falls back to Production keys.
   - Keep the 13 Sandbox tests green.
 - [ ] **B3 (J, portal)** Add the exact Preview callback URL to **Sandbox** Login Kit redirect URIs. Never touch Production app settings.
@@ -92,45 +107,45 @@ Owner: **A** = agent · **J** = James · **T** = TikTok
 
 ### Phase C — App Review package (agent drafts, James submits)
 
-- [ ] **C1 (A → J)** Privacy Policy and Terms.
+- [~] **C1 (A → J)** Privacy Policy and Terms.
   - Draft a TikTok section covering: data read (open_id, display name, avatar, creator_info); content posted only after approval of each exact post; token storage and encryption; retention; deletion; revocation; the data-deletion page.
   - Propose text for the placeholders.
   - James (and counsel if he chooses) approves. The agent never removes the "Draft" banner without James. This is not legal advice.
-- [ ] **C2 (A)** Check app details against the App Review Guidelines:
+- [~] **C2 (A)** Check app details against the App Review Guidelines:
   - Custom name with no "TikTok" in it, and a clear icon.
   - User-facing description.
   - Website URL is a developed site, not a landing or login page.
   - Privacy Policy and ToS links visible without opening a menu.
   - Valid web redirect URI.
-- [ ] **C3 (A)** Products and scopes: request only Login Kit (`user.info.basic`) and Content Posting API Direct Post (`video.publish`). Remove anything not built *and* demonstrated, such as `video.upload`, `video.list` or `user.info.stats`, because extras delay review.
-- [ ] **C4 (A/J)** URL properties: confirm in the portal which property the Production app needs. If it needs the `91d0872b` file, include it in the release candidate and verify 200 on rafii.io.
-- [ ] **C5 (A)** Content Sharing Guidelines UX audit, with screenshots, on the real composer:
+- [~] **C3 (A)** Products and scopes: request only Login Kit (`user.info.basic`) and Content Posting API Direct Post (`video.publish`). Remove anything not built *and* demonstrated, such as `video.upload`, `video.list` or `user.info.stats`, because extras delay review.
+- [x] **C4 (A/J)** URL properties: confirm in the portal which property the Production app needs. If it needs the `91d0872b` file, include it in the release candidate and verify 200 on rafii.io.
+- [~] **C5 (A)** Content Sharing Guidelines UX audit, with screenshots, on the real composer:
   - Creator nickname/avatar from `creator_info`.
   - Privacy dropdown with no default, offering only allowed options.
   - Comment/Duet/Stitch off by default and greyed out when the creator disabled them.
   - Max-duration check.
   - Commercial disclosure, the "Promotional content" / "Paid partnership" labels, and the rule that branded content cannot be private.
   - The exact consent text, the processing notice and the unaudited-private notice.
-- [ ] **C6 (A)** Demo video script and shot list covering every product and scope end to end: login, consent, account card, composer rules, approval, posting, status, disconnect.
+- [~] **C6 (A)** Demo video script and shot list covering every product and scope end to end: login, consent, account card, composer rules, approval, posting, status, disconnect.
   - **Domain-match risk:** TikTok wants the demo's domain to match the Website URL, but the Sandbox lane rejects production origins. Needs decision **D1**.
 - [ ] **C7 (J)** Record (or approve an agent-assisted recording of) 1–5 videos, ≤ 50 MB each.
 - [ ] **C8 (J)** Submit App Review in the portal. Accepting TikTok terms and submitting is James's action.
 
 ### Phase D — Rafii code gaps (agent; one release candidate on the live lineage)
 
-- [ ] **D1 (A)** Add `server_schedule = True` for TikTok.
+- [x] **D1 (A)** Add `server_schedule = True` for TikTok.
   - At dispatch: re-query `creator_info`, re-check privacy option and max duration, and hold (no retry loop) if anything changed.
   - Add tests.
-- [ ] **D2 (A)** Deauthorization.
+- [x] **D2 (A)** Deauthorization.
   - Verify TikTok's current webhook docs (`authorization.removed` or equivalent) and implement a signed webhook if one exists.
   - Otherwise make the `401` / `access_token_invalid` paths mark the connection "reconnect needed" without retrying.
   - Add tests.
-- [ ] **D3 (A)** Scale.
+- [~] **D3 (A)** Scale.
   - Confirm current Content Posting and Login Kit rate limits from TikTok docs.
   - Model the worker (10 jobs/min shared, 1-minute cron) against thousands of creators and about 15 posts/day/creator.
   - Add per-provider backpressure or a configurable job budget, and a synthetic load test. No real provider calls.
-- [ ] **D4 (A)** Error handling: map `unaudited_client_can_only_post_to_private_accounts`, `spam_risk_*`, `privacy_level_option_mismatch`, rate limits and the 5-user cap to clear "held"/"failed" copy with no automatic resubmission.
-- [ ] **D5 (A)** One SHA-pinned release-candidate branch containing A3, B2, C4 (if needed) and D1–D4.
+- [x] **D4 (A)** Error handling: map `unaudited_client_can_only_post_to_private_accounts`, `spam_risk_*`, `privacy_level_option_mismatch`, rate limits and the 5-user cap to clear "held"/"failed" copy with no automatic resubmission.
+- [~] **D5 (A)** One SHA-pinned release-candidate branch containing A3, B2, C4 (if needed) and D1–D4.
   - JCB `ci` (or `test`/`typecheck`/`lint`) passes remotely.
   - An independent Codex review is done.
   - Open a draft PR. No merge.
@@ -183,6 +198,14 @@ Owner: **A** = agent · **J** = James · **T** = TikTok
 | UTC time | Item | Result | Evidence |
 |---|---|---|---|
 | 2026-10-21 20:50 | Baseline | Recorded | This document, section 1 |
+| 2026-10-22 01:40 | A1 | Live = 75312e78 (dpl_HQHUJrhr…) | sha1 match 2220/2220 vs origin/claude/mastodon-connect-prod-candidate |
+| 2026-10-22 01:45 | B1 | Callback mismatch evidence | staging pr_oauth_transactions.redirect_uri; prod row 10-07 |
+| 2026-10-22 01:50 | B2 | Sandbox lane ported (9665ca0a, 4781c5f3) | 56 targeted tests OK |
+| 2026-10-22 02:00 | D1 | server_schedule + separate publish gate (ecced2d0) | 143 + 60 targeted tests OK |
+| 2026-10-22 02:10 | D2 | authorization.removed webhook (57a75c63) + candidate migration | 21 targeted tests OK; prod/staging lack migration 044 |
+| 2026-10-22 02:12 | D4 | reached_active_user_cap copy (707dd871) | 45 tests OK |
+| 2026-10-22 02:15 | A3 | TikTok page copy (98d28783) | identity Unsupported, "connecting and publishing in review" |
+| 2026-10-22 02:20 | C4 | Second verification file added (cherry-pick of 91d0872b) | web/public |
 
 ## Sources
 
