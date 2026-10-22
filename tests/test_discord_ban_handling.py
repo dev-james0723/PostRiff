@@ -109,6 +109,23 @@ class HeldRoutesSendNothing(unittest.TestCase):
         with self.assertRaises(RateCoordinatorUnavailable):
             self.reserve()
 
+    def hold_application_scope(self, value):
+        # Models UPDATE pr_discord_rate_state SET manual_hold = ... WHERE kind = 'policy' (RUNBOOK-INCIDENT break glass).
+        # A rolled-back reservation replaces the double's state objects, so look the rows up again every time.
+        rows = [state for state in self.db.states.values() if state['kind'] == 'policy']
+        self.assertEqual(len(rows), 1)
+        rows[0]['hold'] = value
+
+    def test_an_operator_hold_on_the_application_scope_stops_every_route_and_can_be_lifted(self):
+        self.assertIsInstance(self.reserve(), Permit)
+        self.hold_application_scope(True)
+        for path in (self.path, '/channels/' + B + '/messages/' + A, '/channels/' + A + '/messages/' + A):
+            with self.assertRaises(RateCoordinatorUnavailable, msg=path):
+                self.limiter.reserve('GET', path, identity=self.identity)
+        self.hold_application_scope(False)
+        self.db.now += 2
+        self.assertIsInstance(self.reserve(), Permit)
+
     def test_a_well_formed_429_delays_and_then_releases_the_route(self):
         self.send({'status': 429, 'headers': {'Retry-After': '2'}, 'body': {'retry_after': 2}})
         with self.assertRaises(RateDelayed) as held:
