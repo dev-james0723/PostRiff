@@ -294,7 +294,7 @@ class StartCapacity(unittest.TestCase):
         s._fresh_identity = Mock(return_value={'connectionId': 'identity-1', 'authorizationGeneration': 'g1'})
         s.user_guilds = Mock(return_value=[{'id': GUILD}])
         s.bind_identity = Mock()
-        reserved = reserve or (lambda cursor, values=None, guild_id=None: order.append('reserve'))
+        reserved = reserve or (lambda cursor, values=None, guild_id=None, person=None, new_server=True: order.append('reserve'))
         with patch('postriff_phase2.hosted.audit'), patch('postriff_phase2.hosted.throttle'), \
                 patch.object(gate, 'reserve_capacity', side_effect=reserved) as spy:
             try:
@@ -307,7 +307,8 @@ class StartCapacity(unittest.TestCase):
         result, order, spy = self.started({'discordPurpose': 'installation', 'guildId': GUILD, 'identityConnectionId': 'identity-1'})
         self.assertEqual(order, ['reserve', 'insert'])
         self.assertEqual(result['transactionId'], 'transaction-id')
-        self.assertEqual(spy.call_args.kwargs, {'guild_id': GUILD})  # a server that already holds a slot is let through
+        # a server that already holds a slot is let through, and one person may only have a few starts in flight
+        self.assertEqual(spy.call_args.kwargs, {'guild_id': GUILD, 'person': (WORKSPACE, ACTOR), 'new_server': True})
 
     def test_a_full_house_writes_no_transaction_and_sends_nobody_to_discord(self):
         full = AlphaError('Discord is at capacity.', 409, code='discord_capacity_reached')
@@ -317,11 +318,11 @@ class StartCapacity(unittest.TestCase):
         self.assertEqual(result.code, 'discord_capacity_reached')
         self.assertNotIn('insert', order)
 
-    def test_reconnecting_an_existing_server_does_not_use_a_new_slot(self):
+    def test_reconnecting_an_existing_server_takes_no_new_slot_but_counts_as_a_start(self):
         result, order, spy = self.started({'discordPurpose': 'installation', 'guildId': GUILD, 'identityConnectionId': 'identity-1',
                                            'connectionId': 'conn-1'})
-        spy.assert_not_called()
-        self.assertEqual(order, ['insert'])
+        self.assertEqual(spy.call_args.kwargs, {'guild_id': GUILD, 'person': (WORKSPACE, ACTOR), 'new_server': False})
+        self.assertEqual(order, ['reserve', 'insert'])
 
     def test_identity_linking_does_not_use_a_slot(self):
         result, order, spy = self.started({'discordPurpose': 'identity'})

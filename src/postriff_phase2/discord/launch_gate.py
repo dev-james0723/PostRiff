@@ -23,6 +23,13 @@ enforced when a new installation is STARTED (reservation under an advisory lock)
 does not remove the shared bot from a server, so servers whose grant was revoked still count toward the cap. A server
 that already has a bot credential row holds its slot and is never counted twice.
 
+Every live installation start holds its own slot, because each one is a server the bot may join (the authorize link
+stays usable at Discord whatever Rafii does to the row). To keep one account from holding the cap by starting over and
+over, a person (workspace and member) may have at most MAX_PENDING_PER_PERSON starts in flight; a fourth is refused until
+one finishes or expires (ten minutes). A server that already has a bot credential row is admitted at any fill, even
+with the cap at 0 or misconfigured: it takes no new slot. The original (non-v2) connect flow cannot name the server
+before the person picks it on Discord's screen, so it always asks for a slot.
+
 What the count cannot see (compare with the Developer Portal's own number, monitoring.sql Q9 and Q12): a person who
 picks a different server on Discord's screen than the one reserved, or closes the tab after consenting, or whose
 callback fails, has still put the bot in a server that Rafii holds no row for; so do deleted workspaces and anyone who
@@ -35,9 +42,11 @@ from postriff_alpha.domain import AlphaError
 ENV_WORKSPACES = 'POSTRIFF_DISCORD_CONNECT_WORKSPACES'
 ENV_CAP = 'POSTRIFF_DISCORD_GUILD_CAP'
 DEFAULT_PRODUCTION_CAP = 90
+MAX_PENDING_PER_PERSON = 3
 
 CLOSED_MESSAGE = 'Discord is not open to new connections for this workspace yet. Connections you already have keep working.'
 CAPACITY_MESSAGE = 'Discord has no room for another server right now. Nothing was connected or posted. Try again later.'
+PENDING_MESSAGE = 'You already have Discord installations waiting to be finished. Finish them or try again in a few minutes. Nothing was connected or posted.'
 
 _WORKSPACE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 _DIGITS = re.compile(r'^[0-9]{1,9}$')
@@ -47,9 +56,10 @@ _LOCK = "SELECT pg_advisory_xact_lock(hashtext('rafii.discord.server-cap'))"
 # started or are mid-exchange: the bot may already be in those servers although no credential is stored yet. A
 # disconnect only revokes Rafii's stored grant; the shared bot stays in the server, and the row keeps the server id and
 # scopes, so revoked rows still count. (Deleted workspaces take their rows with them; compare with the Developer
-# Portal's own server count, see monitoring.sql Q9.) In-flight starts count once per person (workspace and member), so
-# a double click, or one account starting again and again, holds one slot and not twenty. Reconnect starts carry the
-# same scope, so they count too for the minutes they are in flight; that over-count is deliberate.
+# Portal's own server count, see monitoring.sql Q9.) Each in-flight start is counted exactly, one slot per row: the
+# server it will join is inside the encrypted request and cannot be compared, so collapsing rows per person would let
+# one account open the bot to many servers for the price of one. A double click or a reconnect start therefore holds
+# a slot for the minutes it is in flight; that over-count is deliberate, and MAX_PENDING_PER_PERSON bounds it.
 _IN_FLIGHT = """provider='discord' AND 'bot' = ANY(scopes)
        AND ((consumed_at IS NULL AND expires_at > now())
             OR (outcome = 'exchange_started' AND consumed_at > now() - interval '10 minutes'))"""
@@ -57,8 +67,11 @@ _COUNT = """SELECT
   (SELECT count(DISTINCT provider_account_id) FROM public.pr_encrypted_credentials
      WHERE provider='discord' AND 'bot' = ANY(scopes))
   +
-  (SELECT count(*) FROM (SELECT DISTINCT workspace_id, member_id FROM public.pr_oauth_transactions
-     WHERE """ + _IN_FLIGHT + """) AS in_flight)"""
+  (SELECT count(*) FROM public.pr_oauth_transactions
+     WHERE """ + _IN_FLIGHT + """)"""
+# What one person already has in flight (reconnect starts included).
+_PENDING = """SELECT count(*) FROM public.pr_oauth_transactions
+  WHERE """ + _IN_FLIGHT + """ AND workspace_id = %s AND member_id = %s"""
 # A server that already has a bot credential row (revoked or not) holds its slot: starting it again, from this or
 # another workspace, must not need a second one.
 _KNOWN = """SELECT 1 FROM public.pr_encrypted_credentials
@@ -149,14 +162,22 @@ def require_connect_access(connections, workspace, token, values=None):
         raise AlphaError(CLOSED_MESSAGE, 403, code='discord_access_closed')
 
 
-def reserve_capacity(cur, values=None, guild_id=None):
+def reserve_capacity(cur, values=None, guild_id=None, person=None, new_server=True):
     """Inside the transaction that records a new installation start: serialise, count, refuse at the cap.
 
-    `guild_id` (the server being installed, when known) lets a server that already holds a slot through at any fill."""
+    `guild_id` (the server being installed, when known) lets a server that already holds a slot through at any fill.
+    `person` is (workspace id, member id): at most MAX_PENDING_PER_PERSON starts of theirs may be in flight, whatever the
+    cap. `new_server=False` is a reconnect of a server Rafii already holds: it takes no slot but still counts as a start."""
     cap, _misconfigured = guild_cap(values)
     if cap is None:
         return None
     cur.execute(_LOCK)
+    if person:
+        cur.execute(_PENDING, tuple(person))
+        if int(cur.fetchone()[0]) >= MAX_PENDING_PER_PERSON:
+            raise AlphaError(PENDING_MESSAGE, 409, code='discord_capacity_reached')
+    if not new_server:
+        return {'reconnect': True, 'cap': cap}
     if guild_id:
         cur.execute(_KNOWN, (str(guild_id),))
         if cur.fetchone():

@@ -128,6 +128,7 @@ class DiscordConnections:
         if response.get('status') not in (200, 201, 204):
             error = AlphaError('Discord access is unavailable. Reconnect if permissions were removed.', 409 if response.get('status') in (400, 401, 403) else 503)
             error.discord_permanent = response.get('status') in (400, 401, 403)
+            error.discord_status = response.get('status')
             raise error
         return response.get('body')
 
@@ -224,10 +225,12 @@ class DiscordConnections:
             elif inputs.get('connectionId'):
                 record = identity_record(state, inputs['connectionId'], actor)
                 context['expectedUserId'] = record['userId']
-            if purpose == 'installation' and not inputs.get('connectionId'):
+            if purpose == 'installation':
                 # A brand-new server takes one of the shared bot's limited slots (launch_gate); one the bot already
-                # holds a slot for (for example after a disconnect) does not.
-                launch_gate.reserve_capacity(cur, guild_id=inputs.get('guildId'))
+                # holds a slot for (for example after a disconnect) does not, and neither does a reconnect. Every
+                # installation start, a reconnect too, counts toward the few a person may have in flight.
+                launch_gate.reserve_capacity(cur, guild_id=inputs.get('guildId'), person=(workspace, actor),
+                                             new_server=not inputs.get('connectionId'))
             state_value = secrets.token_urlsafe(32)
             ciphertext, key = self.oauth.vault.encrypt(json.dumps(context))
             cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,'discord',%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>600)) RETURNING id::text", (workspace, actor, capability, redirect, scopes, hashlib.sha256(state_value.encode()).hexdigest(), ciphertext, key))
@@ -431,6 +434,13 @@ class DiscordConnections:
                     self.save_state(cur, workspace, state)
             fail('Discord refresh could not be confirmed. Reconnect before publishing.')
 
+        def release_claim():
+            with self.local(workspace, token) as (cur, state, actor):
+                record = identity_record(state, connection, actor)
+                if record.get('refreshClaim') == claim and record.get('authorizationGeneration') == row[4]:
+                    record.pop('refreshClaim', None); record.pop('refreshStartedAt', None)
+                    self.save_state(cur, workspace, state)
+
         # Never retry an ambiguous rotating-token exchange automatically.
         try:
             response = self._response('POST', '/oauth2/token', user_id=envelope['user'], form={'grant_type': 'refresh_token', 'refresh_token': refresh})
@@ -439,12 +449,15 @@ class DiscordConnections:
             # is untouched and nothing is ambiguous. Free the claim and let the caller try again later; revoking here
             # would destroy a healthy connection (and its servers) because of a policy hold, an expired policy or a
             # busy minute.
-            with self.local(workspace, token) as (cur, state, actor):
-                record = identity_record(state, connection, actor)
-                if record.get('refreshClaim') == claim and record.get('authorizationGeneration') == row[4]:
-                    record.pop('refreshClaim', None); record.pop('refreshStartedAt', None)
-                    self.save_state(cur, workspace, state)
+            release_claim()
             raise
+        except AlphaError as refused:
+            if getattr(refused, 'discord_status', None) != 429:
+                reconnect_required()
+            # Discord itself answered 429: the request was rate limited and not processed, so the refresh token is
+            # unspent either. Same outcome as a coordinator refusal; any other answer stays ambiguous.
+            release_claim()
+            raise RateDelayed(cause='provider_429') from refused
         except Exception:
             reconnect_required()
         # From here the old refresh token is spent, so a failure to verify the new one cannot be retried.

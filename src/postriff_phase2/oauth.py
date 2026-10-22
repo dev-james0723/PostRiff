@@ -516,7 +516,7 @@ class OAuthService:
                 # This is the original flow (Discord v2 flags off). It also puts the shared bot in a server of the
                 # person's choosing, so it takes a slot under the same lock as the v2 installation start.
                 from .discord import launch_gate
-                launch_gate.reserve_capacity(cur)
+                launch_gate.reserve_capacity(cur, person=(workspace_id, principal))
             state = secrets.token_urlsafe(32)
             verifier, challenge = pkce_pair()
             custody = json.dumps({'pkce': verifier, 'connectionId': (inputs or {}).get('connectionId'),
