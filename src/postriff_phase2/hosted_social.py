@@ -287,8 +287,9 @@ class HostedSocial:
         text = manifest["payload"]["text"]
         if session.get("did") != manifest.get("providerAccountId"):
             return {"state": "held", "confirmed": "Bluesky account changed since approval; choose the correct account and approve again."}
-        if not isinstance(text, str) or not text.strip() or measure("Bluesky", text)["used"] > 300:
-            return {"state": "failed", "confirmed": "Bluesky requires a non-empty post of at most 300 Unicode graphemes. Review the exact draft; nothing was posted."}
+        counted = measure("Bluesky", text) if isinstance(text, str) else None
+        if not counted or not text.strip() or counted["used"] > 300 or counted["bytes"] > counted["byteLimit"]:
+            return {"state": "failed", "confirmed": "Bluesky requires a non-empty post of at most 300 Unicode graphemes and 3,000 bytes. Review the exact draft; nothing was posted."}
         rkey = self.bluesky_rkey(manifest)
         reference = f"at://{session['did']}/app.bsky.feed.post/{rkey}"
         record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")}

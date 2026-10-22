@@ -69,11 +69,18 @@ class Refresh(unittest.TestCase):
                            "pds": "https://pds.example.com", "jwk": generate_jwk(), "rt": "fixture-refresh", "nonce": None})
 
     def test_only_a_definitive_answer_ends_the_grant(self):
-        for status, body in ((400, {"error": "invalid_grant"}), (401, {"error": "invalid_client"})):
-            provider, _ = self.provider([ok(body, status=status)])
+        for status in (400, 401):
+            provider, _ = self.provider([ok({"error": "invalid_grant"}, status=status)])
             with self.assertRaises(AlphaError) as caught:
                 provider.refresh(self.stored())
             self.assertEqual(caught.exception.code, "reauthorization_required")
+
+    def test_a_refused_client_key_is_an_operator_problem_not_a_revoked_grant(self):
+        for error in ("invalid_client", "unauthorized_client"):
+            provider, _ = self.provider([ok({"error": error}, status=401)])
+            with self.assertRaises(AlphaError) as caught:
+                provider.refresh(self.stored())
+            self.assertEqual((caught.exception.status, caught.exception.code), (503, "provider_client_rejected"))
 
     def test_outage_or_rate_limit_keeps_the_grant(self):
         for status, body in ((503, {}), (429, {"error": "rate_limited"}), (500, {"error": "internal"})):
@@ -177,6 +184,42 @@ class Resolution(unittest.TestCase):
         with self.assertRaises(AlphaError) as caught:
             provider.begin(BASE + "/api/oauth/bluesky/callback", "state", "verifier", "challenge", ["atproto"], "name.bsky.social")
         self.assertEqual(caught.exception.status, 409)
+
+
+class ReviewFindings(unittest.TestCase):
+    """Regressions for the 2026-10-22 independent review."""
+
+    def test_did_documents_served_as_json_ld_are_accepted_only_for_atproto(self):
+        from postriff_phase2.net_guard import accepted_json_type
+        self.assertTrue(accepted_json_type("application/did+ld+json", True))  # plc.directory's real content type
+        self.assertTrue(accepted_json_type("application/did+json", True))
+        self.assertTrue(accepted_json_type("application/json", False))
+        self.assertFalse(accepted_json_type("application/did+ld+json", False))
+        self.assertFalse(accepted_json_type("text/html", True))
+
+    def test_bluesky_byte_limit_is_enforced_beside_graphemes(self):
+        from postriff_phase2.text_measure import measure
+        from postriff_phase2.publisher import text_blockers
+        heavy = "\U0001F469\U0001F3FD\u200D\U0001F3A4" * 300  # 300 graphemes, 4,500 UTF-8 bytes
+        counted = measure("Bluesky", heavy)
+        self.assertEqual((counted["used"], counted["bytes"], counted["byteLimit"]), (300, 4500, 3000))
+        blockers = text_blockers({"text": heavy}, "Bluesky")
+        self.assertTrue(blockers and "bytes" in blockers[0])
+        self.assertEqual(text_blockers({"text": "hello"}, "Bluesky"), [])
+
+    def test_publish_refuses_over_byte_limit_without_calling_bluesky(self):
+        from postriff_phase2.hosted_social import HostedSocial
+        from test_hosted_wave1_connectors import manifest
+        heavy = "\U0001F469\U0001F3FD\u200D\U0001F3A4" * 300
+        job = manifest("Bluesky", DID)
+        job["payload"]["text"] = heavy
+        wire = Wire([])
+        adapter = BlueskyProvider(generate_jwk(kid="launch"), BASE, transport=wire, resolver=PUBLIC)
+        session = json.dumps({"v": 1, "did": DID, "at": "fixture", "pds": "https://pds.example.com", "jwk": generate_jwk(), "iss": "https://as.example.com"})
+        result = HostedSocial(None, {"bluesky": adapter})._submit_bluesky(job, adapter, session)
+        self.assertEqual(result["state"], "failed")
+        self.assertIn("3,000 bytes", result["confirmed"])
+        self.assertEqual(wire.calls, [])
 
 
 class Custody(unittest.TestCase):

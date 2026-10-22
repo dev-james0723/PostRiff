@@ -51,7 +51,10 @@ def text_blockers(variant: dict, platform: str) -> list[str]:
     used = len(text)
     if platform == "Bluesky":
         from .text_measure import measure
-        used = measure("Bluesky", text)["used"]
+        counted = measure("Bluesky", text)
+        used = counted["used"]
+        if counted["bytes"] > counted["byteLimit"]:
+            return [f"The draft is {counted['bytes']} bytes; Bluesky allows {counted['byteLimit']}. Shorten emoji-heavy text."]
     if limit and used > limit:
         return [f"The draft is {used} characters; {platform} allows {limit}."]
     return []

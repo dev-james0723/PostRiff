@@ -124,6 +124,14 @@ def public_https_url(url, resolver=socket.getaddrinfo):
     return url
 
 
+# plc.directory and did:web hosts serve DID documents as JSON-LD (application/did+ld+json).
+_DID_DOCUMENT_TYPES = ("application/did+ld+json", "application/did+json")
+
+
+def accepted_json_type(content_type, allow_atproto_did=False):
+    return content_type in ("application/json", "application/problem+json") or (allow_atproto_did and content_type in _DID_DOCUMENT_TYPES)
+
+
 @_bounded_public_transport
 def pinned_public_json_transport(method, url, headers=None, form=None, body=None, data=None,
                                  *, resolver=socket.getaddrinfo, allow_atproto_did=False):
@@ -203,7 +211,7 @@ def pinned_public_json_transport(method, url, headers=None, form=None, body=None
             return {"status": response.status,
                     "headers": {k.lower(): v for k, v in response.getheaders()},
                     "body": {"raw": raw.decode("utf-8", "replace").strip()}}
-        if raw and content_type not in ("application/json", "application/problem+json"):
+        if raw and not accepted_json_type(content_type, allow_atproto_did):
             raise AlphaError("The instance returned an unsupported response.", 502)
         try:
             parsed = json.loads(raw) if raw else {}

@@ -108,7 +108,9 @@ class P0Bluesky(unittest.TestCase):
 
     def test_unicode_graphemes_300_with_zwj_vs_301(self):
         emoji = "👩🏽‍🎤"
-        self.assertEqual(measure("Bluesky", emoji * 300), {"used": 300, "limit": 300, "unit": "grapheme"})
+        counted = measure("Bluesky", emoji * 300)
+        self.assertEqual({k: counted[k] for k in ("used", "limit", "unit")}, {"used": 300, "limit": 300, "unit": "grapheme"})
+        self.assertGreater(counted["bytes"], counted["byteLimit"])  # 300 such clusters still exceed the 3,000-byte cap
         self.assertEqual(measure("Bluesky", "e\u0301" * 300)["used"], 300)
         job = manifest("Bluesky", DID, emoji * 301)
         social, wire, _ = self.social()

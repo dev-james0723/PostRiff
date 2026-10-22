@@ -114,7 +114,7 @@ test('Bluesky identity-only state never claims publishing and offers an explicit
   const card = fs.readFileSync(path.resolve(__dirname, '../src/features/channels/channel-card.tsx'), 'utf8');
   assert.match(card, /!blueskyHasPostGrant/);
   assert.match(card, /scopes\.includes\('transition:generic'\)/);
-  assert.match(card, /scopes\.includes\('repo:app\.bsky\.feed\.post\?action=create'\)/);
+  assert.match(card, /scopes\.includes\('repo:app\.bsky\.feed\.post\?action=create'\) && channel\.scopes\.includes\('blob:image\/\*'\)/);
   assert.match(card, /capability: 'publish'/);
   assert.match(card, /Grant publishing/);
 });

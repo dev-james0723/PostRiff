@@ -247,8 +247,9 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const expired = !renewable && typeof channel.expiresAt === 'number' && channel.expiresAt <= nowSeconds();
   const sentence = attentionSentence(channel, undefined, held);
   const identityVerifiedAt = channel.capabilities.identity?.verifiedAt ?? null;
+  // Matches BlueskyProvider.has_publish_scopes: a granular grant needs both post creation and image upload.
   const blueskyHasPostGrant = channel.scopes.includes('transition:generic') ||
-    channel.scopes.includes('repo:app.bsky.feed.post?action=create');
+    (channel.scopes.includes('repo:app.bsky.feed.post?action=create') && channel.scopes.includes('blob:image/*'));
   const activityTotal = activity ? activity.scheduled + activity.held + activity.published : 0;
 
   async function refresh() {

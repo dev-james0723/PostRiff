@@ -380,9 +380,12 @@ class BlueskyProvider(OAuthProvider):
                    "did": stored["did"], "pds": stored["pds"], "dpopJwk": stored["jwk"]}
         response, nonce = self._dpop_post(stored["tokenEndpoint"], {"grant_type": "refresh_token", "refresh_token": stored["rt"]}, stored["jwk"], stored.get("nonce"), audience=stored["iss"])
         body = response.get("body") if isinstance(response.get("body"), dict) else {}
-        if response.get("status") in (400, 401) and body.get("error") in ("invalid_grant", "invalid_client", "unauthorized_client"):
+        if response.get("status") in (400, 401) and body.get("error") == "invalid_grant":
             # Definitive: the grant is gone. Only this answer may turn the connection into "reconnect".
             raise AlphaError("Bluesky access expired; reconnect the account.", 409, code="reauthorization_required")
+        if response.get("status") in (400, 401) and body.get("error") in ("invalid_client", "unauthorized_client"):
+            # Rafii's own client key or metadata was refused: an operator problem, not the customer's grant. Keep it.
+            raise AlphaError("Rafii could not renew Bluesky access right now. Try again shortly.", 503, code="provider_client_rejected")
         if response.get("status") != 200 or not body:
             # Outage, rate limit or an unknown answer: the stored grant stays usable for a later retry.
             raise AlphaError("Bluesky did not renew access right now. Try again shortly.", 503, code="provider_unavailable")
