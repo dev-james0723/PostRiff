@@ -1,9 +1,9 @@
 {
-  "recordedAt": "2026-10-22T19:50:46Z",
+  "recordedAt": "2026-10-22T20:16:13Z",
   "snapshot": "2026-10-22 ~17:00 UTC",
   "objective": "Let customers connect Discord to Rafii tomorrow at the largest scale that can be proven safe (capped Wave 1), and prepare Wave 2 ('thousands').",
   "releaseStatus": "NO_GO",
-  "releaseStatusNote": "NO_GO at 2026-10-22T19:50:46Z: no frozen SHA with green CI, no real-customer acceptance, no owner approvals, Discord verification unknown, backups unverified, public privacy wording unapproved. Flip only through F-01.",
+  "releaseStatusNote": "NO_GO at 2026-10-22T20:16:13Z: no frozen SHA with green CI, no real-customer acceptance, no owner approvals, Discord verification unknown, backups unverified, public privacy wording unapproved. Flip only through F-01.",
   "targetWave": "W1",
   "statusVocabulary": [
     "VERIFIED",
@@ -37,7 +37,7 @@
     "vercelTeam": "team_PgXY5VdAYKcsv0RLoDPHscNq",
     "supabaseProduction": "buoyhkbodnhzngaotoel",
     "supabaseStaging": "oxacvkhpfgytkepxcaqh",
-    "rcHead": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
+    "rcHead": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
     "rcPullRequest": "https://github.com/dev-james0723/PostRiff/pull/222"
   },
   "humanTouchpoints": [
@@ -157,7 +157,7 @@
         "APPROVAL-PACKET-1.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "default applied by the agent (assumption logged); the owner has not replied: capped Wave 1, at most 90 servers"
     },
     {
@@ -177,7 +177,7 @@
         "APPROVAL-PACKET-1.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "default applied by the agent (assumption logged); the owner has not replied: Discord delta on the live line only"
     },
     {
@@ -197,7 +197,7 @@
         "APPROVAL-PACKET-1.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "default applied by the agent (assumption logged); the owner has not replied: engagement OFF"
     },
     {
@@ -217,7 +217,7 @@
         "APPROVAL-PACKET-1.md row 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "explicit decision requested (packet row 4): REVIEWED passed on the two RC build commands only"
     },
     {
@@ -237,7 +237,7 @@
         "APPROVAL-PACKET-1.md section 2"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "T0 and GO_TIME not given; the agent assumes T0 = 24 hours after its start and says so"
     },
     {
@@ -258,7 +258,7 @@
         "MEASUREMENTS.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "default applied by the agent (assumption logged); the owner has not replied"
     },
     {
@@ -278,7 +278,7 @@
         "APPROVAL-PACKET-1.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "default applied by the agent (assumption logged); the owner has not replied: identity-only linking is not opened to the public"
     },
     {
@@ -298,7 +298,7 @@
         "H-01-verification-prep.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "human only; preparation done"
     },
     {
@@ -318,7 +318,7 @@
         "PORTAL-AUDIT-SHEET.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "human only (or AUTH-10 read-only); audit sheet prepared"
     },
     {
@@ -338,7 +338,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "human only; session script prepared"
     },
     {
@@ -358,7 +358,7 @@
         "APPROVAL-PACKET-1.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "Approval Packet 1 rev A sent to the owner 2026-10-22 ~19:35Z; no reply yet"
     },
     {
@@ -378,7 +378,7 @@
         "APPROVAL-PACKET-1.md section 2"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "human only"
     },
     {
@@ -396,7 +396,7 @@
       "status": "NOT_RUN",
       "evidence": [],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "human only (optional)"
     },
     {
@@ -416,7 +416,7 @@
         "APPROVAL-PACKET-1.md section 2"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "human only"
     },
     {
@@ -438,7 +438,7 @@
         "P-01-privacy-terms-diff.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "wording drafted and committed on the RC as its own commit; awaiting approval; the build waits for it"
     },
     {
@@ -475,7 +475,7 @@
         "S-01-lineage-report.md"
       ],
       "sourceSha": "c5fc1fd10350f3142ec6f34b2c373139e85abb39",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "live build is c5fc1fd1 (Mastodon production candidate), 257 of 257 listed files identical, 48 of 48 hidden-file probes; no Discord v2 code in production"
     },
     {
@@ -498,7 +498,7 @@
         "S-01-lineage-report.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "covered in aggregate by the superset proof and the full Python suite (6,075 tests, same code as the candidate); no per-capability matrix written"
     },
     {
@@ -523,7 +523,7 @@
         "superset-allowlist.json"
       ],
       "sourceSha": "d4572f68",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "candidate branch built as a merge of the live line c5fc1fd1 and the Discord line b960bfe0 plus the launch controls; 11 conflicted files resolved as unions"
     },
     {
@@ -546,8 +546,8 @@
         "tests/test_rc_superset_proof.py",
         "superset-allowlist.json"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "superset proof passes with 29 deliberate, explained rewrites; re-run at freeze"
     },
     {
@@ -569,7 +569,7 @@
         "S-05-migration-reconciliation.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "nothing to apply for Discord; migrations 108 to 112 are absent in production but also absent from the live build; retired Mastodon 131 to 133 absent everywhere"
     },
     {
@@ -592,8 +592,8 @@
         "https://github.com/dev-james0723/PostRiff/pull/222"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
-      "note": "draft PR #222 runs the pull-request workflows; the four dispatched workflows ran on an older head. Findings so far: the offline secret scan fails on the live commit itself (171 digests reviewed in the candidate); other results pending"
+      "timestamp": "2026-10-22T20:16:13Z",
+      "note": "draft PR #222 runs the pull-request workflows; dispatched workflows (library, agent-ui, qualification) must be re-run on the frozen head. Two inherited failures found and fixed on the candidate: the offline secret scan (171 digests reviewed) and, since 2026-10-22, npm audit criticals in next 16.3.8 and @sentry/nextjs 10.74.0 (patched). Results on the final head pending"
     },
     {
       "id": "S-07",
@@ -611,11 +611,12 @@
       "basis": "",
       "status": "NOT_RUN",
       "evidence": [
-        "commit 0c6a9c36"
+        "commit cd0ff8d0 (dependency patch)",
+        "commit 0c6a9c36 (secret allowlist)"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
-      "note": "pins kept (Pillow 13.0.0, pypdf 6.20.1 in requirements.txt); secret scan fixed with reviewed allowlist entries only; npm audit not re-run"
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
+      "note": "npm audit: 0 vulnerabilities at the candidate head (it was 2 critical + 1 high in next 16.3.8 and @sentry/nextjs 10.74.0; the same lockfile is live today); Pillow 13.0.0 and pypdf 6.20.1 pins kept; offline secret scan PASS with reviewed allowlist entries only; local tsc, oxlint, 1008 web tests and a production build (Sentry on and off) pass. CI on the exact head pending"
     },
     {
       "id": "S-08",
@@ -635,7 +636,7 @@
       "status": "NOT_RUN",
       "evidence": [],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "not frozen: CI findings, H-08 wording approval and the cap/legal changes still move the head"
     },
     {
@@ -657,7 +658,7 @@
         "https://github.com/dev-james0723/PostRiff/pull/222"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "draft PR \"DO NOT MERGE: Discord launch RC\", base branch points at the live commit so the diff is the Discord delta"
     },
     {
@@ -679,8 +680,8 @@
         "src/postriff_phase2/discord/launch_gate.py",
         "tests/test_discord_launch_gate.py (48 tests)"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "implemented and passing locally; awaiting exact-SHA CI on the frozen head. Enforced at connect START and in the catalog; deliberately not at the callback, destinations or publish (would strand a consented install; the kill switch covers them)"
     },
     {
@@ -702,8 +703,8 @@
         "launch_gate.py",
         "tests: ReserveCapacity, StartCapacity"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "implemented and passing locally; awaiting exact-SHA CI on the frozen head. Counts every distinct bot-install server including revoked grants (a disconnect leaves the bot in the server) plus installs in flight; reserved under an advisory lock at start"
     },
     {
@@ -725,8 +726,8 @@
         "web/src/lib/channels/discord-copy.json",
         "web/tests/discord-launch-gate.test.cjs"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "partial: closed, full, busy, unavailable and late-post wording shipped in three languages; the Channels card capability wording is unchanged (already Assisted / identity only); verification-pending state not built"
     },
     {
@@ -748,8 +749,8 @@
         "tests/test_discord_launch_gate.py KillSwitch",
         "RUNBOOK-INCIDENT.md"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "implemented and passing locally; awaiting exact-SHA CI on the frozen head. Kill switch composes with the gate (KillSwitch tests). On Vercel the switch needs a new build; the runbook uses a third twin and a database hold for seconds-level stops"
     },
     {
@@ -772,8 +773,8 @@
         "tests/test_discord_launch_gate.py WidenWithoutRedeploy",
         "RUNBOOK-LAUNCH.md section 0"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "implemented and passing locally; awaiting exact-SHA CI on the frozen head. Correction to the item: env changes reach new builds only, so widening is done by promoting a pre-built twin, not by an env edit"
     },
     {
@@ -793,8 +794,8 @@
         "scripts/discord_rate_policy.py",
         "tests/test_discord_rate_policy_tool.py"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "policy tool and 22 tests pass locally; applying the value is AUTH-4. Policy last used by the coordinator expires between 10-23 18:47Z and 10-24 18:47Z"
     },
     {
@@ -816,7 +817,7 @@
         "APPROVAL-PACKET-1.md row 9"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "not requested (AUTH-2); does not gate a 90-server Wave 1"
     },
     {
@@ -837,8 +838,8 @@
       "evidence": [
         "tests/test_discord_ban_handling.py"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "implemented and passing locally; awaiting exact-SHA CI on the frozen head (15 tests: Cloudflare-style 429, scopes, hints, held routes, operator hold)"
     },
     {
@@ -859,8 +860,8 @@
       "evidence": [
         "MEASUREMENTS.md"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "model and user-facing messages done; request counts are from code and the harness constant, not measured"
     },
     {
@@ -882,8 +883,8 @@
         "MEASUREMENTS.md",
         "tests/test_discord_worker_budget.py"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "decision recorded with the budget arithmetic; per-step latency not measured; late-post note in the schedule dialog"
     },
     {
@@ -903,7 +904,7 @@
         "RUNBOOK-INCIDENT.md 4.B"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "COULD; the incident runbook covers a ban"
     },
     {
@@ -927,7 +928,7 @@
         "C-01-env-matrix.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "matrix written; the dangerous values live only on the build commands"
     },
     {
@@ -948,7 +949,7 @@
         "APPROVAL-PACKET-1.md row 8"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "incomplete: the tool returned 100 of 271 production env records and only 48 names; no Discord variable exists in the readable window (created 10-14 or later); the older 223 are unreadable. Needs the owner's names-only `vercel env ls production`"
     },
     {
@@ -971,7 +972,7 @@
         "APPROVAL-PACKET-1.md rows 1 to 3"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "awaiting AUTH-3 and AUTH-4"
     },
     {
@@ -992,8 +993,8 @@
       "evidence": [
         "scripts/rc_superset_proof.py crons check"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "the candidate keeps the only live cron (/api/cron/worker every minute), proven by the superset proof; the post-promotion check is not done"
     },
     {
@@ -1013,7 +1014,7 @@
       "status": "NOT_RUN",
       "evidence": [],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "needs the staged build"
     },
     {
@@ -1033,7 +1034,7 @@
         "private audit (not in the repository)"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "advisors run read-only: security 23 findings (1 WARN, 22 INFO), performance 223; none on the in-scope tables at ERROR level; triage in the private report"
     },
     {
@@ -1054,7 +1055,7 @@
         "monitoring.sql planned against the schema"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "RLS and FORCE RLS on, anon has no grants, authenticated has no access to the Discord, credential or OAuth tables, service_role grants as migrations 124 to 131 give"
     },
     {
@@ -1074,7 +1075,7 @@
         "APPROVAL-PACKET-1.md row 11"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "cannot be determined with the tools available: Pro plan means daily backups kept 7 days; PITR is a paid add-on; WAL archiving is running. The owner must read the dashboard"
     },
     {
@@ -1094,7 +1095,7 @@
         "S-05-migration-reconciliation.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "default taken: staging has no Discord tables and migrations are already in production; AUTH-8 not requested"
     },
     {
@@ -1117,7 +1118,7 @@
         "P-02-discord-policy-compliance.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "engagement is OFF; its code keeps counts and digests, not message text; every monitor is aggregate-only; reply approvals (when enabled) keep parent message id, author id and a digest"
     },
     {
@@ -1140,7 +1141,7 @@
         "RUNBOOK-LAUNCH.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the frozen SHA and the owner"
     },
     {
@@ -1162,7 +1163,7 @@
         "RUNBOOK-LAUNCH.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the frozen SHA and the owner"
     },
     {
@@ -1184,7 +1185,7 @@
         "RUNBOOK-LAUNCH.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the frozen SHA and the owner"
     },
     {
@@ -1206,7 +1207,7 @@
         "RUNBOOK-LAUNCH.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the frozen SHA and the owner"
     },
     {
@@ -1228,7 +1229,7 @@
         "RUNBOOK-LAUNCH.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the frozen SHA and the owner"
     },
     {
@@ -1250,7 +1251,7 @@
         "RUNBOOK-LAUNCH.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the frozen SHA and the owner"
     },
     {
@@ -1276,7 +1277,7 @@
         "RUNBOOK-LAUNCH.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the frozen SHA and the owner"
     },
     {
@@ -1300,7 +1301,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1324,7 +1325,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1347,7 +1348,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1371,7 +1372,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1394,7 +1395,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1417,7 +1418,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1440,7 +1441,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1459,12 +1460,11 @@
       "basis": "",
       "status": "NOT_RUN",
       "evidence": [
-        "RUNBOOK-LAUNCH.md",
-        "TESTER-SESSION-SCRIPT.md"
+        "tests/test_discord_launch_cap_race.py"
       ],
-      "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
-      "note": "waits for the dark promotion and the tester session"
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
+      "note": "test written and passing locally on PostgreSQL 16 (12 racers, 5 slots, 2 held; exactly 3 admitted, count never above the cap; a no-lock control overshoots). Production check is the Q9 count query only. CI evidence = the qualification workflow (PostgreSQL 17) on the frozen head"
     },
     {
       "id": "X-09",
@@ -1488,7 +1488,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1507,8 +1507,8 @@
       "evidence": [
         "P-01-privacy-terms-diff.md"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "wording drafted and committed on the RC; approval is H-08"
     },
     {
@@ -1528,7 +1528,7 @@
         "P-02-discord-policy-compliance.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "compliance table against Discord's developer policy and terms (2024-07-08 copy); gaps ranked"
     },
     {
@@ -1549,8 +1549,8 @@
       "evidence": [
         "web/src/lib/channels/discord-copy.json"
       ],
-      "sourceSha": "0c6a9c3652e586c47a6abf04867c98ee852c877a",
-      "timestamp": "2026-10-22T19:50:46Z",
+      "sourceSha": "cd0ff8d0b1c71e201d376aa295afbc5c352168ef",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "partial: refusal, busy and late-post copy done; the connect guide (Manage Server, permissions, removing the bot) is not written"
     },
     {
@@ -1571,7 +1571,7 @@
         "P-01-privacy-terms-diff.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "workspace deletion cascades the Discord credential rows; the shared bot is never removed from a server, by design on this line; disclosed in the draft wording"
     },
     {
@@ -1593,7 +1593,7 @@
         "monitoring.sql"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "eleven aggregate-only monitors with thresholds; every statement planned against the production schema with EXPLAIN (no rows read)"
     },
     {
@@ -1616,7 +1616,7 @@
         "APPROVAL-PACKET-1.md row 12"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "trigger table and abort ladder written for Vercel semantics; AUTH-7 rewritten in the packet"
     },
     {
@@ -1640,7 +1640,7 @@
         "RUNBOOK-INCIDENT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "launch and incident runbooks with customer notices in three languages"
     },
     {
@@ -1662,7 +1662,7 @@
         "scripts/discord_rate_policy.py"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "the policy tool prints the renew-by date; no calendar entries created"
     },
     {
@@ -1682,7 +1682,7 @@
       "status": "NOT_RUN",
       "evidence": [],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "after launch"
     },
     {
@@ -1702,7 +1702,7 @@
         "LAUNCH-READINESS-REPORT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "evaluated at GO_TIME; today the recommendation is NO-GO"
     },
     {
@@ -1725,7 +1725,7 @@
         "RUNBOOK-INCIDENT.md section 5"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "the fallback is that D1 (gate closed) stays promoted; the customer wording exists; reschedule criteria not written"
     },
     {
@@ -1748,7 +1748,7 @@
         "RUNBOOK-INCIDENT.md section 1"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "abort and rollback ladder with speeds and undo steps"
     },
     {
@@ -1768,7 +1768,7 @@
       "status": "NOT_RUN",
       "evidence": [],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "after F-01"
     },
     {
@@ -1790,7 +1790,7 @@
         "H-01-verification-prep.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "waits on H-01 and Discord"
     },
     {
@@ -1829,7 +1829,7 @@
         "W-03-webhook-server-limit.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "not documented by Discord in anything found; a safe empirical test and a question to Discord are drafted"
     },
     {
@@ -1904,7 +1904,7 @@
         "W-07-merge-proposal.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T19:50:46Z",
+      "timestamp": "2026-10-22T20:16:13Z",
       "note": "proposal only"
     }
   ]

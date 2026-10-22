@@ -1,6 +1,6 @@
 # LAUNCH-READINESS-REPORT (Discord capped Wave 1)
 
-Generated 2026-10-22T19:50:46Z. Candidate: `claude/discord-launch-rc-20261023` at `0c6a9c36` (draft PR #222, not frozen). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
+Generated 2026-10-22T20:16:13Z. Candidate: `claude/discord-launch-rc-20261023` at `cd0ff8d0` (draft PR #222, not frozen). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
 
 ## Recommendation: **NO-GO today**
 
@@ -37,8 +37,8 @@ A false GO is the worst outcome, and none of the gates that need the owner, Disc
 | S-03 | Build the RC branch | AGENT | **VERIFIED** | candidate branch built as a merge of the live line c5fc1fd1 and the Discord line b960bfe0 plus the launch controls; 11 conflicted files resolved as unions | branch claude/discord-launch-rc-20261023; merge commit d4572f68 message lists every resolution |
 | S-04 | Superset proof | AGENT | **VERIFIED** | superset proof passes with 29 deliberate, explained rewrites; re-run at freeze | scripts/rc_superset_proof.py; tests/test_rc_superset_proof.py |
 | S-05 | Migration ledger reconciliation | AGENT | **VERIFIED** | nothing to apply for Discord; migrations 108 to 112 are absent in production but also absent from the live build; retired Mastodon 131 to 133 absent everywhere | S-05-migration-reconciliation.md |
-| S-06 | Exact-SHA CI green on the RC head | AGENT | **NOT_RUN** | draft PR #222 runs the pull-request workflows; the four dispatched workflows ran on an older head. Findings so far: the offline secret scan fails on the live commit itself (171 digests reviewed in the candidate… | https://github.com/dev-james0723/PostRiff/pull/222 |
-| S-07 | Dependency and secret hygiene | AGENT | **NOT_RUN** | pins kept (Pillow 13.0.0, pypdf 6.20.1 in requirements.txt); secret scan fixed with reviewed allowlist entries only; npm audit not re-run | commit 0c6a9c36 |
+| S-06 | Exact-SHA CI green on the RC head | AGENT | **NOT_RUN** | draft PR #222 runs the pull-request workflows; dispatched workflows (library, agent-ui, qualification) must be re-run on the frozen head. Two inherited failures found and fixed on the candidate: the offline sec… | https://github.com/dev-james0723/PostRiff/pull/222 |
+| S-07 | Dependency and secret hygiene | AGENT | **NOT_RUN** | npm audit: 0 vulnerabilities at the candidate head (it was 2 critical + 1 high in next 16.3.8 and @sentry/nextjs 10.74.0; the same lockfile is live today); Pillow 13.0.0 and pypdf 6.20.1 pins kept; offline secr… | commit cd0ff8d0 (dependency patch); commit 0c6a9c36 (secret allowlist) |
 | S-08 | Freeze the RC | AGENT | **NOT_RUN** | not frozen: CI findings, H-08 wording approval and the cap/legal changes still move the head |  |
 | G-01 | Fail-closed workspace gate for Discord | AGENT | **NOT_RUN** | implemented and passing locally; awaiting exact-SHA CI on the frozen head. Enforced at connect START and in the catalog; deliberately not at the callback, destinations or publish (would strand a consented insta… | src/postriff_phase2/discord/launch_gate.py; tests/test_discord_launch_gate.py (48 tests) |
 | G-02 | Global server cap guard | AGENT | **NOT_RUN** | implemented and passing locally; awaiting exact-SHA CI on the frozen head. Counts every distinct bot-install server including revoked grants (a disconnect leaves the bot in the server) plus installs in flight; … | launch_gate.py; tests: ReserveCapacity, StartCapacity |
@@ -83,6 +83,8 @@ A false GO is the worst outcome, and none of the gates that need the owner, Disc
 - The server cap now counts revoked grants because a disconnect leaves the shared bot in the server; it can still undercount Discord's own number (deleted workspaces), so the Portal's figure must be compared before opening.
 - The public privacy page and the deletion promise do not describe Discord, and for Discord the claim "revoked where supported" is untrue on this line. Drafted wording is in `P-01-privacy-terms-diff.md`.
 - The Discord rate policy last used by the coordinator expires between 10-23 18:47Z and 10-24 18:47Z.
+- **Security, not Discord-specific:** the live site runs Next.js 16.3.8 and @sentry/nextjs 10.74.0. Advisories published 2026-10-14 (Next.js: two critical remote-code-execution findings and one high denial-of-service; patched in 16.4.1) and 2026-09-24 (Sentry tunnel-route middleware bypass; patched in 10.75.2) reached the advisory database on 2026-10-22. From the app's own source the stated preconditions look unmet for three of the four (no `use cache`, no Server Actions, and the build script has no `--webpack` flag while the Sentry advisory needs a webpack build) and unclear for the image-optimizer one, so this is [Likely] not exploitable today, not proven safe. The candidate carries the patch (next 16.4.2, @sentry/nextjs 10.76.2, `npm audit` 0). The same lockfile is on every other branch, so their `npm audit` gates fail from today too (`S-07`).
+- A real-PostgreSQL race test now shows the server cap holds under concurrent starts (`X-08`).
 
 ## Not done on purpose
 
