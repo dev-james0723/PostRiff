@@ -110,20 +110,20 @@ GROUP BY 1, 2, 3
 ORDER BY 1 DESC, 2, 3;
 
 -- Q9. Servers counted against the cap: the same expression the connect gate uses (distinct servers with a bot-install
--- grant, revoked ones included because a disconnect leaves the shared bot in the server, plus installations started or
--- mid-exchange). It can UNDERCOUNT Discord's own number (deleted workspaces take their rows with them, and server
--- admins can add or remove the bot without us): compare with the server count in the Developer Portal and lower
--- POSTRIFF_DISCORD_GUILD_CAP by the difference. Page at 80 percent of the cap.
+-- grant, revoked ones included because a disconnect leaves the shared bot in the server, plus every installation start
+-- that is live or mid-exchange, one slot per row). It can UNDERCOUNT Discord's own number (deleted workspaces take their
+-- rows with them, and server admins can add or remove the bot without us): compare with the server count in the
+-- Developer Portal and lower POSTRIFF_DISCORD_GUILD_CAP by the difference. Page at 80 percent of the cap.
 SELECT (SELECT count(DISTINCT provider_account_id) FROM public.pr_encrypted_credentials
          WHERE provider = 'discord' AND 'bot' = ANY (scopes)) AS servers_counted,
        (SELECT count(DISTINCT provider_account_id) FROM public.pr_encrypted_credentials
          WHERE provider = 'discord' AND revoked_at IS NULL AND 'bot' = ANY (scopes)) AS servers_with_a_live_grant,
-       (SELECT count(*) FROM (SELECT DISTINCT workspace_id, member_id FROM public.pr_oauth_transactions
+       (SELECT count(*) FROM public.pr_oauth_transactions
          WHERE provider = 'discord' AND 'bot' = ANY (scopes)
            AND ((consumed_at IS NULL AND expires_at > now())
-                OR (outcome = 'exchange_started' AND consumed_at > now() - interval '10 minutes'))) AS in_flight) AS installs_in_flight;
--- installs_in_flight counts one slot per workspace and member (the gate does the same), so repeated starts by one
--- account are one row here. servers_counted + installs_in_flight is the number the gate compares with the cap.
+                OR (outcome = 'exchange_started' AND consumed_at > now() - interval '10 minutes'))) AS installs_in_flight;
+-- installs_in_flight counts every live start, one slot per row (a double click is two, a reconnect start is one): each
+-- is a server the bot may join. servers_counted + installs_in_flight is the number the gate compares with the cap.
 
 -- Q10. Grants by kind and recent revocations (counts only).
 SELECT ('bot' = ANY (scopes)) AS bot_install,
@@ -156,3 +156,17 @@ SELECT count(*) FILTER (WHERE consumed_at IS NULL AND expires_at <= now()) AS ne
 FROM public.pr_oauth_transactions
 WHERE provider = 'discord' AND 'bot' = ANY (scopes)
   AND created_at > now() - interval '24 hours';
+
+-- Q13. Hoarding check (counts only, no ids): how many people (workspace and member) have 1, 2 or 3 bot-install starts in
+-- flight right now. The gate refuses a fourth start from one person, so no row may show more than 3. Many people at 3 at
+-- once while few installs complete means the cap is being held by sign-ups rather than servers: close the gate (promote
+-- D1) and read Q8. Holds expire by themselves after ten minutes.
+SELECT starts_in_flight, count(*) AS people
+FROM (SELECT workspace_id, member_id, count(*) AS starts_in_flight
+      FROM public.pr_oauth_transactions
+      WHERE provider = 'discord' AND 'bot' = ANY (scopes)
+        AND ((consumed_at IS NULL AND expires_at > now())
+             OR (outcome = 'exchange_started' AND consumed_at > now() - interval '10 minutes'))
+      GROUP BY workspace_id, member_id) AS per_person
+GROUP BY starts_in_flight
+ORDER BY starts_in_flight DESC;
