@@ -5,8 +5,10 @@ before committing. The scripted-cursor tests prove that order; this test proves 
 the last slots, exactly the free slots are handed out. A control run without the lock shows the race is real, so a pass
 means the lock is doing the work.
 
-Runs where PostgreSQL server binaries are named by POSTRIFF_PG_BIN (the qualification workflow sets it). It starts its own
-disposable cluster in a temporary directory and never reads application credentials or touches any other database.
+Runs where PostgreSQL server binaries are named by POSTRIFF_PG_BIN (the qualification and local-gates workflows set it). It
+starts its own disposable cluster in a temporary directory and never reads application credentials or touches any other
+database. It does not run under the synthetic transport fence (RAFII_DISCORD_SYNTHETIC_FENCE), which by design refuses every
+database except the guarded runner's own: the same tests run in the unfenced full-suite step of both workflows.
 """
 import os
 import shutil
@@ -27,6 +29,7 @@ except ImportError:  # pragma: no cover - the dependency set always has it in CI
     psycopg = None
 
 PG_BIN = os.environ.get('POSTRIFF_PG_BIN')
+FENCED = '1' in (os.environ.get('RAFII_DISCORD_SYNTHETIC_FENCE'), os.environ.get('RAFII_LINKEDIN_SYNTHETIC_FENCE'))
 CAP = 5
 RACERS = 12
 # Only the columns the count reads; the production tables carry more.
@@ -45,6 +48,7 @@ def _free_port():
         return probe.getsockname()[1]
 
 
+@unittest.skipIf(FENCED, 'the synthetic transport fence refuses any database but the guarded runner\'s; these tests run in the unfenced suite')
 @unittest.skipUnless(PG_BIN and psycopg and (Path(PG_BIN) / 'initdb').exists(),
                      'needs PostgreSQL server binaries (POSTRIFF_PG_BIN) and psycopg')
 class ConcurrentCapReservation(unittest.TestCase):
