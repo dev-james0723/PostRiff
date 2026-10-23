@@ -327,3 +327,146 @@ Section 4 limits: P50 ≤ 12, P95 ≤ 25, max ≤ 40.
   in the receipts' mock log and the coordinator's admission table. They decide which column of section 5 applies.
 - **Whether the lane's 12 loops can sustain 25 requests/s at all** (the lock benchmark, profile `lockbench`). If the
   loops or the coordinator lock top out below the budget, every row above moves right.
+
+## 7. Measured on the GitHub-hosted runner (requests 1023b)
+
+Tree `d80d6eaf` (the same `src/` as 62f68c56), harness 22e3257e, standard ubuntu-24.04 runner (4 vCPU), PostgreSQL 17
+behind PgBouncer (pool 20) with 2 ms per round trip, the fixed-window coordinator. Figures are from the artifacts,
+re-analysed with this branch's analysis (`analyze` on the downloaded run directory). They are facts unless marked.
+
+### 7.1 S1: 5,000 posts due at T in 2,000 workspaces (1,000 with 2 posts, 1,000 with 3)
+
+**Against the standard:**
+
+- Lateness median 17.19 min, p95 36.79 and max 40.73: all three **FAIL**.
+- 0 duplicates, 0 creates after expiry, 0 misroutes, 0 429s.
+- Policy ceiling **FAIL**: 856 requests had more than 25 others in their trailing second. The peak was 29 at the
+  mock; the coordinator's own table shows 29 in a trailing second and **28 in one calendar second**. So a calendar
+  second is not bounded by 25 either; the sandbox F429 run had shown at most 25.
+- All 5,000 verified. Pool demand 0.60 of 20. 0 statement timeouts.
+
+**Requests:**
+
+- 7.850 per verified post: essential 7.000; repeated preflight 0.653 (653 passes without a create, in 503 workspaces);
+  bot identity pair 0.197.
+- Only the plateau decides the median. From T to the first read-back at T+24.6 min, the mock processed 24,215
+  requests for 3,588 creates: **6.749 requests per created post**. Read-backs are served after the creates.
+
+**Pacing (verified against the coordinator's decomposition):**
+
+- In the plateau, the lane sends from second 6 to second 51 of each minute. Seconds 0-3 average 0 requests, seconds
+  4-5 average 0.8 and 4.0, and seconds 52-59 together average under 6. **Duty cycle 78%** (1,898 of 2,436 seconds of
+  the busy period had at least 5 requests).
+- The cause is in the code and the configuration. Each shard's loop has a budget of 50 s (`DEFAULT_SECONDS`,
+  `lane.py`). Each invocation builds its runtime inside the request (cold), and its first Discord request comes about
+  5 s after the cron time.
+- **Active-window rate:** seconds 7-51 averaged 21.2 requests/s, 85% of 25. Over every second with at least 5 requests
+  of the plateau it was 20.9/s, 84%.
+- **Plateau average:** 16.4 requests/s.
+- These three numbers reproduce the median. 8 s + 2,500 × 6.749 / (0.78 × 20.9) = **17.35 min** (inference) against
+  17.19 measured.
+- So at 6.75 requests per created post, P50 ≤ 12 min needs duty cycle × packing ≥ 0.95. Neither lever alone is
+  enough, and the request count matters as much.
+
+### 7.2 The tail of S1 (minutes 33 to 40): who used the requests
+
+| Minutes after T | Creates/min | Read-backs/min | Grant checks/min | Witness reads/min | Requests/s |
+|---|---|---|---|---|---|
+| 0-23 | 132-152 | 0 | 159-166 | 636-664 | 15.9-16.7 |
+| 24-32 | 101-124 | 35-221 | 115-152 | 460-608 | 15.3-15.8 |
+| 33-40 | 44-67 | 356-553 | 51-78 | 204-312 | 12.9-16.1 |
+
+**Read-backs take most of the tail.** 8 to 9 of the 14.7 requests per second go to read-backs, each step making one
+Discord request. The request rate itself drops, probably because a read-back step spends most of its time in
+database transactions (claim, lease, reconcile, record) rather than in Discord (inference).
+
+**The creates of the tail are posts pushed back by a release.** Created in minutes 33-40 are first and second posts
+(p0, p1) of their workspaces, 30 to 40 minutes late. The trace of workspace 257:
+
+1. At T+75 s its first post's preflight ran, and no create followed: released.
+2. At T+811 s its second post was created.
+3. At T+1,527 s its third post was created.
+4. Only at T+1,986 s was the released first post created (33 min late).
+5. The three read-backs followed at T+2,183, 2,304 and 2,411 s.
+
+The mechanism, from the code:
+
+- a claim stamps `lastDispatchedAt = now` on the job it takes (`hosted_worker.py:688`), including a job that is then
+  released unsent;
+- inside a workspace, jobs are taken by `lastDispatchedAt` ascending (`hosted_worker.py:552`), so a released post sorts
+  behind every post of its workspace that was never claimed;
+- a workspace gets one job per claim, and claims go round robin over workspaces (`ORDER BY hint.last_claimed_at`,
+  `hosted_worker.py:57-60`). At S1's pace a round is about 12 to 14 minutes, and each position a post loses in its
+  workspace costs it a round.
+
+Measured effect:
+
+| Posts | Count | Lateness median | p95 | max |
+|---|---|---|---|---|
+| in the 503 workspaces with a release | 1,304 | 26.6 min | 39.8 | 40.7 |
+| in the other workspaces | 3,696 | 15.3 min | 30.6 | 32.6 |
+
+**Every post later than 32.6 min was in a workspace with a release.** This is lane behaviour, not a harness artefact:
+the harness only sets the layout (2.5 posts per workspace, the same due minute), and production would order the same
+way. So candidate 4.1 (one preflight per sent post) would also remove the S1 tail beyond about 33 min (inference).
+The release itself is the trigger; the requeue behind the workspace's never-claimed posts is what makes it cost
+rounds.
+
+### 7.3 Read-back delay: create to verified median 18.15 min, p95 30.13, max 32.43
+
+The same three rules decide it:
+
+- the round robin over workspaces;
+- inside a workspace, never-claimed jobs first (`lastDispatchedAt` 0), so every new post of a workspace is created
+  before any of its read-backs;
+- one job per claim.
+
+A workspace with k posts reaches its first read-back only in round k + 1. The read-back's due time (5 s after the
+create, `hosted_worker.py:871`) makes it eligible but gives it no priority. Due time to verified read-back: median
+35.63 min, p95 40.26. Only 9 posts were still unverified at the last create, because the tail served read-backs.
+
+**Is it intended?** The comments at `hosted_worker.py:471-473` give the intent of the tenant order, fairness: "a busy
+tenant cannot monopolize every chunk lease by sorting before others". No comment addresses the read-back latency. In a
+burst, a customer sees the post in Discord while Rafii shows it as sent and not yet confirmed (`provider_accepted`) for
+18 to 30 minutes. Candidate 4.2 in this document trades that against the lateness.
+
+### 7.4 Lock benchmark (profile `lockbench`, same runner type)
+
+Admissions per second: one reserve plus one observe transaction per request.
+
+| Configuration | 1 process | 4 | 12 | 24 |
+|---|---|---|---|---|
+| learned routes, no policy limit, 0 ms round trip | 68.5 | 128.3 | 129.2 | 119.2 |
+| the same, 2 ms | 10.6 | 31.9 | 42.4 | 47.4 |
+| the same, 5 ms | 4.2 | 14.1 | 20.5 | 23.2 |
+| 2 ms with a 120 ms Discord answer between reserve and observe | | | 24.6 | 30.6 |
+| cold routes, 2 ms | 9.7 | 22.4 | 24.4 | |
+| the reviewed 25/s policy, 2 ms | | | 23.4 (95 delayed) | 24.9 (277 delayed) |
+
+At 12 processes and 2 ms, reserve took p50 153 ms and p95 291 ms, and observe 122 and 213. That is queueing on the
+application row lock, against 39 and 56 ms with one process.
+
+**Answer to "is the lock the limiter at 25/s" (inference from these numbers):**
+
+- **At 2 ms per round trip it is the main latency contributor, not a hard ceiling.** The coordinator alone admits 42
+  to 47 per second back to back. With a Discord answer between admission and observation, 12 loops get only 24.6/s,
+  because each request spends about 300 to 400 ms in the two transactions. The lane's other step transactions (claim,
+  lease, seal, record) come on top, which fits the 20.9/s measured in S1's active seconds.
+- **At 5 ms the lock becomes the ceiling:** 20.5/s at 12 processes, 23.2/s at 24, below 25 with no policy at all.
+- So the real database round trip from Vercel to Supabase decides it, and it was not measured. More loops raise the
+  ceiling (24 processes: 30.6/s with a Discord answer) at the price of longer queues (reserve p95 614 ms).
+
+### 7.5 What would move the S1 median (inference from 7.1 to 7.4)
+
+P50 ≈ 2,500 × r / (25 × duty × packing):
+
+| Lever | duty | packing | r | P50 (min) |
+|---|---|---|---|---|
+| today | 0.78 | 0.84 | 6.75 | 17.2 |
+| loop budget 58 s (S1-lane58) | about 0.92 | 0.84 | 6.75 | about 14.6 |
+| budget 70 s, or warm with 58 s (S1-lane70, S1-warm) | about 0.98 | 0.84 | 6.75 | about 13.7 |
+| plus one preflight per sent post (4.1) | 0.98 | 0.84 | about 6.1 | about 12.4 |
+| plus charge-once accounting (4.9) | 0.98 | about 0.95 | about 6.1 | about 10.9 |
+
+P95 and max depend mostly on the release requeue (7.2), which 4.1 removes. The `s1levers` profile (S1 as control,
+S1-lane58, S1-lane70, S1-warm) measures the duty-cycle rows alone. No code changes.
