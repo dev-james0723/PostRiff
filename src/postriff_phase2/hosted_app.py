@@ -624,7 +624,7 @@ class HostedApplication:
                 'event':'request.completed', 'requestId':request_id,
                 'method':method if method in ('GET','POST','PUT','PATCH','DELETE','OPTIONS','HEAD') else 'OTHER',
                 'status':status_code, 'durationMs':round((time.monotonic()-started)*1000,2),
-                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' or environ.get('PATH_INFO','').startswith('/api/cron/youtube/') else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
+                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' or environ.get('PATH_INFO','').startswith(('/api/cron/youtube/','/api/cron/discord-worker/')) else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
             **environ.get('postriff.failure', {})
             }))
             # Founder reliability metrics (CONTRACTS §8.D): one in-memory count per minute x route pattern x status class,
@@ -669,6 +669,25 @@ class HostedApplication:
                 service = self._runtime()
                 from .youtube.fleet import run_lane
                 return self._json(start_response, 200, run_lane(service, self.worker, lanes[suffix]))
+            if path.startswith('/api/cron/discord-worker/'):
+                # W-02 shards. Same authority as the YouTube lanes: the cron secret, checked before the runtime,
+                # database or provider clients start. The flag is read per request; off answers without them.
+                started = time.monotonic()
+                from .discord import lane as discord_lane
+                number = discord_lane.shard(path.removeprefix('/api/cron/discord-worker/'))
+                if method != 'GET' or number is None:
+                    raise AlphaError('This hosted route is unavailable.', 404)
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get('CRON_SECRET', '')
+                supplied = environ.get('HTTP_AUTHORIZATION', '')
+                if (not isinstance(expected, str) or len(expected) < 16 or not expected.isascii()
+                        or not isinstance(supplied, str) or not supplied.isascii()
+                        or not hmac.compare_digest(supplied, 'Bearer ' + expected)):
+                    raise AlphaError('Cron authorization failed.', 401)
+                if not discord_lane.enabled():
+                    return self._json(start_response, 200, discord_lane.disabled(number))
+                self._runtime()
+                return self._json(start_response, 200, discord_lane.run(self.worker, number, started=started,
+                                                                         request_id=environ.get('postriff.request_id')))
             if path == '/api/discord/interactions':
                 if method != 'POST':
                     raise AlphaError('Discord interaction route unavailable.', 404)
@@ -1382,7 +1401,7 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith('/api/cron/youtube/'):
+            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith(('/api/cron/youtube/', '/api/cron/discord-worker/')):
                 # Source locations only: never format exception text, source lines, locals or payloads.
                 frame = error.__traceback__
                 while frame is not None:

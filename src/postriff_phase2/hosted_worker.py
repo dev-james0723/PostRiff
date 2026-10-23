@@ -1317,6 +1317,12 @@ class PostgresWorker:
     def tick(self, max_jobs=None, max_seconds=None):
         from .youtube.fleet import enabled
         fleet_owns_youtube = enabled()
+        from .discord import lane
+        if lane.enabled():
+            # W-02: the parallel Discord lane owns Discord; this tick never claims it.
+            result = self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube, exclude_discord=True)
+            result['discordParallelLane'] = True
+            return result
         return self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
 
     def tick_youtube(self, max_jobs, max_seconds):
@@ -1359,7 +1365,7 @@ class PostgresWorker:
         return {'version': 1, 'enabled': self.discord_workers, 'stopping': self._stopping,
                 'counterScope': 'worker-instance', 'counters': dict(self.discord_stats), 'queue': queue,'rateLimits':rate}
 
-    def _tick(self, max_jobs=None, max_seconds=None, *, youtube_only=False, exclude_youtube=False, discord_only=False):
+    def _tick(self, max_jobs=None, max_seconds=None, *, youtube_only=False, exclude_youtube=False, discord_only=False, exclude_discord=False):
         self._ensure_lifecycle()
         if max_jobs is None or max_seconds is None:
             configured_jobs, configured_seconds = configured_worker_limits()
@@ -1384,6 +1390,8 @@ class PostgresWorker:
         def step():
             if discord_only:
                 return self.step(discord_only=True)
+            if exclude_discord:
+                return self.step(exclude_youtube=exclude_youtube, exclude_discord=True)
             if self.discord_workers and not youtube_only:
                 # Alternate provider lanes when both are busy; each lane retains
                 # its existing approval and claim path. No Discord global lock.

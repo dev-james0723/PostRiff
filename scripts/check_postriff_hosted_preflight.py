@@ -102,7 +102,9 @@ def validate_structure(root=ROOT):
     leaked = re.search(r"(?:sb_secret_|sk-proj-)[A-Za-z0-9_-]{16,}", samples)
     checks.append(_result("environment-template", "fail" if leaked else "pass", "placeholder-only contract; no secret-shaped literal found"))
     crons = config.get("crons", [])
-    exact_cron = crons == [{"path": "/api/cron/worker", "schedule": "* * * * *"}]
+    # The worker, then the reviewed W-02 Discord lane shards (each answers without the runtime while its flag is off).
+    exact_cron = crons == [{"path": "/api/cron/worker", "schedule": "* * * * *"}] + [
+        {"path": "/api/cron/discord-worker/%d" % shard, "schedule": "* * * * *"} for shard in range(12)]
     checks.append(_result("production-cron-candidate", "pass" if exact_cron else "pending", "one-minute authenticated worker candidate" if exact_cron else "add the reviewed production cadence before promotion"))
     checks.append(_result("vercel-project-link", "pass" if (root / ".vercel/project.json").is_file() else "pending", "linked" if (root / ".vercel/project.json").is_file() else "no Vercel project selected"))
     return checks

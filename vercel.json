@@ -103,6 +103,54 @@
     {
       "path": "/api/cron/worker",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/0",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/1",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/2",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/3",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/4",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/5",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/6",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/7",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/8",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/9",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/10",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/discord-worker/11",
+      "schedule": "* * * * *"
     }
   ],
   "git": {

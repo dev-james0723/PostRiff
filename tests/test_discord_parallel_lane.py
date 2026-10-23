@@ -1,0 +1,547 @@
+"""W-02 parallel Discord lane, offline: flag, budget, route, the existing tick, and the loop itself.
+
+No database, network or credential. The real-PostgreSQL proofs (exactly once with many loops, the rate cap, fairness,
+expiry, the operator hold, a global 429, connections) are in test_discord_parallel_lane_postgres.py.
+"""
+import copy
+import hashlib
+import importlib.util
+import io
+import itertools
+import json
+import logging
+import time
+import unittest
+import uuid
+from contextlib import contextmanager
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+from postriff_alpha.domain import AlphaError
+from postriff_phase2 import hosted_worker, security_holds
+from postriff_phase2.discord import lane
+from postriff_phase2.discord.rate_limits import RateDelayed, SharedPostgresBudget
+from postriff_phase2.hosted_app import HostedApplication
+from postriff_phase2.hosted_social import HostedSocial
+from postriff_phase2.hosted_worker import PostgresWorker
+from postriff_phase2.social_connectors import DiscordProvider
+from test_discord_publish_authorization import APP, NOW, SyntheticGrants, SyntheticWire, approve, fixture, review
+from test_discord_worker_lifecycle import MemoryDatabase
+
+ROOT = Path(__file__).resolve().parents[1]
+_SPEC = importlib.util.spec_from_file_location('discord_rate_policy', ROOT / 'scripts/discord_rate_policy.py')
+POLICY_TOOL = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(POLICY_TOOL)
+ON = {lane.ENV_ENABLED: 'true', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}
+BASE_SOURCE = ROOT / 'tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt'
+BASE_SHA256 = '8fdfd6e3dc461a88a9d4784a587491e22ada54b27585480a41609fb8c64f76de'  # pragma: allowlist secret -- content hash of the pinned source
+
+
+class FlagAndBudget(unittest.TestCase):
+    def test_only_the_exact_string_true_with_the_worker_protocol_on_enables_the_lane(self):
+        self.assertTrue(lane.enabled(ON))
+        for value in ('TRUE', 'True', '1', 'yes', ' true', 'true ', '', None):
+            with self.subTest(value=value):
+                self.assertFalse(lane.enabled({**ON, lane.ENV_ENABLED: value} if value is not None else
+                                              {'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}))
+        self.assertFalse(lane.enabled({lane.ENV_ENABLED: 'true'}), 'needs the Discord worker lease protocol too')
+        self.assertFalse(lane.enabled({}))
+
+    def test_the_default_budget_ends_well_inside_one_cron_minute(self):
+        self.assertEqual(lane.limits({}), (50.0, 600))
+
+    def test_no_budget_can_outlast_the_function_limit_with_one_step_in_flight(self):
+        config = json.loads((ROOT / 'vercel.json').read_text())
+        duration = config['services']['postriff_api']['functions']['api/index.py']['maxDuration']
+        self.assertEqual(lane.FUNCTION_SECONDS, duration)
+        self.assertEqual(lane.MAX_SECONDS + lane.STEP_RESERVE_SECONDS + lane.COLD_START_SECONDS, duration)
+        # Seven Discord requests at the 20-second transport timeout, and room for their transactions.
+        self.assertGreaterEqual(lane.STEP_RESERVE_SECONDS, 7 * 20 + 20)
+        self.assertEqual(lane.limits({lane.ENV_SECONDS: str(lane.MAX_SECONDS)})[0], lane.MAX_SECONDS)
+        for seconds, steps in ((lane.MAX_SECONDS + 1, 10), (290, 10), (4, 10), ('nan', 10), ('inf', 10), ('x', 10),
+                               (50, 0), (50, lane.MAX_STEPS + 1), (50, 'x')):
+            with self.subTest(seconds=seconds, steps=steps), self.assertRaises(AlphaError) as refused:
+                lane.limits({lane.ENV_SECONDS: str(seconds), lane.ENV_STEPS: str(steps)})
+            self.assertEqual(refused.exception.code, 'discord_lane_configuration')
+
+    def test_shards_are_small_decimal_numbers_only(self):
+        self.assertEqual([lane.shard(text) for text in ('0', '7', '11', '31')], [0, 7, 11, 31])
+        for text in ('32', '99', '-1', '01', '1.0', ' 1', '1/2', '', 'one', None, '١'):
+            with self.subTest(text=text):
+                self.assertIsNone(lane.shard(text))
+
+    def test_vercel_starts_one_loop_per_shard_every_minute_and_git_deploys_stay_off(self):
+        config = json.loads((ROOT / 'vercel.json').read_text())
+        self.assertEqual(config['git'], {'deploymentEnabled': False})
+        self.assertEqual(config['crons'][0], {'path': '/api/cron/worker', 'schedule': '* * * * *'})
+        self.assertEqual(config['crons'][1:], [{'path': lane.ROUTE + str(n), 'schedule': '* * * * *'}
+                                               for n in range(lane.SHARDS)])
+        self.assertLessEqual(lane.SHARDS, lane.MAX_SHARDS)
+
+
+def invoke(app, suffix, authorization='', method='GET'):
+    result = {}
+    environ = {'REQUEST_METHOD': method, 'PATH_INFO': lane.ROUTE + suffix, 'QUERY_STRING': '',
+               'HTTP_AUTHORIZATION': authorization, 'wsgi.input': io.BytesIO(), 'CONTENT_LENGTH': '0'}
+
+    def response(status, headers):
+        result['status'] = int(status.split()[0])
+    result['body'] = json.loads(b''.join(app(environ, response)))
+    return result
+
+
+class CronRoute(unittest.TestCase):
+    SECRET = 'c' * 24
+
+    def app(self):
+        app = HostedApplication(cron_secret=self.SECRET)
+        app._runtime = Mock(side_effect=AssertionError('runtime initialized'))
+        return app
+
+    def test_missing_or_user_tokens_never_start_the_runtime(self):
+        for authorization in ('', 'Bearer dev:someone', 'Bearer prt_not-cron-authority', 'Bearer ' + 'c' * 23):
+            with self.subTest(authorization=authorization), patch.dict('os.environ', ON):
+                app = self.app()
+                self.assertEqual(invoke(app, '0', authorization)['status'], 401)
+                app._runtime.assert_not_called()
+
+    def test_with_the_flag_off_an_authorized_shard_answers_without_the_runtime(self):
+        with patch.dict('os.environ', {lane.ENV_ENABLED: 'TRUE', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}):
+            app = self.app()
+            result = invoke(app, '3', 'Bearer ' + self.SECRET)
+        self.assertEqual(result, {'status': 200, 'body': {'version': 1, 'lane': 'discord', 'enabled': False,
+                                                         'shard': 3, 'processed': 0}})
+        app._runtime.assert_not_called()
+
+    def test_unknown_shards_and_methods_are_not_routes(self):
+        for suffix, method in (('32', 'GET'), ('x', 'GET'), ('1/2', 'GET'), ('', 'GET'), ('1', 'POST')):
+            with self.subTest(suffix=suffix, method=method), patch.dict('os.environ', ON):
+                app = self.app()
+                self.assertEqual(invoke(app, suffix, 'Bearer ' + self.SECRET, method)['status'], 404)
+                app._runtime.assert_not_called()
+
+    def test_with_the_flag_on_the_shard_runs_one_loop_on_the_shared_worker(self):
+        worker = object()
+        app = HostedApplication(service=object(), worker=worker, cron_secret=self.SECRET)
+        with patch.dict('os.environ', ON), patch.object(lane, 'run', return_value={'lane': 'discord'}) as run:
+            result = invoke(app, '11', 'Bearer ' + self.SECRET)
+        self.assertEqual(result, {'status': 200, 'body': {'lane': 'discord'}})
+        self.assertEqual(run.call_args.args, (worker, 11))
+        self.assertIsInstance(run.call_args.kwargs['started'], float)
+
+    def test_the_request_log_files_shards_under_cron(self):
+        records = []
+        handler = logging.Handler()
+        handler.emit = lambda record: records.append(record.getMessage())
+        logger = logging.getLogger('postriff.request')
+        logger.addHandler(handler)
+        try:
+            invoke(self.app(), '0')
+        finally:
+            logger.removeHandler(handler)
+        logged = [json.loads(line) for line in records if '"request.completed"' in line]
+        self.assertEqual([entry['route'] for entry in logged], ['cron'])
+
+
+def recording_worker(step, *, discord=True):
+    instance = object.__new__(PostgresWorker)
+    instance._stopping = False
+    instance._ensure_lifecycle = lambda: None
+    instance.social = SimpleNamespace()
+    instance.discord_workers = discord
+    instance.discord_report = lambda: {}
+    instance.step = step
+    return instance
+
+
+class ExistingTick(unittest.TestCase):
+    def test_with_the_lane_on_the_minute_tick_never_claims_discord(self):
+        seen = []
+        with patch.dict('os.environ', ON):
+            result = recording_worker(lambda **kw: seen.append(kw) or True).tick()
+        self.assertEqual(result['processed'], 10)
+        self.assertTrue(result['discordParallelLane'])
+        self.assertEqual(seen, [{'exclude_youtube': False, 'exclude_discord': True}] * 10)
+
+    def test_with_the_lane_on_and_the_youtube_fleet_on_both_stay_excluded(self):
+        seen = []
+        with patch.dict('os.environ', {**ON, 'POSTRIFF_YOUTUBE_FLEET_ENABLED': '1', 'POSTRIFF_YOUTUBE_CREATOR_ENABLED': '1'}):
+            recording_worker(lambda **kw: seen.append(kw) or False).tick()
+        self.assertEqual(seen, [{'exclude_youtube': True, 'exclude_discord': True}])
+
+    def test_with_the_lane_off_the_tick_still_alternates_its_two_lanes(self):
+        seen = []
+        with patch.dict('os.environ', {lane.ENV_ENABLED: 'false', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}):
+            result = recording_worker(lambda **kw: seen.append(kw) or True).tick()
+        self.assertNotIn('discordParallelLane', result)
+        self.assertEqual(seen.count({'discord_only': True}), 5)
+
+
+class Deterministic:
+    """Same ids and clocks for two runs, so their traces can be compared exactly."""
+    def __enter__(self):
+        counter = itertools.count(1)
+        clock = itertools.count(0)
+        self.patches = [patch.object(uuid, 'uuid4', lambda: uuid.UUID(int=next(counter))),
+                        patch.object(time, 'monotonic', lambda: next(clock) * 0.001)]
+        for item in self.patches:
+            item.start()
+        return self
+
+    def __exit__(self, *exc):
+        for item in reversed(self.patches):
+            item.stop()
+
+
+class FlagOffIsTheFrozenBase(unittest.TestCase):
+    """The frozen release candidate's worker (2a5a523d) and this one, run side by side on the same inputs."""
+    @classmethod
+    def setUpClass(cls):
+        source = BASE_SOURCE.read_bytes()
+        assert hashlib.sha256(source).hexdigest() == BASE_SHA256, 'the pinned base worker changed'
+        namespace = {'__name__': 'postriff_phase2.hosted_worker_2a5a523d', '__package__': 'postriff_phase2',
+                     '__builtins__': __builtins__}
+        exec(compile(source, str(BASE_SOURCE), 'exec'), namespace)
+        cls.Base = namespace['PostgresWorker']
+
+    def setUp(self):
+        for item in (patch.dict(security_holds._INSTALLED, {'readable': True, 'checked': float('-inf')}),
+                     patch('postriff_phase2.billing.require_publishing', return_value=None),
+                     patch('socket.socket.connect', side_effect=AssertionError('Real network forbidden'))):
+            item.start()
+            self.addCleanup(item.stop)
+
+    @staticmethod
+    def queue(jobs=2):
+        engine, state, channel, variant = fixture()
+        approve(engine, state, review(engine, state, channel, variant))
+        for number in range(1, jobs):
+            draft = dict(variant, id='synthetic-draft-%d' % number, text='Synthetic second post %d' % number)
+            state['variants'].append(draft)
+            approve(engine, state, review(engine, state, channel, draft))
+        return state
+
+    def trace(self, cls, environment, state):
+        db, wire = MemoryDatabase(copy.deepcopy(state)), SyntheticWire()
+        provider = DiscordProvider(APP, 'synthetic-secret', 'synthetic-bot', 'https://rafii.example.invalid',
+                                   transport=wire, production_reviewed=True)
+        provider.authorization_v2_enabled = True
+        social = HostedSocial(SyntheticGrants(), {'discord': provider})
+        with patch.dict('os.environ', environment, clear=True), Deterministic():
+            worker = cls(db.connection, social, clock=lambda: NOW + 301, worker_id='trace-worker')
+            results = [worker.tick() for _ in range(3)]
+        return {'sql': db.queries, 'http': wire.calls, 'state': db.state, 'results': results,
+                'stats': worker.discord_stats}
+
+    def assert_same(self, environment):
+        state = self.queue()
+        base, current = self.trace(self.Base, environment, state), self.trace(PostgresWorker, environment, state)
+        self.assertGreater(len(base['sql']), 10)
+        for key in ('sql', 'http', 'state', 'results', 'stats'):
+            with self.subTest(key=key):
+                self.assertEqual(json.dumps(current[key], sort_keys=True, default=repr),
+                                 json.dumps(base[key], sort_keys=True, default=repr))
+        return base
+
+    def test_flag_unset_matches_the_base_exactly(self):
+        base = self.assert_same({'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'})
+        self.assertTrue(any(call[0] == 'POST' for call in base['http']), 'the run reached a Discord create')
+
+    def test_flag_not_exactly_true_matches_the_base_exactly(self):
+        for value in ('TRUE', '1', 'yes', ' true'):
+            with self.subTest(value=value):
+                self.assert_same({'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true', lane.ENV_ENABLED: value})
+
+    def test_flag_on_without_the_worker_protocol_matches_the_base_exactly(self):
+        self.assert_same({lane.ENV_ENABLED: 'true'})
+
+    def test_control_flag_on_changes_the_trace(self):
+        environment = {'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true', lane.ENV_ENABLED: 'true'}
+        state = self.queue()
+        base, current = self.trace(self.Base, environment, state), self.trace(PostgresWorker, environment, state)
+        self.assertTrue(any(call[0] == 'POST' for call in base['http']))
+        self.assertEqual(current['http'], [], 'the minute tick leaves Discord to the lane')
+        self.assertEqual({job['state'] for job in current['state']['phase2']['jobs']}, {'scheduled'})
+
+
+class FakeLane:
+    """Drives run() without a database: steps, the coordinator outlook and the due hint are scripted."""
+    def __init__(self, steps=None, outlooks=None, due=None, step_seconds=1.0, projection=True):
+        self.now = 0.0
+        self.steps, self.outlooks, self.due = list(steps or []), list(outlooks or []), list(due or [])
+        self.step_seconds, self.projection = step_seconds, projection
+        self.started, self.slept, self.outlook_calls = [], [], 0
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.now += seconds
+
+    def step(self, worker, **kw):
+        assert kw == {'discord_only': True}
+        self.started.append(self.now)
+        self.now += self.step_seconds
+        outcome = self.steps.pop(0) if self.steps else True
+        if isinstance(outcome, BaseException):
+            raise outcome
+        if outcome == 'claim':
+            worker.discord_stats['claims'] += 1
+            return True
+        return outcome
+
+    def outlook(self, worker):
+        self.outlook_calls += 1
+        return self.outlooks.pop(0) if self.outlooks else (None, 0.0)
+
+    @contextmanager
+    def patched(self):
+        with patch.object(lane, 'outlook', self.outlook), \
+                patch.object(lane, 'soonest_due', lambda worker: self.due.pop(0) if self.due else None), \
+                patch.object(lane, '_projection_ready', lambda worker: self.projection), \
+                patch.object(lane.LaneWorker, 'step', lambda worker, **kw: self.step(worker, **kw)):
+            yield
+
+    def run(self, values=None, **kw):
+        base = PostgresWorker(lambda: None, social=SimpleNamespace(providers={}), worker_id='fake', discord_workers=True)
+        with self.patched():
+            return lane.run(base, 2, {**ON, **(values or {})}, started=0.0, sleep=self.sleep, monotonic=self.monotonic,
+                            rng=SimpleNamespace(random=lambda: 0.0), **kw)
+
+
+class TheLoop(unittest.TestCase):
+    def test_no_step_starts_after_the_budget_and_the_last_ends_within_one_step(self):
+        fake = FakeLane(step_seconds=7.0)
+        result = fake.run({lane.ENV_SECONDS: '50'})
+        self.assertEqual(result['stoppedBy'], 'time_budget')
+        self.assertTrue(all(at < 50 for at in fake.started))
+        self.assertLessEqual(result['elapsedSeconds'], 50 + 7)
+        self.assertEqual(len(fake.started), 8)
+
+    def test_the_step_budget_bounds_a_fast_loop(self):
+        fake = FakeLane(step_seconds=.001)
+        self.assertEqual(fake.run({lane.ENV_STEPS: '25'})['stoppedBy'], 'step_budget')
+        self.assertEqual(len(fake.started), 25)
+
+    def test_an_operator_hold_before_the_first_claim_stops_with_no_step(self):
+        fake = FakeLane(outlooks=[('operator_hold', 0.0)])
+        result = fake.run()
+        self.assertEqual((result['stoppedBy'], fake.started), ('operator_hold', []))
+
+    def test_an_operator_hold_set_mid_run_stops_at_the_next_iteration(self):
+        fake = FakeLane(outlooks=[(None, 0.0)] * 3 + [('operator_hold', 0.0)])
+        result = fake.run()
+        self.assertEqual(result['stoppedBy'], 'operator_hold')
+        self.assertEqual(len(fake.started), 3, 'no step after the hold was seen')
+        self.assertEqual(fake.outlook_calls, 4)
+
+    def test_a_degraded_or_unavailable_coordinator_stops_the_loop(self):
+        for blocker in ('coordinator_degraded', 'coordinator_unavailable'):
+            with self.subTest(blocker=blocker):
+                fake = FakeLane(outlooks=[(blocker, 0.0)])
+                self.assertEqual(fake.run()['stoppedBy'], blocker)
+                self.assertEqual(fake.started, [])
+
+    def test_an_embargo_is_slept_out_before_the_next_claim(self):
+        fake = FakeLane(outlooks=[(None, 0.0), (None, 4.0), (None, 0.0)], steps=[True, True, False])
+        result = fake.run()
+        self.assertEqual(fake.started[1] - fake.started[0], 1.0 + 4.0 + .01)
+        self.assertEqual(result['counters']['rateWaits'], 1)
+        self.assertEqual(result['waitedSeconds']['rate'], 4.01)
+
+    def test_an_embargo_longer_than_the_budget_ends_the_loop_instead_of_waiting(self):
+        fake = FakeLane(outlooks=[(None, 60.0)])
+        result = fake.run({lane.ENV_SECONDS: '30'})
+        self.assertEqual((result['stoppedBy'], fake.started, fake.slept), ('rate_wait', [], []))
+
+    def test_no_due_work_ends_the_loop_after_one_miss(self):
+        fake = FakeLane(steps=[False], due=[None])
+        result = fake.run()
+        self.assertEqual((result['stoppedBy'], len(fake.started)), ('idle', 1))
+
+    def test_work_due_within_seconds_is_waited_for(self):
+        fake = FakeLane(steps=[False, 'claim', False], due=[4.0, None])
+        result = fake.run()
+        self.assertEqual(fake.slept, [4.0])
+        self.assertEqual(result['counters']['idleWaits'], 1)
+        self.assertEqual(result['counters']['claimed'], 1)
+
+    def test_work_due_later_than_the_horizon_is_left_to_the_next_minute(self):
+        fake = FakeLane(steps=[False], due=[lane.IDLE_HORIZON_SECONDS + 1])
+        self.assertEqual(fake.run()['stoppedBy'], 'idle')
+        self.assertEqual(fake.slept, [])
+
+    def test_overdue_work_another_loop_holds_is_retried_a_few_times_then_left(self):
+        fake = FakeLane(steps=[False] * 20, due=[-1.0] * 20, step_seconds=.01)
+        result = fake.run()
+        self.assertEqual(result['stoppedBy'], 'idle')
+        self.assertEqual(len(fake.started), lane.MAX_IDLE_MISSES + 1)
+        self.assertEqual(fake.slept, [min(1.0, .05 * 2 ** n) for n in range(1, lane.MAX_IDLE_MISSES + 1)])
+
+    def test_missing_projection_schema_claims_nothing(self):
+        fake = FakeLane(projection=False)
+        self.assertEqual((fake.run()['stoppedBy'], fake.started), ('schema', []))
+
+    def test_a_step_failure_is_logged_with_its_class_and_raised(self):
+        fake = FakeLane(steps=['claim', RuntimeError('database down')])
+        with self.assertLogs('postriff.request', 'WARNING') as logged, self.assertRaises(RuntimeError):
+            fake.run()
+        entry = json.loads(logged.records[-1].getMessage())
+        self.assertEqual((entry['event'], entry['stoppedBy'], entry['error']), ('discord.lane.completed', 'error', 'RuntimeError'))
+        self.assertEqual(entry['counters']['claimed'], 1)
+        self.assertNotIn('database down', logged.records[-1].getMessage())
+
+    def test_each_invocation_logs_its_counters_and_no_identifiers(self):
+        fake = FakeLane(steps=['claim', 'claim', False])
+        with self.assertLogs('postriff.request', 'INFO') as logged:
+            result = fake.run(request_id='req-1')
+        entry = json.loads(logged.records[-1].getMessage())
+        self.assertEqual(entry['event'], 'discord.lane.completed')
+        self.assertEqual(entry['requestId'], 'req-1')
+        self.assertEqual(set(entry['counters']), set(lane.COUNTERS))
+        self.assertEqual(entry['counters']['claimed'], 2)
+        self.assertEqual({key: entry[key] for key in result}, result)
+        self.assertNotIn('discord-lane-', logged.records[-1].getMessage(), 'the lease owner id is not logged')
+
+    def test_flag_off_runs_nothing(self):
+        fake = FakeLane()
+        with fake.patched():
+            result = lane.run(object(), 4, {lane.ENV_ENABLED: 'true'})
+        self.assertEqual(result, lane.disabled(4))
+        self.assertEqual(fake.started, [])
+
+    def test_every_invocation_has_its_own_lease_owner(self):
+        base = PostgresWorker(lambda: None, social=SimpleNamespace(providers={}), worker_id='shared', discord_workers=True)
+        one, two = lane.LaneWorker(base, 0), lane.LaneWorker(base, 0)
+        self.assertNotEqual(one.worker_id, two.worker_id)
+        self.assertTrue(one.worker_id.startswith('discord-lane-0-'))
+        self.assertTrue(one.discord_workers)
+        self.assertIs(one.connection_factory, base.connection_factory)
+        self.assertEqual(one.worker_binding, base.worker_binding)
+
+
+class Outlook(unittest.TestCase):
+    """The pre-claim read uses the coordinator's own key derivation and only reads."""
+    def setUp(self):
+        build = POLICY_TOOL.build
+        self.provider = DiscordProvider(APP, 'synthetic-secret', 'synthetic-bot', 'https://rafii.example.invalid',
+                                        transport=SyntheticWire(), production_reviewed=True)
+        self.provider.rate_v1_enabled = True
+        self.now = 1_800_000_000.0
+        self.statements = []
+        self.rows = []
+        self.provider.rate_limiter = SharedPostgresBudget(self.factory, APP,
+                                                          policy=json.dumps(build(self.now - 100, days=1)))
+        self.worker = SimpleNamespace(social=SimpleNamespace(providers={'discord': self.provider}),
+                                      connection_factory=self.factory)
+
+    @contextmanager
+    def factory(self):
+        test = self
+
+        class Cursor:
+            def execute(self, sql, params=()):
+                test.statements.append((sql, params))
+
+            def fetchall(self):
+                return test.rows or [(test.now, None, None, None, None, None, None, None)]
+
+        class Connection:
+            def cursor(self):
+                return contextmanager(lambda: (yield Cursor()))()
+        yield Connection()
+
+    def keys(self):
+        limiter = self.provider.rate_limiter
+        identity = self.provider._rate_identity('bot')
+        expected = limiter._keys(identity, 'r' * 64, 'm' * 64, 'b' * 64)
+        return sorted(key for key in expected if expected[key][0] in ('policy', 'global', 'credential', 'invalid'))
+
+    def row(self, key, kind, hold=False, remaining=10, reset=None, blocked=None, circuit=None):
+        return (self.now, key, kind, hold, remaining, reset, blocked, circuit)
+
+    def test_it_reads_the_four_application_wide_rows_without_locking(self):
+        self.assertEqual(lane.outlook(self.worker), (None, 0.0))
+        (sql, params), = self.statements
+        self.assertNotIn('FOR UPDATE', sql.upper())
+        self.assertNotIn('FOR SHARE', sql.upper())
+        self.assertTrue(sql.lstrip().upper().startswith('WITH OBSERVED'))
+        self.assertEqual(params, (self.keys(),))
+
+    def test_a_hold_on_the_policy_row_is_the_operator_hold_and_any_other_hold_also_stops(self):
+        for index, kind in enumerate(('policy', 'global', 'credential', 'invalid')):
+            with self.subTest(kind=kind):
+                self.rows = [self.row(self.keys()[index], kind, hold=True)]
+                self.assertEqual(lane.outlook(self.worker),
+                                 ('operator_hold' if kind == 'policy' else 'coordinator_hold', 0.0))
+
+    def test_embargoes_circuits_and_a_spent_window_become_a_wait(self):
+        policy, global_ = self.keys()[0], self.keys()[1]
+        self.rows = [self.row(policy, 'policy', remaining=0, reset=self.now + .4),
+                     self.row(global_, 'global', remaining=None, blocked=self.now + 3)]
+        self.assertEqual(lane.outlook(self.worker), (None, 3.0))
+        self.rows = [self.row(policy, 'policy', remaining=0, reset=self.now + .4)]
+        self.assertAlmostEqual(lane.outlook(self.worker)[1], .4, places=5)
+        self.rows = [self.row(policy, 'policy', remaining=0, reset=self.now - 1)]
+        self.assertEqual(lane.outlook(self.worker), (None, 0.0), 'a past window refills on the next reservation')
+
+    def test_an_expired_policy_or_missing_coordinator_stops_the_loop(self):
+        self.now = self.provider.rate_limiter.policy.expires_at + 1
+        self.assertEqual(lane.outlook(self.worker)[0], 'coordinator_unavailable')
+        self.provider.rate_v1_enabled = False
+        self.assertEqual(lane.outlook(self.worker)[0], 'coordinator_unavailable')
+        self.provider.rate_v1_enabled = True
+        self.provider.rate_coordinator_degraded = True
+        self.assertEqual(lane.outlook(self.worker)[0], 'coordinator_degraded')
+        self.worker.social = SimpleNamespace(providers={})
+        self.assertEqual(lane.outlook(self.worker)[0], 'coordinator_unavailable')
+
+
+class CreatePermitWait(unittest.TestCase):
+    def social(self, *errors):
+        calls = []
+
+        def reserve(manifest, **kw):
+            calls.append(kw)
+            if errors[len(calls) - 1:len(calls)]:
+                raise errors[len(calls) - 1]
+            return 'permit'
+        clock = SimpleNamespace(now=0.0)
+        paced = lane.PacedSocial(SimpleNamespace(reserve_discord_send=reserve, other='kept'),
+                                 sleep=lambda s: setattr(clock, 'now', clock.now + s), monotonic=lambda: clock.now)
+        return paced, calls, clock
+
+    def test_a_spent_application_window_is_waited_for_once_within_a_second(self):
+        paced, calls, clock = self.social(RateDelayed(.4, scope='application'))
+        self.assertEqual(paced.reserve_discord_send({}, job={'id': 'j'}), 'permit')
+        self.assertEqual((len(calls), paced.permit_waits), (2, 1))
+        self.assertLess(clock.now, 1.0)
+        self.assertEqual(calls[0], calls[1], 'the same binding and deadline are asked for again')
+        self.assertEqual(paced.other, 'kept')
+
+    def test_a_permit_that_lapsed_at_its_window_end_is_asked_for_again(self):
+        paced, calls, _ = self.social(RateDelayed(.05, cause='permit_expired', scope='permit'))
+        self.assertEqual(paced.reserve_discord_send({}), 'permit')
+        self.assertEqual(len(calls), 2)
+
+    def test_an_embargo_a_channel_window_or_a_passed_deadline_is_refused_as_before(self):
+        for scope, cause in (('embargo', 'rate_budget'), ('learned_route', 'rate_budget'), ('unknown_route', 'rate_budget'),
+                             ('discovery', 'rate_budget'), ('unknown', 'rate_budget'), ('permit', 'window_expiring')):
+            with self.subTest(scope=scope, cause=cause):
+                paced, calls, _ = self.social(RateDelayed(.2, cause=cause, scope=scope))
+                with self.assertRaises(RateDelayed):
+                    paced.reserve_discord_send({})
+                self.assertEqual(len(calls), 1)
+
+    def test_the_wait_never_runs_past_one_second(self):
+        paced, calls, clock = self.social(*[RateDelayed(.45, scope='application')] * 5)
+        with self.assertRaises(RateDelayed):
+            paced.reserve_discord_send({})
+        self.assertLessEqual(clock.now, 1.0)
+        self.assertEqual(len(calls), 3)
+
+
+if __name__ == '__main__':
+    unittest.main()
