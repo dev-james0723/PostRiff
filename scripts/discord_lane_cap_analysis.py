@@ -14,6 +14,16 @@ import os
 from collections import Counter, defaultdict
 
 CREATE = 'POST /channels/{id}/messages'
+READBACK = 'GET /channels/{id}/messages/{id}'
+# The real per-post path of the tree under test, one entry per Discord request (route class, credential): the claim
+# that sends proves the person's grant (OAuthService -> DiscordConnections.installation_identity -> GET /oauth2/@me
+# with the person's bearer), reads the permission witness (server, bot member, person member, channel list) and
+# creates; a later claim reads the message back. Seven requests per post; nothing else is needed per post.
+IDEAL = {('GET /oauth2/@me', 'user'): 1, ('GET /guilds/{id}', 'bot'): 1, ('GET /guilds/{id}/members/{id}', 'bot'): 2,
+         ('GET /guilds/{id}/channels', 'bot'): 1, (CREATE, 'bot'): 1, (READBACK, 'bot'): 1}
+PREFLIGHT = tuple(key for key in IDEAL if key[0] not in (CREATE, READBACK))
+# The bot's own identity (cached per process for 60 s by the tree under test): not per post.
+IDENTITY = (('GET /users/@me', 'bot'), ('GET /oauth2/applications/@me', 'bot'))
 
 
 def load_json(path):
@@ -99,6 +109,138 @@ def busiest_window(times, seconds):
     return best
 
 
+def peak_trailing(times, seconds=1.0):
+    """The largest number of events in any half-open span (t - seconds, t]: the mock's own trailing-second count."""
+    times = sorted(times)
+    best, start = 0, 0
+    for end in range(len(times)):
+        while times[end] - times[start] >= seconds:
+            start += 1
+        best = max(best, end - start + 1)
+    return best
+
+
+def peak_calendar_second(times):
+    """The largest number of events inside one calendar second (floor of the epoch time)."""
+    counts = Counter(int(math.floor(t)) for t in times)
+    return max(counts.values()) if counts else 0
+
+
+def tenant_of(record):
+    """The workspace index a request served, where the mock could tell (person, server or channel)."""
+    for key in ('tenant', 'guild', 'channel'):
+        if record.get(key) is not None:
+            return record[key]
+    return None
+
+
+def request_ledger(window, posts):
+    """Every request the mock saw during the run, in exactly one bucket: the ideal real path (IDEAL, seven per post) or
+    a named overhead. Essential = one preflight pass and one create per post that was sent, plus one read-back per post
+    verified at the mock; the remainder is overhead, so the buckets add up to the total."""
+    sent = sum(1 for p in posts.values() if p['createdAt'] is not None)
+    verified = sum(1 for p in posts.values() if p['verifiedAtMock'] is not None)
+    rows = {}
+    for record in window:
+        key = (record.get('route'), record.get('credential') or 'none')
+        row = rows.get(key)
+        if row is None:
+            row = rows[key] = {'route': key[0], 'credential': key[1], 'idealPerPost': IDEAL.get(key, 0),
+                               'requests': 0, 'answered2xx': 0, 'organic429': 0, 'injected': 0, 'otherStatus': 0}
+        row['requests'] += 1
+        status = record.get('status')
+        if record.get('injected'):
+            row['injected'] += 1
+        elif status == 429:
+            row['organic429'] += 1
+        elif isinstance(status, int) and 200 <= status < 300:
+            row['answered2xx'] += 1
+        else:
+            row['otherStatus'] += 1
+    buckets = Counter()
+    for key, row in rows.items():
+        stage = verified if key == (READBACK, 'bot') else sent
+        ideal = row['idealPerPost'] * stage
+        ok = row['answered2xx']
+        row['perVerifiedPost'] = (row['requests'] / verified) if verified else None
+        row['essential'] = min(ok, ideal)
+        row['beyondIdeal'] = max(0, ok - ideal)
+        row['belowIdeal'] = max(0, ideal - ok)
+        buckets['essential'] += row['essential']
+        buckets['answered429'] += row['organic429']
+        buckets['injectedFailures'] += row['injected']
+        buckets['otherStatus'] += row['otherStatus']
+        if key in IDENTITY:
+            buckets['botIdentity'] += ok
+        elif key in PREFLIGHT:
+            buckets['extraPreflight'] += row['beyondIdeal']
+        elif key == (CREATE, 'bot'):
+            buckets['extraCreates'] += row['beyondIdeal']
+        elif key == (READBACK, 'bot'):
+            buckets['extraReadbacks'] += row['beyondIdeal']
+        else:
+            buckets['otherRoutes'] += ok
+    total = len(window)
+    # Successful preflight reads beyond one pass per sent post, split by workspace: up to one pass for each post of
+    # that workspace that was never sent (work for a post that did not get through), the rest a repeated pass.
+    posts_by_tenant, sent_by_tenant = Counter(), Counter()
+    for p in posts.values():
+        posts_by_tenant[p['index']] += 1
+        sent_by_tenant[p['index']] += p['createdAt'] is not None
+    reads = defaultdict(Counter)
+    blind = set()  # preflight routes with a read the mock could not attribute (a mock older than the ledger)
+    for record in window:
+        key = (record.get('route'), record.get('credential') or 'none')
+        if key in PREFLIGHT and isinstance(record.get('status'), int) and 200 <= record['status'] < 300 \
+                and not record.get('injected'):
+            tenant = tenant_of(record)
+            if tenant is None:
+                blind.add(key)
+            else:
+                reads[tenant][key] += 1
+    unattributed = sum(rows[key]['beyondIdeal'] for key in blind)
+    for_unsent = repeated = 0
+    for tenant, by_key in reads.items():
+        unsent = posts_by_tenant.get(tenant, 0) - sent_by_tenant.get(tenant, 0)
+        for key, count in by_key.items():
+            if key in blind:
+                continue
+            extra = max(0, count - IDEAL[key] * sent_by_tenant.get(tenant, 0))
+            unsent_share = min(extra, IDEAL[key] * unsent)
+            for_unsent += unsent_share
+            repeated += extra - unsent_share
+    # Preflight passes per sent post, from one-post workspaces (one GET /guilds/{id} per pass).
+    passes = Counter()
+    for tenant, by_key in reads.items():
+        if posts_by_tenant.get(tenant) == 1 and sent_by_tenant.get(tenant) == 1:
+            passes[by_key.get(('GET /guilds/{id}', 'bot'), 0)] += 1
+    per = (lambda n: (n / verified) if verified else None)
+    overhead = total - buckets['essential']
+    return {
+        'total': total, 'sentPosts': sent, 'verifiedPosts': verified,
+        'essential': buckets['essential'], 'overhead': overhead,
+        'perVerifiedPost': per(total), 'essentialPerVerifiedPost': per(buckets['essential']),
+        'overheadPerVerifiedPost': per(overhead),
+        'overheadBuckets': {k: buckets[k] for k in ('botIdentity', 'extraPreflight', 'answered429', 'injectedFailures',
+                                                    'otherStatus', 'extraCreates', 'extraReadbacks', 'otherRoutes')},
+        'extraPreflightSplit': {'repeatedPassesForSentPosts': repeated, 'forPostsNeverSent': for_unsent,
+                                'unattributed': unattributed, 'attributedTotal': repeated + for_unsent},
+        'preflightPassesPerSentPostOnePostWorkspaces': {str(k): v for k, v in sorted(passes.items())},
+        'rows': sorted(rows.values(), key=lambda r: (-r['idealPerPost'], -r['requests'])),
+    }
+
+
+def grant_custody(ledger):
+    """What the mock saw of the person's grant check: the real path asks GET /oauth2/@me once per sent post."""
+    row = next((r for r in ledger['rows'] if (r['route'], r['credential']) == ('GET /oauth2/@me', 'user')), None)
+    seen = row['answered2xx'] if row else 0
+    sent = ledger['sentPosts']
+    if not sent:
+        return {'state': 'not measured', 'identityChecks': seen, 'sentPosts': sent}
+    return {'state': 'real path' if seen >= sent else 'below one per sent post', 'identityChecks': seen,
+            'sentPosts': sent}
+
+
 def cron_gap(invocations, period, *, first_minute, last_minute):
     """Per shard: seconds of each cron period in which no loop of that shard was inside its handler."""
     by_shard = defaultdict(list)
@@ -159,6 +301,12 @@ def analyse(run_dir):
     # Lateness from the mock's clock; a post never created counts as infinitely late.
     lateness_all = [(p['createdAt'] - p['due']) if p['createdAt'] is not None else math.inf for p in posts.values()]
     lateness_sent = [v for v in lateness_all if math.isfinite(v)]
+    # Time to verified: due time to the read-back the mock answered (what the customer sees as confirmed).
+    to_verified_all = [(p['verifiedAtMock'] - p['due']) if p['verifiedAtMock'] is not None else math.inf
+                       for p in posts.values()]
+    to_verified_done = [v for v in to_verified_all if math.isfinite(v)]
+    create_to_verified = [p['verifiedAtMock'] - p['createdAt'] for p in posts.values()
+                          if p['verifiedAtMock'] is not None and p['createdAt'] is not None]
     duplicates_nonce = sum(max(0, len(p['creates']) - 1) for p in posts.values())
     duplicates_post = sum(max(0, len(p['creates_by_post']) - 1) for p in posts.values())
     after_expiry = sum(1 for p in posts.values() for at in p['creates'] if at >= p['expiresAt'])
@@ -167,6 +315,8 @@ def analyse(run_dir):
     last_create = max((p['createdAt'] for p in posts.values() if p['createdAt'] is not None), default=None)
     last_verified = max((p['verifiedAtMock'] for p in posts.values() if p['verifiedAtMock'] is not None), default=None)
     first_create = min((p['createdAt'] for p in posts.values() if p['createdAt'] is not None), default=None)
+    unverified_at_last_create = (sum(1 for p in posts.values() if p['verifiedAtMock'] is None
+                                     or p['verifiedAtMock'] > last_create) if last_create is not None else None)
 
     states = Counter(final_states.get('byPost', {}).get(p, 'missing') for p in posts)
     db_verified = states.get('verified', 0)
@@ -182,6 +332,8 @@ def analyse(run_dir):
     misrouted = sum(1 for r in window if r.get('misrouted'))
     misrouted_by_harness = sum(int(i.get('misroutedByHarness') or 0) for i in invocations)
     requests_per_verified = (len(window) / verified_mock) if verified_mock else None
+    ledger = request_ledger(window, posts)
+    custody = grant_custody(ledger)
     per_minute = Counter(int((p['createdAt'] - T) // 60) for p in posts.values() if p['createdAt'] is not None)
 
     # Normal load (S0): shares sent within 2, 5 and 15 minutes of each post's own due time.
@@ -259,7 +411,7 @@ def analyse(run_dir):
     database = {'peakBackendsSampled': peak_backends, 'peakActiveSampled': peak_active,
                 'peakLockWaitsSampled': lock_waits, 'longestActiveStatementSampledSeconds': longest_sampled,
                 'postgresCpuSeconds': pg_cpu, 'serverVersion': config.get('serverVersion'),
-                **{k: v for k, v in extra.items() if k not in ('kills', 'lockInjections')}}
+                **{k: v for k, v in extra.items() if k not in ('kills', 'lockInjections', 'admissionWindow')}}
     errors = Counter()
     if pooler:
         database['pooler'] = {k: pooler.get(k) for k in (
@@ -295,10 +447,14 @@ def analyse(run_dir):
         'posts': len(posts), 'workspaces': len(by_workspace), 'endReason': config.get('endReason'),
         'lateness': {'allPostsUnsentInfinite': describe(lateness_all), 'sentOnly': describe(lateness_sent),
                      'source': 'mock create time (mock clock) minus the due time from the seed manifest'},
+        'timeToVerified': {'allPostsUnverifiedInfinite': describe(to_verified_all), 'verifiedOnly': describe(to_verified_done),
+                           'createToVerified': describe(create_to_verified),
+                           'source': 'mock read-back answer time (mock clock) minus the due time from the seed manifest'},
         'normal': normal,
         'drain': {'firstCreateAfterT': (first_create - T) if first_create else None,
                   'lastCreateAfterT': (last_create - T) if last_create else None,
                   'lastVerifiedAtMockAfterT': (last_verified - T) if last_verified else None,
+                  'unverifiedAtLastCreate': unverified_at_last_create,
                   'allTerminalInDatabaseAfterT': (config.get('allTerminalAt') - T) if config.get('allTerminalAt') else None},
         'creationsPerMinute': {str(k): v for k, v in sorted(per_minute.items())},
         'outcomes': {'sentAtMock': sent, 'verifiedAtMock': verified_mock, 'verifiedInDatabase': db_verified,
@@ -316,7 +472,10 @@ def analyse(run_dir):
                     'aboveFiftyBot': counters.get('aboveGlobalBot'), 'aboveFiftyAll': counters.get('aboveGlobalAll'),
                     'peakTrailingSecondAll': mock_summary.get('peakTrailingSecondAll'),
                     'peakTrailingSecondBot': mock_summary.get('peakTrailingSecondBot'),
-                    'peakTenSecondAveragePerSecond': busiest_window([r['processed'] for r in window], 10.0) / 10.0},
+                    'peakCalendarSecondAll': peak_calendar_second([r['processed'] for r in window]),
+                    'peakTenSecondAveragePerSecond': busiest_window([r['processed'] for r in window], 10.0) / 10.0,
+                    'coordinatorAdmissions': extra.get('admissionWindow')},
+        'ledger': ledger, 'grantCustody': custody,
         'requests': {'total': len(window), 'perVerifiedPost': requests_per_verified, 'byRoute': dict(routes),
                      'byStatus': dict(statuses), 'byCredential': dict(credentials), 'injected': dict(injected),
                      'global429': counters.get('global429'), 'route429': counters.get('route429'),
@@ -666,14 +825,24 @@ def receipt(result, verdicts, config, differences, expectations=()):
     lines.append('')
     lines.append('| | median | p95 | p99 | max |')
     lines.append('|---|---|---|---|---|')
-    for name, d in (('all %d posts (never sent = infinite)' % late['count'], late),
-                    ('sent posts only (%d)' % sent_only['count'], sent_only)):
+    tv = result.get('timeToVerified') or {}
+    rows = [('lateness (due to create): all %d posts (never sent = infinite)' % late['count'], late),
+            ('lateness: sent posts only (%d)' % sent_only['count'], sent_only)]
+    if tv:
+        rows += [('time to verified (due to answered read-back): all %d posts (never verified = infinite)' %
+                  tv['allPostsUnverifiedInfinite']['count'], tv['allPostsUnverifiedInfinite']),
+                 ('time to verified: verified posts only (%d)' % tv['verifiedOnly']['count'], tv['verifiedOnly']),
+                 ('create to verified read-back (%d)' % tv['createToVerified']['count'], tv['createToVerified'])]
+    for name, d in rows:
         lines.append('| %s | %s | %s | %s | %s |' % (name, *(_minutes(d[k]) for k in ('median', 'p95', 'p99', 'max'))))
     lines.append('')
     drain = result['drain']
     lines.append('Drain: first create %s after T, last create %s, last verified read-back at the mock %s, every job '
                  'terminal in the database %s.' % tuple(_minutes(drain[k]) for k in (
                      'firstCreateAfterT', 'lastCreateAfterT', 'lastVerifiedAtMockAfterT', 'allTerminalInDatabaseAfterT')))
+    if drain.get('unverifiedAtLastCreate') is not None:
+        lines.append('Posts not yet verified at the mock when the last create happened: %d of %d (each shows as sent '
+                     'but not confirmed until its read-back).' % (drain['unverifiedAtLastCreate'], result['posts']))
     n = result['normal']
     lines.append('Sent within 2 / 5 / 15 min of the due time: %.1f%% / %.1f%% / %.1f%%; not sent %.2f%%.' % (
         100 * n['within2'], 100 * n['within5'], 100 * n['within15'], 100 * n['notSentShare']))
@@ -717,12 +886,61 @@ def receipt(result, verdicts, config, differences, expectations=()):
                      c['peakTrailingSecondAll'], c['peakTrailingSecondBot'], c['peakTenSecondAveragePerSecond'],
                      c['aboveTwentyFiveAll'], c['aboveFiftyBot'], r['invalidPeak10Minutes']))
     lines.append('')
-    lines.append('| Route | Requests | Per verified post |')
-    lines.append('|---|---|---|')
-    verified = o['verifiedAtMock'] or None
-    for route, count in sorted(r['byRoute'].items(), key=lambda item: -item[1]):
-        lines.append('| `%s` | %d | %s |' % (route, count, _fmt(count / verified) if verified else 'n/a'))
+    admissions = c.get('coordinatorAdmissions')
+    lines.append('Ceiling, report only (the policy_ceiling verdict above counts per trailing second at the mock): most '
+                 'requests in any calendar second at the mock %s.%s' % (
+                     c.get('peakCalendarSecondAll'),
+                     (' The coordinator\'s own admission table (database clock, rows reserved during the run: %s; by '
+                      'credential %s): most in any trailing second %s, in any calendar second %s.' % (
+                          admissions.get('count'), json.dumps(admissions.get('byCredential'), sort_keys=True),
+                          admissions.get('peakTrailingSecond'), admissions.get('peakCalendarSecond')))
+                     if admissions else ' Coordinator admission figures: not collected by this harness version.'))
     lines.append('')
+    ledger = result.get('ledger')
+    if ledger:
+        custody = result.get('grantCustody') or {}
+        lines.append('### Request ledger')
+        lines.append('')
+        lines.append('Grant custody: the harness runs the application\'s real grant path against the mock '
+                     '(OAuthService -> DiscordConnections.installation_identity -> GET /oauth2/@me with the person\'s '
+                     'bearer); the lane fixture\'s Grants stub (tests/discord_lane_fixture.py) is not used. Measured: %d '
+                     'identity checks answered for %d sent posts (%s).' % (
+                         custody.get('identityChecks', 0), custody.get('sentPosts', 0), custody.get('state')))
+        lines.append('')
+        per = (lambda n: _fmt(n / ledger['verifiedPosts']) if ledger['verifiedPosts'] else 'n/a')
+        lines.append('%d requests for %d sent and %d verified posts: %s per verified post, of which essential %s '
+                     '(the ideal real path is 7: one grant check, four permission-witness reads, the create, the '
+                     'read-back) and overhead %s.' % (
+                         ledger['total'], ledger['sentPosts'], ledger['verifiedPosts'], per(ledger['total']),
+                         per(ledger['essential']), per(ledger['overhead'])))
+        lines.append('')
+        lines.append('| Route class | Credential | Ideal per post | Requests | 2xx | 429 (organic) | injected | other status '
+                     '| Per verified post | Beyond ideal | Below ideal |')
+        lines.append('|---|---|---|---|---|---|---|---|---|---|---|')
+        for row in ledger['rows']:
+            lines.append('| `%s` | %s | %d | %d | %d | %d | %d | %d | %s | %d | %d |' % (
+                row['route'], row['credential'], row['idealPerPost'], row['requests'], row['answered2xx'],
+                row['organic429'], row['injected'], row['otherStatus'], _fmt(row['perVerifiedPost']),
+                row['beyondIdeal'], row['belowIdeal']))
+        lines.append('')
+        names = {'botIdentity': 'bot identity pair (per process, 60 s cache)',
+                 'extraPreflight': 'successful preflight reads beyond one pass per sent post',
+                 'answered429': 'answered 429 by the mock (organic)', 'injectedFailures': 'injected by the scenario',
+                 'otherStatus': 'other non-2xx answers', 'extraCreates': 'creates beyond one per sent post',
+                 'extraReadbacks': 'read-backs beyond one per verified post', 'otherRoutes': 'other routes'}
+        lines.append('| Overhead | Requests | Per verified post |')
+        lines.append('|---|---|---|')
+        for key, count in ledger['overheadBuckets'].items():
+            lines.append('| %s | %d | %s |' % (names[key], count, per(count)))
+        lines.append('')
+        split, passes = ledger['extraPreflightSplit'], ledger['preflightPassesPerSentPostOnePostWorkspaces']
+        lines.append('Preflight reads beyond the ideal, by workspace: %d in repeated passes for posts that were sent, %d '
+                     'for posts never sent, %d on routes the mock could not attribute to a workspace (mock older than '
+                     'the ledger). Preflight passes per sent post (one-post workspaces, counted by GET /guilds/{id}): '
+                     '%s.' % (
+                         split['repeatedPassesForSentPosts'], split['forPostsNeverSent'], split['unattributed'],
+                         ', '.join('%s pass(es): %d posts' % item for item in passes.items()) or 'none'))
+        lines.append('')
     d = result['database']
     lines.append('## Database')
     lines.append('')

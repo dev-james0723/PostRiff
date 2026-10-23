@@ -184,6 +184,8 @@ class World:
         template = route_class(method, path)
         record = {'arrived': arrived if arrived is not None else now, 'processed': now, 'method': method,
                   'route': template, 'credential': kind or 'none'}
+        if kind == 'user' and person is not None:
+            record['tenant'] = person  # the workspace whose person's bearer this is (request ledger)
         with self.lock:
             self.counters['requests'] += 1
             count_all = self._trail(self.trail_all, now)
@@ -354,6 +356,7 @@ class World:
                                        'position': 0, 'permission_overwrites': []}]
             return 404, headers, {'message': 'Unknown Member', 'code': 10007}
         if len(parts) == 4 and parts[0] == 'channels' and parts[2] == 'messages':
+            record['tenant'] = index_of(parts[1], CHANNEL0)
             message = self.messages.get((parts[1], parts[3]))
             if message is None:
                 return 404, headers, {'message': 'Unknown Message', 'code': 10008}

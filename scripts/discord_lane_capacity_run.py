@@ -308,8 +308,7 @@ class Harness:
             sourceTree=str(tree), sourceSha=sha, sourceDirty=bool(dirty), harnessSha=harness_sha,
             harnessDirty=bool(harness_dirty), startedAt=time.time(), startedAtIso=now_iso(), loadAtStart=uptime,
             routes=crons, laneCodePresent=has_lane, settings={k: v for k, v in s.items() if k != 'expect'},
-            expect=list(s['expect']), python=sys.version.split()[0], machine={
-                'cpus': os.cpu_count(), 'memGb': round(os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / 2 ** 30, 1)},
+            expect=list(s['expect']), python=sys.version.split()[0], machine=machine_description(),
             cronPeriodSeconds=s['cron_period'], policyCeiling=25, informationOnly=s['information_only'])
         if s['lane'] and not has_lane:
             raise SystemExit('the source tree has no W-02 lane (src/postriff_phase2/discord/lane.py); run it with '
@@ -948,6 +947,16 @@ class Harness:
             admissions = dict(db.execute('SELECT state,count(*) FROM public.pr_discord_request_admissions GROUP BY state').fetchall())
             holds = db.execute("""SELECT kind,count(*) FILTER (WHERE manual_hold),count(*) FILTER (WHERE blocked_until>clock_timestamp()),
                 count(*) FILTER (WHERE circuit_until>clock_timestamp()),count(*) FROM public.pr_discord_rate_state GROUP BY kind""").fetchall()
+            # The coordinator's own clock: every admission reserved during the run (rows still in the table at the end).
+            start = self.config.get('runStartedAt') or 0
+            admitted = [float(t) for (t,) in db.execute(
+                """SELECT extract(epoch from reserved_at)::double precision FROM public.pr_discord_request_admissions
+                   WHERE reserved_at >= to_timestamp(%s) ORDER BY 1""", (start,)).fetchall()]
+            by_kind = dict(db.execute("""SELECT coalesce(credential_kind,'?'),count(*) FROM public.pr_discord_request_admissions
+                   WHERE reserved_at >= to_timestamp(%s) GROUP BY 1""", (start,)).fetchall())
+            admission_window = {'count': len(admitted), 'byCredential': by_kind,
+                                'peakTrailingSecond': analysis.peak_trailing(admitted, 1.0),
+                                'peakCalendarSecond': analysis.peak_calendar_second(admitted)}
             slow = []
             if self.config.get('pgStatStatements'):
                 try:
@@ -982,7 +991,7 @@ class Harness:
         extra = {'admissionsByState': admissions, 'rateStateHolds': [
             {'kind': k, 'manualHold': h, 'blocked': b, 'circuit': c, 'rows': n} for k, h, b, c, n in holds],
             'slowestStatements': slow, 'logErrorsBySqlstate': log_errors, 'statementsOverOneSecond': slow_lines,
-            'lockInjections': self.lock_windows, 'kills': self.kills}
+            'lockInjections': self.lock_windows, 'kills': self.kills, 'admissionWindow': admission_window}
         (self.dir / 'database-final.json').write_text(json.dumps(extra, default=str))
 
     def shutdown_children(self):
@@ -1082,13 +1091,39 @@ class Harness:
         return finish(self.dir)
 
 
+def machine_description():
+    """Where this run executes, from the environment (a receipt must not misdescribe its machine)."""
+    machine = {'cpus': os.cpu_count(), 'memGb': round(os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / 2 ** 30, 1)}
+    if os.environ.get('GITHUB_ACTIONS') == 'true':
+        machine.update(kind='github-actions', runnerEnvironment=os.environ.get('RUNNER_ENVIRONMENT') or 'unknown',
+                       runnerName=os.environ.get('RUNNER_NAME'), runnerOs=os.environ.get('RUNNER_OS'),
+                       runnerArch=os.environ.get('RUNNER_ARCH'), image=os.environ.get('ImageOS'),
+                       imageVersion=os.environ.get('ImageVersion'))
+    else:
+        machine['kind'] = 'local'
+    return machine
+
+
+def machine_line(result, config):
+    m = config.get('machine') or {}
+    load = 'one-minute load %s at start, peak %s during the run' % ((config.get('loadAtStart') or '?').split()[0],
+                                                                    result.get('machineLoad1Max'))
+    if m.get('kind') == 'github-actions':
+        where = ('a GitHub Actions runner (%s; runner %s, %s %s, image %s %s), %s vCPU and %s GB' % (
+            'GitHub-hosted: a fresh VM for this job alone' if m.get('runnerEnvironment') == 'github-hosted'
+            else 'runner environment %s' % m.get('runnerEnvironment'), m.get('runnerName'), m.get('runnerOs'),
+            m.get('runnerArch'), m.get('image'), m.get('imageVersion'), m.get('cpus'), m.get('memGb')))
+    else:
+        where = ('a %s-core, %s GB machine outside GitHub Actions (the development sandbox is shared with other '
+                 'agents, so its throughput figures are not evidence)' % (m.get('cpus'), m.get('memGb')))
+    return ('Machine: %s; %s. Every process of the run (database, pooler, mock Discord, every invocation) shares it; '
+            'Vercel runs each invocation on its own instance. CPU contention here can only slow the lane.' % (where, load))
+
+
 def differences(result, config):
     s = config['settings']
     items = [
-        'Machine: this is a %s-core, %s GB sandbox shared with other agents (1-minute load %s at start, peak %s during '
-        'the run); Vercel runs each invocation on its own instance. CPU contention here can only slow the lane.' % (
-            config['machine']['cpus'], config['machine']['memGb'], (config.get('loadAtStart') or '?').split()[0],
-            result.get('machineLoad1Max')),
+        machine_line(result, config),
         'Database: %s, PostgreSQL %s, on the same machine (production: Supabase PostgreSQL 17.6 on Micro compute, '
         'max_connections 60, across the network). Pooler: %s; production uses Supavisor in transaction mode with TLS. '
         'Network latency is emulated at %.1f ms per round trip with %d round trips per new connection; real '
