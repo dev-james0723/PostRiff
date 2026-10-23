@@ -691,7 +691,10 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                                                          policy=F.policy(self.cluster.now() - 3 * 86400, capacity=200))
         else:
             assert cause == 'no coordinator', cause
+            # runtime_from_environment with rate limits on but no policy, or one that does not parse: the coordinator
+            # cannot be built, so no limiter is set and Discord authorization is turned off.
             provider.rate_limiter = None
+            provider.authorization_v2_enabled = False
 
     def repair(self):
         """The repaired configuration, as a new deployment builds it: rate limits on and a current reviewed policy."""
@@ -748,10 +751,9 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual(failures, [])
         return frozen, F.jobs(self.cluster), {tenant.id for tenant in tenants[:3]}
 
-    def test_recovery_after_rate_limits_were_off_keeps_the_frozen_holds(self):
-        """Recorded: without rate limits the frozen path holds each post and asks for its destination to be
+    def assert_frozen_holds(self, frozen, final):
+        """Without Discord authorization the frozen path holds each post it claims and asks for its destination to be
         verified again; the repaired lane then has nothing due, and never sends a held post."""
-        frozen, final, _ = self.recovery('rate limits off')
         for job in frozen.values():
             self.assertEqual((job['state'], job['events'][-1]['message']),
                              ('held', 'Discord destination, grant, media or rollout verification is unavailable. '
@@ -759,6 +761,15 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual(self.destinations(), ['verification_required'] * 6)
         self.assertEqual({job['state'] for job in final.values()}, {'held'})
         self.assertEqual(self.wire.requests(method='POST'), [])
+
+    def test_recovery_after_rate_limits_were_off_keeps_the_frozen_holds(self):
+        """Recorded: the hosted runtime turns Discord authorization off without rate limits."""
+        self.assert_frozen_holds(*self.recovery('rate limits off')[:2])
+
+    def test_recovery_after_the_coordinator_was_missing_keeps_the_frozen_holds(self):
+        """Recorded: rate limits on but no coordinator (no policy, or one that does not parse) is reachable only with
+        Discord authorization off (runtime_from_environment), so the frozen path holds as with rate limits off."""
+        self.assert_frozen_holds(*self.recovery('no coordinator')[:2])
 
     def assert_recovered_after_the_push_back(self, frozen, final, short):
         for (workspace, _), job in frozen.items():
@@ -779,9 +790,6 @@ class ParallelLaneOnPostgres(unittest.TestCase):
 
     def test_recovery_after_the_policy_expired_drains_exactly_once(self):
         self.assert_recovered_after_the_push_back(*self.recovery('policy expired'))
-
-    def test_recovery_after_the_coordinator_was_missing_drains_exactly_once(self):
-        self.assert_recovered_after_the_push_back(*self.recovery('no coordinator'))
 
     def test_recovery_after_the_shard_crons_stopped_for_minutes(self):
         tenants = sorted((F.Tenant(n) for n in range(7)), key=lambda tenant: tenant.id)
