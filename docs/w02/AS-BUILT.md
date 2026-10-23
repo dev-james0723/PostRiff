@@ -164,9 +164,9 @@ leaves Discord to the lane, and only its own loops stop.
 | Loops racing on one workspace | one live Discord lease per workspace | `test_loops_racing_on_one_workspace_send_one_post_at_a_time` |
 | A loop dies before its intent | lease expires; the job is released as provably unsent and sent once | `test_a_loop_that_dies_before_its_intent_is_recovered_and_sent_once` |
 | A loop dies after Discord accepted, or as the create leaves | the sealed intent forbids a new create; the job is reconciled by hand ('uncertain') | `test_a_loop_that_dies_after_discord_accepted_...`, `..._as_its_create_leaves_...` |
-| Request rate across all loops | the shared coordinator admits every request; 12 loops at a 10 per second policy never passed 20 in any second | `test_the_coordinator_caps_the_request_rate_across_all_loops`, with a control that the same run exceeds it when the policy allows |
+| Request rate across all loops | the shared coordinator admits every request; 12 loops at a 3 per second policy met the cap (they waited for the next window) and never passed 6 in any second (earlier runs at 10 per second never passed 20) | `test_the_coordinator_caps_the_request_rate_across_all_loops`, with a control that the same run exceeds it when the policy allows |
 | Permits of a dead loop | unused permits expire with their window; a request that died in flight keeps its slot (existing rule, Q3) | `test_permits_of_a_dead_loop_that_were_never_used_free_their_slots`, `test_a_read_whose_process_died_...` |
-| One busy workspace cannot starve the others | least-recently-served rotation plus one lease per workspace | `test_one_busy_workspace_cannot_starve_the_others`, with a control ordering by id |
+| One busy workspace cannot starve the others | least-recently-served rotation plus one lease per workspace | `test_one_busy_workspace_cannot_starve_the_others` (one loop's first 14 claims are two rounds over all 7 workspaces), with a control ordering by id (all 30 busy posts are claimed before any other workspace) |
 | A channel's create limit (5 per 5 s) | the coordinator learns the channel's bucket from Discord's headers | `test_posts_to_one_channel_keep_to_its_create_limit` |
 | An approval that expires while its post waits is held, never sent late | approval rechecked at claim, seal and the final pre-send guard; a lease never outlives the approval | `test_a_post_whose_approval_expires_while_waiting_is_held_and_never_sent_late` |
 | Operator hold stops the lane within one iteration | pre-claim read of `manual_hold` | `test_an_operator_hold_stops_every_loop_within_one_iteration`, `test_a_hold_set_before_the_minute_starts_claims_nothing`, with a control that the old loop claims and postpones every post under the same hold |
@@ -175,6 +175,20 @@ leaves Discord to the lane, and only its own loops stop.
 | One database connection per loop at a time | sequential transactions, none held across HTTP | `test_each_loop_holds_one_database_connection_at_a_time` |
 | The last step ends inside the function limit | admission deadline, budget capped at 90 s (a larger setting is clamped) | offline `test_no_budget_can_outlast_the_function_limit_with_one_step_in_flight`, `test_a_budget_above_ninety_seconds_is_clamped_to_ninety`, `test_a_configured_120_seconds_runs_for_90`, `test_no_step_starts_after_the_budget_...` |
 | Flag off, or on with the lane unable to run, is the frozen behaviour | flag read as the exact string; one readiness test (`lane.blocker`) for the tick (its static part) and the lane (the full rule); equivalence with `2a5a523d` | offline `FlagOffIsTheFrozenBase`, `LaneReadiness`, `ExistingTick` |
+
+How the PostgreSQL tests stay off the runner's clock (an early CI run failed the id-ordered fairness control with 19
+of the 20 busy creates it counted; a faster runner gives the small tenants more of each channel window):
+- Order properties are read from the jobs' own `claimed` events: which workspace a loop takes next is the selection's
+  choice, while whether that attempt sends now or is deferred depends on the runner's speed.
+- "Never sent late" is checked on the coordinator's own record, not the mock's arrival time. The exact bound is the
+  permit: a create's permit never ends after its approval or the policy (`permit_end <= expiresAt`), and `consume()`
+  refuses a permit at its end by the database clock. The release instant (`sent_at`) is written by the next statement
+  of that transaction, so the tests allow it `RELEASE_SLACK` = 1 s: as tested, "never sent late" reads "released no
+  later than 1 s after expiry", while the permit check above is exact.
+- A test that checks an outcome after a time-boxed run repeats the run, as the next cron minute would, while any post
+  still waits to be sent or verified (at most four runs); fast runners use one.
+- The coordinator-cap pair runs at 3 requests per second (ceiling 6), a cap twelve loops meet on a slow runner too, and
+  counts the loops' own application-window waits as the sign the cap was met.
 
 ## Database connections
 
