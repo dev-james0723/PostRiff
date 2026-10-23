@@ -1,19 +1,24 @@
-"""Option D: the compensating automatic operator hold (docs/ops/H07-OPTIONS.md, section D).
+"""Option D: an automatic operator hold (docs/ops/H07-OPTIONS.md, section D). AN OWNER DECISION, OFF BY DEFAULT, AND
+ADVISED AGAINST: the independent review of 8e76afdd and the Release Captain recommend not automating HOLD_ON, because the
+hold itself strands posts (each created post's read-back is parked for 24 hours when a Discord-claiming worker runs
+under it, and a post needs a new approval from about 55 minutes after its own scheduled time; PHONE-RUNBOOK.md).
 
-When an incident of a listed rule is live at the listed severity (page), the engine runs the PHONE-RUNBOOK HOLD_ON
-statement through an injected executor, reads the hold back, audits the decision and opens its own P0
-(ONCALL_AUTO_HOLD_ENGAGED, or ONCALL_AUTO_HOLD_FAILED when the read-back does not show the hold). It engages at most once
+If the owner enables it anyway: when an incident of a listed rule (by default only CROSS_TENANT_PROBE_FAILED, a
+confirmed isolation failure; never probing, which is the gate working) is live at the listed severity, the engine runs
+the PHONE-RUNBOOK HOLD_ON statement through an injected executor. The statement returns the rows it held, so an empty
+result is a proven failure (no policy row: HOLD_INSERT is a person's step), and the read-back must show the hold. It
+audits the decision and opens its own P0 (ONCALL_AUTO_HOLD_ENGAGED, or ONCALL_AUTO_HOLD_FAILED). It engages at most once
 per triggering incident, so a person who lifts the hold is not overruled by the same incident. It never lifts a hold.
 
 Off unless RAFII_ONCALL_AUTO_HOLD_ENABLED is exactly 'true' AND the integration passes an executor (engine.stage). The
-statements are the runbook's own blocks (a test asserts they are identical). A hold longer than about an hour lets
-approvals lapse, so the rules exclude backlog, silent-halt and configuration alerts.
+statements are the runbook's own blocks (a test asserts they are identical). A database hold is rewound by a restore;
+the Discord-paused build is the stop that does not live in the database (PHONE-RUNBOOK.md, lever 2).
 """
 import re
 from pathlib import Path
 
 RUNBOOK = Path(__file__).resolve().parents[3] / 'docs' / 'ops' / 'PHONE-RUNBOOK.md'
-HOLD_ON = "UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy';"
+HOLD_ON = "UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy' RETURNING kind, manual_hold;"
 HOLD_READBACK = """SELECT count(*) AS policy_rows,
        count(*) FILTER (WHERE manual_hold) AS held,
        (SELECT round(extract(epoch FROM now() - reserved_at)) FROM public.pr_discord_request_admissions
@@ -54,15 +59,14 @@ class AutoHold:
         rules = sorted({i['rule'] for i in fresh})
         try:
             before = self.readback()
-            if not before['held']:
-                self.executor(HOLD_ON)
+            held_rows = self.executor(HOLD_ON) if not before['held'] else [{'manual_hold': True}]
             after = self.readback()
         except Exception:
             for incident in fresh:
                 engine._event('auto_hold_failed', now, incident, reason='executor_error')
             return [meta_alert('ONCALL_AUTO_HOLD_FAILED', 'page', 'The automatic hold could not be set (database error) for %s. '
                                'Set it by hand: PHONE-RUNBOOK HOLD_ON.' % ', '.join(rules), rules=rules, reason='executor_error')]
-        if after['policyRows'] == 0 or not after['held']:
+        if not held_rows or after['policyRows'] == 0 or not after['held']:
             for incident in fresh:
                 engine._event('auto_hold_failed', now, incident, policyRows=after['policyRows'], held=after['held'])
             return [meta_alert('ONCALL_AUTO_HOLD_FAILED', 'page', 'The automatic hold did not take (policy_rows %d, held %d) for %s. '

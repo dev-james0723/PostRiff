@@ -49,8 +49,8 @@ def dedupe_key(alert):
     return alert['id'] + (':' + scope if isinstance(scope, str) and _SCOPE.match(scope) else '')
 
 
-def meta_alert(rule, severity, message, **evidence):
-    return {'id': rule, 'class': 'ONCALL', 'severity': severity, 'message': message, 'evidence': evidence}
+def meta_alert(alert_id, severity, message, **evidence):
+    return {'id': alert_id, 'class': 'ONCALL', 'severity': severity, 'message': message, 'evidence': evidence}
 
 
 def _clean(text, limit=500):

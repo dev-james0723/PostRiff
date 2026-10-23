@@ -46,25 +46,30 @@ Persistence is an additive migration (`migrations/postriff/140_rafii_control_onc
 | Owner must | Create the read-only login (a secret) and approve the role migration. Make sure the GitHub notification settings send failed workflow runs to the phone. |
 | Combine with | A (in-app paging plus an outside watchdog) or B (where the vendor's heartbeat replaces it). |
 
-## D. Compensating control when no human covers the night: the automatic hold
+## D. Compensating control when no human covers the night: a stop that does not need a person
 
-**What it is.** For the P0 classes where continuing is dangerous, the engine sets the operator hold itself: the same `HOLD_ON` statement as `PHONE-RUNBOOK.md`. Implemented here as `src/rafii_control/oncall/autohold.py`, flag `RAFII_ONCALL_AUTO_HOLD_ENABLED`, default off, drilled on a disposable database.
+**The independent review of `8e76afdd` and the Release Captain advise against automating the database hold**, and this memo now agrees: the hold itself strands posts. Measured on the merged head `d864f25f` (disposable PostgreSQL, real worker and coordinator, mock Discord; `PHONE-RUNBOOK.md`):
+
+- while a Discord-claiming worker runs under the hold (the lane flag off or not ready, the RC1 build after a rollback, a customer's "post now"), each created post's read-back burns a check per claim and is **parked for 24 hours** after the fifth, although the message is in Discord; the lift does not bring it back;
+- a post needs **a new approval from about 55 minutes after its own scheduled time**, so a hold through the night turns the morning's queue into re-approvals;
+- the hold lives in the database, so a restore rewinds it.
+
+What remains of option D, as owner decisions, none of them on by default:
 
 | | |
 |---|---|
-| Engages on | `CROSS_TENANT_PROBE_FAILED`, `CROSS_TENANT_PROBING` (page), `DELIVERY_UNCERTAIN` (page: duplicate-send suspicion), `RATE_INVALID_REQUESTS` and `RATE_INVALID_BUDGET` (page: an IP restriction would hit every customer). Runaway sending is already capped by the coordinator, and a duplicate shows up as `DELIVERY_UNCERTAIN`. |
-| Never engages on | Backlog, silent halt, configuration or policy alerts: a hold makes them worse. **A hold longer than about an hour lets approvals expire**, so queued posts need re-approval; it must never be used for a backlog. |
-| Consequences | Every new Discord request is refused for every customer: posts wait, reads and connects fail with "coordination unavailable". A create whose permit was reserved just before can still post (at most one step per running loop). Customers see delays. Nothing is deleted or resent. |
-| Who lifts it | Only a person: the Release Captain, or the Primary on the captain's word, with `HOLD_OFF` and its read-back. **Never automatic.** The engine sends its own P0 (`ONCALL_AUTO_HOLD_ENGAGED`) and audits the decision. |
-| Risk | A false positive pauses Discord for everyone until morning. The detection must therefore stay strict (page level only), and the owner accepts the trade-off explicitly. It is an automated write to the Production database (the service role the application already uses), so enabling it is a Production change needing approval. |
-| Cost class | None. |
+| D1. Automatic database hold (`src/rafii_control/oncall/autohold.py`, flag `RAFII_ONCALL_AUTO_HOLD_ENABLED`, off) | Kept in code only so the owner can choose it with the facts above. If chosen, it engages only on `CROSS_TENANT_PROBE_FAILED` (a confirmed isolation failure), never on probing (a refusal is the gate working), runs the runbook's own `HOLD_ON`, which must return a row, reads it back, opens its own P0 and never lifts the hold. A false positive pauses Discord for everyone until a person lifts it. It is an automated write to the Production database, so enabling it is a Production change. |
+| D2. The Discord-paused build, prepared in advance | The serving SHA staged with a rate policy that does not parse: every process refuses Discord requests before sending, nothing is held, parked or marked uncertain, and it survives a restore (the restore lane's drill, `RESTORE-RUNBOOK-PROPOSAL.md` 4.J, a proposal not in force). It needs a person to promote it (a Production operation), so it is not automatic; it is the lever a woken person should prefer when the lane does not own Discord. Packet 3 row 12b prepares it. |
+| D3. Smaller exposure instead of a stop | Open with a smaller server cap, or keep the canary gate, until night cover exists (a business decision). |
+
+**Who lifts any stop:** only a person, the Release Captain or the Primary on the captain's word. Cost class of D1 to D3: none beyond a staged build.
 
 ## Recommendation [advice]
 
 1. **Before the public opening:** the owner names a Primary and a Backup and says honestly whether P0 is covered at night. If not, H-07 is **BLOCKED** (see `H07-EVIDENCE.md` for the rule).
 2. **Fastest path to VERIFIED:** **B with C**. A paging service gives calls, rotations, acknowledgement and an outside heartbeat on day one; the GitHub watchdog is a second, free-ish dead-man's switch. Cost: a per-responder subscription.
 3. **No new vendor:** **A with C**. Use this branch's engine with the existing push, e-mail and phone integrations. It needs the P0 call-policy change reviewed, the migration applied and the adapters built; it shares fate with the application, so C is mandatory.
-4. **In every case, D** while nights are not truly covered: it limits the damage of the dangerous classes, at the price of a paused Discord until someone lifts the hold.
+4. **While nights are not truly covered:** prepare D2 (the paused build) so a woken person has a stop that strands nothing, and decide D3. D1 (an automatic database hold) is not recommended: it strands posts (see D).
 5. If neither a night person nor D is acceptable, the alternatives are:
    - open only with a smaller server cap, accepting the night risk for a limited audience;
    - delay the public opening until a Backup exists (for example in another time zone).

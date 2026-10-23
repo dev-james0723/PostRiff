@@ -84,7 +84,7 @@ def runbook_statements(path=RUNBOOK):
 
 def social(cluster, tenants, wire, *, capacity=200, days=20.0, issued=None, reviewed=True, rate_limits=True, **overrides):
     """The fixture's provider with a policy that is valid for `days` from `issued` (the database clock by default)."""
-    provider = DiscordProvider(F.APP, 'synthetic-secret', 'synthetic-bot-token', 'https://rafii.example.invalid',
+    provider = DiscordProvider(F.APP, secrets.token_hex(12), secrets.token_hex(12), 'https://rafii.example.invalid',
                                transport=wire, production_reviewed=reviewed)
     provider.authorization_v2_enabled = provider.connections_v2_enabled = True
     provider.rate_v1_enabled = rate_limits
@@ -146,6 +146,13 @@ class Lab:
             cur = db.execute(statement, params)
             return cur.fetchall() if cur.description else []
 
+    def named(self, statement, params=None):
+        """The first row of one statement as {column: value} (columns are read by name, never by position)."""
+        with self.cluster.connect(autocommit=True) as db:
+            cur = db.execute(statement, params)
+            row = cur.fetchone() if cur.description else None
+            return dict(zip([c.name for c in cur.description], row)) if row else {}
+
     def look(self, phase='pre_open', values=None, thresholds=None, worker=None):
         snapshot = ops.snapshot(worker or self.worker, values or VALUES)
         alerts = check.evaluate(snapshot, thresholds or THRESHOLDS, now=self.cluster.now(), phase=phase)
@@ -167,6 +174,11 @@ class Lab:
 
     def sql_twin(self):
         return self.sql(SNAPSHOT_SQL.read_text())[0][0]
+
+
+def psycopg_errors():
+    import psycopg
+    return psycopg.errors
 
 
 def severities(alerts):
@@ -245,7 +257,7 @@ def d0_baseline(lab):
 
 def d1_backlog(lab):
     d = Drill('D1', 'BACKLOG', 'Late work is detected at warn and page levels while senders still make progress')
-    for due_ago, severity in ((1000, 'page'), (400, 'warn')):
+    for due_ago, severity in ((3000, 'page'), (1000, 'warn')):   # page above 2,700 s, warn above 900 s (review M2)
         lab.fresh([F.Tenant(n) for n in range(40)], 1, due_ago=due_ago, latency=0.05)
         before, alerts = lab.look()
         d.step('injected: 40 posts due %d s ago, nothing run yet' % due_ago, alerts,
@@ -300,8 +312,9 @@ def d2_delivery(lab):
     snapshot, alerts = lab.look()
     d.step('recovered: 16 minutes later (simulated), no new failures', alerts, uncertain=snapshot['deliveries']['uncertain'],
            uncertainJobsLeftForReconciliation=lab.states().get('uncertain', 0))
-    d.expect('delivery alerts cleared', not {'DELIVERY_UNCERTAIN', 'DELIVERY_SYSTEM_FAILURES'} & set(severities(alerts)),
-             severities(alerts))
+    d.expect('the failure-share alert cleared; the three uncertain admissions keep a warning until reviewed (review M4)',
+             'DELIVERY_SYSTEM_FAILURES' not in severities(alerts) and severities(alerts).get('DELIVERY_UNCERTAIN') == 'warn'
+             and snapshot['unresolved']['uncertainPublishes'] == 3, [severities(alerts), snapshot['unresolved']])
     d.record['references'].append('an uncertain create is never sent again: test_a_loop_that_dies_after_discord_accepted_'
                                   'never_causes_a_second_post; the jobs stay uncertain for read-back reconciliation')
     return d.done()
@@ -437,7 +450,7 @@ def d4_silent_halt(lab):
     healthy = HostedApplication(service=object(), worker=lab.worker, cron_secret=SECRET)
     with serving(healthy) as url:
         answered = check.fetch(url, SECRET, timeout=10)
-        wrong = check.fetch(url, 'not-the-secret-0123456789', timeout=10)
+        wrong = check.fetch(url, secrets.token_hex(13), timeout=10)
     alerts = check.evaluate(answered, THRESHOLDS, now=lab.cluster.now(), phase='pre_open')
     d.step('the real route over HTTP, right secret', alerts, observed=answered.get('observedAt') is not None)
     d.expect('route answers 200 with a snapshot', answered.get('kind') == ops.KIND, answered.get('kind'))
@@ -521,7 +534,7 @@ def d5_cross_tenant(lab):
             for _ in range(12):
                 statuses[refused(lambda: repository.transaction('synthetic-session', a.id).__enter__())] += 1
             clock.at += 60
-        # A fourth minute: one more refusal (its line carries the previous minute's suppressed count) and one from the
+        # A fourth minute: one more refusal (it first writes the previous minute's final count) and one from the
         # Discord code path (DiscordConnections.public_identities, the identities route).
         statuses[refused(lambda: repository.transaction('synthetic-session', a.id).__enter__())] += 1
         statuses[refused(lambda: discord.public_identities(a.id, 'synthetic-session'))] += 1
@@ -534,10 +547,11 @@ def d5_cross_tenant(lab):
         d.expect('every refusal is the uniform 403', statuses == Counter({403: 38}), dict(statuses))
         d.fires(alerts, 'CROSS_TENANT_PROBING', 'page', '38 refusals for one actor in 10 minutes')
         d.fires(alerts, 'CROSS_TENANT_DISCORD', 'warn', 'a refusal from the Discord code path')
-        d.expect('one line per actor, family and minute (5 lines for 38 refusals)', len(lines) == 5, len(lines))
-        d.expect('lines carry only family, status, actor key and suppressed',
-                 all(set(line) == {'event', 'routeFamily', 'status', 'actorKey', 'suppressed'} for line in lines),
-                 sorted({key for line in lines for key in line}))
+        d.expect('lines at the running counts 1 and 10 and a final line per minute (11 lines for 38 refusals)',
+                 len(lines) == 11 and [l['count'] for l in lines if l['final']] == [12, 12, 12], [len(lines), [l['count'] for l in lines]])
+        d.expect('lines carry only family, status, actor key, count, minute, final and the process label',
+                 all(set(line) == {'event', 'routeFamily', 'status', 'actorKey', 'count', 'minute', 'final', 'instance'}
+                     for line in lines), sorted({key for line in lines for key in line}))
         text = ' '.join(captured.lines)
         d.expect('no workspace or member id in any line', not any(value in text for value in (a.id, b.id, member)), None)
         fleet = check.parse_logs(captured.lines, 600)
@@ -545,8 +559,9 @@ def d5_cross_tenant(lab):
         alerts_fleet = check.evaluate({'version': 1, 'source': 'logs', 'observedAt': snapshot['observedAt'], 'fleet': fleet},
                                       THRESHOLDS, now=lab.cluster.now())
         d.step('the same refusals read from the log lines only (the check-in path)', alerts_fleet,
-               fleetDenials=fleet['denials']['deniedTotal'], fleetTop=fleet['denials']['topActorDenials10m'],
-               note='a line reports the denials suppressed before it, so the newest minute is seen one line late')
+               fleetDenials=fleet['denials']['deniedTotal'], fleetTop=fleet['denials']['topActorDenials10m'])
+        d.expect('the log lines alone count every refusal (38), not a sample of them', fleet['denials']['deniedTotal'] == 38,
+                 fleet['denials']['deniedTotal'])
         d.fires(alerts_fleet, 'CROSS_TENANT_PROBING', 'page', 'from the log lines alone')
         d.fires(alerts_fleet, 'CROSS_TENANT_DISCORD', 'warn', 'Discord family from the log lines alone')
         recorder = request_metrics.Recorder(clock=time.time)
@@ -626,10 +641,13 @@ def o1_hold(lab):
     lab.fresh([F.Tenant(n) for n in range(4)], 1)
     rows = lab.sql(statements['HOLD_READBACK'])
     d.step('read-back before any request', [], policyRows=rows[0][0], held=rows[0][1])
-    lab.sql(statements['HOLD_ON'])
-    d.expect('on an empty coordinator HOLD_ON changes nothing (the runbook says so)', lab.sql(statements['HOLD_READBACK'])[0][0] == 0,
-             lab.sql(statements['HOLD_READBACK'])[0][:2])
+    returned = lab.sql(statements['HOLD_ON'])
+    d.expect('on an empty coordinator HOLD_ON returns no row: the proof that there is no hold (the runbook says so)',
+             returned == [] and lab.sql(statements['HOLD_READBACK'])[0][0] == 0, [returned, lab.sql(statements['HOLD_READBACK'])[0][:2]])
     lab.sql(statements['HOLD_INSERT'].replace('DISCORD_APPLICATION_ID', F.APP))
+    keycheck = lab.named(statements['HOLD_KEYCHECK'].replace('DISCORD_APPLICATION_ID', F.APP))
+    d.expect('HOLD_KEYCHECK: the typed id names the only policy row', keycheck.get('typed_key_rows') == 1 == keycheck.get('policy_rows'),
+             keycheck)
     rows = lab.sql(statements['HOLD_READBACK'])
     results, _ = F.run_lanes(lab.worker, 2, seconds=5)
     snapshot, alerts = lab.look()
@@ -646,6 +664,19 @@ def o1_hold(lab):
     d.expect('after HOLD_OFF the coordinator works with that row and every post is verified once',
              lab.states() == Counter(verified=4) and lab.wire.duplicates() == 0, dict(lab.states()))
     d.silent(alerts, 'after the inserted hold was lifted')
+    # (a2) a mistyped application id: the inserted row is not the coordinator's, which creates its own row unheld
+    lab.fresh([F.Tenant(n) for n in range(2)], 1)
+    lab.sql(statements['HOLD_INSERT'].replace('DISCORD_APPLICATION_ID', F.APP + '0'))
+    F.run_lanes(lab.worker, 1, seconds=8)
+    readback = lab.named(statements['HOLD_READBACK'])
+    keycheck = lab.named(statements['HOLD_KEYCHECK'].replace('DISCORD_APPLICATION_ID', F.APP + '0'))
+    d.step('injected: HOLD_INSERT with a mistyped application id, then one shard', [], readback=readback, keycheck=keycheck,
+           posts=len(lab.wire.requests(method='POST')))
+    d.expect('a mistyped id is caught: policy_rows 2 with held 1, and the typed key has no admission',
+             readback.get('policy_rows') == 2 and readback.get('held') == 1 and keycheck.get('admissions_on_typed_key') == 0
+             and keycheck.get('admissions', 0) > 0, [readback, keycheck])
+    returned = lab.sql(statements['HOLD_ON'])
+    d.expect('HOLD_ON then holds every policy row and returns them', len(returned) == 2 and all(r[1] for r in returned), returned)
     # (b) the incident shape: a hold set by the operator while four shards are sending
     lab.fresh([F.Tenant(n) for n in range(30)], 1, latency=0.02)
     held = {}
@@ -698,30 +729,51 @@ def o1_hold(lab):
 
 def o2_rollback_order(lab):
     import test_discord_parallel_lane_postgres as W
-    d = Drill('O2', 'OPERATION', 'Rollback order: hold, drain check, the older worker, lift; and the lane flag off')
+    d = Drill('O2', 'OPERATION', 'Rollback order: hold, drain check, the older worker, lift at once; and the lane flag off')
     statements = runbook_statements()
     lab.fresh([F.Tenant(n) for n in range(8)], 2, latency=0.02)
-    held = {}
+    seen = {}
 
     def after(method, path, answer):
-        if method == 'POST' and len(lab.wire.requests(method='POST')) >= 3 and not held:
-            lab.sql(statements['HOLD_ON'])
-            held['yes'] = True
+        posts = len(lab.wire.requests(method='POST'))
+        if method == 'POST' and posts == 2 and 'busy' not in seen:
+            seen['busy'] = lab.named(statements['DRAIN_CHECK'])   # a loop is between its POST and its answer now
+        if method == 'POST' and posts >= 3 and 'held' not in seen:
+            seen['held'] = lab.sql(statements['HOLD_ON'])
     lab.wire.after = after
     F.run_lanes(lab.worker, 2, seconds=20)
     lab.wire.after = None
-    drain = lab.sql(statements['DRAIN_CHECK'])[0]
-    d.step('1-2: HOLD_ON while sending, loops stopped, DRAIN_CHECK', [], liveLeases=drain[0], sealedNow=drain[1],
-           uncertainToReconcile=drain[2])
-    d.expect('drain check: no live lease and nothing sealed, so the worker can be switched', drain[0] == 0 and drain[1] == 0,
-             list(drain))
+    busy = seen.get('busy') or {}
+    d.step('while sending: DRAIN_CHECK from inside a create (positive case)', [], **{k: busy.get(k) for k in (
+        'live_leases', 'publishes_in_flight', 'sealed_now')})
+    d.expect('drain check sees the create in flight: a live lease, a sealed post and its admission (review C1, M7)',
+             (busy.get('live_leases') or 0) >= 1 and (busy.get('publishes_in_flight') or 0) >= 1 and (busy.get('sealed_now') or 0) >= 1,
+             busy)
+    d.expect('1: HOLD_ON returned the held row', bool(seen.get('held')) and all(r[1] for r in seen['held']), seen.get('held'))
+    drain = lab.named(statements['DRAIN_CHECK'])
+    d.step('1-2: HOLD_ON while sending, loops stopped, DRAIN_CHECK', [], **drain)
+    d.expect('2: drain check: no live lease and nothing in flight, so the worker can be switched',
+             drain.get('live_leases') == 0 and drain.get('publishes_in_flight') == 0, drain)
     frozen = W.frozen_worker_class()(lab.cluster.factory(), social=lab.hosted, worker_id='frozen-minute', discord_workers=True)
     off = {k: v for k, v in VALUES.items() if k != F.discord_lane.ENV_ENABLED}
     snapshot, alerts = lab.look(values=off, worker=frozen)
     d.step('3: the older (2a5a523d) worker serves, hold still on', alerts, laneEnabled=snapshot['lane']['enabled'])
     d.expect('the payload reads the older worker; lane flag off is not a lane alarm',
              not snapshot['lane']['enabled'] and 'SILENT_HALT_LANE_NOT_READY' not in severities(alerts), severities(alerts))
-    lab.sql(statements['HOLD_OFF'])
+    posts_before = len(lab.wire.requests(method='POST'))
+    with F.no_billing(), patch.dict(os.environ, {'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}, clear=False):
+        for _ in range(2):                       # the gap between the promote and the lift: the older worker claims
+            frozen.tick(10, 20)
+    jobs = list(F.jobs(lab.cluster).values())
+    burned = sorted(job.get('checks') or 0 for job in jobs if job['state'] in ('provider_accepted', 'uncertain'))
+    d.step('3b: two ticks of the older worker under the hold (it does not stop on the hold by itself)', [],
+           postsUnderHold=len(lab.wire.requests(method='POST')) - posts_before, readbackChecksBurned=burned,
+           jobs=dict(lab.states()))
+    d.expect('the coordinator refuses the older worker under the hold: no create sent (review M7)',
+             len(lab.wire.requests(method='POST')) == posts_before, len(lab.wire.requests(method='POST')) - posts_before)
+    d.record['simulated'].append('the older worker ran two ticks under the hold, as in the gap before the lift; read-backs it '
+                                 'claimed burned a check each (five park a post for 24 hours, which is why step 4 is at once)')
+    returned = lab.sql(statements['HOLD_OFF'])
     with lab.cluster.connect(autocommit=True) as db:  # posts refused by the hold wait five minutes; skip the wait
         for workspace, state in db.execute("SELECT id,state FROM public.pr_workspaces WHERE state ? 'phase2'").fetchall():
             for job in state['phase2']['jobs']:
@@ -736,7 +788,9 @@ def o2_rollback_order(lab):
             time.sleep(.2)
     states = lab.states()
     snapshot, alerts = lab.look(values=off, worker=frozen)
-    d.step('4: HOLD_OFF, the older worker drains', alerts, jobs=dict(states), duplicates=lab.wire.duplicates())
+    d.step('4: HOLD_OFF at once, the older worker drains', alerts, held=bool(returned) and not any(r[1] for r in returned),
+           jobs=dict(states), duplicates=lab.wire.duplicates())
+    d.expect('4: HOLD_OFF returned the lifted row', bool(returned) and not any(r[1] for r in returned), returned)
     d.expect('drained by the older worker, nothing sent twice', lab.wire.duplicates() == 0
              and set(states) <= {'verified', 'uncertain'} and states.get('verified', 0) >= 12, dict(states))
     d.silent(alerts, 'after the rollback', allowed=('DELIVERY_UNCERTAIN', 'DELIVERY_SYSTEM_FAILURES'))
