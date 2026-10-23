@@ -12,17 +12,30 @@ Runs where PostgreSQL server binaries are named by POSTRIFF_PG_BIN. It starts it
 reads application credentials or touches any other database. It does not run under the synthetic transport fence
 (RAFII_DISCORD_SYNTHETIC_FENCE), which by design refuses every database but the guarded runner's own.
 """
+import importlib.util
 import json
+import logging
+import os
 import time
 import unittest
 from unittest.mock import patch
 
 import discord_lane_fixture as F
 from postriff_phase2.discord import worker as discord_worker
+from postriff_phase2.discord.rate_limits import SharedPostgresBudget
 
 
 class WorkerDied(BaseException):
     """A process that stops mid-step: nothing after this point runs; its open transaction rolls back."""
+
+
+def short_policy(now, seconds):
+    """A reviewed policy (the operator tool's own builder) that expires `seconds` after `now`, to the second."""
+    spec = importlib.util.spec_from_file_location('discord_rate_policy', F.ROOT / 'scripts/discord_rate_policy.py')
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    value = tool.build(now, days=(60 + seconds + .5) / 86400, revision='w02-lane-test', app_capacity=200)
+    return json.dumps(value), value['expires_at']
 
 
 @unittest.skipIf(F.FENCED, F.SKIP_FENCED)
@@ -480,6 +493,189 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual(tracker.thread_peak, 1)
         self.assertLessEqual(tracker.peak, 6)
         self.assertEqual(tracker.open, 0)
+
+    # (i) recovery -------------------------------------------------------------------------------------------------
+
+    def minute(self, worker, *, flag=True):
+        """One run of the minute cron (the real PostgresWorker.tick()), with the lane flag on or off."""
+        values = {F.discord_lane.ENV_ENABLED: 'true' if flag else 'false', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}
+        with patch.dict(os.environ, values), F.no_billing():
+            return worker.tick(10, 20)
+
+    def lagging(self, worker):
+        """One minute cron run (lane flag on) and the lag warnings it logged."""
+        with self.assertLogs('postriff.request', 'DEBUG') as logged:
+            logging.getLogger('postriff.request').debug('marker')
+            tick = self.minute(worker)
+        return tick, [json.loads(r.getMessage()) for r in logged.records if 'discord.lane.lagging' in r.getMessage()]
+
+    def unable(self, cause):
+        """Leave this process's provider as the hosted runtime would with `cause`: the lane cannot run anywhere."""
+        provider = self.hosted.providers['discord']
+        if cause == 'rate limits off':
+            # runtime_from_environment: without rate limits it also turns Discord authorization off.
+            provider.rate_v1_enabled = provider.authorization_v2_enabled = False
+            provider.rate_limiter = None
+        elif cause == 'policy expired':
+            provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP,
+                                                         policy=F.policy(self.cluster.now() - 3 * 86400, capacity=200))
+        else:
+            assert cause == 'no coordinator', cause
+            provider.rate_limiter = None
+
+    def repair(self):
+        """The repaired configuration, as a new deployment builds it: rate limits on and a current reviewed policy."""
+        provider = self.hosted.providers['discord']
+        provider.rate_v1_enabled = provider.authorization_v2_enabled = True
+        provider.rate_coordinator_degraded = False
+        provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP,
+                                                     policy=F.policy(self.cluster.now(), capacity=200))
+
+    def skip_push_back(self):
+        """Make the posts pushed back five minutes due now, instead of waiting five minutes."""
+        with self.cluster.connect(autocommit=True) as db:
+            for workspace, state in db.execute("SELECT id,state FROM public.pr_workspaces WHERE state ? 'phase2'").fetchall():
+                for job in state['phase2']['jobs']:
+                    if job['state'] == 'scheduled':
+                        job['nextAt'] = 0
+                db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
+                           (json.dumps(state), workspace))
+
+    def destinations(self):
+        """The status of every Discord destination that is no longer plainly authorized."""
+        with self.cluster.connect(autocommit=True) as db:
+            rows = db.execute("SELECT state FROM public.pr_workspaces WHERE state ? 'phase2'").fetchall()
+        return [destination.get('status') for (state,) in rows for channel in state['phase2']['channels']
+                for destination in channel.get('discordDestinations', []) if destination.get('status') != 'authorized']
+
+    def recovery(self, cause):
+        """Six due posts, three of whose approvals end in 20 s. The lane cannot run (`cause`): the shards claim
+        nothing and the minute cron keeps the frozen path. Then the configuration is repaired and the lane drains.
+        Returns the jobs after the frozen minute, the jobs at the end, and the short-approval workspaces."""
+        tenants = [F.Tenant(n) for n in range(6)]
+        at = self.cluster.now() + 20 - 3600  # an approval lives one hour after its scheduled time
+        F.seed(self.cluster, tenants[:3], 1, now=at - 300, at=at)
+        F.seed(self.cluster, tenants[3:], 1)
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
+        worker = F.base_worker(self.cluster, self.hosted)
+        self.unable(cause)
+        results, failures = F.run_lanes(worker, 3, seconds=10)
+        self.assertEqual(failures, [])
+        self.assertEqual([r['stoppedBy'] for r in results], ['coordinator_unavailable'] * 3)
+        self.assertEqual(sum(r['counters']['claimed'] for r in results), 0, 'the shards claim nothing')
+        tick = self.minute(worker)
+        self.assertNotIn('discordParallelLane', tick, 'the minute cron keeps the frozen Discord path')
+        self.assertEqual((tick['discordLaneStatus']['ready'], tick['discordLaneStatus']['blocker']),
+                         (False, 'coordinator_unavailable'))
+        frozen = F.jobs(self.cluster)
+        self.assertEqual(self.wire.calls, [], 'nothing reached Discord while the lane could not run')
+        self.repair()
+        self.skip_push_back()
+        tick = self.minute(worker)
+        self.assertTrue(tick['discordParallelLane'] and tick['discordLaneStatus']['ready'])
+        results, failures = F.run_lanes(worker, 3, seconds=60)
+        self.assertEqual(failures, [])
+        return frozen, F.jobs(self.cluster), {tenant.id for tenant in tenants[:3]}
+
+    def test_recovery_after_rate_limits_were_off_keeps_the_frozen_holds(self):
+        """Recorded: without rate limits the frozen path holds each post and asks for its destination to be
+        verified again; the repaired lane then has nothing due, and never sends a held post."""
+        frozen, final, _ = self.recovery('rate limits off')
+        for job in frozen.values():
+            self.assertEqual((job['state'], job['events'][-1]['message']),
+                             ('held', 'Discord destination, grant, media or rollout verification is unavailable. '
+                                      'Nothing was posted.'))
+        self.assertEqual(self.destinations(), ['verification_required'] * 6)
+        self.assertEqual({job['state'] for job in final.values()}, {'held'})
+        self.assertEqual(self.wire.requests(method='POST'), [])
+
+    def assert_recovered_after_the_push_back(self, frozen, final, short):
+        for (workspace, _), job in frozen.items():
+            operation = job['discordWorker']
+            self.assertEqual(operation['releaseReason'], 'rate_delayed')
+            self.assertAlmostEqual(operation['rateDelayedUntil'] - operation['releasedAt'], 300, delta=1)
+            self.assertEqual((job['state'], job['nextAction']),
+                             ('held', 'Discord rate wait outlasts approval; review the frozen destination and approve again')
+                             if workspace in short else
+                             ('scheduled', 'Await Discord shared rate budget; no POST occurred and this approval remains frozen'))
+        for (workspace, _), job in final.items():
+            creates = len(self.wire.creates.get(F.nonce(job), []))
+            if workspace in short:
+                self.assertEqual((job['state'], creates), ('held', 0), 'past its approval: held, never sent late')
+            else:
+                self.assertEqual((job['state'], creates), ('verified', 1), 'inside its approval: created exactly once')
+        self.assertEqual(self.wire.duplicates(), 0)
+
+    def test_recovery_after_the_policy_expired_drains_exactly_once(self):
+        self.assert_recovered_after_the_push_back(*self.recovery('policy expired'))
+
+    def test_recovery_after_the_coordinator_was_missing_drains_exactly_once(self):
+        self.assert_recovered_after_the_push_back(*self.recovery('no coordinator'))
+
+    def test_recovery_after_the_shard_crons_stopped_for_minutes(self):
+        tenants = sorted((F.Tenant(n) for n in range(7)), key=lambda tenant: tenant.id)
+        busy, small = tenants[0], tenants[1:]  # the busy tenant sorts first by id
+        gap = self.cluster.now() - 960  # posts scheduled 11 minutes ago; no shard has run since
+        F.seed(self.cluster, [busy], 20, now=gap)
+        F.seed(self.cluster, small, 2, now=gap)
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
+        worker = F.base_worker(self.cluster, self.hosted)
+        for _ in range(2):  # two minutes of the gap
+            tick, warnings = self.lagging(worker)
+            self.assertTrue(tick['discordParallelLane'], 'the minute cron leaves Discord to the absent lane')
+            (warning,) = warnings
+            self.assertGreater(warning['oldestEligibleLagSeconds'], 600)
+            self.assertEqual((warning['laneOwnsDiscord'], warning['laneBlocker'], warning['depth']), (True, None, 32))
+        self.assertEqual(self.wire.calls, [], 'nothing was sent during the gap')
+        results, failures = F.run_lanes(worker, 1, seconds=90)  # the crons arrive again
+        self.assertEqual(failures, [])
+        self.assert_each_created_once_and_verified(32)
+        creates = sorted((at, channel) for times in self.wire.creates.values() for at, channel, _ in times)
+        last_small = max(index for index, (_, channel) in enumerate(creates) if channel != busy.channel)
+        self.assertLessEqual(sum(1 for _, channel in creates[:last_small] if channel == busy.channel), 8,
+                             'the backlog drains fairly: every small tenant finished while the busy one sent a few')
+        tick, warnings = self.lagging(worker)
+        self.assertEqual(warnings, [], 'quiet once drained')
+
+    def test_a_policy_that_expires_mid_run_stops_every_loop_and_renewal_resumes(self):
+        tenants = [F.Tenant(n) for n in range(48)]
+        worker = self.start(tenants, 1, latency=.1)
+        provider = self.hosted.providers['discord']
+        raw, expires = short_policy(self.cluster.now(), 4)
+        provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP, policy=raw)
+        results, failures = F.run_lanes(worker, 4, seconds=60)
+        self.assertEqual(failures, [])
+        self.assertEqual([r['stoppedBy'] for r in results], ['coordinator_unavailable'] * 4, 'every loop stopped')
+        self.assertEqual({r['status']['blocker'] for r in results}, {'coordinator_unavailable'})
+        found = F.jobs(self.cluster)
+        claims = [event['at'] for job in found.values() for event in job.get('events', []) if event['state'] == 'claimed']
+        self.assertTrue(claims and min(claims) < expires)
+        self.assertEqual([at for at in claims if at > expires + 1], [], 'nothing claimed after the expiry')
+        sent = sorted(wall for times in self.wire.creates.values() for _, _, wall in times)
+        self.assertTrue(0 < len(sent) < len(tenants), 'the policy expired mid-run')
+        self.assertLess(sent[-1], expires + 1, 'no create left after the expiry')
+        # Renewal (a new deployment with a renewed policy): the lane resumes.
+        provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP,
+                                                     policy=F.policy(self.cluster.now(), capacity=200))
+        self.skip_push_back()
+        results, failures = F.run_lanes(worker, 4, seconds=60)
+        self.assertEqual(failures, [])
+        stuck = []
+        for job in F.jobs(self.cluster).values():
+            creates = len(self.wire.creates.get(F.nonce(job), []))
+            self.assertLessEqual(creates, 1, 'never sent twice')
+            if job['state'] == 'verified':
+                self.assertEqual(creates, 1)
+            else:
+                stuck.append((job['state'], creates, job['events'][-1]['message']))
+        # The step a loop had in flight at the expiry may be left for review (existing rules: refused at the seal it
+        # is held, refused at the create it is uncertain with nothing sent); never more than one per loop.
+        self.assertLessEqual(len(stuck), 4, stuck)
+        self.assertEqual({(state, creates) for state, creates, _ in stuck} - {('held', 0), ('uncertain', 0)}, set(),
+                         stuck)
+        self.assertEqual(self.wire.duplicates(), 0)
 
 
 if __name__ == '__main__':
