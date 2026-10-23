@@ -204,6 +204,10 @@ of the 20 busy creates it counted; a faster runner gives the small tenants more 
   still waits to be sent or verified (at most four runs); fast runners use one.
 - The coordinator-cap pair runs at 3 requests per second (ceiling 6), a cap twelve loops meet on a slow runner too, and
   counts the loops' own application-window waits as the sign the cap was met.
+- The global-429 tests count from the coordinator's record of the 429 (its admission's outcome) to the embargo's end,
+  both on the database clock: nothing is admitted in that window, at most one request per other loop still arrives,
+  and each loop claims at most once in it. Counting from the 429's arrival at the mock widened both bounds on a slow
+  runner by however long the record took.
 
 ## Database connections
 
@@ -388,12 +392,14 @@ platform before any claim is made to customers.
   minute cron still leaves Discord to the lane, so due posts wait unsent. Nothing could be sent in that state either
   way; the signals are the shard lines (`coordinator_degraded`, at WARNING) and, after five minutes, the lag warning
   with `laneOwnsDiscord` true, which does not name the cause.
-- Seen once, under heavy CPU contention, cause not confirmed: in the cron-gap recovery test (one loop, 20 posts to
-  one channel) ten of the busy channel's posts ended held, nothing sent, released for a rate wait longer than their
-  approval ("Discord rate wait outlasts approval") [measured: 1 of about 8 contended runs; 0 of many uncontended].
-  A wait that long fits a learned route left with no remaining requests and its policy-expiry placeholder reset,
-  which a stale response (one reserved before the route's refill) can produce in `observe()` [reasoned, not
-  reproduced]. Coordinator code; left to the coordinator's reviewer.
+- A learned route can close until the policy expires. When its window ends, the next reservation refills it and
+  sets its reset to the policy's expiry until a response from the new window gives the real one (`_roll`). If the
+  permits reserved after that refill all expire unused (a slow step, a released job), no request leaves, no response
+  comes back, and the route stays at nothing left: every later request on it is refused with a wait of the policy's
+  remaining life, so every later post to that channel is held ("Discord rate wait outlasts approval"), nothing
+  sent [measured: reproduced deterministically with the coordinator alone, a refused read waits 86,336 s on the
+  one-day test policy; seen under heavy CPU contention in the many-loops, cron-gap and fairness tests, where six to
+  ten posts on such channels ended held]. Coordinator code; left to the coordinator's reviewer.
 
 ## Not done
 
