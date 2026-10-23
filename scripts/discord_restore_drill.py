@@ -492,31 +492,54 @@ def phase_holdrow(timeline, args):
 
 # --- a restore under running loops ------------------------------------------------------------------------------------
 
+class Tagged:
+    """The transport one invocation sees: Discord itself, plus a note of which invocation made each create."""
+
+    def __init__(self, wire, number, notes):
+        self.wire, self.number, self.notes = wire, number, notes
+
+    def __call__(self, method, url, **kwargs):
+        answer = self.wire(method, url, **kwargs)
+        if method == 'POST' and isinstance(answer, dict) and answer.get('status') == 200:
+            self.notes.append({'invocation': self.number, 'at': time.time(), 'id': (answer.get('body') or {}).get('id')})
+        return answer
+
+
 class Cron:
     """A cron that starts one lane invocation every `period` seconds (shards round robin), each on a fresh provider
-    (a cold function instance), until stopped. Records every invocation's start, end, error and counters."""
+    (a cold function instance), until stopped. `build` is the deployment new invocations run: 'normal', or 'paused'
+    (the same code with a rate policy that does not parse, so its coordinator refuses every Discord request).
+    Records every invocation's build, start, end, error and counters, and which invocation made each create."""
 
     def __init__(self, cluster, tenants, wire, *, period=1.0, seconds=8, shards=4):
         self.cluster, self.tenants, self.wire = cluster, tenants, wire
         self.period, self.seconds, self.shards = period, seconds, shards
+        self.build = 'normal'
         self.stop = threading.Event()
-        self.invocations, self.threads = [], []
+        self.invocations, self.threads, self.notes = {}, [], []
         self.lock = threading.Lock()
 
     def one(self, number):
-        record = {'shard': number % self.shards, 'started': time.time()}
+        record = {'shard': number % self.shards, 'started': time.time(), 'build': self.build}
+        with self.lock:
+            self.invocations[number] = record
         try:
-            app = App(self.cluster, self.tenants, self.wire)
+            app = App(self.cluster, self.tenants, Tagged(self.wire, number, self.notes))
+            if record['build'] == 'paused':
+                provider = app.hosted.providers['discord']
+                # What OAuthService does at startup when POSTRIFF_DISCORD_RATE_POLICY does not parse.
+                provider.rate_limiter, provider.rate_coordinator_degraded = None, True
             values = {**F.LANE_ENV, 'POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS': str(self.seconds)}
             with F.no_billing():
                 result = F.discord_lane.run(app.worker, number % self.shards, values)
+                if record['build'] == 'paused':
+                    tick = app.tick(flag=True)  # the paused build's minute cron as well
+                    record['tickProcessed'] = tick['processed']
             record.update(stoppedBy=result['stoppedBy'], posted=result['counters']['posted'],
                           claimed=result['counters']['claimed'])
         except BaseException as error:  # a function invocation that errors: the next cron minute starts another
             record.update(error=type(error).__name__)
         record['ended'] = time.time()
-        with self.lock:
-            self.invocations.append(record)
 
     def loop(self):
         number = 0
@@ -526,6 +549,10 @@ class Cron:
             self.threads.append(thread)
             number += 1
             self.stop.wait(self.period)
+
+    def running(self, build):
+        with self.lock:
+            return [r for r in self.invocations.values() if r['build'] == build and 'ended' not in r]
 
     def __enter__(self):
         self.runner = threading.Thread(target=self.loop, daemon=True)
@@ -540,85 +567,125 @@ class Cron:
 
 
 def phase_liveswap(work, args):
-    """Restore in place (same address) while the lane's cron keeps firing; the operator sets the hold `delay`
-    seconds after the database is back. Then the safe order: restore on another port, hold, then move it."""
+    """A restore under the lane's running cron. Three orders:
+    in_place      the database is replaced at the same address while the cron keeps firing; the operator sets the
+                  hold `--hold-delay` seconds after it is back (what M-03 section 6 step 2 describes)
+    hold_first    the restore goes to another address, the hold is set there, then it takes the old address
+    paused_build  before the restore the cron runs a build whose rate policy does not parse (a stop that does not
+                  live in the database); in-place restore; hold; the normal build again; reconcile; lift"""
     results = {}
-    for variant, delay in (('in_place_hold_after_%ds' % args.hold_delay, args.hold_delay), ('hold_before_exposure', None)):
-        base_dir = work / ('swap-' + variant.split('_')[0])
+    for variant in ('in_place', 'hold_first', 'paused_build'):
+        base_dir = work / ('swap-' + variant)
         shutil.rmtree(base_dir, ignore_errors=True)
         tenants = [F.Tenant(500 + n) for n in range(args.swap_tenants)]
         trickle = [F.Tenant(600 + n) for n in range(12)]
+        everyone = tenants + trickle
         port = R.free_port()
         c0 = R.ArchivedCluster(base_dir / 'c0', port=port, archive=base_dir / 'archive').start()
-        c0.apply_schema()
-        wire = R.RestoreMockDiscord(tenants + trickle)
-        App(c0, tenants + trickle, wire).warm()
-        base, _ = c0.base_backup(base_dir / 'base')
-        now = c0.now()
-        # Posts due now, and a trickle due every few seconds so loops are alive (idle-waiting) across the swap.
-        seed(c0, [(t, [('Synthetic swap post for %s' % t.guild, now - 60)]) for t in tenants] +
-             [(t, [('Synthetic trickle post for %s' % t.guild, now + 5 + 3 * n)]) for n, t in enumerate(trickle)])
-        time.sleep(1.5)
-        target = c0.now()
-        time.sleep(1.5)
-        with Cron(c0, tenants + trickle, wire, period=1.0, seconds=8) as cron:
-            deadline = time.monotonic() + 90
-            while time.monotonic() < deadline:
-                states = Counter(j['state'] for k, j in F.jobs(c0).items() if k[0] in {t.id for t in tenants})
-                if states.get('verified', 0) == len(tenants):
-                    break
-                time.sleep(.5)
-            first_creates = len(wire.visible_creates())
-            truth = creates(wire)
-            c0.flush_archive()
-            swap_started = time.time()
-            if delay is not None:
-                c0.stop('immediate')  # the in-place restore takes the database away under the running loops
-                restored, report = R.restore(base, base_dir / 'archive', target, base_dir / 'restored', port=port)
-                back = time.time()
-                time.sleep(delay)
-                with restored.connect() as db:
-                    hold = T.set_hold(db)
-                held_at = time.time()
-            else:
-                restored, report = R.restore(base, base_dir / 'archive', target, base_dir / 'restored')  # elsewhere
-                with restored.connect() as db:
-                    hold = T.set_hold(db)  # before the application can reach it
-                held_at = time.time()
-                c0.stop('immediate')
-                restored.stop('fast')
-                restored.configure({'port': str(port)})
-                restored.port = port
-                restored.dsn = c0.dsn
-                restored.start()
-                back = time.time()
-            time.sleep(8)
-        after = Counter()
-        for entry in wire.log:
-            if not entry['deduplicated'] and entry['at'] > swap_started:
-                after['beforeHold' if entry['at'] <= held_at else 'afterHold'] += 1
-        duplicates = sum(1 for e in wire.log if not e['deduplicated'] and e['at'] > swap_started and truth.get(e['nonce']))
-        loops = {'startedBeforeSwap': [i for i in cron.invocations if i['started'] < swap_started],
-                 'startedAfterBack': [i for i in cron.invocations if i['started'] >= back]}
-        results[variant] = {
-            'posts': len(tenants), 'trickle': len(trickle), 'firstTimelineCreates': first_creates,
-            'restore': report, 'downSeconds': round(back - swap_started, 2),
-            'holdSecondsAfterBack': None if delay is None else round(held_at - back, 2),
-            'hold': hold, 'createsAfterSwap': dict(after), 'duplicates': duplicates,
-            'invocationsStartedBeforeSwap': summarize(loops['startedBeforeSwap'], swap_started),
-            'invocationsStartedAfterBack': summarize(loops['startedAfterBack'], swap_started)}
-        restored.destroy()
-        c0.destroy()
-        log('liveswap ' + variant, duplicates=duplicates, after=dict(after))
+        restored = None
+        try:
+            c0.apply_schema()
+            wire = R.RestoreMockDiscord(everyone)
+            App(c0, everyone, wire).warm()
+            base, _ = c0.base_backup(base_dir / 'base')
+            now = c0.now()
+            # Posts due now, and a trickle due every few seconds so loops are alive (idle-waiting) across the swap.
+            seed(c0, [(t, [('Synthetic swap post for %s' % t.guild, now - 60)]) for t in tenants] +
+                 [(t, [('Synthetic trickle post for %s' % t.guild, now + 5 + 3 * n)]) for n, t in enumerate(trickle)])
+            time.sleep(1.5)
+            target = c0.now()
+            time.sleep(1.5)
+            extra = {}
+            with Cron(c0, everyone, wire, period=1.0, seconds=8) as cron:
+                deadline = time.monotonic() + 90
+                ids = {t.id for t in tenants}
+                while time.monotonic() < deadline:
+                    states = Counter(j['state'] for k, j in F.jobs(c0).items() if k[0] in ids)
+                    if states.get('verified', 0) == len(tenants):
+                        break
+                    time.sleep(.5)
+                if variant == 'paused_build':
+                    cron.build = 'paused'  # promote the paused twin, then wait for the normal build's invocations to end
+                    waited = time.monotonic()
+                    while cron.running('normal') and time.monotonic() - waited < 60:
+                        time.sleep(.2)
+                    extra['waitedForNormalInvocationsSeconds'] = round(time.monotonic() - waited, 1)
+                first_creates = len(wire.visible_creates())
+                truth = creates(wire)
+                c0.flush_archive()
+                swap_started = time.time()
+                if variant in ('in_place', 'paused_build'):
+                    c0.stop('immediate')  # the in-place restore takes the database away under the running loops
+                    restored, report = R.restore(base, base_dir / 'archive', target, base_dir / 'restored', port=port)
+                    back = time.time()
+                    if variant == 'in_place':
+                        time.sleep(args.hold_delay)
+                    with restored.connect() as db:
+                        hold = T.set_hold(db)
+                    held_at = time.time()
+                    if variant == 'paused_build':
+                        cron.build = 'normal'  # promote the normal build again: the database hold now stops it
+                else:
+                    restored, report = R.restore(base, base_dir / 'archive', target, base_dir / 'restored')  # elsewhere
+                    with restored.connect() as db:
+                        hold = T.set_hold(db)  # before the application can reach it
+                    held_at = time.time()
+                    c0.stop('immediate')
+                    restored.stop('fast')
+                    restored.configure({'port': str(port)})
+                    restored.port, restored.dsn = port, c0.dsn
+                    restored.start()
+                    back = time.time()
+                time.sleep(8)
+                if variant == 'paused_build':
+                    reader = T.DiscordReader(wire, 'synthetic-bot-token', pace=0)
+                    applied, _ = T.reconcile(restored.factory(), reader, restore_point=target, interval_end=swap_started,
+                                             dry_run=False)
+                    extra['reconcile'] = {k: applied[k] for k in ('decisions', 'reasons', 'write')}
+                    with restored.connect() as db:
+                        extra['lifted'] = T.lift_hold(db)
+                    lifted_at = time.time()
+                    time.sleep(12)
+                    extra['afterLift'] = {'creates': sum(1 for e in wire.log if not e['deduplicated'] and e['at'] > lifted_at),
+                                          'duplicates': sum(1 for e in wire.log if not e['deduplicated'] and e['at'] > lifted_at
+                                                            and truth.get(e['nonce'])),
+                                          'states': dict(Counter(j['state'] for j in F.jobs(restored).values()))}
+            after = Counter()
+            for entry in wire.log:
+                if not entry['deduplicated'] and entry['at'] > swap_started:
+                    after['beforeHold' if entry['at'] <= held_at else 'afterHold'] += 1
+            duplicates = [e for e in wire.log if not e['deduplicated'] and e['at'] > swap_started and truth.get(e['nonce'])]
+            by_message = {note['id']: note['invocation'] for note in cron.notes}
+            started = {n: r['started'] for n, r in cron.invocations.items()}
+            senders = Counter('startedBeforeSwap' if started[by_message[e['id']]] < swap_started else
+                              'startedDuringDowntime' if started[by_message[e['id']]] < back else 'startedAfterBack'
+                              for e in duplicates if e['id'] in by_message)
+            records = list(cron.invocations.values())
+            results[variant] = {
+                'posts': len(tenants), 'trickle': len(trickle), 'firstTimelineCreates': first_creates,
+                'restore': report, 'downSeconds': round(back - swap_started, 2),
+                'holdSecondsAfterBack': round(held_at - back, 2), 'hold': hold, 'createsAfterSwap': dict(after),
+                'duplicates': len(duplicates), 'duplicatesBySender': dict(senders),
+                'invocations': {'startedBeforeSwap': summarize([r for r in records if r['started'] < swap_started], swap_started),
+                                'startedDuringDowntime': summarize([r for r in records if swap_started <= r['started'] < back], swap_started),
+                                'startedAfterBack': summarize([r for r in records if r['started'] >= back], swap_started)},
+                **extra}
+            log('liveswap ' + variant, duplicates=len(duplicates), after=dict(after), senders=dict(senders))
+        finally:
+            if restored is not None:
+                restored.destroy()
+            c0.destroy()
     return results
 
 
 def summarize(records, swap):
-    alive = [r for r in records if r.get('ended', 0) > swap]
+    alive = [r for r in records if r.get('ended', float('inf')) > swap]
     return {'count': len(records), 'aliveAtSwap': len(alive),
+            'builds': dict(Counter(r['build'] for r in records)),
             'errors': dict(Counter(r.get('error') for r in records if r.get('error'))),
             'stoppedBy': dict(Counter(r.get('stoppedBy') for r in records if r.get('stoppedBy'))),
-            'posted': sum(r.get('posted', 0) for r in records)}
+            'posted': sum(r.get('posted', 0) for r in records),
+            'pausedTickProcessed': sum(r.get('tickProcessed', 0) for r in records)}
 
 
 # --- local timing ------------------------------------------------------------------------------------------------------
