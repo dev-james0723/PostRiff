@@ -73,6 +73,7 @@ class DenialSignal:
         self.minutes = {}       # minute -> {(actor, family): count}
         self.logged = {}        # (actor, family) -> minute of its last line
         self.suppressed = {}    # (actor, family) -> denials not logged since that line
+        self.swept = None       # the minute old entries were last dropped: once a minute, not on every denial
 
     def denied(self, member, family='other', status=403):
         family = family if family in FAMILIES else 'other'
@@ -80,11 +81,13 @@ class DenialSignal:
         minute = int(now // 60)
         actor = actor_key(member)
         with self.lock:
-            for old in [m for m in self.minutes if m < minute - KEEP_MINUTES]:
-                del self.minutes[old]
-            for key in [k for k, m in self.logged.items() if m < minute - KEEP_MINUTES]:
-                self.logged.pop(key, None)
-                self.suppressed.pop(key, None)
+            if self.swept != minute:
+                self.swept = minute
+                for old in [m for m in self.minutes if m < minute - KEEP_MINUTES]:
+                    del self.minutes[old]
+                for key in [k for k, m in self.logged.items() if m < minute - KEEP_MINUTES]:
+                    self.logged.pop(key, None)
+                    self.suppressed.pop(key, None)
             bucket = self.minutes.setdefault(minute, {})
             key = (actor, family)
             if key not in bucket and len(bucket) >= MAX_KEYS:
