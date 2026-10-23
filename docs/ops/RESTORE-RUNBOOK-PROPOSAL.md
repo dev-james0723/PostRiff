@@ -13,10 +13,11 @@ an environment change or a Production database write; each still needs the owner
 **Why a restore needs its own procedure.** A restore rewinds the database. A Discord post sent after the restore point
 looks unsent again, and while its approval is valid the worker creates it a second time: the duplicate protection
 (dispatch intents, leases, the request coordinator's admissions) lives in the database and is rewound with it. In the
-drill, the same code against a database restored to just before the first send created a second copy of 44 of the 46
-messages customers had already seen; only posts whose approval had expired by then were held instead. The operator
-hold (step 2) lives in the database too: a restore rewinds it, and a hold set after the restored database is back races
-the cron (drill: 14 duplicates in the 3 seconds before the hold). Discord's own nonce de-duplication only covers "the past
+drill, the same code against a database restored to just before the first send created a second copy of 43 of the 46
+messages customers had already seen (200 of 200 at scale); only posts whose approval had expired by then, and one post
+held after repeated read 429s, were not resent. The operator hold (step 2) lives in the database too: a restore rewinds
+it, and a hold set after the restored database is back races the cron (drill: with the hold 3 seconds after the
+database was back, 14, 4, 3, 10 and 0 duplicates in five runs). Discord's own nonce de-duplication only covers "the past
 few minutes", far shorter than a restore.
 
 **Who.** The owner decides on a restore and presses Restore. The agent never restores. The Release Captain runs the
@@ -28,7 +29,8 @@ steps below, keeps the evidence (counts, states and ids only, section 3) and lif
    `UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy' RETURNING scope_key;`
    It must return at least one row. **Zero rows means there is no hold**: the policy row is created by the coordinator's
    first request, so a database that never admitted one (or was restored to before it) has none, and the next request
-   creates it unheld (drill: `UPDATE 0`, then 45 duplicates). Use the tool, which proves the result and can insert the row
+   creates it unheld (drill: `UPDATE 0`, then 14 duplicates in 6 seconds). Use the tool, which proves the result and can
+   insert the row
    already held:
    `scripts/discord_restore_reconcile.py hold --set --create-missing --application-id <Discord application id> --dsn-env <VAR>`
    It must print `"held": true`. (If the current database cannot be reached, skip this step and note why.)
@@ -77,8 +79,9 @@ steps below, keeps the evidence (counts, states and ids only, section 3) and lif
      reply post, or a post that was due inside the rewound interval and is not in the channel, which may be a message a
      moderator deleted): the job is `held` for human review. Never sent automatically.
    - **not sent** (complete channel history since the restore point shows no such message, and the post could not have
-     been sent inside the interval): left as it is; the product sends it once if its approval is still valid and holds
-     it if not.
+     been sent inside the interval, judged from when it became due; a worker's lease at the restore point does not
+     delay that): left as it is; the product sends it once if its approval is still valid and holds it if not.
+   It also reads every other authorized destination channel, only to count bot messages that no job claims.
    - Jobs with a sealed intent are never resent by the product; the tool only attaches their message id when it finds
      exactly one.
 9. **Human review** (Release Captain with the owner):
