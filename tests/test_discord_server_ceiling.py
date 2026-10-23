@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 from postriff_alpha.domain import AlphaError, initial_state
 from postriff_phase2.discord.oauth import DiscordConnections, MAX_SERVERS_PER_MEMBER, MAX_SERVERS_PER_WORKSPACE
 from test_discord_oauth_lifecycle import service
-from test_discord_publish_authorization import ACTOR, GUILD, USER, WORKSPACE
+from test_discord_publish_authorization import ACTOR, GUILD, WORKSPACE
 
 OTHER = '20000000-0000-4000-8000-0000000000bb'
 

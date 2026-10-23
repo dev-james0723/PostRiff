@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 from postriff_alpha.domain import AlphaError, initial_state
 from postriff_phase2 import discord as _discord  # noqa: F401  (package import)
 from postriff_phase2.discord import oauth as discord_oauth
-from postriff_phase2.discord.oauth import DiscordConnections, READ_CACHE_SECONDS, READ_LIMIT_MEMBER, READ_LIMIT_WORKSPACE
+from postriff_phase2.discord.oauth import READ_CACHE_SECONDS, READ_LIMIT_MEMBER, READ_LIMIT_WORKSPACE
 from postriff_phase2.oauth import CredentialVault, OAuthService
 from test_discord_oauth_lifecycle import LifecycleWire
 from test_discord_publish_authorization import ACTOR, APP, BOT, FIRST, GUILD, NOW, USER, WORKSPACE

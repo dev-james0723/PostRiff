@@ -4,7 +4,6 @@ rotated nor kept (synthetic state, synthetic wire, no network).
 The SQL conditions of the real guard (active membership, undeleted profile, manage_connections) are proven on a real
 PostgreSQL by tests/phase2/postgres_discord_custody.py; the tests here pin the order of effects and the wiring.
 """
-import json
 import unittest
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -248,7 +247,6 @@ class AMemberWhoIsGoneLeavesNoLiveCredentialBehind(unittest.TestCase):
         s, cur, state, world = custody_world()
         state['phase2'] = {'channels': [], 'discordIdentityLinks': []}
         service, discord, cur = self.service_double(state)
-        before = None
         with patch('postriff_phase2.agent_runtime_v2.agent_permissions.on_membership_ended'), \
                 patch('postriff_phase2.agent_runtime_v2.authz.mode_for', return_value='off'), \
                 patch('postriff_phase2.agent_runtime_v2.authz.runtime_config_for', return_value=None):
@@ -276,7 +274,7 @@ class ManagersMayRemoveAnOrphanedIdentityButNotAnActiveMembersOne(unittest.TestC
             return s, cur, world, audit, (lambda: s.disconnect_identity(WORKSPACE, 'session', 'identity-gone'))
 
     def test_a_manager_can_remove_the_identity_of_someone_who_is_no_longer_an_active_manager(self):
-        s, cur, world, audit, call = self.disconnect(authorizer_is_active=False)
+        s, cur, world, _, call = self.disconnect(authorizer_is_active=False)
         with patch('postriff_phase2.hosted.audit') as audit:
             self.assertTrue(call()['disconnected'])
         self.assertEqual(world.gone['status'], 'disconnected')

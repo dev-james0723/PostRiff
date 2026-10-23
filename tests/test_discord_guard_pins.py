@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from postriff_alpha.domain import AlphaError, initial_state
-from postriff_phase2.discord.oauth import DiscordConnections, identity_record
+from postriff_phase2.discord.oauth import identity_record
 from postriff_phase2.social_connectors import DiscordProvider
 from test_discord_hybrid_review_regressions import GENERATION
 from test_discord_oauth_lifecycle import SECOND_GUILD, installation_callback, service

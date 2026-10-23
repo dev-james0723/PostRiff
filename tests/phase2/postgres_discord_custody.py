@@ -27,7 +27,7 @@ from postriff_phase2.discord import launch_gate
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.social_connectors import DiscordProvider
-from test_discord_oauth_lifecycle import LifecycleWire, APP, USER, GUILD, SECOND_GUILD
+from test_discord_oauth_lifecycle import LifecycleWire, APP, GUILD, SECOND_GUILD
 from test_discord_publish_authorization import FIRST
 
 DSN = 'host=127.0.0.1 port=55438 dbname=postgres user=postriff_test'
