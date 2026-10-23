@@ -26,6 +26,12 @@ from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# Bind the application packages now: another test module may later put scripts/ (which has postriff_phase2.py and
+# postriff_alpha.py scripts) first on sys.path, and the in-process tests below import from them lazily.
+if sys.path[:1] != [str(ROOT / 'src')]:
+    sys.path.insert(0, str(ROOT / 'src'))
+import postriff_alpha.domain  # noqa: E402,F401
+import postriff_phase2.hosted_app  # noqa: E402,F401
 LIVE_REV = os.environ.get('RC2_LIVE_REV', 'c5fc1fd10350f3142ec6f34b2c373139e85abb39')
 PROBE_TIMEOUT = 300
 
