@@ -446,7 +446,7 @@ class CronAuthorizationRefusesNonAsciiHeaders(unittest.TestCase):
 
     def test_a_non_ascii_header_is_refused_401_at_info_on_both_routes(self):
         agent_tasks, worker, reached = self.apps()
-        for header in ('Bearer \u00e9' + 'c' * 31, 'Bearer \xff\xfe', '\u20ac'):
+        for header in ('Bearer \u00e9' + synthetic(), 'Bearer \xff\xfe', '\u20ac'):
             for app, path in ((agent_tasks, '/api/cron/agent-tasks'), (worker, '/api/cron/worker')):
                 with self.subTest(path=path, header=header.encode('unicode_escape')):
                     self.assertEqual(self.call(app, path, header), (401, 'unauthenticated', ['INFO']))
@@ -454,8 +454,9 @@ class CronAuthorizationRefusesNonAsciiHeaders(unittest.TestCase):
 
     def test_a_non_ascii_secret_is_refused_401(self):
         from postriff_phase2.hosted_app import HostedApplication
-        app = HostedApplication(cron_secret='\u00e9' * 20)
-        self.assertEqual(self.call(app, '/api/cron/agent-tasks', 'Bearer ' + '\u00e9' * 20), (401, 'unauthenticated', ['INFO']))
+        configured = '\u00e9' + synthetic()
+        app = HostedApplication(cron_secret=configured)
+        self.assertEqual(self.call(app, '/api/cron/agent-tasks', 'Bearer ' + configured), (401, 'unauthenticated', ['INFO']))
 
     def test_ascii_headers_are_judged_as_before(self):
         from unittest.mock import patch

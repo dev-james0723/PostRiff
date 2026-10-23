@@ -71,7 +71,7 @@ class App:
         status = self.status_change.get(path)
         if path == '/':
             body, kind = page(self.build, **self.page_change).encode(), 'text/html; charset=utf-8'
-            common.append(('Set-Cookie', '%s=cookie-secret-%s; %s' % (self.cookie, self.build, self.cookie_flags)))
+            common.append(('Set-Cookie', '%s=%s-%s; %s' % (self.cookie, SYNTHETIC['session'], self.build, self.cookie_flags)))
         elif path == '/privacy':
             body, kind = page(self.build, heading='Privacy', extra=self.privacy_extra).encode(), 'text/html; charset=utf-8'
         elif path == '/api/health':
@@ -124,7 +124,7 @@ class Synthetic(unittest.TestCase):
     def capture(self, app, name):
         out = os.path.join(self.tmp, name)
         with served(app) as base, contextlib.redirect_stdout(io.StringIO()):
-            impact_compare.capture(self.routes, base, out, {'Authorization': 'Bearer never-stored-0000', 'X-Note': 'kept-out'}, 10)
+            impact_compare.capture(self.routes, base, out, {'Authorization': 'Bearer ' + SYNTHETIC['header'], 'X-Note': 'kept-out'}, 10)
         return out
 
     def verdicts(self, a, b):
@@ -200,8 +200,8 @@ class Synthetic(unittest.TestCase):
     def test_capture_never_stores_secrets(self):
         out = self.capture(App('aaaa'), 'a')
         text = ''.join(Path(out, name).read_text() for name in os.listdir(out))
-        self.assertNotIn('never-stored-0000', text, 'request headers are not written')
-        self.assertNotIn('cookie-secret-', text, 'cookie values are redacted')
+        self.assertNotIn(SYNTHETIC['header'], text, 'request headers are not written')
+        self.assertNotIn(SYNTHETIC['session'], text, 'cookie values are redacted')
         self.assertIn('rafii_session=<redacted>', text)
         self.assertNotIn('kept-out', text)
 
@@ -246,8 +246,10 @@ server.serve_forever()
 
 
 # Credential-shaped values are generated once per test process (rule P2-SEC-CI-04: no literal credential, no scanner
-# exception); both builds get the same ones.
-SYNTHETIC = {name: 'synthetic-' + secrets.token_hex(12) for name in ('publishable', 'secret', 'cron', 'discord', 'bot')}
+# exception); both builds get the same ones. 'header' and 'session' are the bearer header and the session cookie of the
+# fake builds the capture tests serve.
+SYNTHETIC = {name: 'synthetic-' + secrets.token_hex(12)
+             for name in ('publishable', 'secret', 'cron', 'discord', 'bot', 'header', 'session')}
 CREDENTIAL_KEY = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
 
 
