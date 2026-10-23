@@ -253,6 +253,9 @@ class Discovery:
         self.reviews = []
         self.variants = []
         self.members = []            # member user ids
+        # The caller's OWN member entry ("you": true) when its role is owner, else None. The only safe
+        # target for member_remove: the owner-differential DELETE of the owner is refused (409).
+        self.owner_member = None
         self.markers = set()
 
     def _mark(self, value):
@@ -315,13 +318,19 @@ def discover(client, config, key):
                         d.destinations.setdefault(cid, []).append(stable)
                         d._mark(stable)
 
-    # Members (own read).
+    # Members (own read). Never treat members[0] as the owner: the app lists members ORDER BY role (text),
+    # so admin/approver/editor sort BEFORE owner. Only the caller's own entry ("you") with role owner is
+    # used as the member_remove target, so the owner-differential DELETE can only hit "the owner cannot be
+    # removed" (409) and never removes a real member.
     st, _t, b = client.request("GET", f"/api/workspaces/{d.workspace}/members", tok)
     if st == 200 and isinstance(b, dict):
         for m in b.get("members", []) or []:
             if isinstance(m, dict) and m.get("userId"):
                 d.members.append(m["userId"])
                 d._mark(m.get("userId"))
+                if (m.get("you") is True and m.get("role") == "owner"
+                        and m.get("status", "active") == "active"):
+                    d.owner_member = m["userId"]
     return d
 
 
@@ -355,8 +364,11 @@ def snapshot(client, config, key):
     parts["variants"] = len(state.get("variants", []) or [])
 
     st, _t, mbody = client.request("GET", f"/api/workspaces/{ws}/members", tok)
+    # status is included: a member REMOVED during the attack phase stays listed as "revoked", so a
+    # projection without status would miss exactly that side effect.
     parts["members"] = sorted(
-        [(m.get("userId"), m.get("role"), json.dumps(m.get("permissions") or m.get("flags") or {}, sort_keys=True))
+        [(m.get("userId"), m.get("role"), m.get("status"),
+          json.dumps(m.get("permissions") or m.get("flags") or {}, sort_keys=True))
          for m in (mbody.get("members", []) if st == 200 and isinstance(mbody, dict) else [])
          if isinstance(m, dict)])
     st, _t, abody = client.request("GET", f"/api/workspaces/{ws}/audit", tok)
@@ -476,11 +488,11 @@ def build_matrix(disc, config, flags):
         arrow = f"{attacker}->{victim}"
         vph = f"<{victim}.workspace>"
         aph = f"<{attacker}.workspace>"
-        # Deliberately-stale revision: bootstrap starts a workspace above 0, so expectedRevision 0
+        # Deliberately-stale revision: no workspace revision is ever negative, so expectedRevision -1
         # always loses the revision compare-and-swap (409) AFTER the membership gate — the attacker
         # hits the gate (403) first, and the owner-differential request gets a harmless 409, never a
         # mutation.
-        STALE = 0
+        STALE = -1
 
         # ---------- READ, style (i): victim workspace id in path (differential) ---------- #
         for suffix, tail in (("get", ""), ("members", "/members"), ("audit", "/audit"),
@@ -556,17 +568,19 @@ def build_matrix(disc, config, flags):
             f"/api/workspaces/{v_ws}/actions", attacker,
             body={"action": "p2_cancel", "payload": {"jobId": "q05"}, "expectedRevision": STALE},
             mutation=True, victim_key=victim, scope="ws_scope", differential=True, owner_token_key=victim))
-        if d_v.members:
-            vmember = d_v.members[0]  # the victim's own owner id: the owner-differential removes self -> 409
+        if d_v.owner_member:
+            # ONLY the victim owner's own entry: its owner-differential DELETE removes "self" -> 409
+            # "The owner cannot be removed." Any other member would really be removed by the owner.
+            vmember = d_v.owner_member
             cases.append(Case(
                 f"write.ws_scope.member_remove.{arrow}", "DELETE",
-                f"/api/workspaces/{vph}/members/<{victim}.member>", arrow, "write", "state",
+                f"/api/workspaces/{vph}/members/<{victim}.owner>", arrow, "write", "state",
                 f"/api/workspaces/{v_ws}/members/{vmember}", attacker,
                 mutation=True, victim_key=victim, scope="ws_scope", differential=True, owner_token_key=victim))
         else:
             cases.append(_not_built(f"write.ws_scope.member_remove.{arrow}", "DELETE",
-                f"/api/workspaces/{vph}/members/<{victim}.member>", arrow, "write", "state",
-                victim, "no victim member discovered"))
+                f"/api/workspaces/{vph}/members/<{victim}.owner>", arrow, "write", "state",
+                victim, "victim's own owner entry not found in its member list (never target another member)"))
         # invite and connect-start are strict-attacker (no owner differential: a legitimate owner
         # request would mutate / send an e-mail). Gate removal still turns them FAIL (2xx or past-gate).
         cases.append(Case(
@@ -700,6 +714,13 @@ def build_matrix(disc, config, flags):
                 f"/api/workspaces/{oph}/discord/identities/<{owner}.identity>/guilds",
                 "control", "control", "",
                 f"/api/workspaces/{o_ws}/discord/identities/{oid}/guilds", owner, expected=("200",)))
+        else:
+            # Fresh accounts (and every account on a build without Discord v2) have no identity: emit the
+            # NOT RUN placeholder so the fixed expected-case list is complete. It counts as undiscovered:
+            # tolerated by --smoke, a failure in gate mode.
+            cases.append(_not_built(f"control.identity_guilds.{owner}", "GET",
+                f"/api/workspaces/{oph}/discord/identities/<{owner}.identity>/guilds",
+                "control", "control", "", owner, "owner has no discord identity to control"))
         # write control (inert): refresh action succeeds for the owner, proving
         # the write route is reachable so a denied cross-tenant write is a real
         # deny and not a globally broken/blocked route.
@@ -735,6 +756,7 @@ def _full_discovery(config):
         d.destinations = {f"{k}-conn": [f"{k}-dest"]}
         d.jobs = [(f"{k}-job", "0" * 64)]
         d.members = [f"{k}-member"]
+        d.owner_member = f"{k}-member"
         disc[k] = d
     return disc
 
@@ -892,8 +914,8 @@ def write_markdown(path, cases, summary, flags, config):
         lines.append("")
     if flags.smoke:
         lines.append("> SMOKE MODE: undiscovered victim objects are reported NOT RUN below and do "
-                     "**not** fail this run. This is a smoke run, not the G4 gate. Only a FAIL or "
-                     "an inconclusive control fails a smoke run.")
+                     "**not** fail this run. This is a smoke run, not the G4 gate. A FAIL or any "
+                     "INCONCLUSIVE case — an attack as well as a control — still fails a smoke run.")
         lines.append("")
     if summary["undiscovered"]:
         lines.append(f"> NOT RUN (undiscovered victim objects): **{summary['undiscovered']}** "
@@ -996,7 +1018,8 @@ def main(argv=None):
                         help="declare the victim tenants synthetic; required for send cases")
     parser.add_argument("--smoke", action="store_true",
                         help="smoke run: undiscovered victim objects are reported NOT RUN but do "
-                             "not fail the exit (a FAIL or inconclusive control still does)")
+                             "not fail the exit (a FAIL or any INCONCLUSIVE case, attack or control, "
+                             "still does)")
     parser.add_argument("--budget", type=int, default=600, help="max requests (default 600)")
     parser.add_argument("--delay", type=float, default=0.02, help="seconds between requests")
     parser.add_argument("--out-md", default=None, help="path for the Markdown receipt")
