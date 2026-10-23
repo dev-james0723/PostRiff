@@ -5,8 +5,8 @@ the existing Discord-only worker step under its own lease owner id: workspace ro
 one job per claim and at most one live Discord lease per workspace, the lease owner and lease id are rechecked at every
 step, every Discord request is admitted by the shared PostgreSQL coordinator, and an intent is sealed before any POST.
 Loops may overlap each other, the existing /api/cron/worker (which leaves Discord to this lane only while the flag is
-on and blocker() says the lane can run in its process; otherwise it keeps the frozen Discord path) and a person's own
-"post now" nudge. That overlap is safe by the lease protocol; keeping Discord to one scheduler is a preference.
+on and blocker(process_state=False) says the lane can run; otherwise it keeps the frozen Discord path) and a person's
+own "post now" nudge. That overlap is safe by the lease protocol; keeping Discord to one scheduler is a preference.
 
 The loop only adds waiting. Before each claim it asks blocker() and reads the coordinator's application-wide rows
 without locks: an operator hold (manual_hold) stops it, an embargo or a spent budget (the application window or the
@@ -58,7 +58,7 @@ IDLE_HORIZON_SECONDS = 10
 MAX_IDLE_MISSES = 6
 # While the flag is on, the minute tick logs one warning when its own Discord report (discord_report: the oldest due,
 # unleased Discord job in its bounded sample) is later than this: shard crons that do not fire or cannot claim, a lane
-# that cannot keep up with a burst, or a minute tick that kept Discord because the lane could not run in its process.
+# that cannot keep up with a burst, or a minute tick that kept Discord because the lane could not run anywhere.
 LAG_WARNING_SECONDS = 300
 _SHARD = re.compile(r'^(0|[1-9][0-9]?)$')
 _GUARDS = ('00:', '10:', '11:', '20:')  # application policy, bot global, bot credential, invalid-request budget
@@ -166,12 +166,15 @@ def _discord(social):
     return providers.get('discord') if isinstance(providers, dict) else None
 
 
-def blocker(social, now, values=None):
-    """Why the lane cannot run in this process at `now` (epoch seconds), or None when it can.
+def blocker(social, now, values=None, *, process_state=True):
+    """Why the lane cannot run at `now` (epoch seconds), or None when it can.
 
-    The one readiness test. tick() asks it (process clock) before it leaves Discord to the lane, and every lane
-    iteration asks it before claiming (process clock, then the database clock the coordinator itself refuses by), so
-    the minute worker never hands Discord to loops that would refuse to run. Pure: no database, network or clock of
+    The one readiness test, in two scopes. The static causes (a bad lane budget, rate limits off, no coordinator or
+    policy, a policy not valid at `now`) stop the lane in every process. process_state=True, the default, adds this
+    process's own coordinator state (a lost observation): the lane asks that full rule before every claim (process
+    clock, then the database clock the coordinator itself refuses by), so a degraded process stops its own loops.
+    tick() asks process_state=False: a coordinator degraded only in the minute cron's process cannot send there either,
+    so the tick still leaves Discord to the lane loops of healthy processes. Pure: no database, network or clock of
     its own; it reads the given environment (the lane budget, as the shard route does), this process's Discord
     provider and `now`. It cannot see whether the shard crons fire at all; warn_if_lagging covers that.
     """
@@ -185,7 +188,7 @@ def blocker(social, now, values=None):
     if provider is None or not getattr(provider, 'rate_v1_enabled', False) or limiter is None or policy is None:
         # POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED off, or no shared coordinator with a reviewed policy.
         return 'coordinator_unavailable'
-    if getattr(provider, 'rate_coordinator_degraded', False):
+    if process_state and getattr(provider, 'rate_coordinator_degraded', False):
         # This process lost track of an observation; every later request here is refused before transport.
         return 'coordinator_degraded'
     if not discord_worker.finite(now) or not policy.issued_at <= now < policy.expires_at:

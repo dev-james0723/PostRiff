@@ -209,15 +209,16 @@ def discord_social(connection_factory=None, **setup):
     return HostedSocial(SyntheticGrants(), {'discord': coordinator(provider, factory, **setup)})
 
 
-# Every configuration in which a shard loop refuses to run, with the reason it stops with.
+# Every configuration in which no shard loop can run, in any process, with the reason it stops with.
 NOT_READY = (
     ('rate limits off', {'rate_limits': False, 'policy': None}, 'coordinator_unavailable'),
     ('rate limits off with a policy', {'rate_limits': False}, 'coordinator_unavailable'),
     ('no shared coordinator', {'policy': None}, 'coordinator_unavailable'),
     ('policy expired', {'policy': 'expired'}, 'coordinator_unavailable'),
     ('policy not valid yet', {'policy': 'future'}, 'coordinator_unavailable'),
-    ('coordinator degraded in this process', {'degraded': True}, 'coordinator_degraded'),
 )
+# A coordinator that lost an observation in this process only: this process's loops stop, other processes' do not.
+DEGRADED = ('coordinator degraded in this process', {'degraded': True}, 'coordinator_degraded')
 
 
 def recording_worker(step, *, discord=True, social=None):
@@ -265,15 +266,35 @@ class ExistingTick(unittest.TestCase):
                 self.assertEqual(result['processed'], 10)
                 self.assertEqual(seen.count({'discord_only': True}), 5, 'the minute worker still runs Discord steps')
 
+    def test_with_only_this_process_degraded_the_tick_still_leaves_discord_to_the_lane(self):
+        # This process cannot send either; lane loops in healthy processes can.
+        seen = []
+        with patch.dict('os.environ', ON):
+            result = recording_worker(lambda **kw: seen.append(kw) or True, social=discord_social(**DEGRADED[1])).tick()
+        self.assertTrue(result['discordParallelLane'])
+        self.assertEqual(seen, [{'exclude_youtube': False, 'exclude_discord': True}] * 10)
+
 
 class LaneReadiness(unittest.TestCase):
     """One readiness test decides both who sends Discord in the minute tick and whether a shard loop runs."""
     def test_the_readiness_test_names_why_the_lane_cannot_run(self):
         self.assertIsNone(lane.blocker(discord_social(), NOW, {}))
+        self.assertIsNone(lane.blocker(discord_social(), NOW, {}, process_state=False))
         for name, setup, reason in NOT_READY:
             with self.subTest(name):
                 self.assertEqual(lane.blocker(discord_social(**setup), NOW, {}), reason)
+                self.assertEqual(lane.blocker(discord_social(**setup), NOW, {}, process_state=False), reason,
+                                 'a static cause stops the lane in every process')
+        name, setup, reason = DEGRADED
+        self.assertEqual(lane.blocker(discord_social(**setup), NOW, {}), reason)
+        self.assertIsNone(lane.blocker(discord_social(**setup), NOW, {}, process_state=False),
+                          'a degraded process stops only its own loops')
+        both = discord_social(degraded=True, policy='expired')
+        self.assertEqual(lane.blocker(both, NOW, {}), 'coordinator_degraded')
+        self.assertEqual(lane.blocker(both, NOW, {}, process_state=False), 'coordinator_unavailable')
         self.assertEqual(lane.blocker(discord_social(), NOW, {lane.ENV_SECONDS: 'x'}), 'configuration')
+        self.assertEqual(lane.blocker(discord_social(), NOW, {lane.ENV_SECONDS: 'x'}, process_state=False),
+                         'configuration')
         self.assertEqual(lane.blocker(SimpleNamespace(), NOW, {}), 'coordinator_unavailable')
         self.assertEqual(lane.blocker(hosted_worker.DisabledHostedSocial(), NOW, {}), 'coordinator_unavailable')
         policy = discord_social().providers['discord'].rate_limiter.policy
@@ -312,7 +333,7 @@ class LaneReadiness(unittest.TestCase):
         return result, statements, json.loads(logged.records[-1].getMessage())
 
     def test_a_shard_that_cannot_run_claims_nothing_and_says_why(self):
-        for name, setup, reason in NOT_READY:
+        for name, setup, reason in NOT_READY + (DEGRADED,):
             with self.subTest(name):
                 result, statements, entry = self.run_shard(discord_social(**setup))
                 self.assertEqual((result['stoppedBy'], result['processed'], result['counters']['steps']), (reason, 0, 0))
@@ -327,19 +348,20 @@ class LaneReadiness(unittest.TestCase):
     def test_the_minute_tick_and_the_shard_loop_ask_the_same_readiness_test(self):
         asked = []
 
-        def verdict(social, now, values=None):
-            asked.append(now)
-            return 'coordinator_degraded'
+        def verdict(social, now, values=None, *, process_state=True):
+            asked.append((now, process_state))
+            return 'coordinator_unavailable'
         seen = []
         with patch.object(lane, 'blocker', verdict), patch.dict('os.environ', ON):
             result = recording_worker(lambda **kw: seen.append(kw) or True, social=discord_social()).tick()
             self.assertNotIn('discordParallelLane', result)
             self.assertEqual(seen.count({'discord_only': True}), 5)
             shard, statements, _ = self.run_shard(discord_social())
-        self.assertEqual(shard['stoppedBy'], 'coordinator_degraded')
-        self.assertEqual(asked, [NOW, NOW], 'one question from the tick and one from the shard, same function')
+        self.assertEqual(shard['stoppedBy'], 'coordinator_unavailable')
+        self.assertEqual(asked, [(NOW, False), (NOW, True)],
+                         'the same function: the tick asks its static part, the shard its full rule')
         seen.clear()
-        with patch.object(lane, 'blocker', lambda social, now, values=None: None), patch.dict('os.environ', ON):
+        with patch.object(lane, 'blocker', lambda social, now, values=None, **scope: None), patch.dict('os.environ', ON):
             result = recording_worker(lambda **kw: seen.append(kw) or True, social=SimpleNamespace()).tick()
         self.assertTrue(result['discordParallelLane'], 'the tick follows the readiness test alone')
         self.assertEqual(seen, [{'exclude_youtube': False, 'exclude_discord': True}] * 10)
@@ -399,6 +421,13 @@ class LagWarning(unittest.TestCase):
         self.assertNotIn('discordParallelLane', result)
         entry = json.loads(logged.records[-1].getMessage())
         self.assertEqual((entry['laneOwnsDiscord'], entry['laneBlocker']), (False, 'coordinator_unavailable'))
+
+    def test_a_coordinator_degraded_only_in_this_process_leaves_the_lane_owning_discord(self):
+        with self.assertLogs('postriff.request', 'WARNING') as logged:
+            result = self.tick(900.0, setup=DEGRADED[1])
+        self.assertTrue(result['discordParallelLane'])
+        entry = json.loads(logged.records[-1].getMessage())
+        self.assertEqual((entry['laneOwnsDiscord'], entry['laneBlocker']), (True, None))
 
     def test_the_warning_comes_from_the_report_the_tick_already_makes(self):
         statements, warnings = {}, {}
@@ -522,16 +551,19 @@ class FlagOffIsTheFrozenBase(unittest.TestCase):
 
     def test_control_flag_on_and_the_lane_able_to_run_changes_the_trace(self):
         environment = {'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true', lane.ENV_ENABLED: 'true'}
-        state = self.queue()
-        base = self.trace(self.Base, environment, state, {})
-        current = self.trace(PostgresWorker, environment, state, {})
-        self.assertGreater(base['stats']['claims'], 0, 'the frozen tick claims Discord')
-        self.assertEqual(current['stats']['claims'], 0, 'the minute tick leaves Discord to the lane')
-        self.assertEqual(current['http'], [])
-        jobs = current['state']['phase2']['jobs']
-        self.assertEqual({job['state'] for job in jobs}, {'scheduled'})
-        self.assertFalse([job for job in jobs if job.get('attempts')])
-        self.assertTrue(all(result['discordParallelLane'] for result in current['results']))
+        # A coordinator degraded only in this process still leaves Discord to the lane loops of healthy processes.
+        for name, setup in (('lane able to run', {}), DEGRADED[:2]):
+            with self.subTest(name):
+                state = self.queue()
+                base = self.trace(self.Base, environment, state, setup)
+                current = self.trace(PostgresWorker, environment, state, setup)
+                self.assertGreater(base['stats']['claims'], 0, 'the frozen tick claims Discord')
+                self.assertEqual(current['stats']['claims'], 0, 'the minute tick leaves Discord to the lane')
+                self.assertEqual(current['http'], [])
+                jobs = current['state']['phase2']['jobs']
+                self.assertEqual({job['state'] for job in jobs}, {'scheduled'})
+                self.assertFalse([job for job in jobs if job.get('attempts')])
+                self.assertTrue(all(result['discordParallelLane'] for result in current['results']))
 
 
 class FakeLane:
