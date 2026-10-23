@@ -115,41 +115,41 @@ Gate stays closed (tester and grandfathered workspaces only). The public sees th
 Defaults are pre-selected so no agent ever waits on a decision. Override them in the Authorization Block of the handoff prompt.
 
 - [x] **D-01** `HUMAN` `MUST` `W1`: **Launch scope for tomorrow**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: decided by the owner (replies 4 and 5): the first opening is at a server cap of 10,000 on both twins, with no staged ramp; the agent advised a ramp and recorded the risk
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: decided by the owner (replies 4 and 5): the first opening is at a server cap of 10,000 on both twins, with no staged ramp; the agent advised a ramp and recorded the risk
   - Evidence: AUTHORIZATION-RECORD.md replies 4 and 5; APPROVAL-PACKET-1.md section 4
   - What: Default A = Capped Wave 1: public Discord bot-connect for at most 90 distinct servers (hard cap, waitlist beyond). Wave 2 (uncapped, 'thousands') only after Discord app verification (H-01) and worker scaling (R-05, W-02). B = uncapped public, valid ONLY if H-01 shows the app is already verified. C = no public Discord tomorrow (this is fallback F-02).
   - Evidence to record: Choice recorded in the ledger. Default A applies if the owner does not reply.
   - Basis: Discord 100-server rule [Likely]; no per-workspace Discord gate exists today [Likely].
 - [ ] **D-02** `HUMAN` `MUST` `W1`: **Which lanes ship in the same RC**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: default applied by the agent (assumption logged); the owner has not replied: Discord delta on the live line only
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: default applied by the agent (assumption logged); the owner has not replied: Discord delta on the live line only
   - Evidence: APPROVAL-PACKET-1.md section 4
   - What: Default: the Discord delta only, on top of the lineage that is live now (S-01). Other lanes (LinkedIn #218, Mastodon #212/#213/#219, Bluesky, Pinterest) join only if the owner lists them. In every case the RC must be a strict superset of what is live (S-04) so nothing live is silently dropped; PR #218 warns about exactly this.
   - Evidence to record: Lane list recorded in the ledger.
   - Basis: PR #218 body; PR #212 body.
 - [ ] **D-03** `HUMAN` `SHOULD` `W1`: **Engagement (analytics / comments / reply) in Wave 1**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: default applied by the agent (assumption logged); the owner has not replied: engagement OFF
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: default applied by the agent (assumption logged); the owner has not replied: engagement OFF
   - Evidence: APPROVAL-PACKET-1.md section 4
   - What: Default OFF. The code exists behind six flags plus per-channel 30-day consent, but it is partial by design (at most 10 messages, approximate counts, no reach or impressions, Message Content intent OFF) and has no live acceptance. Do not market Discord analytics or comments as equal to other platforms.
   - Evidence to record: Recorded in the ledger.
   - Basis: src/postriff_phase2/discord/engagement.py (ping-runtime branch).
 - [x] **D-04** `HUMAN` `MUST` `W1`: **Exposure rule for 'Direct' publish and schedule**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: decision taken by the owner with packet row 4: POSTRIFF_OAUTH_DISCORD_REVIEWED=true on the two RC build commands only, never in project env; opening stays a separate step
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: decision taken by the owner with packet row 4: POSTRIFF_OAUTH_DISCORD_REVIEWED=true on the two RC build commands only, never in project env; opening stays a separate step
   - Evidence: AUTHORIZATION-RECORD.md
   - What: Production already stores identity, publish and schedule as Direct on its bot installs, which implies REVIEWED and the two v2 flags were on, yet the coordinator has recorded no real publish. Do not widen exposure beyond tester workspaces until X-03 (real send plus read-back) and X-04 (unattended schedule plus cancel) are VERIFIED. G-01 is the enforcement mechanism. Do not flip POSTRIFF_OAUTH_DISCORD_REVIEWED either way without an approval-packet item.
   - Evidence to record: Recorded in the ledger.
   - Basis: Supabase pr_channel_capabilities aggregate 2026-10-22; _capabilities() in oauth.py [Likely].
 - [ ] **D-05** `HUMAN` `MUST` `W1`: **Launch time T0 and GO / NO-GO time**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: owner reply 12: T0 and GO_TIME are now the TARGET TIME OF THE FULL OPENING (every new customer, no allowlist), postponed whenever acceptance, capacity or on-call is incomplete; a READY dark build is not delivery. No date is set: the capacity gate needs W-02 integrated and re-frozen first
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: owner reply 12: T0 and GO_TIME are now the TARGET TIME OF THE FULL OPENING (every new customer, no allowlist), postponed whenever acceptance, capacity or on-call is incomplete; a READY dark build is not delivery. No date is set: the capacity gate needs W-02 integrated and re-frozen first
   - Evidence: AUTHORIZATION-RECORD.md reply 12; RELEASE-DEFINITION-v2.md sections 2 and 8
   - What: Owner enters absolute UTC times. Default GO_TIME = T0 minus 3 hours. If unset, the agent computes T0 as 24 hours after it starts and says so.
   - Evidence to record: Times written in the Authorization Block.
 - [x] **D-06** `HUMAN` `SHOULD` `W1`: **Day-1 load assumption**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: the owner wants thousands to tens of thousands of users on the open version (reply 5); the agent replaced its default load assumption: proven sending capacity is 6 to 12 Discord posts a minute, so heavy use queues and posts whose approval expires are held for a fresh approval; worker parallelism (W-02) is the next engineering step
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: the owner wants thousands to tens of thousands of users on the open version (reply 5); the agent replaced its default load assumption: proven sending capacity is 6 to 12 Discord posts a minute, so heavy use queues and posts whose approval expires are held for a fresh approval; worker parallelism (W-02) is the next engineering step
   - Evidence: MEASUREMENTS.md R-05 update; AUTHORIZATION-RECORD.md reply 5
   - What: Default: at most 90 servers, at most 300 connect attempts per hour at peak, at most 600 scheduled posts per day, at most 60 posts due in any single minute. Used to size R-01 to R-05. Override if wrong.
   - Evidence to record: Numbers recorded in the ledger.
 - [ ] **D-07** `HUMAN` `COULD` `W1`: **Identity-only Discord linking for the public**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: default applied by the agent (assumption logged); the owner has not replied: identity-only linking is not opened to the public
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: default applied by the agent (assumption logged); the owner has not replied: identity-only linking is not opened to the public
   - Evidence: APPROVAL-PACKET-1.md section 4
   - What: Default NO. Linking without the bot has no 100-server limit but stores OAuth tokens (guilds, identify) for a feature that does not publish. Recommend not opening it until something uses it (data minimisation).
   - Evidence to record: Recorded in the ledger.
@@ -160,47 +160,47 @@ Defaults are pre-selected so no agent ever waits on a decision. Override them in
 Cannot be delegated. The agent prepares every input so each one takes minutes.
 
 - [x] **H-01** `HUMAN` `MUST` `W1+W2`: **Discord Developer Portal: App Verification status, and start verification today**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: owner-attested: the verified-app check mark is shown on the production bot tag (screenshot seen, not stored) and the owner confirms it is the production app; compare the client id in the authorize URL (C-05) on the staged build
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: owner-attested: the verified-app check mark is shown on the production bot tag (screenshot seen, not stored) and the owner confirms it is the production app; compare the client id in the authorize URL (C-05) on the staged build
   - Evidence: AUTHORIZATION-RECORD.md reply 3; H-01-verification-prep.md
   - What: Open the app's App Verification tab. Record: verified or not, current server count, what is missing. If unverified and eligible, submit now (the team owner must verify identity through Stripe, which only a human can do). Verification is Discord's timeline, not ours. Without it the bot cannot be in more than 100 servers, so 'thousands' is impossible in bot mode.
   - Evidence to record: Status text or screenshot (never an ID document) pasted into the ledger.
   - Basis: Discord help 'How Do I Get My App Verified?' via search summary, page not read directly [Likely]. No repo document mentions this limit.
 - [ ] **H-02** `HUMAN` `MUST` `W1`: **Portal settings audit**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: human only (or AUTH-10 read-only); audit sheet prepared
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: human only (or AUTH-10 read-only); audit sheet prepared
   - Evidence: PORTAL-AUDIT-SHEET.md
   - What: Check: (a) redirect URI exactly https://rafii.io/api/oauth/discord/callback and no stale or staging URIs; (b) Public Bot ON and Requires OAuth2 Code Grant ON (as of 10-21); (c) Interactions Endpoint URL EMPTY (PING / User Install are out of scope); (d) Terms of Service and Privacy Policy URLs set to rafii.io pages; (e) name, icon and description presentable; (f) install settings request only bot + identify with permissions integer 101376 (View Channel, Send Messages, Attach Files, Read Message History); no Administrator. The agent may do this read-only through the owner's paired computer if AUTH-10 is ticked; edits are always the owner's.
   - Approval: AUTH-10
   - Evidence to record: Filled Portal audit sheet (agent provides the sheet).
   - Basis: Redirect URI built in oauth.py as {base}/api/oauth/{provider}/callback; permissions = DiscordProvider.PERMISSIONS on the #216 line; Portal values per PR #216 body.
 - [ ] **H-03** `HUMAN` `MUST` `W1`: **Tester assets and one 20-minute consent session**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: owner reply 12: reuse the existing tester workspace (ids and time slot still to be given by the owner) and add a brand-new ordinary workspace with no Discord history, to prove a customer needs no allowlist; real sends reuse the approved account and the content the owner approves at that moment (at most the three messages already allowed)
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: owner reply 12: reuse the existing tester workspace (ids and time slot still to be given by the owner) and add a brand-new ordinary workspace with no Discord history, to prove a customer needs no allowlist; real sends reuse the approved account and the content the owner approves at that moment (at most the three messages already allowed)
   - Evidence: TESTER-SESSION-SCRIPT.md; AUTHORIZATION-RECORD.md reply 12; RELEASE-DEFINITION-v2.md G3 and G7
   - What: Provide a Discord test account, a test server where it has Manage Server, a public test channel, and a private channel the bot cannot see. Put the IDs in the Authorization Block. Be available once for about 20 minutes to click through consent and approvals while the agent verifies.
   - Evidence to record: IDs in the Authorization Block; session time agreed.
   - Basis: PRD A08: a reported click is not proof; the callback must be verified.
 - [x] **H-04** `HUMAN` `MUST` `W1`: **Reply to the Approval Packets**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: owner replied after packet rev D (RC head 2a5a523d): "Approve all from 1 to 15 and rev B+"; read as rows 1 to 15 plus the last row of the table, labelled (rev B+); the conditions written in the rows still apply
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: owner replied after packet rev D (RC head 2a5a523d): "Approve all from 1 to 15 and rev B+"; read as rows 1 to 15 plus the last row of the table, labelled (rev B+); the conditions written in the rows still apply
   - Evidence: AUTHORIZATION-RECORD.md
   - What: Two packets: #1 before the RC build (AUTH-1..4), #2 before promotion and opening (AUTH-5, AUTH-6, sign-offs). Each is a single message: APPROVE 1,2 / DENY 3 / HOLD 4.
   - Evidence to record: Replies logged verbatim in the ledger.
 - [ ] **H-05** `HUMAN` `MUST` `W1`: **Release Captain sign-off and security-review decision**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: owner reply 12: the owner (James) is the Release Captain; the independent AI review must be of the FINAL release SHA with the security-fix evidence; the full opening is approved after real-flow, isolation and capacity acceptance pass. The "only D1 controlled acceptance" positioning is deleted. Still open: the review of the final SHA (RC2 if W-02 is integrated) and the approval itself, which comes after G3 to G5
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: owner reply 12: the owner (James) is the Release Captain; the independent AI review must be of the FINAL release SHA with the security-fix evidence; the full opening is approved after real-flow, isolation and capacity acceptance pass. The "only D1 controlled acceptance" positioning is deleted. Still open: the review of the final SHA (RC2 if W-02 is integrated) and the approval itself, which comes after G3 to G5
   - Evidence: AUTHORIZATION-RECORD.md reply 12; RELEASE-DEFINITION-v2.md section 5
   - What: Name the Release Captain. Decide whether the 2026-10-20 independent AI security review (two P1 findings found and repaired) is enough, or a human review is required. PR #216 lists both as still open.
   - Evidence to record: Names and decisions recorded.
   - Basis: PR #216 'Remaining live and release gates'; SECURITY-REVIEW-20261020.md.
 - [ ] **H-06** `HUMAN` `SHOULD` `W1`: **Physical phone check**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: human only (optional)
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: human only (optional)
   - What: Open the Connect flow on a real phone up to the Discord consent screen; confirm layout, keyboard and return. Browser tests cover 390 px, but PR #216 lists physical mobile acceptance as open.
   - Evidence to record: Pass / fail note.
   - Basis: PR #216 body.
 - [ ] **H-07** `HUMAN` `MUST` `W1`: **Support and on-call for the launch window and first 24 hours**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: owner reply 12: kept as a requirement. Needs the real operator name(s), covered hours, the alert entry point, and a stop and rollback method that works with the Mac offline; unconfirmed stays open. Method proposed (coordinator hold by SQL, Vercel rollback by API or phone dashboard) in RELEASE-DEFINITION-v2.md section 7, to be run once before it counts
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: owner reply 12: kept as a requirement. Needs the real operator name(s), covered hours, the alert entry point, and a stop and rollback method that works with the Mac offline; unconfirmed stays open. Method proposed (coordinator hold by SQL, Vercel rollback by API or phone dashboard) in RELEASE-DEFINITION-v2.md section 7, to be run once before it counts
   - Evidence: AUTHORIZATION-RECORD.md reply 12; RELEASE-DEFINITION-v2.md section 7; RUNBOOK-INCIDENT.md
   - What: Name who watches alerts and answers customers, and where status updates are posted.
   - Evidence to record: Names and channel recorded.
 - [x] **H-08** `HUMAN` `MUST` `W1`: **Approve customer-facing Discord disclosures**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: approved by the owner with packet row 14: the wording as drafted (P-01-privacy-terms-diff.md, commit 4680efce on the RC); the pages keep their draft banner
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: approved by the owner with packet row 14: the wording as drafted (P-01-privacy-terms-diff.md, commit 4680efce on the RC); the pages keep their draft banner
   - Evidence: P-01-privacy-terms-diff.md; AUTHORIZATION-RECORD.md
   - What: Agent drafts the privacy-notice and terms changes (P-01); the owner approves wording.
   - Depends on: P-01
@@ -216,58 +216,58 @@ Today there is no single qualified SHA: consumer-saas has no Discord work, five 
   - Evidence to record: Appendix A
   - Basis: Tool readbacks 2026-10-22.
 - [x] **S-01** `AGENT` `MUST` `W1`: **Identify the lineage of the build rafii.io serves now**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: live build is c5fc1fd1 (Mastodon production candidate), 257 of 257 listed files identical, 48 of 48 hidden-file probes; no Discord v2 code in production
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: live build is c5fc1fd1 (Mastodon production candidate), 257 of 257 listed files identical, 48 of 48 hidden-file probes; no Discord v2 code in production
   - Evidence: S-01-lineage-report.md (source c5fc1fd1)
   - What: Vercel metadata is empty and /api/health reports sourceRevision null because the deploy came from the CLI. Fingerprint deployment dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg: list its files (Vercel API) and compare sha1 of file bytes with candidate commits (09b3ab8a, #216 head b960bfe0, #218 head c4c74777, #212 head 65d469ae, consumer-saas 5670ce3c). Record the best match and unmatched paths. Ask the owner one question ('what did you deploy at 12:48 UTC?') only if the fingerprint is inconclusive.
   - Evidence to record: S-01 report with best-match SHA and path diff.
   - Basis: alias rafii.io updated 2026-10-22 12:52:07Z; #218 says rafii.io served dpl_yKAToJbv (09b3ab8a) on 10-21.
 - [x] **S-02** `AGENT` `MUST` `W1`: **Preserve-live matrix**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: matrix written with the code path, route or cron, tests and proof for every live capability, plus the capability levels Discord will show; its rows rest on tests that pass in CI on the exact SHA 2a5a523d, and the superset proof passes at the frozen SHA
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: matrix written with the code path, route or cron, tests and proof for every live capability, plus the capability levels Discord will show; its rows rest on tests that pass in CI on the exact SHA 2a5a523d, and the superset proof passes at the frozen SHA
   - Evidence: S-02-preserve-live-matrix.md; scripts/rc_superset_proof.py; RC-RECEIPT.md section 3 (source 2a5a523d)
   - What: From S-01, list every capability live now that must survive the RC (Discord level, LinkedIn publishing and its cron lane, Mastodon connect and management, Pinterest, Bluesky). For each, name the code path, route, cron entry and test that proves it still works in the RC.
   - Depends on: S-01
   - Evidence to record: Matrix file with a test or probe per row.
 - [x] **S-03** `AGENT` `MUST` `W1`: **Build the RC branch**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: candidate branch built as a merge of the live line c5fc1fd1 and the Discord line b960bfe0 plus the launch controls; 11 conflicted files resolved as unions
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: candidate branch built as a merge of the live line c5fc1fd1 and the Discord line b960bfe0 plus the launch controls; 11 conflicted files resolved as unions
   - Evidence: branch claude/discord-launch-rc-20261023; merge commit d4572f68 message lists every resolution; superset-allowlist.json (source d4572f68)
   - What: New branch with your own family prefix (codex/ or claude/) named discord-launch-rc-20261023. Start from the live lineage (S-01), add the Discord delta from PR #216 head b960bfe0 with all new modes OFF (Webhook, User Install, PING, engagement), and then commit G-01..G-05 and any R-05 config change on this same branch. Resolve conflicts preserving both sides. Keep vercel.json git.deploymentEnabled=false and every cron entry that is live. Never touch other agents' branches or worktrees. Do NOT build from consumer-saas: it has no Discord work.
   - Depends on: S-02, D-02
   - Evidence to record: Branch + head SHA; conflict log.
   - Basis: PR #216 head CI green on b960bfe0; consumer-saas lacks migrations 124-131 and src/postriff_phase2/discord/.
 - [x] **S-04** `AGENT` `MUST` `W1`: **Superset proof**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: superset proof passes with 29 deliberate, explained rewrites; re-run at freeze
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: superset proof passes with 29 deliberate, explained rewrites; re-run at freeze
   - Evidence: scripts/rc_superset_proof.py; tests/test_rc_superset_proof.py; superset-allowlist.json (source 2a5a523d)
   - What: Script that proves RC contains everything live: file inventory, route table, cron list, migration list, feature flags read by the code. Fail on any silent drop.
   - Depends on: S-03
   - Evidence to record: Script + passing output committed.
 - [x] **S-05** `AGENT` `MUST` `W1`: **Migration ledger reconciliation**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: nothing to apply for Discord; migrations 108 to 112 are absent in production but also absent from the live build; retired Mastodon 131 to 133 absent everywhere
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: nothing to apply for Discord; migrations 108 to 112 are absent in production but also absent from the live build; retired Mastodon 131 to 133 absent everywhere
   - Evidence: S-05-migration-reconciliation.md
   - What: Compare the production ledger (Supabase list_migrations on the production project) with migrations/postriff in the RC. Report (a) RC migrations not applied, (b) applied but absent from the RC, (c) numbering conflicts (Discord 131 vs the retired Mastodon 131-133: never apply the retired ones). Default expectation: nothing to apply. Anything in (a) becomes an approval item with backup and rollback.
   - Depends on: S-03
   - Evidence to record: Reconciliation table.
   - Basis: Production ledger includes discord 124,125,126,128,131; Mastodon 134 and management; Pinterest x3.
 - [x] **S-06** `AGENT` `MUST` `W1`: **Exact-SHA CI green on the RC head**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: exact-SHA CI on 2a5a523d: ten workflows, fourteen check runs, eleven success and three skipped by design (local-gates, scenes, founder, growth studio, growth metrics, composer input; library, agent-ui and the qualification dispatched on the same head). Earlier heads failed or were cancelled for reasons since fixed or re-run (secret scan, npm audit, pip-audit, the Mastodon opt-in, the real-PostgreSQL tests under the fence, a Chromium install hang, one WebKit check); none of them is evidence for this head
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: exact-SHA CI on 2a5a523d: ten workflows, fourteen check runs, eleven success and three skipped by design (local-gates, scenes, founder, growth studio, growth metrics, composer input; library, agent-ui and the qualification dispatched on the same head). Earlier heads failed or were cancelled for reasons since fixed or re-run (secret scan, npm audit, pip-audit, the Mastodon opt-in, the real-PostgreSQL tests under the fence, a Chromium install hang, one WebKit check); none of them is evidence for this head
   - Evidence: RC-RECEIPT.md section 3; https://github.com/dev-james0723/PostRiff/pull/222 (source 2a5a523d)
   - What: All repository workflows on standard ubuntu-24.04 GitHub-hosted runners (no paid runners): local release gates, Discord qualification, browser scenes 390/1280, composer, founder admin, growth. Fix root causes, batch fixes, never skip or weaken a test. A retried job needs its first-failure log kept and the cause stated.
   - Depends on: S-04, G-05
   - Evidence to record: Run URLs + conclusions for the exact SHA.
   - Basis: PR #216 head had 7 workflows green; browser scenes needed one retry (WebKit crash, cause unproven).
 - [x] **S-07** `AGENT` `MUST` `W1`: **Dependency and secret hygiene**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: npm audit 0 vulnerabilities and pip-audit clean at the candidate head (before: 2 critical + 1 high in next 16.3.8 and @sentry/nextjs 10.74.0, and 4 advisories in pypdf 6.20.1; the same lockfile and pin are live today). Deliberate deviation from "keep the pypdf 6.20.1 pin": the pin fails a CI gate and parses uploaded PDFs with known issues, so it is 6.21.1 (the Telegram lane already runs it); Pillow 13.0.0 kept; offline secret scan PASS with reviewed allowlist entries only; local tsc, oxlint, 1,010 web tests, the full Python suite (6,141) and a production build pass. CI on the exact SHA passes: local-gates Dependency audits and Offline source secret scan, and the library run (secret scan, npm audit)
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: npm audit 0 vulnerabilities and pip-audit clean at the candidate head (before: 2 critical + 1 high in next 16.3.8 and @sentry/nextjs 10.74.0, and 4 advisories in pypdf 6.20.1; the same lockfile and pin are live today). Deliberate deviation from "keep the pypdf 6.20.1 pin": the pin fails a CI gate and parses uploaded PDFs with known issues, so it is 6.21.1 (the Telegram lane already runs it); Pillow 13.0.0 kept; offline secret scan PASS with reviewed allowlist entries only; local tsc, oxlint, 1,010 web tests, the full Python suite (6,141) and a production build pass. CI on the exact SHA passes: local-gates Dependency audits and Offline source secret scan, and the library run (secret scan, npm audit)
   - Evidence: commit 29bc8ab2 (pypdf, Mastodon opt-in); commit cd0ff8d0 (next, @sentry/nextjs); commit 0c6a9c36 (secret allowlist) (source 2a5a523d)
   - What: Keep Pillow 13.0.0 and pypdf 6.20.1 pins, npm audit zero, detect-secrets clean, no credentials in the diff, secret-allowlist changes limited to synthetic fixtures.
   - Depends on: S-03
   - Evidence to record: Audit outputs.
 - [x] **S-08** `AGENT` `MUST` `W1`: **Freeze the RC**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: frozen 2026-10-22T22:37Z by the agent: head 2a5a523d, branch tip unchanged, CI green on every workflow, superset proof PASS, both independent review rounds closed, H-08 wording approved by the owner; any further change to the branch voids the freeze and the approvals that name this SHA
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: frozen 2026-10-22T22:37Z by the agent: head 2a5a523d, branch tip unchanged, CI green on every workflow, superset proof PASS, both independent review rounds closed, H-08 wording approved by the owner; any further change to the branch voids the freeze and the approvals that name this SHA
   - Evidence: RC-RECEIPT.md section 1; https://github.com/dev-james0723/PostRiff/pull/222 (source 2a5a523d)
   - What: Record the exact SHA in the ledger and the RC PR. After freeze only fixes for failed gates, each re-qualified from S-06.
   - Depends on: S-06, S-07
   - Evidence to record: Frozen SHA.
 - [x] **S-09** `AGENT` `SHOULD` `W1`: **Draft PR for visibility**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: draft PR "DO NOT MERGE: Discord launch RC", base branch points at the live commit so the diff is the Discord delta
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: draft PR "DO NOT MERGE: Discord launch RC", base branch points at the live commit so the diff is the Discord delta
   - Evidence: https://github.com/dev-james0723/PostRiff/pull/222
   - What: Open a DRAFT PR titled 'DO NOT MERGE: Discord launch RC' so reviewers can read the diff. Never merge. Never push to consumer-saas.
   - Depends on: S-08
@@ -278,35 +278,35 @@ Today there is no single qualified SHA: consumer-saas has no Discord work, five 
 No per-workspace gate exists for Discord today; the only switch is provider-wide (POSTRIFF_OAUTH_DISCORD_DISABLED). A runtime gate lets the RC go live dark, be proven on a tester workspace, and then open without a second build.
 
 - [x] **G-01** `AGENT` `MUST` `W1`: **Fail-closed workspace gate for Discord**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Enforced at connect START and in the catalog; deliberately not at the callback, destinations or publish (would strand a consented install; the kill switch covers them). After the independent review: an identity that must reconnect counts as a footprint, production is recognised whatever its case or spacing, and the original (non-v2) flow sits behind the same gate. Decision D-08: a workspace with a footprint may start any kind of connection
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Enforced at connect START and in the catalog; deliberately not at the callback, destinations or publish (would strand a consented install; the kill switch covers them). After the independent review: an identity that must reconnect counts as a footprint, production is recognised whatever its case or spacing, and the original (non-v2) flow sits behind the same gate. Decision D-08: a workspace with a footprint may start any kind of connection
   - Evidence: src/postriff_phase2/discord/launch_gate.py; tests/test_discord_launch_gate.py (48 tests); tests/test_discord_launch_hardening.py (34 tests) (source 2a5a523d)
   - What: Runtime-evaluated env allowlist, e.g. POSTRIFF_DISCORD_CONNECT_WORKSPACES: empty means no workspace, '*' must be written explicitly, otherwise a comma list. Follow the existing pattern in agent_runtime_v2/config.py. Enforce server-side at connect start, callback completion, destination listing and the publish route; reflect it in the provider catalog so the UI shows waitlist copy. Grandfather every workspace that already has an active Discord grant so nobody live regresses. Tests must include direct API calls from a non-allowlisted workspace.
   - Depends on: S-03
   - Evidence to record: Tests + CI run; behaviour table.
   - Basis: No per-workspace Discord gate found by grep; execution_enabled kill switch is provider-wide [Likely].
 - [x] **G-02** `AGENT` `MUST` `W1`: **Global server cap guard**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Counts every distinct bot-install server including revoked grants (a disconnect leaves the bot in the server) plus every installation start in flight, one slot per row (a second review showed that counting once per person let one account open the bot to many servers for one slot); one person (workspace and member) may have at most three starts in flight, reconnects included; reserved under an advisory lock at start for both the v2 and the original flow; a server that already has a credential row is admitted at any fill, a reconnect takes no slot. Residual: servers the bot joins without a stored row (another server picked, tab closed, callback failed, manual invite) are not counted; mitigated by comparing the Portal count with Q9 and Q12. Low residuals from the narrow third check (RUNBOOK-LAUNCH section 7): hoarding by many accounts is bounded per person only (Q9 threshold, Q13); the per-person refusal reuses the capacity wording; the count scans are slow only at a million never-purged rows
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Counts every distinct bot-install server including revoked grants (a disconnect leaves the bot in the server) plus every installation start in flight, one slot per row (a second review showed that counting once per person let one account open the bot to many servers for one slot); one person (workspace and member) may have at most three starts in flight, reconnects included; reserved under an advisory lock at start for both the v2 and the original flow; a server that already has a credential row is admitted at any fill, a reconnect takes no slot. Residual: servers the bot joins without a stored row (another server picked, tab closed, callback failed, manual invite) are not counted; mitigated by comparing the Portal count with Q9 and Q12. Low residuals from the narrow third check (RUNBOOK-LAUNCH section 7): hoarding by many accounts is bounded per person only (Q9 threshold, Q13); the per-person refusal reuses the capacity wording; the count scans are slow only at a million never-purged rows
   - Evidence: launch_gate.py; tests: ReserveCapacity, StartCapacity, test_discord_launch_hardening.py; tests/test_discord_launch_cap_race.py (real PostgreSQL) (source 2a5a523d)
   - What: Count distinct active bot-install servers plus unexpired OAuth reservations; refuse to START a connect when at or above the cap (default 90, env POSTRIFF_DISCORD_GUILD_CAP). Important: the bot joins at Discord's consent screen, before Rafii's callback runs, so a cap can only be enforced at start, with a race-safe reservation (advisory lock; reservation expires with pr_oauth_transactions.expires_at), and by revoking an over-cap install afterwards (DiscordProvider.revoke). Verify how the server id is stored (account column) before relying on it. No schema change.
   - Depends on: G-01
   - Evidence to record: Concurrency test: 200 simultaneous starts at cap-1 admit exactly one.
   - Basis: Discord unverified apps are limited to 100 servers [Likely]; callback order from oauth.py DiscordProvider.exchange. If this guard cannot be proven in time, do not open with '*': open with an explicit allowlist of at most 90 invited workspaces instead.
 - [ ] **G-03** `AGENT` `MUST` `W1`: **Truthful gate and capability copy**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: partial: closed, full, busy, unavailable and late-post wording shipped in three languages, now at every screen that can receive the four codes (connect, server list, destination picker, verify, engagement) and a separate wording for the page Discord returns to, because the bot may already be in the server; the Channels card capability wording is unchanged (already Assisted / identity only); verification-pending state not built
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: partial: closed, full, busy, unavailable and late-post wording shipped in three languages, now at every screen that can receive the four codes (connect, server list, destination picker, verify, engagement) and a separate wording for the page Discord returns to, because the bot may already be in the server; the Channels card capability wording is unchanged (already Assisted / identity only); verification-pending state not built
   - Evidence: web/src/lib/channels/discord-copy.json; web/src/lib/channels/discord-refusal.ts; web/tests/discord-launch-gate.test.cjs (source 2a5a523d)
   - What: UI states for: not allowlisted, cap reached, paused (kill switch), verification pending. Update web/src/config/channels.ts and the Channels card so Discord text matches what is verified: identity and publish yes (after X-03), schedule only after X-04, no analytics, comments or reply promise. English, Traditional and Simplified Chinese packs. 'Waitlist' here is state copy only: do not build an email or interest capture without the owner's decision (it would collect personal data).
   - Depends on: G-01
   - Evidence to record: Screens at 390 and 1280 px; copy diff.
   - Basis: channels.ts currently says 'publishing opens after testing' with identity-only capabilities, while production rows say Direct.
 - [x] **G-04** `AGENT` `MUST` `W1`: **Kill-switch drill**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Kill switch composes with the gate (KillSwitch tests). On Vercel the switch needs a new build; the runbook uses a third twin and a database hold for seconds-level stops
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Kill switch composes with the gate (KillSwitch tests). On Vercel the switch needs a new build; the runbook uses a third twin and a database hold for seconds-level stops
   - Evidence: tests/test_discord_launch_gate.py KillSwitch; RUNBOOK-INCIDENT.md (source 2a5a523d)
   - What: POSTRIFF_OAUTH_DISCORD_DISABLED=true is checked at connect start, callback, destinations and publish (all-or-nothing). Prove in CI that existing grants and queued jobs stay safe (held, nothing lost, nothing resent), that it composes with G-01, and write a two-minute runbook: set, read back, resume.
   - Depends on: G-01
   - Evidence to record: Test names + runbook path.
   - Basis: execution_enabled checks in oauth.py lines 464, 573, 925 and publish_route.
 - [x] **G-05** `AGENT` `MUST` `W1`: **Widen without redeploy**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Correction to the item: env changes reach new builds only, so widening is done by promoting a pre-built twin, not by an env edit
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Correction to the item: env changes reach new builds only, so widening is done by promoting a pre-built twin, not by an env edit
   - Evidence: tests/test_discord_launch_gate.py WidenWithoutRedeploy; RUNBOOK-LAUNCH.md section 0 (source 2a5a523d)
   - What: Document and test how to move from tester-only to the capped public (allowlist to '*', cap 90) and later to Wave 2 (cap raised after verification) by env change alone.
   - Depends on: G-01, G-02
@@ -317,14 +317,14 @@ No per-workspace gate exists for Discord today; the only switch is provider-wide
 One shared bot token serves every customer. The capacity test passed on a mock that is more permissive than Discord's documented limits and with 16 parallel workers, which production does not have.
 
 - [ ] **R-01** `AGENT+APPROVAL` `MUST` `W1`: **Rate policy: generate, validate, calendar**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: policy tool and 22 tests pass locally; applying the value is AUTH-4. Policy last used by the coordinator expires between 10-23 18:47Z and 10-24 18:47Z
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: policy tool and 22 tests pass locally; applying the value is AUTH-4. Policy last used by the coordinator expires between 10-23 18:47Z and 10-24 18:47Z
   - Evidence: scripts/discord_rate_policy.py; tests/test_discord_rate_policy_tool.py (source 2a5a523d)
   - What: POSTRIFF_DISCORD_RATE_POLICY must parse with the repo's own SafetyPolicy.parse and fails closed (HTTP 503 for all Discord traffic) once expires_at passes; maximum validity is 31 days. Generate a new policy JSON (version 1, revision, issued_at, expires_at, egress_scope, app_capacity, app_window_seconds, unknown_window_seconds, invalid_capacity, invalid_window_seconds, failure_threshold, circuit_seconds, permit_ttl_seconds <= 10, read_attempts <= 5). Size the app budget at no more than 80 percent of Discord's 50 requests per second and the invalid budget at no more than 50 percent of 10,000 per 10 minutes. Do NOT read the existing production value. Add a reminder at expiry minus 7 days. The last coordinator activity was 2026-10-19, so an expired policy is plausible [Guessing].
   - Approval: AUTH-4
   - Evidence to record: Policy JSON (not secret) + parse test + expiry date.
   - Basis: rate_limits.py SafetyPolicy (ping-runtime branch) [Certain]; Discord rate-limit figures via search summary of docs.discord.com [Likely].
 - [ ] **R-02** `AGENT+APPROVAL` `SHOULD` `W1+W2`: **Capacity re-run with Discord-realistic quotas and production topology**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: approved by the owner (row 9, AUTH-2, ceiling $4.32) but deferred: the existing harness is on the unmerged #197 branch (.depot/workflows/discord-capacity-stage-a-*) and runs through the owner's Depot account; it does not gate a 90-server Wave 1
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: approved by the owner (row 9, AUTH-2, ceiling $4.32) but deferred: the existing harness is on the unmerged #197 branch (.depot/workflows/discord-capacity-stage-a-*) and runs through the owner's Depot account; it does not gate a 90-server Wave 1
   - Evidence: AUTHORIZATION-RECORD.md row 9
   - What: Re-run capacity Stage A (1,000 users) and, if time allows, B (10,000) with the mock set to Discord's documented limits (50 requests per second global per bot, 5 messages per 5 seconds per channel) and with ONE worker invocation per minute instead of 16 replicas. Report accounting (verified, held, uncertain, unaccounted) and real latency, and state the SLO that is actually true. Cost ceilings from the harness constants: A at most $4.32, B at most $21.60 (rate $0.0016 per second x job timeout).
   - Depends on: S-03
@@ -332,28 +332,28 @@ One shared bot token serves every customer. The capacity test passed on a mock t
   - Evidence to record: Result JSON + run URL + cost.
   - Basis: PR #197: B passed on a mock allowing 100 creates per second. 10,000 creates inside a p99 of 173.5 s implies at least about 57 creates per second, above the documented 50 requests per second per bot; the harness excludes real Discord [Likely].
 - [x] **R-03** `AGENT` `MUST` `W1`: **429 and ban handling**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3) (15 tests: Cloudflare-style 429, scopes, hints, held routes, operator hold)
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3) (15 tests: Cloudflare-style 429, scopes, hints, held routes, operator hold)
   - Evidence: tests/test_discord_ban_handling.py (source 2a5a523d)
   - What: Prove global vs shared vs user 429 scopes, Cloudflare-style HTML 429 (error 1015), invalid-request accounting (401, 403, 429 except shared scope), circuit opening and no retry storms. Add missing cases to tests/test_discord_rate_limits.py.
   - Depends on: S-03
   - Evidence to record: Test names + CI.
   - Basis: Discord docs via search summary: more than 10,000 invalid requests per 10 minutes causes a temporary IP restriction [Likely].
 - [ ] **R-04** `AGENT` `SHOULD` `W1`: **Connect-burst model**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: model and user-facing messages done; request counts are from code and the harness constant, not measured
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: model and user-facing messages done; request counts are from code and the harness constant, not measured
   - Evidence: MEASUREMENTS.md (source 2a5a523d)
   - What: The capacity harness counts at least 39 Discord requests per connecting user (3 + 2x3 + 6x5, a lower bound). At the 50 requests per second ceiling that is about 1.2 connects per second before any publishing. Confirm destination listing is lazy and paged, add caching if needed, and define the user-visible message when the coordinator delays or denies a request.
   - Depends on: S-03
   - Evidence to record: Request-count measurement + UX copy.
   - Basis: postgres_discord_capacity.py bootstrapRequestLowerBoundPerUser.
 - [ ] **R-05** `AGENT` `MUST` `W1+W2`: **Worker throughput**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: decision recorded with the budget arithmetic; per-step latency not measured; late-post note in the schedule dialog
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: decision recorded with the budget arithmetic; per-step latency not measured; late-post note in the schedule dialog
   - Evidence: MEASUREMENTS.md; tests/test_discord_worker_budget.py (source 2a5a523d)
   - What: Today one cron (every minute) runs worker.tick() with POSTRIFF_WORKER_MAX_JOBS default 10 (hard cap 25) and POSTRIFF_WORKER_MAX_SECONDS default 20 (cap 45), sequentially. With the Discord worker flag, lanes alternate between Discord and the rest, and a post needs at least two steps (create, then read-back). Rough ceiling: about 5 posts per minute at defaults, about 12 at the cap. 100 posts due in the same minute take 8 to 20 minutes; 1,000 take 83 to 200 minutes. tick_discord exists but is not wired to any cron. Decide: (a) the Wave 1 cap makes this acceptable; (b) raise POSTRIFF_WORKER_MAX_JOBS to 25 and MAX_SECONDS toward 45 (affects all providers; the API function maxDuration is 300); (c) add parallel cron lanes or a dedicated Discord lane (Wave 2, needs SKIP LOCKED and lease-fence proofs). Measure instead of assuming; show late-post expectation in the UI.
   - Depends on: S-01
   - Evidence to record: Measured jobs per minute in CI; decision recorded; UI expectation copy.
   - Basis: hosted_worker.py configured_worker_limits and _tick; vercel.json crons [Certain]; steps per post [Likely].
 - [ ] **R-06** `AGENT` `COULD` `W2`: **Shared egress reputation**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: COULD; the incident runbook covers a ban
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: COULD; the incident runbook covers a ban
   - Evidence: RUNBOOK-INCIDENT.md 4.B
   - What: Vercel egress IPs are shared; Discord's Cloudflare restriction is per IP. Record egress_scope in the policy, add a monitor for HTML 429 / 1015 responses, and decide on Vercel Static IPs or a proxy only if bans are observed (paid, needs approval).
   - Evidence to record: Monitor + decision note.
@@ -364,32 +364,32 @@ One shared bot token serves every customer. The capacity test passed on a mock t
 Vercel env changes apply to new deployments only, so set them before the RC build. The agent never reads or prints secret values.
 
 - [x] **C-01** `AGENT` `MUST` `W1`: **Env matrix for the RC**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: matrix written; the dangerous values live only on the build commands
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: matrix written; the dangerous values live only on the build commands
   - Evidence: C-01-env-matrix.md
   - What: Produce the final table in Appendix B (names, Wave 1 target state, how it is applied and read back) from the code. New modes OFF; kill switch armed (variable unset); rate policy per R-01; worker budget per R-05; gate and cap per G-01/G-02.
   - Depends on: G-01, R-01, R-05
   - Evidence to record: Matrix file.
 - [x] **C-02** `AGENT` `MUST` `W1`: **Names-only readback of production env**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: names-only readback done through the owner-approved GitHub Actions route (read-only preflight, run 39882363204, 2026-10-23T01:11Z): 176 production names; the six required names (Discord client id and secret, bot token, public base URL, credential key, cron secret) are present; none of the names that must stay unset exists (gate, cap, reviewed flag, kill switch, webhook, engagement, user-install, interaction, message content); the Discord, worker and OAuth-Discord family held exactly four names before the batch. Other names are not printed because the log is public
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: names-only readback done through the owner-approved GitHub Actions route (read-only preflight, run 39882363204, 2026-10-23T01:11Z): 176 production names; the six required names (Discord client id and secret, bot token, public base URL, credential key, cron secret) are present; none of the names that must stay unset exists (gate, cap, reviewed flag, kill switch, webhook, engagement, user-install, interaction, message content); the Discord, worker and OAuth-Discord family held exactly four names before the batch. Other names are not printed because the log is public
   - Evidence: GitHub Actions run 39882363204; BUILD-VIA-GITHUB-ACTIONS.md
   - What: List production env variable NAMES with no decryption and diff against C-01. Flag missing and unexpected names. Never print values.
   - Evidence to record: Name diff.
   - Basis: AGENTS.md: no credential edits; Vercel MCP rule: never decrypt unless requested.
 - [x] **C-03** `AGENT+APPROVAL` `MUST` `W1`: **Apply non-secret env changes in one batch**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: applied by the agent 2026-10-23T01:17Z through the Vercel API: four Discord flags set to true, the rate policy (revision rafii-w1-20261023, valid until 2026-11-22, renew by 2026-11-15) and the worker budget of 25 jobs and 40 seconds; type plain, target production; read back by name and value from a second listing (all seven equal); the gate, cap, reviewed flag, kill switch, webhook, engagement and user-install names are not set. Applied before the owner had said go after the preflight result; the owner had approved rows 1 to 3 and was told
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: applied by the agent 2026-10-23T01:17Z through the Vercel API: four Discord flags set to true, the rate policy (revision rafii-w1-20261023, valid until 2026-11-22, renew by 2026-11-15) and the worker budget of 25 jobs and 40 seconds; type plain, target production; read back by name and value from a second listing (all seven equal); the gate, cap, reviewed flag, kill switch, webhook, engagement and user-install names are not set. Applied before the owner had said go after the preflight result; the owner had approved rows 1 to 3 and was told
   - Evidence: AUTHORIZATION-RECORD.md rows 1 to 3; RC-RECEIPT.md section 4
   - What: Booleans and numbers only (gate, cap, flags, worker budget, kill-switch left unset). Read back by name and non-secret value. The agent NEVER touches client secret, bot token or CRON_SECRET; any secret change is the owner's.
   - Depends on: C-01, C-02
   - Approval: AUTH-3
   - Evidence to record: Readback.
 - [ ] **C-04** `AGENT` `MUST` `W1`: **Cron lanes**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: the candidate keeps the only live cron (/api/cron/worker every minute), proven by the superset proof; the post-promotion check is not done
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: the candidate keeps the only live cron (/api/cron/worker every minute), proven by the superset proof; the post-promotion check is not done
   - Evidence: scripts/rc_superset_proof.py crons check (source 2a5a523d)
   - What: RC vercel.json must keep every live cron lane (at least /api/cron/worker every minute; also /api/cron/linkedin/worker if the LinkedIn lane is live). After promotion confirm one 200 per minute in runtime logs.
   - Depends on: S-03
   - Evidence to record: vercel.json diff; log excerpt after X-01.
 - [ ] **C-05** `AGENT` `MUST` `W1`: **OAuth start URL audit (read-only)**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: needs the staged build
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: needs the staged build
   - What: On the staged RC, call the authenticated connect-start API with a tester session (or use the existing browser harness) and parse the returned authorize URL: client_id, response_type=code, scope 'bot identify' only, permissions=101376 (confirm against DiscordProvider.PERMISSIONS in the RC), redirect_uri https://rafii.io/api/oauth/discord/callback, state present. No consent is given.
   - Depends on: Q-02
   - Evidence to record: Parsed parameter table.
@@ -399,30 +399,30 @@ Vercel env changes apply to new deployments only, so set them before the RC buil
 Production Supabase already has Discord migrations 124-126, 128 and 131. Staging does not.
 
 - [x] **M-01** `AGENT` `SHOULD` `W1`: **Advisors**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: advisors run read-only: security 23 findings (1 WARN, 22 INFO), performance 223; none on the in-scope tables at ERROR level; triage in the private report
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: advisors run read-only: security 23 findings (1 WARN, 22 INFO), performance 223; none on the in-scope tables at ERROR level; triage in the private report
   - Evidence: private audit (not in the repository)
   - What: Run Supabase security and performance advisors on production, read-only. Triage; any fix needs a migration approval.
   - Evidence to record: Advisor output summary.
 - [x] **M-02** `AGENT` `MUST` `W1`: **RLS, FORCE RLS and grants on Discord tables**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: RLS and FORCE RLS on, anon has no grants, authenticated has no access to the Discord, credential or OAuth tables, service_role grants as migrations 124 to 131 give
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: RLS and FORCE RLS on, anon has no grants, authenticated has no access to the Discord, credential or OAuth tables, service_role grants as migrations 124 to 131 give
   - Evidence: private audit (not in the repository); monitoring.sql planned against the schema
   - What: Catalog queries only (no row reads) for pr_discord_rate_state, pr_discord_route_buckets, pr_discord_request_admissions, pr_discord_worker_projection, pr_discord_interaction_links, pr_discord_interaction_replays and the credential tables. Confirm anon and authenticated are denied.
   - Evidence to record: Catalog output.
   - Basis: PR #216 body reports this for 131 only; 124-128 not re-read here.
 - [ ] **M-03** `AGENT` `MUST` `W1`: **Backup and restore point**
-  - Status: **BLOCKED_EXTERNAL** at 2026-10-23T03:06:58Z: owner reply 12: kept as a requirement; fill from the real project, PITR as it really is, assess sufficiency, buy nothing automatically. Read 2026-10-23T02:58Z with the database tools: organization plan Pro, PostgreSQL 17.6, us-east-1, 237 MB, compute is the smallest tier (max_connections 60, shared_buffers about 224 MB) [likely Micro], WAL archiving on with 26,520 segments and 0 failures (consistent with PITR but not proof). NOT visible to any tool: whether the PITR add-on is bought, the list of restore points, earliest and latest recoverable time; the owner can read them at Database > Backups
+  - Status: **BLOCKED_EXTERNAL** at 2026-10-23T03:58:34Z: owner reply 12: kept as a requirement; fill from the real project, PITR as it really is, assess sufficiency, buy nothing automatically. Read 2026-10-23T02:58Z with the database tools: organization plan Pro, PostgreSQL 17.6, us-east-1, 237 MB, compute is the smallest tier (max_connections 60, shared_buffers about 224 MB) [likely Micro], WAL archiving on with 26,520 segments and 0 failures (consistent with PITR but not proof). NOT visible to any tool: whether the PITR add-on is bought, the list of restore points, earliest and latest recoverable time; the owner can read them at Database > Backups
   - Evidence: AUTHORIZATION-RECORD.md reply 12; RELEASE-DEFINITION-v2.md section 6
   - What: Confirm backups / point-in-time recovery are active for the production project and record the timestamp before any change.
   - Evidence to record: Backup status + timestamp.
 - [ ] **M-04** `AGENT+APPROVAL` `COULD` `W1`: **Staging drift**
-  - Status: **NOT_APPLICABLE** at 2026-10-23T03:06:58Z: default taken: staging has no Discord tables and migrations are already in production; AUTH-8 not requested
+  - Status: **NOT_APPLICABLE** at 2026-10-23T03:58:34Z: default taken: staging has no Discord tables and migrations are already in production; AUTH-8 not requested
   - Evidence: S-05-migration-reconciliation.md
   - What: Staging (oxacvkhpfgytkepxcaqh) ledger ends at 130 and has no Discord, Pinterest or Mastodon migrations, so it cannot rehearse this RC. Default: rely on the disposable PostgreSQL 17 CI scenarios and skip staging. Applying migrations to staging is an optional approval (AUTH-8).
   - Approval: AUTH-8
   - Evidence to record: Decision recorded.
   - Basis: Supabase list_migrations on staging, 2026-10-22.
 - [x] **M-05** `AGENT` `SHOULD` `W1`: **Data minimisation check**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: engagement is OFF; its code keeps counts and digests, not message text; every monitor is aggregate-only; reply approvals (when enabled) keep parent message id, author id and a digest
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: engagement is OFF; its code keeps counts and digests, not message text; every monitor is aggregate-only; reply approvals (when enabled) keep parent message id, author id and a digest
   - Evidence: monitoring.sql; P-02-discord-policy-compliance.md
   - What: Confirm no message text, author profile or reaction-user list is retained (engagement LIMITS), and that all monitoring queries are aggregate-only.
   - Depends on: S-03
@@ -433,14 +433,14 @@ Production Supabase already has Discord migrations 124-126, 128 and 131. Staging
 One staged production-target build, then everything that can be proven without touching Discord.
 
 - [x] **Q-01** `AGENT` `MUST` `W1`: **Pre-flight for the build**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: project postriff-phase2-private (prj_6ufJ...) in the Rafii team confirmed, not rafii-consumer-staging; no other build in flight before D1; rafii.io named dpl_47SGx before and after D1; the cost note was posted to the owner before the build (about 2.5 minutes expected, cap $5 per build, two builds in total, no retry)
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: project postriff-phase2-private (prj_6ufJ...) in the Rafii team confirmed, not rafii-consumer-staging; no other build in flight before D1; rafii.io named dpl_47SGx before and after D1; the cost note was posted to the owner before the build (about 2.5 minutes expected, cap $5 per build, two builds in total, no retry)
   - Evidence: RC-RECEIPT.md section 4
   - What: Verify the linked project is postriff-phase2-private (prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L) in team_PgXY5VdAYKcsv0RLoDPHscNq and not rafii-consumer-staging; no other RC in flight for this lane; post the cost note.
   - Depends on: S-08, C-03
   - Evidence to record: Pre-flight record.
   - Basis: AGENTS.md safeguarded release path.
 - [x] **Q-02** `AGENT+APPROVAL` `MUST` `W1`: **Build ONE staged RC**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: D1 built and READY: dpl_25ihHyiZCzZXAjVsJqJiYcCWA51n, run 39883169905, 4 min 3 s, source 2a5a523d. The GitHub job shows red only because the agent's own domain alarm fired on the project's internal login-protected default domain, which Vercel moves to every production build; rafii.io is untouched. D2 is not built (it needs the tester session first)
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: D1 built and READY: dpl_25ihHyiZCzZXAjVsJqJiYcCWA51n, run 39883169905, 4 min 3 s, source 2a5a523d. The GitHub job shows red only because the agent's own domain alarm fired on the project's internal login-protected default domain, which Vercel moves to every production build; rafii.io is untouched. D2 is not built (it needs the tester session first)
   - Evidence: RC-RECEIPT.md section 4; BUILD-VIA-GITHUB-ACTIONS.md (source 2a5a523d)
   - What: vercel deploy --prod --skip-domain from the frozen SHA, with the SHA attached as deployment metadata (check 'vercel deploy --help' for --meta). No --force unless justified. At most two builds in total, the second only if the first fails for infrastructure reasons. Record deployment ID, URL, state, time, cost if observable.
   - Depends on: Q-01
@@ -448,33 +448,33 @@ One staged production-target build, then everything that can be proven without t
   - Evidence to record: Deployment record.
   - Basis: Runbook: staged candidate does not assign public domains.
 - [x] **Q-03** `AGENT` `MUST` `W1`: **Provenance of the deployed RC**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: 257 of 257 visible source files equal the frozen tree; 7 of 7 deeper files probed by content hash are present (3 exist only in the RC); the 2 RC-only files probed are absent from the live dpl_47SG; /api/health reports sourceRevision 2a5a523d788eef67a5c7dbed609a98efa6650eef. Sample-based like S-01 (the listing shows 11% of the upload set)
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: 257 of 257 visible source files equal the frozen tree; 7 of 7 deeper files probed by content hash are present (3 exist only in the RC); the 2 RC-only files probed are absent from the live dpl_47SG; /api/health reports sourceRevision 2a5a523d788eef67a5c7dbed609a98efa6650eef. Sample-based like S-01 (the listing shows 11% of the upload set)
   - Evidence: RC-RECEIPT.md section 4 (source 2a5a523d)
   - What: Fingerprint the deployed files against the RC tree (same method as S-01). Exact match required.
   - Depends on: Q-02
   - Evidence to record: Match report.
 - [x] **Q-04** `AGENT` `MUST` `W1`: **Smoke on the RC URL**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: on D1 without a session: /api/health 200 with the expected source revision; /api/me and /api/workspaces 401; no 5xx and no error lines in the runtime log; no cron call reached D1. NOT covered here: the connect page showing the gate state needs a signed-in session, so it moves to the closed-state check and X-02 after the dark promotion (RC-RECEIPT.md section 5)
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: on D1 without a session: /api/health 200 with the expected source revision; /api/me and /api/workspaces 401; no 5xx and no error lines in the runtime log; no cron call reached D1. NOT covered here: the connect page showing the gate state needs a signed-in session, so it moves to the closed-state check and X-02 after the dark promotion (RC-RECEIPT.md section 5)
   - Evidence: RC-RECEIPT.md section 5 (source 2a5a523d)
   - What: Using Vercel's protection-bypass fetch: /api/health, protected routes return 401/403 when unauthenticated, connect UI shows gate state, no 5xx in runtime logs.
   - Depends on: Q-02
   - Evidence to record: Probe table.
 - [ ] **Q-05** `AGENT` `MUST` `W1`: **Hosted tenant-isolation probe**
-  - Status: **BLOCKED_EXTERNAL** at 2026-10-23T03:06:58Z: owner reply 12: NO waiver and no deferral past opening. Before the full opening: accounts A and B, both directions, reads AND writes, denied, no side effects (before and after snapshots), and the write tests the original script lacked. CI evidence on the exact SHA (cross-tenant destination, consent, lease and state-binding tests) is supporting only. A probe script with mutation tests is being built; the hosted run needs two real accounts the agent cannot create (owner decision pending: owner-made throwaway accounts, or synthetic users made by the agent in production auth with explicit permission and cleanup)
-  - Evidence: AUTHORIZATION-RECORD.md reply 12; RELEASE-DEFINITION-v2.md G4
+  - Status: **BLOCKED_EXTERNAL** at 2026-10-23T03:58:34Z: owner reply 12: NO waiver and no deferral past opening. Before the full opening: accounts A and B, both directions, reads AND writes, denied, no side effects (before and after snapshots), and the write tests the original script lacked. CI evidence on the exact SHA (cross-tenant destination, consent, lease and state-binding tests) is supporting only. The probe (branch claude/discord-q05-probe-20261023, head 3968c673) is built and validated locally on the frozen head by an agent and re-run by the captain: 66 cases pass (22 reads, 28 writes, 14 controls, 2 no-side-effect snapshots), zero Discord sends, nine self-tests pass including four detected mutations; no isolation hole found in the probed surface; the local database role bypasses RLS and the Vercel layer is not exercised. The hosted run is still required and needs two ordinary accounts the agent cannot create (owner creates them by normal sign-up) and, for the Discord object cases, a build whose connect gate admits both
+  - Evidence: AUTHORIZATION-RECORD.md reply 12; RELEASE-DEFINITION-v2.md G4; branch claude/discord-q05-probe-20261023 docs/q05/
   - What: Two synthetic workspaces; cross-tenant read and write of Discord resources must be denied. Use the existing harness. If it needs accounts the agent cannot create, mark BLOCKED_EXTERNAL and add to the Approval Packet.
   - Depends on: Q-02
   - Evidence to record: Probe results.
   - Basis: PR #216 lists hosted application tenant isolation as unqualified.
 - [x] **Q-06** `AGENT` `MUST` `W1`: **Rollback target**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: rollback target is dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg (READY, rollback candidate, serves rafii.io, fingerprinted as the c5fc1fd1 lineage in S-01); the five Discord migrations are already in production and additive, so the older build runs against the current database. Rule kept: before any rollback to the older worker, set the kill switch and drain or reconcile in-flight Discord jobs (none can exist while the gate is closed)
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: rollback target is dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg (READY, rollback candidate, serves rafii.io, fingerprinted as the c5fc1fd1 lineage in S-01); the five Discord migrations are already in production and additive, so the older build runs against the current database. Rule kept: before any rollback to the older worker, set the kill switch and drain or reconcile in-flight Discord jobs (none can exist while the gate is closed)
   - Evidence: RUNBOOK-INCIDENT.md; APPROVAL-PACKET-2.md
   - What: Name a compatible READY production deployment by fingerprint, not by guess (candidates seen on 10-22: dpl_349BPQoCn1p857TxmQaaKhDb2Lrx, dpl_AkP8r1Lfx4nWgCYSJuJxCKWkF3yM, and dpl_yKAToJbv... whose full id must be looked up; none verified for compatibility). Rule: before any rollback to an older worker, set the kill switch and drain or reconcile in-flight Discord jobs (lease-protocol fence, migration 128).
   - Depends on: Q-02
   - Evidence to record: Target + compatibility note.
   - Basis: PR #211 body rollback note.
 - [ ] **Q-07** `AGENT` `MUST` `W1`: **Promotion packet**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: APPROVAL-PACKET-2.md is written; the promotion waits for H-05 and the owner's answer on Q-05
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: APPROVAL-PACKET-2.md is written; the promotion waits for H-05 and the owner's answer on Q-05
   - Evidence: APPROVAL-PACKET-2.md
   - What: Evidence bundle, exact 'vercel promote <deployment-url>' command, post-promotion checks, abort criteria. Goes into Approval Packet #2.
   - Depends on: Q-03, Q-04, Q-05, Q-06, C-05
@@ -485,60 +485,60 @@ One staged production-target build, then everything that can be proven without t
 Vercel crons run only on the promoted production deployment and the OAuth callback origin is rafii.io, so real OAuth and unattended scheduling can only be proven after a dark promotion.
 
 - [ ] **X-01** `AGENT+APPROVAL` `MUST` `W1`: **Dark promotion (gate closed except testers and grandfathered workspaces)**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: AUTH-5 approved (the rev B+ row) on condition that Q-01 to Q-07 are VERIFIED and the H-05 sign-off exists; promotion is an API call the agent can make, so it needs no machine
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: AUTH-5 approved (the rev B+ row) on condition that Q-01 to Q-07 are VERIFIED and the H-05 sign-off exists; promotion is an API call the agent can make, so it needs no machine
   - Evidence: AUTHORIZATION-RECORD.md; BUILD-RUNSHEET.md section G
   - What: After AUTH-5: promote the verified RC; confirm https://rafii.io/api/health, that public workspaces see the waitlist state, and one cron 200 per minute.
   - Depends on: Q-07, H-05
   - Approval: AUTH-5
   - Evidence to record: Health + log excerpt + deployment ID.
 - [ ] **X-02** `HUMAN` `MUST` `W1`: **Real OAuth and bot install (PRD A08)**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: waits for the dark promotion and the tester session
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: waits for the dark promotion and the tester session
   - Evidence: RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md
   - What: Tester account installs the bot into the tester server through the supported flow on rafii.io. Agent verifies with own-workspace readbacks (no secrets): one code exchange, channel record, capability rows, destination list limited to channels the tester can see.
   - Depends on: X-01, H-03
   - Evidence to record: Readback log.
   - Basis: Earlier callback duplicated one-use code exchanges; watch for double POSTs.
 - [ ] **X-03** `HUMAN` `MUST` `W1`: **One real send and read-back (PRD A09)**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: waits for the dark promotion and the tester session
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: waits for the dark promotion and the tester session
   - Evidence: RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md
   - What: Owner approves the exact text, sender, channel and time in the product UI. Verify the message exists, matches, mentions are suppressed and the read-back receipt is verified. Maximum 3 messages in total.
   - Depends on: X-02
   - Approval: AUTH-9
   - Evidence to record: Message id, digest match, receipt.
 - [ ] **X-04** `HUMAN` `MUST` `W1`: **Unattended schedule and cancel (PRD A10)**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: waits for the dark promotion and the tester session
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: waits for the dark promotion and the tester session
   - Evidence: RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md
   - What: Schedule a post at least 5 minutes ahead and do nothing; the production cron must send it and the read-back must verify. Record the delay. Schedule a second post and cancel before due; nothing may be sent.
   - Depends on: X-02, C-04
   - Approval: AUTH-9
   - Evidence to record: Timeline log.
 - [ ] **X-05** `HUMAN` `MUST` `W1`: **Revoke and reconnect**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: waits for the dark promotion and the tester session
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: waits for the dark promotion and the tester session
   - Evidence: RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md
   - What: Remove the bot from the tester server. The next attempt must be held with a clear reconnect message and no retry storm; the connection must show reauthorization needed; reconnect must work.
   - Depends on: X-02
   - Evidence to record: State transitions log.
 - [ ] **X-06** `AGENT` `SHOULD` `W1`: **Permission failure**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: waits for the dark promotion and the tester session
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: waits for the dark promotion and the tester session
   - Evidence: RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md
   - What: Channel the bot cannot post in: the job must be held with a clear reason and no message.
   - Depends on: X-02
   - Evidence to record: Held-state evidence.
 - [ ] **X-07** `AGENT` `MUST` `W1`: **Release receipt (PRD A13)**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: waits for the dark promotion and the tester session
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: waits for the dark promotion and the tester session
   - Evidence: RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md
   - What: Project, SHA, deployment ID, ready state, acceptance results, cost if observed, rollback target. No secrets, no customer data.
   - Depends on: X-01
   - Evidence to record: RC-RECEIPT.md.
   - Basis: CLAUDE.md end-of-release record.
 - [x] **X-08** `AGENT` `SHOULD` `W1`: **Cap race under load (synthetic)**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: tests written and passing locally on PostgreSQL 16 (11, uuid columns like production: 12 racers, 5 slots, 2 held; exactly 3 admitted, count never above the cap; a no-lock control overshoots; every start holds its own slot; one account starting ten different servers is admitted for exactly the free slots; one person at most three in flight, freed when one finishes; a reconnect takes no slot at a full house; a known server is admitted at a full house). Production check is the Q9 count query only. CI evidence: the 11 tests run unfenced in the ci-python step of local-gates and in the full-suite step of the qualification on PostgreSQL 17, and both steps succeeded on the frozen head (the tests skip only without the PostgreSQL binaries or under the synthetic fence, and neither applies in those steps); the independent reviewer ran the same files 105 of 105 on PostgreSQL 16
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: tests written and passing locally on PostgreSQL 16 (11, uuid columns like production: 12 racers, 5 slots, 2 held; exactly 3 admitted, count never above the cap; a no-lock control overshoots; every start holds its own slot; one account starting ten different servers is admitted for exactly the free slots; one person at most three in flight, freed when one finishes; a reconnect takes no slot at a full house; a known server is admitted at a full house). Production check is the Q9 count query only. CI evidence: the 11 tests run unfenced in the ci-python step of local-gates and in the full-suite step of the qualification on PostgreSQL 17, and both steps succeeded on the frozen head (the tests skip only without the PostgreSQL binaries or under the synthetic fence, and neither applies in those steps); the independent reviewer ran the same files 105 of 105 on PostgreSQL 16
   - Evidence: tests/test_discord_launch_cap_race.py (source 2a5a523d)
   - What: CI test with simultaneous connect starts around the cap; in production only verify the count query.
   - Depends on: G-02
   - Evidence to record: CI run.
 - [ ] **X-09** `AGENT` `MUST` `W1`: **Post-acceptance exposure decision**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: AUTH-6 approved (the rev B+ row) on condition that X-02 to X-05 are VERIFIED in the tester session, every Wave 1 MUST item is VERIFIED, no abort trigger fired and T0 is reached; the agent still sends the GO or NO-GO report at GO_TIME and opens only on GO
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: AUTH-6 approved (the rev B+ row) on condition that X-02 to X-05 are VERIFIED in the tester session, every Wave 1 MUST item is VERIFIED, no abort trigger fired and T0 is reached; the agent still sends the GO or NO-GO report at GO_TIME and opens only on GO
   - Evidence: AUTHORIZATION-RECORD.md
   - What: Only after X-03 and X-04 are VERIFIED: recommend opening the capped public gate (Approval Packet #2 / AUTH-6). If either failed: NO-GO, fallback F-02.
   - Depends on: X-03, X-04, X-05
@@ -549,24 +549,24 @@ Vercel crons run only on the promoted production deployment and the OAuth callba
 Truthful copy and disclosures. Production already stores Direct for publish and schedule with zero real sends, so copy must not run ahead of evidence.
 
 - [x] **P-01** `AGENT` `MUST` `W1`: **Privacy notice and terms**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: wording drafted and committed on the RC; approval is H-08
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: wording drafted and committed on the RC; approval is H-08
   - Evidence: P-01-privacy-terms-diff.md (source 2a5a523d)
   - What: Compare the Discord text in the privacy notice and terms with real behaviour: server and channel ids, bot permissions, revocation, retention, no message text stored, deletion on account removal. Draft edits for H-08.
   - Evidence to record: Diff + drafted wording.
   - Basis: privacy.py, engagement LIMITS, account_deletion.py.
 - [x] **P-02** `AGENT` `SHOULD` `W1`: **Discord Developer Policy and Terms review**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: compliance table against Discord's developer policy and terms (2024-07-08 copy); gaps ranked
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: compliance table against Discord's developer policy and terms (2024-07-08 copy); gaps ranked
   - Evidence: P-02-discord-policy-compliance.md
   - What: Read the current public Discord Developer Policy / Terms and produce a compliance table against Rafii behaviour (no mass mentions, no unsolicited DMs, data use, disclosure, deletion). List gaps for the owner.
   - Evidence to record: Compliance table.
 - [ ] **P-03** `AGENT` `SHOULD` `W1`: **Customer help and error copy**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: refusal, busy and late-post copy shipped in the candidate in three languages; a connect guide (Manage Server, permissions, removing the bot) is drafted in three languages but is not in the product, because adding it would move the frozen head
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: refusal, busy and late-post copy shipped in the candidate in three languages; a connect guide (Manage Server, permissions, removing the bot) is drafted in three languages but is not in the product, because adding it would move the frozen head
   - Evidence: web/src/lib/channels/discord-copy.json; P-03-connect-guide-draft.md (source 2a5a523d)
   - What: Connect guide (needs Manage Server, what permissions, how to remove the bot), and copy for: not enough permission, bot removed, cap reached, waitlist, delayed schedule. English, Traditional and Simplified Chinese.
   - Depends on: G-03
   - Evidence to record: Copy files.
 - [x] **P-04** `AGENT` `SHOULD` `W1`: **Account deletion and shared-server behaviour**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: workspace deletion cascades the Discord credential rows; the shared bot is never removed from a server, by design on this line; disclosed in the draft wording
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: workspace deletion cascades the Discord credential rows; the shared bot is never removed from a server, by design on this line; disclosed in the draft wording
   - Evidence: P-02-discord-policy-compliance.md D2 D3; P-01-privacy-terms-diff.md
   - What: Verify deleting a workspace removes its Discord grants and tokens, and that the shared bot stays while another workspace still uses the same server.
   - Evidence to record: Test or code reference.
@@ -577,32 +577,32 @@ Truthful copy and disclosures. Production already stores Direct for publish and 
 Aggregate-only monitoring, abort triggers and runbooks.
 
 - [x] **O-01** `AGENT` `MUST` `W1`: **Monitoring queries and thresholds (aggregate-only)**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: eleven aggregate-only monitors with thresholds; every statement planned against the production schema with EXPLAIN (no rows read)
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: eleven aggregate-only monitors with thresholds; every statement planned against the production schema with EXPLAIN (no rows read)
   - Evidence: monitoring.sql
   - What: Per-5-minute counts from pr_discord_request_admissions (status_code, state, is_publish), held and uncertain job counts, rate-state blocked_until / circuit_until, OAuth failures, Vercel runtime errors. Page on: invalid-request rate above 1,000 per 10 minutes, any circuit open more than 5 minutes, 3 or more uncertain sends in 15 minutes, 5xx above 2 percent for 5 minutes, policy expiry within 7 days.
   - Depends on: S-03
   - Evidence to record: SQL file + threshold table.
 - [x] **O-02** `AGENT` `MUST` `W1`: **Abort triggers and pre-authorised actions**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: trigger table and abort ladder written for Vercel semantics; AUTH-7 rewritten in the packet
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: trigger table and abort ladder written for Vercel semantics; AUTH-7 rewritten in the packet
   - Evidence: RUNBOOK-INCIDENT.md; APPROVAL-PACKET-1.md row 12
   - What: Write the exact triggers and the action for each (kill switch first, then close gate, then rollback only for code defects). Ready as AUTH-7.
   - Depends on: G-04
   - Approval: AUTH-7
   - Evidence to record: Trigger table.
 - [x] **O-03** `AGENT` `SHOULD` `W1`: **Runbooks**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: launch and incident runbooks with customer notices in three languages
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: launch and incident runbooks with customer notices in three languages
   - Evidence: RUNBOOK-LAUNCH.md; RUNBOOK-INCIDENT.md
   - What: Launch-day runbook (T-minus), incident runbook (Discord outage, 1015 ban, policy expiry, bot-token compromise with the owner-only rotation steps and the all-customers impact), customer comms templates.
   - Depends on: O-01, O-02
   - Evidence to record: Runbook files.
 - [ ] **O-04** `AGENT` `COULD` `W1`: **Renewal and rotation calendar**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: no calendar tool is connected to this session; the policy tool prints the renew-by date (7 days before expiry; for the example policy: expiry 2026-11-21 19:59Z, renew-by 2026-11-14) and RUNBOOK-LAUNCH lists the owner reminders; the owner creates the entries
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: no calendar tool is connected to this session; the policy tool prints the renew-by date (7 days before expiry; for the example policy: expiry 2026-11-21 19:59Z, renew-by 2026-11-14) and RUNBOOK-LAUNCH lists the owner reminders; the owner creates the entries
   - Evidence: scripts/discord_rate_policy.py; RUNBOOK-LAUNCH.md
   - What: Rate-policy expiry, bot-token and client-secret rotation reminders.
   - Depends on: R-01
   - Evidence to record: Calendar entries or tracker items.
 - [ ] **O-05** `AGENT` `SHOULD` `W1`: **Post-launch reviews**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: after launch
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: after launch
   - What: Aggregate-only reports at T+2h and T+24h: connects, caps, errors, delays, held and uncertain jobs.
   - Depends on: X-01
   - Evidence to record: Report files.
@@ -612,24 +612,24 @@ Aggregate-only monitoring, abort triggers and runbooks.
 A false GO is the worst outcome. A clean NO-GO with the fallback engaged is an acceptable result.
 
 - [ ] **F-01** `AGENT` `MUST` `W1`: **GO / NO-GO evaluation**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: evaluated at GO_TIME; today the recommendation is NO-GO
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: evaluated at GO_TIME; today the recommendation is NO-GO
   - Evidence: LAUNCH-READINESS-REPORT.md
   - What: At GO_TIME generate the table of every MUST item with status and evidence link and give a recommendation. Declare NO-GO early when a MUST gate can no longer pass, not at the deadline.
   - Evidence to record: LAUNCH-READINESS-REPORT.md.
 - [ ] **F-02** `AGENT` `MUST` `W1`: **Fallback (NO-GO)**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: the fallback is that D1 (gate closed) stays promoted; the customer wording exists; reschedule criteria not written
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: the fallback is that D1 (gate closed) stays promoted; the customer wording exists; reschedule criteria not written
   - Evidence: RUNBOOK-LAUNCH.md section 2; RUNBOOK-INCIDENT.md section 5
   - What: Gate stays closed (tester and grandfathered workspaces only), the public sees the waitlist state, no data is lost and existing grants stay safe. Config diff and customer message prepared in advance. Reschedule criteria stated.
   - Depends on: G-01
   - Evidence to record: Fallback config + message.
 - [x] **F-03** `AGENT` `MUST` `W1`: **Abort / rollback decision tree after opening**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: abort and rollback ladder with speeds and undo steps
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: abort and rollback ladder with speeds and undo steps
   - Evidence: RUNBOOK-INCIDENT.md section 1
   - What: Kill switch (seconds, reversible) then close gate then rollback to the verified target only for a code defect, after draining in-flight Discord jobs.
   - Depends on: G-04, Q-06
   - Evidence to record: Decision tree in runbook.
 - [ ] **F-04** `AGENT` `MUST` `W1`: **Final report**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: after F-01
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: after F-01
   - What: Per CLAUDE.md: project, SHA, deployment ID, ready state, acceptance results, cost if observed, rollback target; privacy-preserving.
   - Depends on: F-01
   - Evidence to record: Report.
@@ -639,7 +639,7 @@ A false GO is the worst outcome. A clean NO-GO with the fallback engaged is an a
 None of these can be finished tomorrow, but several take calendar time and must start today.
 
 - [ ] **W-01** `EXTERNAL` `MUST` `W2`: **Verification approved, cap raised**
-  - Status: **NOT_RUN** at 2026-10-23T03:06:58Z: verification is owner-attested (see H-01); what remains is the decision to raise the cap in steps, each a new build with the owner's yes (AUTHORIZATION-RECORD.md reply 3)
+  - Status: **NOT_RUN** at 2026-10-23T03:58:34Z: verification is owner-attested (see H-01); what remains is the decision to raise the cap in steps, each a new build with the owner's yes (AUTHORIZATION-RECORD.md reply 3)
   - Evidence: AUTHORIZATION-RECORD.md reply 3
   - What: After Discord approves verification, raise POSTRIFF_DISCORD_GUILD_CAP and widen the allowlist by env change (G-05).
   - Depends on: H-01
@@ -649,7 +649,7 @@ None of these can be finished tomorrow, but several take calendar time and must 
   - Depends on: R-05
   - Evidence to record: Design + CI + capacity result.
 - [ ] **W-03** `AGENT+APPROVAL` `SHOULD` `W2`: **Do webhook-only installs count toward the server limit?**
-  - Status: **BLOCKED_EXTERNAL** at 2026-10-23T03:06:58Z: not documented by Discord in anything found; a safe empirical test and a question to Discord are drafted
+  - Status: **BLOCKED_EXTERNAL** at 2026-10-23T03:58:34Z: not documented by Discord in anything found; a safe empirical test and a question to Discord are drafted
   - Evidence: W-03-webhook-server-limit.md
   - What: Find out from Discord documentation or support, or empirically by reading the application's approximate guild count before and after one webhook install. If they do not count, the bot-free mode (PR #216, owners and Administrators only, currently OFF) becomes the route to scale without the bot.
   - Evidence to record: Written finding.
@@ -666,7 +666,7 @@ None of these can be finished tomorrow, but several take calendar time and must 
   - What: Macros, FAQ, SLA, abuse handling and a bot-token incident process.
   - Evidence to record: Process doc.
 - [x] **W-07** `AGENT` `SHOULD` `W2`: **Merge strategy**
-  - Status: **VERIFIED** at 2026-10-23T03:06:58Z: proposal only
+  - Status: **VERIFIED** at 2026-10-23T03:58:34Z: proposal only
   - Evidence: W-07-merge-proposal.md
   - What: Propose how the Discord lanes (#216, PING runtime) and the RC land on the release trunk so future RCs stop being re-derived. Propose only; no merge without exact authority.
   - Depends on: S-08

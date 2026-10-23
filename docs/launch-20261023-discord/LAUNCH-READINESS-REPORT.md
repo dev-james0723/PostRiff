@@ -1,6 +1,6 @@
 # LAUNCH-READINESS-REPORT (Discord capped Wave 1)
 
-Generated 2026-10-23T03:06:58Z. Candidate: `claude/discord-launch-rc-20261023` at `2a5a523d` (draft PR #222, frozen, CI green on the exact SHA). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
+Generated 2026-10-23T03:58:34Z. Candidate: `claude/discord-launch-rc-20261023` at `2a5a523d` (draft PR #222, frozen, CI green on the exact SHA). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
 
 ## Recommendation: **NO-GO today**
 
