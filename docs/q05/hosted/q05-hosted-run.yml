@@ -56,7 +56,7 @@ jobs:
           expectrev="$(python3 -I -c 'import json; print(json.load(open("request/probe/REQUEST.json")).get("expectSourceRevision",""))')"
           # Whole-string matches only, before anything is written to the step outputs.
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'the request does not hold a 40 hex SHA'; exit 1; }
-          [[ "$probesha" =~ ^[0-9a-f]{16,64}$ ]] || { echo 'the request does not hold a probeSha256 (16-64 hex)'; exit 1; }
+          [[ "$probesha" =~ ^[0-9a-f]{64}$ ]] || { echo 'the request does not hold the full reviewed probeSha256 (64 hex)'; exit 1; }
           case "$mode" in
             generic) [ -z "$expectrev" ] || { echo 'generic mode must not pin expectSourceRevision'; exit 1; } ;;
             gate) [[ "$expectrev" =~ ^[0-9a-f]{40}$ ]] || { echo 'gate mode requires expectSourceRevision (40 hex) in the request'; exit 1; } ;;
@@ -80,13 +80,11 @@ jobs:
           test "$(git -C rc rev-parse HEAD)" = "$SOURCE_SHA"
           git -C rc show "HEAD:scripts/q05_tenant_probe.py" > "$GITHUB_WORKSPACE/probe.py"
           grep -q 'Q-05 cross-tenant isolation probe' "$GITHUB_WORKSPACE/probe.py" || { echo 'the fetched file is not the Q-05 probe'; exit 1; }
-          # The request pins the probe's sha256 (reviewed before the request was built). Refuse a
-          # fetched probe whose hash differs, so the content of this SHA cannot be swapped under review.
+          # The request pins the FULL sha256 of the probe from its independent review record (the request
+          # maker refuses to build when the probe at the SHA differs). Refuse a fetched probe whose hash is
+          # not exactly that value, so the reviewed content cannot be swapped.
           actual="$(sha256sum "$GITHUB_WORKSPACE/probe.py" | cut -d' ' -f1)"
-          case "$actual" in
-            "$PROBE_SHA256"*) : ;;
-            *) echo 'the fetched probe does not match the reviewed probeSha256 in the request'; exit 1 ;;
-          esac
+          [ "$actual" = "$PROBE_SHA256" ] || { echo 'the fetched probe does not match the reviewed probeSha256 in the request'; exit 1; }
       - name: Sign in both accounts, resolve their workspaces, and run the probe
         env:
           MODE: ${{ steps.req.outputs.mode }}
@@ -102,23 +100,53 @@ jobs:
           set -euo pipefail
           GUARD='X-Postriff-Request: founder-alpha'
           CURL() { curl -sS --connect-timeout 10 --max-time 30 "$@"; }
-          # Mask every secret input before it could reach a log line (belt and braces with "never print").
-          for s in "${Q05_SUPABASE_PUBLISHABLE_KEY:-}" "${Q05_EMAIL_A:-}" "${Q05_EMAIL_B:-}" "${Q05_CODE_A:-}" "${Q05_CODE_B:-}"; do
+          # No e-mail, code, key or token ever goes on a command line (argv is readable by every process on
+          # the runner). Secret headers are written by the printf BUILTIN to private files that curl reads
+          # with -H @file; request bodies reach jq and curl on stdin. The directory is removed on exit.
+          SECRETS_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/q05s.XXXXXX")"
+          chmod 700 "$SECRETS_DIR"
+          hdr() { f="$(mktemp "$SECRETS_DIR/h.XXXXXX")"; printf '%s\n' "$@" > "$f"; printf '%s' "$f"; }
+          # shellcheck disable=SC2329  # invoked indirectly via cleanup/trap
+          logout() {
+            [ -n "${1:-}" ] || return 0   # never minted: nothing to sign out
+            CURL -X POST "$SUPABASE_URL/auth/v1/logout" -H @"$(hdr "apikey: $key" "Authorization: Bearer $1")" >/dev/null 2>&1 || true
+          }
+          # The sign-out trap is installed BEFORE any code is spent, so a failure after minting A (for
+          # example while minting B) still signs A out. Empty tokens are skipped.
+          TOKEN_A=""; TOKEN_B=""; key=""
+          # shellcheck disable=SC2329  # invoked indirectly via trap
+          cleanup() { logout "$TOKEN_A"; logout "$TOKEN_B"; rm -rf "$SECRETS_DIR"; }
+          trap cleanup EXIT
+          # Trim surrounding spaces and line breaks from every secret (a pasted value often carries a
+          # trailing newline), then mask the exact values used before they could reach a log line.
+          trim() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"; printf '%s' "$v"; }
+          EMAIL_A="$(trim "${Q05_EMAIL_A:-}")"; EMAIL_B="$(trim "${Q05_EMAIL_B:-}")"
+          CODE_A="$(trim "${Q05_CODE_A:-}")"; CODE_B="$(trim "${Q05_CODE_B:-}")"
+          key="$(trim "${Q05_SUPABASE_PUBLISHABLE_KEY:-}")"
+          for s in "$key" "$EMAIL_A" "$EMAIL_B" "$CODE_A" "$CODE_B"; do
             [ -n "$s" ] && echo "::add-mask::$s" || true
           done
-          # M2: the publishable/anon key only. Refuse a secret key or a service_role JWT (decoded locally,
-          # never printed). An sb_publishable_ value or an anon JWT is accepted; an unknown shape is left to
-          # the server to reject (a wrong key cannot sign anyone in).
-          key="${Q05_SUPABASE_PUBLISHABLE_KEY:-}"
+          # M2 / N4: an ALLOWLIST, after trimming. Accept only the publishable key (sb_publishable_...) or a
+          # JWT whose role is anon (decoded locally from stdin, never printed). Everything else — a secret
+          # key, a service_role or authenticated JWT, any unknown shape — is refused before any request.
           [ -n "$key" ] || { echo 'Q05_SUPABASE_PUBLISHABLE_KEY is required'; exit 1; }
           case "$key" in
-            sb_secret_*|sbp_secret_*|service_role*) echo 'refusing: that looks like a SECRET/service key, not the publishable/anon key'; exit 1 ;;
+            sb_publishable_*)
+              [[ "$key" =~ ^sb_publishable_[A-Za-z0-9_-]+$ ]] || { echo 'refusing: malformed publishable key'; exit 1; } ;;
+            *)
+              role=""
+              if [[ "$key" =~ ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$ ]]; then
+                role="$(printf '%s' "$key" | python3 -I -c 'import sys,base64,json; p=sys.stdin.read().split(".")[1]; print(json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4))).get("role") or "")' 2>/dev/null || true)"
+              fi
+              case "$role" in
+                anon) : ;;
+                service_role) echo 'refusing: the key is a service_role JWT, not the anon/publishable key'; exit 1 ;;
+                *) echo 'refusing: Q05_SUPABASE_PUBLISHABLE_KEY must be the publishable key (sb_publishable_...) or an anon JWT; a SECRET or unknown key is never used'; exit 1 ;;
+              esac ;;
           esac
-          role="$(printf '%s' "$key" | python3 -I -c 'import sys,base64,json; t=sys.stdin.read().strip().split("."); p=(t[1]+"="*(-len(t[1])%4)) if len(t)>=2 else ""; print((json.loads(base64.urlsafe_b64decode(p)).get("role") or "") if p else "")' 2>/dev/null || true)"
-          [ "$role" != service_role ] || { echo 'refusing: the key is a service_role JWT, not the anon/publishable key'; exit 1; }
           # M3: both e-mail local parts must carry the marker "q05" (plus-addressing, e.g. name+q05a@gmail.com),
           # so a real everyday account is not used against the live site by mistake.
-          for e in "${Q05_EMAIL_A:-}" "${Q05_EMAIL_B:-}"; do
+          for e in "$EMAIL_A" "$EMAIL_B"; do
             [ -n "$e" ] || continue   # a missing e-mail is reported by mint_token, not as a bad marker
             local_part="${e%@*}"
             case "$local_part" in
@@ -129,20 +157,20 @@ jobs:
           mint_token() {
             who="$1"; email=""; code=""
             case "$who" in
-              A) email="${Q05_EMAIL_A:-}"; code="${Q05_CODE_A:-}" ;;
-              B) email="${Q05_EMAIL_B:-}"; code="${Q05_CODE_B:-}" ;;
+              A) email="$EMAIL_A"; code="$CODE_A" ;;
+              B) email="$EMAIL_B"; code="$CODE_B" ;;
             esac
             [ -n "$email" ] && [ -n "$code" ] || { echo "account $who: set Q05_EMAIL_$who and Q05_CODE_$who" >&2; return 1; }
-            body="$(jq -nc --arg e "$email" --arg t "$code" '{type:"email",email:$e,token:$t}')"
-            resp="$(CURL -X POST "$SUPABASE_URL/auth/v1/verify" -H "apikey: $key" -H 'Content-Type: application/json' --data "$body")" || { echo "account $who: OTP verify request failed" >&2; return 1; }
+            body="$(printf '%s\n%s\n' "$email" "$code" | jq -Rnc '[inputs] as $l | {type:"email",email:$l[0],token:$l[1]}')"
+            resp="$(printf '%s' "$body" | CURL -X POST "$SUPABASE_URL/auth/v1/verify" -H @"$(hdr "apikey: $key" 'Content-Type: application/json')" --data-binary @-)" || { echo "account $who: OTP verify request failed" >&2; return 1; }
             tok="$(printf '%s' "$resp" | jq -r '.access_token // empty' 2>/dev/null || true)"
             [ -n "$tok" ] || { echo "account $who: the OTP code did not verify (used, expired, or wrong e-mail) — request a new code" >&2; return 1; }
             printf '%s' "$tok"
           }
           resolve_ws() {
             token="$1"
-            CURL -X POST "$BASE_URL/api/auth/verify" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -H "$GUARD" -H "Origin: $BASE_URL" --data '{}' >/dev/null 2>&1 || true
-            wsjson="$(CURL "$BASE_URL/api/workspaces" -H "Authorization: Bearer $token")" || { echo 'workspace list request failed' >&2; return 1; }
+            printf '{}' | CURL -X POST "$BASE_URL/api/auth/verify" -H @"$(hdr "Authorization: Bearer $token" 'Content-Type: application/json' "$GUARD" "Origin: $BASE_URL")" --data-binary @- >/dev/null 2>&1 || true
+            wsjson="$(CURL "$BASE_URL/api/workspaces" -H @"$(hdr "Authorization: Bearer $token")")" || { echo 'workspace list request failed' >&2; return 1; }
             ws="$(printf '%s' "$wsjson" | jq -r 'if ((.workspaces // []) | length) == 1 then .workspaces[0].workspaceId else empty end' 2>/dev/null || true)"
             [ -n "$ws" ] || { echo 'could not resolve exactly one workspace for this account' >&2; return 1; }
             printf '%s' "$ws"
@@ -150,32 +178,29 @@ jobs:
           connections_v2_on() {
             # L3: only mint an OAuth state where the connections-v2 flow is live, so the identity start
             # cannot reserve a shared Discord server-cap slot (the original flow would, on a v2-off build).
-            CURL "$BASE_URL/api/workspaces/$2/channels" -H "Authorization: Bearer $1" 2>/dev/null \
+            CURL "$BASE_URL/api/workspaces/$2/channels" -H @"$(hdr "Authorization: Bearer $1")" 2>/dev/null \
               | jq -e '[.providers[]? | select(.id=="discord" and .discordConnectionsV2==true)] | length > 0' >/dev/null 2>&1
           }
           mint_state() {
             token="$1"; ws="$2"
             connections_v2_on "$token" "$ws" || return 0   # route absent / v2 off: leave the state empty
-            resp="$(CURL -X POST "$BASE_URL/api/workspaces/$ws/channels/discord/oauth/start" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -H "$GUARD" -H "Origin: $BASE_URL" --data '{"capability":"identity","input":{"discordPurpose":"identity"}}' 2>/dev/null)" || return 0
+            resp="$(printf '%s' '{"capability":"identity","input":{"discordPurpose":"identity"}}' | CURL -X POST "$BASE_URL/api/workspaces/$ws/channels/discord/oauth/start" -H @"$(hdr "Authorization: Bearer $token" 'Content-Type: application/json' "$GUARD" "Origin: $BASE_URL")" --data-binary @- 2>/dev/null)" || return 0
             url="$(printf '%s' "$resp" | jq -r '.authorizeUrl // empty' 2>/dev/null || true)"
             printf '%s' "$url" | sed -n 's/.*[?&]state=\([A-Za-z0-9_-]*\).*/\1/p'
           }
-          # shellcheck disable=SC2329  # invoked indirectly via cleanup/trap
-          logout() { CURL -X POST "$SUPABASE_URL/auth/v1/logout" -H "apikey: $key" -H "Authorization: Bearer $1" >/dev/null 2>&1 || true; }
           health_rev() { CURL "$BASE_URL/api/health" 2>/dev/null | jq -r '.sourceRevision // "null"' 2>/dev/null || echo null; }
 
-          TOKEN_A="$(mint_token A)" || exit 1; echo "::add-mask::$TOKEN_A"
-          TOKEN_B="$(mint_token B)" || exit 1; echo "::add-mask::$TOKEN_B"
-          # shellcheck disable=SC2329  # invoked indirectly via trap
-          cleanup() { logout "$TOKEN_A"; logout "$TOKEN_B"; }
-          trap cleanup EXIT
-          WS_A="$(resolve_ws "$TOKEN_A")" || { echo 'account A: workspace resolution failed'; exit 1; }; echo "::add-mask::$WS_A"
-          WS_B="$(resolve_ws "$TOKEN_B")" || { echo 'account B: workspace resolution failed'; exit 1; }; echo "::add-mask::$WS_B"
-
+          # N6: identify the serving build BEFORE any one-time code is spent; a gate request for another
+          # build stops here with both codes still unused.
           REV_BEFORE="$(health_rev)"
           if [ "$MODE" = gate ]; then
             [ "$REV_BEFORE" = "$EXPECT_REV" ] || { echo "gate: the serving build sourceRevision does not match expectSourceRevision in the request"; exit 1; }
           fi
+          TOKEN_A="$(mint_token A)" || exit 1; echo "::add-mask::$TOKEN_A"
+          TOKEN_B="$(mint_token B)" || exit 1; echo "::add-mask::$TOKEN_B"
+          WS_A="$(resolve_ws "$TOKEN_A")" || { echo 'account A: workspace resolution failed'; exit 1; }; echo "::add-mask::$WS_A"
+          WS_B="$(resolve_ws "$TOKEN_B")" || { echo 'account B: workspace resolution failed'; exit 1; }; echo "::add-mask::$WS_B"
+
           VICTIM_A=""; VICTIM_B=""
           if [ "$MODE" = gate ]; then
             VICTIM_A="$(mint_state "$TOKEN_A" "$WS_A")"; [ -n "$VICTIM_A" ] && echo "::add-mask::$VICTIM_A" || true
@@ -185,14 +210,25 @@ jobs:
           # can never run a send-blast case (a wrongly-accepted attack still cannot send a message).
           args=(--allow-writes --delay 0.05 --out-md receipt.md --out-json cases.jsonl)
           if [ "$MODE" = generic ]; then args+=(--smoke); fi
+          probe_py="$GITHUB_WORKSPACE/probe.py"
+          run_probe() (
+            # M2/L2: the probe gets a MINIMAL environment (PATH + the Q05_* it needs) and python3 -I, so no
+            # inherited secret reaches it and no local module/env can influence it. Built with builtins only
+            # (unset/export) — never an external command with VAR=secret arguments — so no secret value
+            # appears on any command line.
+            keep_path="$PATH"; base="$BASE_URL"
+            while IFS= read -r -d '' kv; do unset "${kv%%=*}" 2>/dev/null || true; done < <(env -0)
+            export PATH="$keep_path" Q05_BASE_URL="$base" Q05_TOKEN_A="$TOKEN_A" Q05_TOKEN_B="$TOKEN_B" \
+              Q05_WORKSPACE_A="$WS_A" Q05_WORKSPACE_B="$WS_B" \
+              Q05_VICTIM_A_OAUTH_STATE="$VICTIM_A" Q05_VICTIM_B_OAUTH_STATE="$VICTIM_B"
+            # (bash itself passes `_`, the path of the command it runs, to every program; it is not inherited)
+            names="$(env -0 | tr '\0' '\n' | sed -n 's/=.*//p' | grep -vx '_' | LC_ALL=C sort | tr '\n' ' ')"
+            [ "$names" = "PATH Q05_BASE_URL Q05_TOKEN_A Q05_TOKEN_B Q05_VICTIM_A_OAUTH_STATE Q05_VICTIM_B_OAUTH_STATE Q05_WORKSPACE_A Q05_WORKSPACE_B " ] \
+              || { echo 'refusing: the probe environment is not minimal' >&2; exit 97; }
+            exec python3 -I "$probe_py" "$@"
+          )
           rc=0
-          # M2/L2: a MINIMAL environment (only PATH + the Q05_* the probe needs) and python3 -I, so no
-          # inherited secret reaches the probe process and no local module/env can influence it.
-          env -i PATH="$PATH" \
-            Q05_BASE_URL="$BASE_URL" Q05_TOKEN_A="$TOKEN_A" Q05_TOKEN_B="$TOKEN_B" \
-            Q05_WORKSPACE_A="$WS_A" Q05_WORKSPACE_B="$WS_B" \
-            Q05_VICTIM_A_OAUTH_STATE="$VICTIM_A" Q05_VICTIM_B_OAUTH_STATE="$VICTIM_B" \
-            python3 -I "$GITHUB_WORKSPACE/probe.py" "${args[@]}" || rc=$?
+          run_probe "${args[@]}" || rc=$?
           REV_AFTER="$(health_rev)"
           # M6: record which build answered. sourceRevision is null on a build without Discord v2 (the
           # serving build today, c5fc1fd1): a generic run then smoke-tests THAT build, not RC1/RC2.
