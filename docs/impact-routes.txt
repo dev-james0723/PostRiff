@@ -72,3 +72,5 @@ GET /api/workspaces/00000000-0000-4000-8000-000000000000/channels/x/discord-enga
 # The signed Discord interactions endpoint is POST-only in the candidate; a GET shows how it answers strangers.
 GET /api/discord/interactions                                                              kind=shape
 GET /api/cron/worker                                                                       kind=shape
+# RC2 adds twelve W-02 shard crons; without the cron secret a shard refuses with its own cron message.
+GET /api/cron/discord-worker/0                                                             kind=shape expect=(?i)cron

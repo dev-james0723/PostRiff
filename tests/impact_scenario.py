@@ -9,6 +9,7 @@ Phases, all with synthetic users and sessions (no Supabase, no provider, no netw
   prepare    one of them sets up a LinkedIn post and approves it (ordinary hosted commands)
   read       workspace read (service.get) and Channels read (oauth.channels) for every workspace
   tick       one minute tick of the hosted worker after the post is due
+  shard      W-02 trees only: one /api/cron/discord-worker shard invocation with the lane flag off, then on
 Each phase records the database connections opened, every SQL statement (normalised), the statements that write and
 the table they write, the row count of every public table before and after, and any provider HTTP request attempted.
 """
@@ -26,7 +27,7 @@ import uuid
 parser = argparse.ArgumentParser()
 parser.add_argument('--tree', required=True)
 parser.add_argument('--dsn', required=True)
-parser.add_argument('--phases', default='bootstrap,prepare,read,tick')
+parser.add_argument('--phases', default='bootstrap,prepare,read,tick,shard')
 args = parser.parse_args()
 sys.path.insert(0, os.path.join(args.tree, 'src'))
 
@@ -255,5 +256,22 @@ if 'tick' in phases:
                                     'events': [e.get('message') for e in j.get('events', [])]}
                                    for (s,) in rows for j in s['phase2'].get('jobs', [])]
         RECORD['phase2KeysAfterTick'] = sorted({k for (s,) in rows for k in s.get('phase2', {})})
+
+if 'shard' in phases:
+    # W-02 (RC2 and later): one cron shard invocation with the lane flag off, then on, with no Discord work anywhere.
+    try:
+        from postriff_phase2.discord import lane
+    except ImportError:
+        lane = None
+    RECORD['laneAvailable'] = lane is not None
+    if lane is not None:
+        social = HostedSocial(service.oauth, providers)
+        worker = PostgresWorker(factory, social=social, clock=time.time, worker_id='impact-minute-worker')
+        for flag in ('off', 'on'):
+            values = {**os.environ, **({'POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED': 'true'} if flag == 'on' else {})}
+            with phase('shard-' + flag):
+                result = lane.run(worker, 0, values=values)
+                RECORD['shard-' + flag] = {'enabled': result.get('enabled'), 'processed': result.get('processed'),
+                                           'stoppedBy': result.get('stoppedBy'), 'status': result.get('status')}
 
 print(json.dumps(RECORD, sort_keys=True, default=str))

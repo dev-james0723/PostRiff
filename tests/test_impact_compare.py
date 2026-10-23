@@ -305,16 +305,24 @@ class RealBuilds(unittest.TestCase):
         for route in shapes:
             with self.subTest(route['path']):
                 result = self.results['GET ' + route['path']]
-                self.assertEqual(result['verdict'], 'SAME', result['findings'])
+                self.assertIn(result['verdict'], ('SAME', 'EXPECTED') if route['expect'] else ('SAME',), result['findings'] + result['textChanges'][:3])
                 self.assertIn(result['status'][0], (401, 403, 404), result['status'])
 
     def test_public_api_differs_only_where_intended(self):
         expected = {'GET /api/privacy/notice': 'EXPECTED'}
-        for route, result in self.results.items():
-            if route.startswith('GET /api/discord/interactions') or not route.startswith('GET /api/') or '/workspaces' in route or route in ('GET /api/me', 'GET /api/cron/worker'):
-                continue
+        for item in (r for r in self.routes if r['kind'] == 'api'):
+            route, result = 'GET ' + item['path'], self.results['GET ' + item['path']]
             with self.subTest(route):
                 self.assertEqual(result['verdict'], expected.get(route, 'SAME'), result['findings'] + result['textChanges'][:5])
+
+    def test_w02_shard_answers_without_the_runtime_when_the_lane_flag_is_off(self):
+        """RC2 only (the route does not exist before W-02, and asking an older build would send the cron secret as a session)."""
+        if not (Path(self.tmp) / 'rc' / 'src' / 'postriff_phase2' / 'discord' / 'lane.py').exists():
+            self.skipTest('this candidate has no W-02 lane')
+        request = urllib.request.Request(self.bases['rc'] + '/api/cron/discord-worker/0', headers={'Authorization': 'Bearer ' + 'c' * 32})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            body = json.load(response)
+        self.assertEqual((body['enabled'], body['processed'], body['status']['blocker']), (False, 0, 'disabled'))
 
     def test_the_new_interactions_route_answers_get_before_authentication(self):
         result = self.results['GET /api/discord/interactions']
