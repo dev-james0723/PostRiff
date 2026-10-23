@@ -489,7 +489,7 @@ class BotNicknameInTheApproval(unittest.TestCase):
         installs = {first: w.installation(first, 1, user, guild='6800001'), second: w.installation(second, 2, other, guild='6800002')}
         reasons = {}
         with patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true', 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}), \
-                patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True):
+                patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True, create=True):
             for workspace, token in tokens.items():
                 ids = installs[workspace]
                 profile = w.get(workspace, token, ids.connection)

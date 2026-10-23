@@ -25,7 +25,7 @@ BODY = {'confirmed': True, 'sharedServerConfirmed': True}
 class Base(unittest.TestCase):
     def setUp(self):
         for patcher in (patch.dict(os.environ, FLAGS),
-                        patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True)):
+                        patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True, create=True)):
             patcher.start()
             self.addCleanup(patcher.stop)
         self.w = Settings()

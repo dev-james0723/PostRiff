@@ -210,7 +210,7 @@ class Harnessed(unittest.TestCase):
     def test_audit_entry_records_scope_and_server_never_the_name(self):
         h = SettingsHarness(); current = h.call(self, 'sender_profile')
         with patch('postriff_phase2.hosted.audit') as audit, patch('postriff_phase2.hosted.throttle'), \
-                patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True):
+                patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True, create=True):
             h.s.set_sender_name(WORKSPACE, 'synthetic-session', h.channel['id'],
                                 {'name': 'Secret Brand', 'fingerprint': current['fingerprint'], 'confirmed': True})
         kinds = [c.args[3] for c in audit.call_args_list]
@@ -246,7 +246,7 @@ class CustodyConditions(unittest.TestCase):
     def setUp(self):
         for patcher in (patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true',
                                                 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}),
-                        patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True)):
+                        patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True, create=True)):
             patcher.start()
             self.addCleanup(patcher.stop)
 
@@ -270,6 +270,7 @@ class CustodyConditions(unittest.TestCase):
         'card names another authorizer': lambda t: t.w.channel(t.A, t.wa.connection).update(discordAuthorizedBy=t.ub),
         'envelope belongs to another workspace': lambda t: t.w.rewrite_envelope(t.A, t.wa.connection, workspaceId=t.B),
         'envelope belongs to another connection': lambda t: t.w.rewrite_envelope(t.A, t.wa.connection, connectionId='discord-webhook-other'),
+        'envelope names another webhook than the credential row': lambda t: t.w.rewrite_envelope(t.A, t.wa.connection, webhookId='9999999'),
         'authorization generation is stale': lambda t: t.w.channel(t.A, t.wa.connection).update(discordAuthorizationGeneration='stale'),
         'stored scopes differ from the card': lambda t: t.w.set_row(t.A, t.wa.connection, 5, ['identify', 'webhook.incoming', 'guilds']),
         'credential of another application': lambda t: t.w.rewrite_envelope(t.A, t.wa.connection, applicationId='7654321'),

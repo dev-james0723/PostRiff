@@ -239,8 +239,8 @@ class Hooks:
             if config.bot_member_missing:
                 return {'status': 404, 'body': {'message': 'Unknown Member', 'code': 10007}, 'headers': {}}
             named = {'global_name': config.bot_global_name} if config.bot_global_name else {}
-            answer = self._ok({'user': {'id': config.readback_user_id if config.readback_user_id and config.patches else BOT,
-                                        'username': 'Rafii', **named},
+            user = {'id': config.readback_user_id if config.readback_user_id and config.patches else BOT, 'username': 'Rafii', **named}
+            answer = self._ok({'user': None if config.readback_no_user and config.patches else user,
                                'roles': ['22334455'], 'nick': config.nick, 'pending': False, 'communication_disabled_until': None})
         elif len(parts) == 3 and parts[2] == 'channels' and guild in self.tenants:
             answer = self._ok([{'id': self.tenants[guild].channel, 'guild_id': guild, 'name': 'synthetic', 'type': 0,
@@ -320,6 +320,7 @@ class GuildConfig:
         self.user_member_missing = self.bot_member_missing = False
         self.bot_global_name = None       # the bot user's global display name, when it has no nickname
         self.readback_user_id = None      # the user id the member read answers with once a PATCH happened
+        self.readback_no_user = False     # ... or no user object at all
 
 
 class FakeLimiter:

@@ -100,7 +100,7 @@ class Switches(unittest.TestCase):
     def test_master_switch_default_depends_on_the_environment_and_only_exact_true_enables(self):
         cases = [({}, True), ({'VERCEL_ENV': 'development'}, True), ({'VERCEL_ENV': 'production'}, False),
                  ({'POSTRIFF_ENVIRONMENT': ' Production '}, False), ({'VERCEL_ENV': 'preview'}, True),
-                 ({names.ENV_SENDER_NAMES: 'true'}, True), ({names.ENV_SENDER_NAMES: 'true', 'VERCEL_ENV': 'production'}, True),
+                 ({'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'}, True), ({names.ENV_SENDER_NAMES: 'true', 'VERCEL_ENV': 'production'}, True),
                  ({names.ENV_SENDER_NAMES: 'TRUE'}, False), ({names.ENV_SENDER_NAMES: '1'}, False),
                  ({names.ENV_SENDER_NAMES: 'yes'}, False), ({names.ENV_SENDER_NAMES: ''}, False),
                  ({names.ENV_SENDER_NAMES: 'false'}, False), ({names.ENV_SENDER_NAMES: ' true'}, False),
@@ -118,7 +118,7 @@ class Switches(unittest.TestCase):
                 self.assertIs(names.nickname_enabled(values), expected)
 
     def test_switches_are_read_at_call_time_from_the_process_environment(self):
-        with patch.dict(os.environ, {names.ENV_SENDER_NAMES: 'true'}):
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'}):
             self.assertTrue(names.names_enabled())
         with patch.dict(os.environ, {names.ENV_SENDER_NAMES: 'false'}):
             self.assertFalse(names.names_enabled())
@@ -134,7 +134,7 @@ class FrozenName(unittest.TestCase):
         return {'discordConnectionKind': 'webhook', **extra}
 
     def test_only_a_webhook_connection_with_a_saved_name_freezes_one_and_only_while_on(self):
-        on, off = {names.ENV_SENDER_NAMES: 'true'}, {names.ENV_SENDER_NAMES: 'false'}
+        on, off = {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'}, {names.ENV_SENDER_NAMES: 'false'}
         self.assertEqual(names.frozen_webhook_name(self.channel(discordSenderName='Acme Weekly'), on), 'Acme Weekly')
         self.assertIsNone(names.frozen_webhook_name(self.channel(discordSenderName='Acme Weekly'), off))
         self.assertIsNone(names.frozen_webhook_name(self.channel(), on))
@@ -152,7 +152,7 @@ class FrozenName(unittest.TestCase):
         self.assertEqual((raised.exception.status, raised.exception.code), (409, 'discord_sender_names_disabled'))
         for manifest in ({'senderKind': 'webhook'}, {'senderKind': 'bot'}, {}):
             names.assert_sendable(manifest, off)
-        names.assert_sendable({'senderKind': 'webhook', 'discordSenderName': 'Acme Weekly'}, {names.ENV_SENDER_NAMES: 'true'})
+        names.assert_sendable({'senderKind': 'webhook', 'discordSenderName': 'Acme Weekly'}, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'})
 
 
 class ReadBack(unittest.TestCase):
@@ -247,7 +247,11 @@ class Joiners(unittest.TestCase):
         self.assertIsNone(self.problem(persian))
         for label, name in {'Latin letters': 'a' + self.ZWNJ + 'b', 'leading': self.ZWNJ + self.MEEM, 'trailing': self.MEEM + self.ZWNJ,
                             'between emoji': self.LAPTOP + self.ZWNJ + self.LAPTOP, 'letter and emoji': self.MEEM + self.ZWNJ + self.LAPTOP,
-                            'Latin extended-A': chr(0x0101) + self.ZWNJ + chr(0x0113)}.items():
+                            'Latin extended-A': chr(0x0101) + self.ZWNJ + chr(0x0113),
+                            'Latin then Persian': 'a' + self.ZWNJ + self.MEEM, 'Persian then Latin': self.MEEM + self.ZWNJ + 'b',
+                            'emoji then Persian': self.LAPTOP + self.ZWNJ + self.MEEM,
+                            'punctuation then Persian': chr(0x060C) + self.ZWNJ + self.MEEM,
+                            'Persian then punctuation': self.MEEM + self.ZWNJ + chr(0x060C)}.items():
             with self.subTest(label):
                 self.assertEqual(self.problem('x ' + name if label != 'leading' else name), 'control_or_format', label)
 
@@ -285,7 +289,7 @@ class Hierarchy(unittest.TestCase):
 
 
 class NicknameFreeze(unittest.TestCase):
-    ON = {names.ENV_SENDER_NAMES: 'true', names.ENV_BOT_NICKNAME: 'true'}
+    ON = {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true', 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}
 
     def channel(self, **extra):
         return {'discordConnectionKind': 'installation', 'discordBotNickname': {'value': 'Brand Bot', 'observedAt': 1.0}, **extra}
@@ -298,9 +302,9 @@ class NicknameFreeze(unittest.TestCase):
         cases = {
             'a webhook connection': (self.channel(discordConnectionKind='webhook'), self.ON),
             'a connection of no kind': ({'discordBotNickname': {'value': 'Brand Bot', 'observedAt': 1}}, self.ON),
-            'master switch off': (self.channel(), {names.ENV_SENDER_NAMES: 'false', names.ENV_BOT_NICKNAME: 'true'}),
-            'nickname switch off': (self.channel(), {names.ENV_SENDER_NAMES: 'true', names.ENV_BOT_NICKNAME: 'false'}),
-            'nickname switch unset': (self.channel(), {names.ENV_SENDER_NAMES: 'true'}),
+            'master switch off': (self.channel(), {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'false', 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}),
+            'nickname switch off': (self.channel(), {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true', 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'false'}),
+            'nickname switch unset': (self.channel(), {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'}),
             'never observed': ({'discordConnectionKind': 'installation'}, self.ON),
             'record is not an object': (self.channel(discordBotNickname='Brand Bot'), self.ON),
             'record has no value': (self.channel(discordBotNickname={'observedAt': 1}), self.ON),

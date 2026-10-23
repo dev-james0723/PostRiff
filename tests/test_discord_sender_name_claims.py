@@ -472,6 +472,7 @@ class PatchAnswers(Claims):
         'an answer that is not an object': lambda body: {'status': 200, 'body': ['x'], 'headers': {}},
         'no body': lambda body: {'status': 200, 'body': None, 'headers': {}},
         'a server error': lambda body: {'status': 502, 'body': {}, 'headers': {}},
+        'a status that is not a number': lambda body: {'status': 'ok', 'body': {'user': {'id': F.BOT}, 'nick': body['nick']}, 'headers': {}},
     }
 
     def test_an_answer_that_is_not_the_requested_nickname_for_the_bot_is_unconfirmed_and_keeps_the_claim(self):
@@ -485,11 +486,15 @@ class PatchAnswers(Claims):
                 self.assertIsNone(self.w.channel(self.A, self.ia.connection).get('discordSenderName'))
                 self.assertEqual(len(self.config.patches), 1, 'never replayed')
 
-    def test_a_readback_by_another_user_is_unconfirmed(self):
-        self.config.readback_user_id = '1234567'
-        outcome = self.post()
-        self.assertEqual(outcome[:2], (409, 'discord_sender_write_unconfirmed'))
-        self.assertIsNotNone(self.claim())
+    def test_a_readback_by_another_user_or_without_one_is_unconfirmed(self):
+        for label, change in (('another user', lambda: setattr(self.config, 'readback_user_id', '1234567')),
+                              ('no user', lambda: setattr(self.config, 'readback_no_user', True))):
+            with self.subTest(label):
+                self.setUp()
+                change()
+                outcome = self.post()
+                self.assertEqual(outcome[:2], (409, 'discord_sender_write_unconfirmed'))
+                self.assertIsNotNone(self.claim())
 
     def test_an_unexpected_error_before_the_transport_is_an_unavailable_provider_and_frees_the_claim(self):
         self.limiter.reserve_error = RuntimeError('synthetic database trouble')
@@ -593,6 +598,35 @@ class Shapes(RouteBase):
         self.assertEqual((profile['editable'], profile['unavailable']), (True, []))
         self.assertEqual(self.save(self.ta, self.A, self.wa, 'Alpha Daily')['savedName'], 'Alpha Daily')
 
+    def test_the_installer_is_found_through_the_installations_own_identity_link_among_look_alikes(self):
+        links = self.w.workspaces[self.A].state['phase2']['discordIdentityLinks']
+        other_id = {'id': 'discord-identity-decoy', 'workspaceId': self.A, 'applicationId': F.APP, 'authorizedBy': self.ub,
+                    'userId': F.USER, 'status': 'linked', 'authorizationGeneration': 'decoy-generation'}
+        other_workspace = dict(links[0], workspaceId=self.B, authorizedBy=self.ub)      # the same id, another workspace's record
+        links.insert(0, other_id)
+        links.insert(0, other_workspace)
+        profile = self.w.get(self.A, self.ta, self.ia.connection)
+        self.assertEqual((profile['editable'], profile['unavailable']), (True, []))
+
+    def test_a_switched_off_bot_answer_never_claims_an_external_rename(self):
+        self.w.channel(self.A, self.ia.connection)['discordSenderName'] = 'Our Name'
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'false'}):
+            profile = self.w.get(self.A, self.ta, self.ia.connection)
+        self.assertEqual((profile['externalChange'], profile['savedName'], profile['observedName']), (False, 'Our Name', None))
+
+    def test_a_nickname_changed_in_discord_after_the_form_was_loaded_makes_the_form_stale(self):
+        profile = self.w.get(self.A, self.ta, self.ia.connection)
+        config = self.w.hooks.guild_config[self.ia.guild]
+        config.nick = 'Changed By A Server Admin'
+        outcome = self.w.attempt(self.w.post, self.A, self.ta, self.ia.connection,
+                                 {'name': 'Brand Bot', 'fingerprint': profile['fingerprint'], **BODY})
+        self.assertEqual(outcome[:2], (409, 'discord_sender_name_required'))
+        self.assertEqual(config.patches, [])
+        self.assertNotIn('discordSenderEdit', self.w.channel(self.A, self.ia.connection))
+        fresh = self.w.get(self.A, self.ta, self.ia.connection)
+        self.assertEqual(self.w.post(self.A, self.ta, self.ia.connection,
+                                     {'name': 'Brand Bot', 'fingerprint': fresh['fingerprint'], **BODY})['savedName'], 'Brand Bot')
+
     def test_only_a_bot_write_refreshes_the_linked_identity(self):
         refresh = self.w.s._fresh_identity
         self.w.get(self.A, self.ta, self.ia.connection)
@@ -649,6 +683,25 @@ class PendingAnswers(Claims):
                 self.assertEqual(self.w.attempt(self.w.get, self.A, self.ta, self.ia.connection)[:2], (409, 'discord_sender_edit_pending'))
                 self.w.now -= 5000
 
+    def test_a_post_whose_fingerprint_matches_the_claimed_state_still_cannot_settle_an_expired_claim(self):
+        """The Rafii-state half of the fingerprint is not a secret worth relying on: settling is for a GET, never a POST."""
+        claim = self.claim_record(expiresAt=self.w.now - 1)
+        with self.w.s.local(self.A, self.ta) as (cur, state, actor):
+            _, _, stamp = names.SenderNames(self.w.s, self.A, self.ta, self.ia.connection).custody(
+                cur, state, actor, fresh=False, require_authorizer=False)
+        outcome = self.w.attempt(self.w.post, self.A, self.ta, self.ia.connection,
+                                 {'name': 'Brand Bot', 'fingerprint': names.fingerprint_of(stamp, 'Rafii'), **BODY})
+        self.assertEqual(outcome[:2], (409, 'discord_sender_edit_pending'))
+        self.assertIs(self.w.channel(self.A, self.ia.connection)['discordSenderEdit'], claim)
+        self.assertEqual(self.config.patches, [])
+
+    def test_a_claim_that_is_not_due_when_the_reads_finish_is_not_settled(self):
+        claim = self.claim_record(expiresAt=self.w.now - 1)
+        self.w.hooks.after_read = lambda: setattr(self.w, 'now', self.w.now - 100)      # the clock the final check sees is earlier
+        outcome = self.w.attempt(self.w.get, self.A, self.ta, self.ia.connection)
+        self.assertEqual(outcome[:2], (409, 'discord_sender_name_required'))
+        self.assertIs(self.w.channel(self.A, self.ia.connection)['discordSenderEdit'], claim)
+
     def test_a_delayed_read_is_a_rate_delay_and_changes_nothing(self):
         def delayed(method, path, *, identity):
             raise RateDelayed(7)
@@ -685,6 +738,13 @@ class NicknameObservation(unittest.TestCase):
         wire.route_overrides[('GET', f'/guilds/{GUILD}/members/{BOT}')] = self.member(None)
         self.assertEqual(self.verify(s, channel)['state'], 'read_verified')
         self.assertEqual(channel['discordBotNickname'], {'value': None, 'observedAt': NOW})
+
+    def test_evidence_without_a_nickname_field_records_nothing(self):
+        s, wire, state, channel, *_ = reverify_fixture(ready=False)
+        real = s.adapter.destinations
+        s.adapter.destinations = lambda envelope: [{k: v for k, v in entry.items() if k != 'botNickname'} for entry in real(envelope)]
+        self.assertEqual(self.verify(s, channel)['state'], 'read_verified')
+        self.assertNotIn('discordBotNickname', channel)
 
     def test_a_failed_verification_records_nothing_and_keeps_the_earlier_observation(self):
         s, wire, state, channel, *_ = reverify_fixture(ready=False)

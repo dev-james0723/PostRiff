@@ -197,7 +197,7 @@ class SettingsHarness:
         method = getattr(self.s, operation, None)
         case.assertTrue(callable(method), 'Discord customer sender-name settings are missing')
         with patch('postriff_phase2.hosted.audit'), patch('postriff_phase2.hosted.throttle'), \
-                patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True), \
+                patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True, create=True), \
                 patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true',
                                         'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}):
             return method(WORKSPACE, 'synthetic-session', self.channel['id'], *args)
