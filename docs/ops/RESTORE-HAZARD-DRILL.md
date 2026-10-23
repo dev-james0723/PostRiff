@@ -216,7 +216,22 @@ reconcile writing nothing, lift, zero duplicates, the revision fence, and the mi
 
 ## 8. Local timings
 
-**LOCAL figures on this shared machine, not Supabase's.** See the timing table filled from the timing run below.
+**LOCAL figures on this shared 4-core container (load average 15 to 17 from other agents during the run), local disk,
+PostgreSQL 16. They are not Supabase's and do not predict its downtime** [measured].
+
+| Measurement | Value |
+|---|---|
+| Database padded to | 244 MB (`pg_database_size`; Production is 237 MB per M-03) |
+| Base backup (`pg_basebackup -X stream -c fast`) | 2.9 s |
+| "A day of WAL" | 720 forced switches of 16 MB segments (M-03: `archive_timeout` 120 s, about 700 segments archived a day), each after 20 workspace-row updates; archive compressed with gzip: 214 MB; LSN span 11.25 GB, most of it the empty tails of forced switches |
+| Restore to the last commit (copy base backup, replay all 720 segments from the archive with `gzip -dc`, promote) | **197 s** wall (copy 1.7 s) |
+| Restored database | 301 MB |
+| Reconciliation, 1,000 posts in 200 channels, all already in Discord | dry-run 0.44 s (201 reads); apply **10.7 s** (1,201 reads: 1 identity, 200 history pages, 1,000 re-reads by id; 1,000 jobs written) |
+| Reconciliation against the real Discord API [inference] | dominated by its pacing: at the default 0.25 s per request, about 1,200 reads take **about 5 minutes per 1,000 posts**, plus any 429 waits; one extra history page per destination channel without a pending post |
+
+M-03 guessed 10 to 30 minutes of Supabase downtime for a 237 MB restore; nothing here confirms or refutes that guess.
+What the local figure does show: replaying a day of mostly idle WAL is per-segment work (720 fetches and
+decompressions), not data volume.
 
 ## 9. Product observations
 
