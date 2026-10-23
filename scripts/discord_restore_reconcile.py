@@ -164,13 +164,19 @@ def in_scope(view):
 
 
 def load(connection):
-    """(views of every Discord job, message ids the database already owns, hold status) from the restored database."""
+    """(views of every Discord job, message ids the database already owns, hold status, channels of every authorized
+    destination) from the restored database."""
     with connection.cursor() as cur:
         cur.execute("SELECT id::text, state FROM public.pr_workspaces WHERE state ? 'phase2'")
         rows = cur.fetchall()
-    views, owned = [], set()
+    views, owned, destinations = [], set(), set()
     for workspace, raw in rows:
         state = json.loads(raw) if isinstance(raw, str) else raw
+        for channel in (state.get('phase2') or {}).get('channels') or []:
+            for destination in channel.get('discordDestinations') or [] if isinstance(channel, dict) else []:
+                if (isinstance(destination, dict) and destination.get('status') == 'authorized'
+                        and snowflake(str(destination.get('channelId', '')))):
+                    destinations.add(str(destination['channelId']))
         for job in (state.get('phase2') or {}).get('jobs') or []:
             view = job_view(workspace, job)
             if view is None:
@@ -179,7 +185,7 @@ def load(connection):
             for reference in [view['reference'], *view['receiptReferences']]:
                 if isinstance(reference, str) and '/' in reference:
                     owned.add(reference.split('/', 1)[1])
-    return views, owned, hold_status(connection)
+    return views, owned, hold_status(connection), destinations
 
 
 def hold_status(connection):
@@ -197,7 +203,7 @@ class DiscordReader:
     stops after `max_invalid` 401/403/404 answers, so it cannot spend Discord's invalid-request budget."""
 
     def __init__(self, transport, token, *, website='https://rafii.example.invalid', max_pages=20, pace=0.25,
-                 max_invalid=25, max_retries=5, sleep=time.sleep, monotonic=time.monotonic):
+                 max_invalid=50, max_retries=5, sleep=time.sleep, monotonic=time.monotonic):
         self.transport, self._token, self.website = transport, token, website
         self.max_pages, self.pace, self.max_invalid, self.max_retries = max_pages, pace, max_invalid, max_retries
         self.sleep, self.monotonic = sleep, monotonic
@@ -257,14 +263,26 @@ class DiscordReader:
         return self.get('/channels/%s/messages/%s' % (channel, message_id))
 
 
-def read_channels(reader, views, restore_point, skew):
-    """History for every channel an in-scope job targets, reaching back to the earliest bound any of them needs."""
-    since = {}
+def read_channels(reader, views, restore_point, skew, destinations=()):
+    """History for every channel an in-scope job targets, reaching back to the earliest bound any of them needs, and
+    for every other authorized destination channel back to the restore point (only to count bot messages no job
+    claims: posts approved after the restore point, whose approvals the restore lost)."""
+    needed = {}
     for view in views:
         if in_scope(view):
             bound = min([restore_point, *view['intentTimes']]) - skew
-            since[view['channelId']] = min(bound, since.get(view['channelId'], bound))
-    return {channel: reader.history(channel, bound) for channel, bound in sorted(since.items())}
+            needed[view['channelId']] = min(bound, needed.get(view['channelId'], bound))
+    channels = {channel: reader.history(channel, bound) for channel, bound in sorted(needed.items())}
+    for channel in sorted(set(destinations) - set(needed)):  # best effort: no decision depends on these
+        if reader.invalid >= reader.max_invalid // 2:
+            break
+        try:
+            history = reader.history(channel, restore_point - skew)
+        except ReconcileError:
+            break
+        if history['readable']:
+            channels[channel] = history
+    return channels
 
 
 # --- the decision, pure -----------------------------------------------------------------------------------------------
@@ -376,6 +394,7 @@ def plan(views, channels, owned, *, restore_point, interval_end, bot_id, skew=5.
             else:
                 orphans += 1
     summary = {'jobs': len(views), 'inScope': len(scoped), 'channels': len(channels),
+               'channelsWithUnresolvedJobs': len({v['channelId'] for v in scoped}),
                'decisions': {name: sum(d['decision'] == name for d in decisions) for name in DECISIONS},
                'reasons': {}, 'unclaimedBotMessages': orphans, 'duplicatesAlreadyVisible': duplicates}
     for item in decisions:
@@ -491,12 +510,12 @@ def reconcile(connection_factory, reader, *, restore_point, interval_end, skew=5
     if interval_end < restore_point:
         raise ReconcileError('the interval end is before the restore point')
     with connection_factory() as db:
-        views, owned, hold = load(db)
+        views, owned, hold, destinations = load(db)
     if require_hold and not dry_run and not hold['held']:
         raise ReconcileError('the operator hold is not in effect in this database (policy rows %d); set it first '
                              '(`hold --set`) so no worker sends while this runs' % hold['policyRows'])
     bot_id = reader.bot_identity()
-    channels = read_channels(reader, views, restore_point, skew)
+    channels = read_channels(reader, views, restore_point, skew, destinations)
     decisions, summary = plan(views, channels, owned, restore_point=restore_point, interval_end=interval_end,
                               bot_id=bot_id, skew=skew)
     run = {'runId': run_id or uuid.uuid4().hex, 'restorePoint': restore_point, 'intervalEnd': interval_end}

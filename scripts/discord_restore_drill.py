@@ -80,7 +80,7 @@ def seed(cluster, plan):
         db.execute('INSERT INTO auth.users(id) VALUES(%s) ON CONFLICT DO NOTHING', (F.ACTOR,))
         db.execute('INSERT INTO public.pr_profiles(user_id) VALUES(%s) ON CONFLICT DO NOTHING', (F.ACTOR,))
         for tenant, specs in plan:
-            state = build_posts(tenant, specs, now=min(at for _, at in specs) - 300)
+            state = build_posts(tenant, specs, now=min([at for _, at in specs] or [time.time()]) - 300)
             db.execute('INSERT INTO public.pr_workspaces(id,revision,state) VALUES(%s,1,%s::jsonb)', (tenant.id, json.dumps(state)))
             db.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status,can_publish,can_reply) "
                        "VALUES(%s,%s,'owner','active',true,true)", (tenant.id, F.ACTOR))
@@ -278,13 +278,19 @@ class Timeline:
                      (e['edited'], [('Synthetic post someone edits, %s' % e['edited'].guild, soon)])]
             plan += [(e['later_%d' % n], [('Synthetic later post, %s' % e['later_%d' % n].guild, self.later_at)]) for n in range(4)]
             plan += [(e['canceled'], [('Synthetic post the customer cancels, %s' % e['canceled'].guild, self.later_at)])]
+            plan += [(e['orphan'], [])]  # connected before the restore point; its post is approved after it
         return plan
 
     def approve_after_restore_point(self, now):
-        """A workspace (and its approved post) created after the restore point: the restored database never knew it."""
+        """A post approved after the restore point in a workspace connected before it: the restored database has the
+        workspace and its destination, not the approval."""
         if self.edges:
             orphan = self.edge['orphan']
-            seed(self.c0, [(orphan, [('Synthetic post approved after the restore point, %s' % orphan.guild, now - 60)])])
+            state = build_posts(orphan, [('Synthetic post approved after the restore point, %s' % orphan.guild, now - 60)],
+                                now=now - 360)
+            with self.c0.connect() as db:
+                db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb, revision=revision+1 WHERE id=%s',
+                           (json.dumps(state), orphan.id))
 
     def cancel_in_first_timeline(self):
         """The customer cancels a queued post after the restore point, with the product's own cancel command."""

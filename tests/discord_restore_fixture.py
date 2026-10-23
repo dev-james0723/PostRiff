@@ -233,6 +233,8 @@ class RestoreMockDiscord(F.MockDiscord):
         super().__init__(tenants, **options)
         self.nonce_window = nonce_window
         self.history = {}  # channel -> [message ids], oldest first, only messages still visible
+        # The fixture registers each tenant's second destination channel too (P.SECOND); Discord would answer it.
+        self.known = {tenant.channel for tenant in tenants} | {str(int(tenant.channel) + 500000) for tenant in tenants}
         self.log, self.deleted, self.nonces = [], set(), {}
         self.counter = 0
 
@@ -283,7 +285,7 @@ class RestoreMockDiscord(F.MockDiscord):
                 self.route429 += 1
                 return {'status': 429, 'headers': headers, 'body': {'message': 'You are being rate limited.',
                                                                     'retry_after': float(headers['retry-after']), 'global': False}}
-            if parts[1] not in self.channels and parts[1] not in self.history:
+            if parts[1] not in self.known and parts[1] not in self.history:
                 return {'status': 404, 'headers': headers, 'body': {'message': 'Unknown Channel', 'code': 10003}}
             options = dict(item.split('=', 1) for item in query.split('&') if '=' in item)
             limit = max(1, min(100, int(options.get('limit', 50))))

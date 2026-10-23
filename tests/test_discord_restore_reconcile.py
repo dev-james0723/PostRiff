@@ -349,6 +349,27 @@ class Reader(unittest.TestCase):
         with self.assertRaises(T.ReconcileError):
             reader.history('7000001', RESTORE)
 
+    def test_destination_channels_without_pending_posts_are_read_only_to_count_unclaimed_messages(self):
+        """A post approved after the restore point lives in a channel where the restored database may have no
+        pending job; its channel is read too (best effort), and an unreadable one never stops the run."""
+        pending = job(1, 'Pending')
+        found = {'7000001': [message(RESTORE + 10, 'Pending')], '7000002': [message(RESTORE + 20, 'Approved later', channel='7000002')]}
+
+        def transport(method, url, headers=None, **_):
+            if url.endswith('/users/@me'):
+                return {'status': 200, 'body': {'id': BOT, 'bot': True}}
+            channel = url.split('/channels/')[1].split('/')[0]
+            if channel == '7000003':
+                return {'status': 403, 'body': {'message': 'Missing Access'}}
+            return {'status': 200, 'body': found.get(channel, [])}
+        reader = T.DiscordReader(transport, 'token', pace=0, sleep=lambda s: None)
+        views = [T.job_view('w1', pending)]
+        channels = T.read_channels(reader, views, RESTORE, 5, destinations={'7000001', '7000002', '7000003'})
+        self.assertEqual(sorted(channels), ['7000001', '7000002'], 'the unreadable destination-only channel is skipped')
+        decisions, summary = T.plan(views, channels, set(), restore_point=RESTORE, interval_end=END, bot_id=BOT)
+        self.assertEqual([(d['decision'], d['reason']) for d in decisions], [('matched', None)])
+        self.assertEqual(summary['unclaimedBotMessages'], 1)
+
     def test_the_reader_paces_its_requests(self):
         clock = [0.0]
         waits = []
