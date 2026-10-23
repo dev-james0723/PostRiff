@@ -15,6 +15,7 @@ import atexit
 import copy
 import inspect
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -335,6 +336,72 @@ class DiscordInteractionsOffMatchesLiveLogging(unittest.TestCase):
                 self.assertEqual((live[case]['status'], live[case]['logLevels'], live[case]['runtimeStarted']), (403, ['INFO'], False))
                 self.assertEqual((mine[case]['logLevels'], mine[case]['runtimeStarted'], mine[case]['status'] // 100),
                                  (live[case]['logLevels'], live[case]['runtimeStarted'], live[case]['status'] // 100))
+
+
+# --- ENV-1: database pool settings ---------------------------------------------------------------------------------------
+class PoolSettingsNeverTakeTheApiDown(unittest.TestCase):
+    """ENV-1 (LOW). runtime_from_environment ran int() on POSTRIFF_DB_POOL_MAX_CONNECTIONS and
+    POSTRIFF_DB_POOL_MAX_WAITING even with the pool off, so one malformed value failed runtime construction and every
+    runtime route answered 503. Now a limit that is not a whole number in its range keeps the pool off (fail-closed:
+    one connection per transaction, as without the pool) and logs one WARNING per process without the value."""
+
+    def setUp(self):
+        from postriff_phase2 import hosted_app
+        from postriff_phase2.oauth import CredentialVault
+        self.hosted_app = hosted_app
+        warned = getattr(hosted_app, '_POOL_SETTINGS_WARNED', None)
+        if warned is not None:  # absent before the fix
+            warned.clear()
+            self.addCleanup(warned.clear)
+        self.env = {'POSTRIFF_DATABASE_URL': 'postgresql://synthetic:synthetic@127.0.0.1:1/none?sslmode=disable',
+                    'POSTRIFF_SUPABASE_URL': 'https://abcdefghijklmnopqrst.supabase.co',
+                    'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': 'sb_publishable_' + 'x' * 30,
+                    'POSTRIFF_SUPABASE_SECRET_KEY': 'sb_secret_' + 'y' * 30,
+                    'POSTRIFF_CREDENTIAL_KEY': CredentialVault.generate_key(),
+                    'POSTRIFF_PUBLIC_BASE_URL': 'https://app.rafii.invalid'}
+
+    def build(self, **changes):
+        from postriff_phase2.postgres_pool import PooledPostgresFactory
+        with self.assertLogs('postriff.request', 'INFO') as logged:
+            logging.getLogger('postriff.request').info('probe')  # assertLogs needs a record when nothing else logs
+            service, _, _ = self.hosted_app.runtime_from_environment({**self.env, **changes})
+        factory = service.repository.connection_factory
+        warnings = [r.getMessage() for r in logged.records if r.levelname == 'WARNING']
+        return isinstance(factory, PooledPostgresFactory), factory, warnings
+
+    def test_a_malformed_limit_with_the_pool_off_keeps_the_api_up_and_logs_once_without_the_value(self):
+        for name in ('POSTRIFF_DB_POOL_MAX_CONNECTIONS', 'POSTRIFF_DB_POOL_MAX_WAITING'):
+            with self.subTest(variable=name):
+                getattr(self.hosted_app, '_POOL_SETTINGS_WARNED', []).clear()
+                pooled, _, warnings = self.build(**{name: 'twenty-five'})
+                self.assertFalse(pooled)
+                self.assertEqual(len(warnings), 1, warnings)
+                self.assertEqual(json.loads(warnings[0]), {'event': 'database.pool_settings_invalid', 'variables': [name],
+                                                           'poolRequested': False, 'pool': 'off'})
+                self.assertNotIn('twenty-five', warnings[0])
+
+    def test_a_bad_limit_with_the_pool_requested_keeps_the_pool_off(self):
+        for value in ('lots', '0', '33', '1e3', ''):
+            with self.subTest(value=value):
+                getattr(self.hosted_app, '_POOL_SETTINGS_WARNED', []).clear()
+                pooled, _, warnings = self.build(POSTRIFF_DB_POOL_ENABLED='true', POSTRIFF_DB_POOL_MAX_CONNECTIONS=value)
+                self.assertFalse(pooled, 'fail-closed: no pool with limits it cannot honour')
+                self.assertEqual([json.loads(w)['poolRequested'] for w in warnings], [True])
+
+    def test_the_warning_is_written_once_per_process(self):
+        self.build(POSTRIFF_DB_POOL_MAX_WAITING='many')
+        _, _, again = self.build(POSTRIFF_DB_POOL_MAX_WAITING='many')
+        self.assertEqual(again, [])
+
+    def test_valid_settings_are_used_exactly_as_before(self):
+        pooled, factory, warnings = self.build(POSTRIFF_DB_POOL_ENABLED='true', POSTRIFF_DB_POOL_MAX_CONNECTIONS='12',
+                                               POSTRIFF_DB_POOL_MAX_WAITING='40')
+        self.assertTrue(pooled)
+        self.assertEqual((factory._max_size, factory._max_waiting, warnings), (12, 40, []))
+        pooled, _, warnings = self.build()
+        self.assertEqual((pooled, warnings), (False, []))
+        pooled, factory, _ = self.build(POSTRIFF_DB_POOL_ENABLED='true')
+        self.assertEqual((pooled, factory._max_size, factory._max_waiting), (True, 20, 64))
 
 
 if __name__ == '__main__':

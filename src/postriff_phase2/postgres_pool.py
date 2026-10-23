@@ -13,6 +13,9 @@ from contextlib import contextmanager
 from postriff_alpha.domain import AlphaError
 
 
+MAX_SIZE_RANGE, MAX_WAITING_RANGE = (1, 32), (1, 256)  # hosted_app.pool_settings reads the same bounds
+
+
 def unavailable():
     return AlphaError('Database capacity is temporarily unavailable. Try again shortly.', 503,
                       code='database_capacity_unavailable')
@@ -22,8 +25,8 @@ class PooledPostgresFactory:
     def __init__(self, dsn, *, max_size=20, max_waiting=64, timeout=8, options=None, observer=None):
         if not isinstance(dsn, str) or not dsn.strip():
             raise ValueError('A server-side database connection is required.')
-        if (type(max_size) is not int or not 1 <= max_size <= 32
-                or type(max_waiting) is not int or not 1 <= max_waiting <= 256
+        if (type(max_size) is not int or not MAX_SIZE_RANGE[0] <= max_size <= MAX_SIZE_RANGE[1]
+                or type(max_waiting) is not int or not MAX_WAITING_RANGE[0] <= max_waiting <= MAX_WAITING_RANGE[1]
                 or type(timeout) not in (int, float) or not math.isfinite(timeout) or not .01 <= timeout <= 30
                 or options is not None and (not isinstance(options, str) or len(options) > 200 or '\x00' in options)):
             raise ValueError('Database pool limits are invalid.')

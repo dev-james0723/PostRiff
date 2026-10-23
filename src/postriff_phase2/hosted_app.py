@@ -39,6 +39,37 @@ from .content_types import formats, public_catalog, public_packs
 from . import account_protection, agent_observability, device_trust, security_gate, tools
 from .agent_runtime import FixtureAgentRuntime
 
+_POOL_SETTINGS_WARNED = []
+
+
+def pool_settings(values):
+    """(pooled, max_size, max_waiting) for postgres_factory from the environment (ENV-1).
+
+    A pool limit that is not a whole number in its range never takes the API down: the pool stays off, so each
+    transaction opens its own connection as it does without the pool, and one WARNING per process names the
+    variables, never their values. Unset limits keep their defaults; a valid setting is used exactly as before.
+    """
+    from .postgres_pool import MAX_SIZE_RANGE, MAX_WAITING_RANGE
+    requested = values.get('POSTRIFF_DB_POOL_ENABLED') == 'true'
+    limits, invalid = [], []
+    for name, default, (low, high) in (('POSTRIFF_DB_POOL_MAX_CONNECTIONS', 20, MAX_SIZE_RANGE),
+                                       ('POSTRIFF_DB_POOL_MAX_WAITING', 64, MAX_WAITING_RANGE)):
+        raw = values.get(name, str(default))
+        try:
+            number = int(raw)
+        except (TypeError, ValueError):
+            number = None
+        if number is None or not low <= number <= high:
+            invalid.append(name)
+        limits.append(number)
+    if not invalid:
+        return requested, limits[0], limits[1]
+    if not _POOL_SETTINGS_WARNED:
+        _POOL_SETTINGS_WARNED.append(True)
+        logging.getLogger('postriff.request').warning(json.dumps({
+            'event': 'database.pool_settings_invalid', 'variables': invalid, 'poolRequested': requested, 'pool': 'off'}))
+    return False, 20, 64
+
 
 def postgres_factory(dsn, *, pooled=False, max_size=20, max_waiting=64, timeout=8, options=None, observer=None):
     if not isinstance(dsn, str) or not dsn.strip():
@@ -296,10 +327,8 @@ def chat_media_from_environment(values):
 def runtime_from_environment(environ=None):
     from .deployment import isolated_environment
     values = isolated_environment(os.environ if environ is None else environ)
-    database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"),
-        pooled=values.get('POSTRIFF_DB_POOL_ENABLED') == 'true',
-        max_size=int(values.get('POSTRIFF_DB_POOL_MAX_CONNECTIONS', '20')),
-        max_waiting=int(values.get('POSTRIFF_DB_POOL_MAX_WAITING', '64')))
+    pooled, max_size, max_waiting = pool_settings(values)
+    database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"), pooled=pooled, max_size=max_size, max_waiting=max_waiting)
     project_url = values.get("POSTRIFF_SUPABASE_URL")
     publishable = values.get("POSTRIFF_SUPABASE_PUBLISHABLE_KEY")
     secret = values.get("POSTRIFF_SUPABASE_SECRET_KEY")
