@@ -1,17 +1,16 @@
 {
   "version": 1,
   "_note": "Alert thresholds for scripts/discord_ops_check.py (H-07). Starting values: the owner confirms or changes them before stage 5c, and they are tuned after the first busy hour. Keys starting with an underscore are notes. Ages and windows are seconds; shares are fractions.",
-  "phase": "pre_open",
-  "_phase": "pre_open: dark build, no configuration expectations. canary: the tester-only gate (a list of at most canary_max_workspaces); an open gate is an accidental opening. open: after the full opening; the gate must be open and the cap at expected_cap.",
+  "_phase": "Given on every run (--phase is required; the function defaults to open, the strictest). pre_open: dark build, no configuration expectations. canary: the tester-only gate (a list of at most canary_max_workspaces); an open gate is an accidental opening. open: after the full opening; the gate must be open and the cap at expected_cap.",
   "severity": {
     "page": "Act now, inside the confirmed on-call hours: first action from docs/ops/PHONE-RUNBOOK.md within 15 minutes, then tell the owner.",
     "warn": "Look in the same working session. Customers may see delays; nothing irreversible is expected, or the condition is expected (a declared burst, an intentional hold).",
     "info": "Recorded in the check-in report only."
   },
   "backlog": {
-    "warn_lag_seconds": 300,
-    "page_lag_seconds": 900,
-    "_burst": "During a declared burst (thousands of posts due in one minute) the warn level is expected: 5,000 posts need about 21 to 25 minutes at the reviewed 25 requests a second. The page level is not."
+    "warn_lag_seconds": 900,
+    "page_lag_seconds": 2700,
+    "_burst": "A declared burst (5,000 posts due in one minute) drains in about 21 to 25 minutes at the reviewed 25 requests a second, and one busy workspace can need 20 to 40 minutes (docs/w02/OPEN-QUESTIONS.md Q6), so the warn level is expected during a burst. The page level (45 minutes) is above the standard's 40-minute maximum with margin and before approvals start lapsing (a post needs re-approval from about 55 minutes after its scheduled time). The real halt detectors are SILENT_HALT_NO_PROGRESS and SILENT_HALT_NO_CREATE."
   },
   "delivery": {
     "uncertain_warn": 1,
@@ -25,6 +24,9 @@
     "stuck_sent_warn": 1,
     "server_error_share_warn": 0.02,
     "min_responses_for_server_errors": 20,
+    "held_growth_warn": 1,
+    "failed_growth_warn": 3,
+    "_growth": "DELIVERY_HELD_GROWTH and DELIVERY_FAILED_GROWTH compare the platform snapshot's publicationHeld and publicationFailed (all platforms, migration 060) with the previous run's report (--previous). The uncertain and stuck-sent warnings also read the unwindowed 'unresolved' counts, so they stay until each admission is reviewed.",
     "_window": "Fifteen minutes of the coordinator's publish admissions (one per create attempt). System-caused: 400, 401, 5xx and other non-2xx answers except 403, 404 and 429, transport failures (uncertain), and creates sent but unanswered for two minutes. Customer-caused: 403 (missing permission) and 404 (channel or bot removed)."
   },
   "rate_limit": {
@@ -44,6 +46,8 @@
   "silent_halt": {
     "due_lag_seconds": 120,
     "quiet_seconds": 180,
+    "no_create_warn_seconds": 600,
+    "no_create_page_seconds": 1800,
     "health_max_age_seconds": 180,
     "min_lane_window_seconds": 180
   },

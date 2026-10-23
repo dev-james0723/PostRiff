@@ -1,11 +1,14 @@
 """H-07 alert rules (scripts/discord_ops_check.py): every rule at and around its thresholds, the healthy baseline,
 transitions, the log parser and the command line. Pure: no database, network or credential."""
 import copy
+import http.server
 import importlib.util
 import io
 import json
 import secrets
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -91,7 +94,7 @@ class Baseline(unittest.TestCase):
                 self.assertEqual(alerts(snapshot, phase=phase), [])
 
     def test_the_thresholds_file_carries_every_value_the_rules_read(self):
-        self.assertIn(THRESHOLDS['phase'], check.PHASES)
+        self.assertNotIn('phase', THRESHOLDS, 'the phase is given on every run (review M3)')
         broken = healthy()
         broken['queue']['oldestDueLagSeconds'] = 10_000
         for section in ('backlog', 'delivery', 'rate_limit', 'silent_halt', 'cross_tenant', 'config'):
@@ -100,7 +103,7 @@ class Baseline(unittest.TestCase):
         self.assertTrue(alerts(broken))
 
     def test_pages_sort_before_warnings(self):
-        snapshot = with_(('queue', 'oldestDueLagSeconds'), 400.0)
+        snapshot = with_(('queue', 'oldestDueLagSeconds'), 1000.0)
         snapshot['coordinator']['traffic']['unauthorized'] = 1
         result = alerts(snapshot)
         self.assertEqual([a['severity'] for a in result], ['page', 'warn'])
@@ -121,7 +124,8 @@ class Baseline(unittest.TestCase):
 
 class Backlog(unittest.TestCase):
     def test_boundaries(self):
-        for lag, expected in ((300.0, None), (300.1, 'warn'), (900.0, 'warn'), (900.1, 'page')):
+        # Review M2: the standard burst drains in about 23 minutes and one workspace can need 40; page above 45.
+        for lag, expected in ((900.0, None), (900.1, 'warn'), (2400.0, 'warn'), (2700.0, 'warn'), (2700.1, 'page')):
             with self.subTest(lag=lag):
                 self.assertEqual(found(with_(('queue', 'oldestDueLagSeconds'), lag), 'BACKLOG_LAG'), expected)
 
@@ -406,6 +410,7 @@ class ConfigDrift(unittest.TestCase):
         for name in ('config', 'lane', 'build'):
             del snapshot[name]
         snapshot['source'] = 'sql'
+        snapshot['servers'] = {'status': 'observed', 'counted': 120, 'inFlight': 3, 'used': 123}
         self.assertEqual(alerts(snapshot), [])
 
 
@@ -442,8 +447,8 @@ class CommandLine(unittest.TestCase):
 
     def test_exit_codes_follow_the_worst_severity(self):
         self.assertEqual(self.run_cli(healthy(), '--phase', 'open')[0], 0)
-        self.assertEqual(self.run_cli(with_(('queue', 'oldestDueLagSeconds'), 400.0), '--phase', 'open')[0], 1)
-        code, report = self.run_cli({'unavailable': True, 'reason': 'http_503'})
+        self.assertEqual(self.run_cli(with_(('queue', 'oldestDueLagSeconds'), 1000.0), '--phase', 'open')[0], 1)
+        code, report = self.run_cli({'unavailable': True, 'reason': 'http_503'}, '--phase', 'open')
         self.assertEqual((code, report['worst']), (2, 'page'))
 
     def test_previous_alerts_give_transitions(self):
@@ -462,6 +467,178 @@ class CommandLine(unittest.TestCase):
         with patch.dict('os.environ', {}, clear=True), patch('sys.stdout', io.StringIO()) as printed:
             check.main(['fetch', 'http://127.0.0.1:9/'])
         self.assertEqual(json.loads(printed.getvalue())['reason'], 'no_bearer')
+
+
+class ReviewFindings(unittest.TestCase):
+    """The independent review of 8e76afdd (findings M1, M3, M4, M6, M8, L3): each test failed on the reviewed
+    evaluator and passes on this one (H07-EVIDENCE.md lists the before and after runs)."""
+
+    def test_M1_a_malformed_snapshot_is_an_alarm_not_silence(self):
+        for mutate, detail in ((lambda s: s.update(kind='something.else'), 'kind'),
+                               (lambda s: s.update(version=2), 'version'),
+                               (lambda s: s.update(source='unknown'), 'source'),
+                               (lambda s: s.pop('deliveries'), 'missing:deliveries'),
+                               (lambda s: s.pop('coordinator'), 'missing:coordinator'),
+                               (lambda s: s.update(errors=None), 'missing:errors')):
+            snapshot = healthy()
+            mutate(snapshot)
+            with self.subTest(detail=detail):
+                hits = [a for a in alerts(snapshot) if a['id'] == 'SILENT_HALT_HEALTH_UNANSWERED']
+                self.assertEqual([(a['severity'], a['evidence'].get('detail')) for a in hits], [('page', detail)])
+        self.assertEqual(alerts({}), [a for a in alerts({}) if a['id'] == 'SILENT_HALT_HEALTH_UNANSWERED'])
+        self.assertTrue(alerts({}))
+
+    def test_M1_each_failed_section_warns_then_pages_when_it_persists(self):
+        snapshot = healthy()
+        snapshot['errors'] = [{'section': 'ledger', 'error': 'QueryCanceled'}, {'section': 'servers', 'error': 'UndefinedTable'}]
+        first = [a for a in alerts(snapshot) if a['id'] == 'SILENT_HALT_SECTION']
+        self.assertEqual(sorted((a['scope'], a['severity']) for a in first), [('ledger', 'warn'), ('servers', 'warn')])
+        second = [a for a in check.evaluate(snapshot, THRESHOLDS, now=NOW, phase='open', previous={'alerts': first})
+                  if a['id'] == 'SILENT_HALT_SECTION']
+        self.assertEqual(sorted((a['scope'], a['severity']) for a in second), [('ledger', 'page'), ('servers', 'page')])
+        snapshot['errors'] = [{'section': 'ledger', 'error': 'QueryCanceled'}]
+        third = check.evaluate(snapshot, THRESHOLDS, now=NOW, phase='open', previous={'alerts': second})
+        self.assertEqual(check.transitions(second, third)['cleared'], ['SILENT_HALT_SECTION/servers'])
+
+    def test_M1_no_progress_still_pages_when_the_ledger_section_failed(self):
+        """Measured by the review (exp_missing): ledger unavailable, work 1,500 s overdue, last claim 4,000 s ago."""
+        snapshot = with_(('queue', 'oldestDueLagSeconds'), 1500.0)
+        snapshot['deliveries'] = {'status': 'unavailable', 'error': 'UndefinedTable'}
+        snapshot['progress'] = {'status': 'partial', 'lastClaimAgeSeconds': 4000.0, 'lastAdmissionAgeSeconds': None,
+                                'lastAcceptedCreateAgeSeconds': None, 'lastReadbackAgeSeconds': None, 'sampleSpanSeconds': None}
+        snapshot['errors'] = [{'section': 'ledger', 'error': 'UndefinedTable'}]
+        result = {(a['id'], a['severity']) for a in alerts(snapshot)}
+        self.assertIn(('SILENT_HALT_NO_PROGRESS', 'page'), result)
+        self.assertIn(('SILENT_HALT_SECTION', 'warn'), result)
+        snapshot['progress']['lastClaimAgeSeconds'] = 10.0          # claims continue: not a halt, but the ledger is blind
+        self.assertNotIn('SILENT_HALT_NO_PROGRESS', {a['id'] for a in alerts(snapshot)})
+
+    def test_M3_the_phase_is_required_on_the_command_line_and_the_function_defaults_to_open(self):
+        closed = with_(('config', 'gate'), {'mode': 'closed', 'workspaces': 0, 'misconfigured': False})
+        self.assertIn('CONFIG_GATE', {a['id'] for a in check.evaluate(closed, THRESHOLDS, now=NOW)})
+        with tempfile.TemporaryDirectory() as folder, patch('sys.stderr', io.StringIO()):
+            path = Path(folder) / 'snapshot.json'
+            path.write_text(json.dumps(closed))
+            with self.assertRaises(SystemExit):
+                check.main(['evaluate', str(path), '--now', str(NOW)])
+
+    def test_M4_an_unresolved_uncertain_admission_keeps_the_warning_after_its_window(self):
+        snapshot = healthy()
+        snapshot['unresolved'] = {'status': 'observed', 'uncertainPublishes': 2, 'stuckSentPublishes': 1, 'livePermits': 0,
+                                  'oldestUnresolvedAgeSeconds': 5400.0}
+        result = {a['id']: a for a in alerts(snapshot)}
+        self.assertEqual(result['DELIVERY_UNCERTAIN']['severity'], 'warn')
+        self.assertEqual(result['DELIVERY_UNCERTAIN']['evidence']['unresolved'], 2)
+        self.assertEqual(result['DELIVERY_STUCK_SENT']['evidence']['unresolved'], 1)
+        snapshot['deliveries'] = {'status': 'unavailable'}             # the 15-minute ledger failed: the counts still stand
+        self.assertEqual({a['id'] for a in alerts(snapshot)} & {'DELIVERY_UNCERTAIN', 'DELIVERY_STUCK_SENT'},
+                         {'DELIVERY_UNCERTAIN', 'DELIVERY_STUCK_SENT'})
+
+    def test_M6_held_and_failed_growth_against_the_previous_report(self):
+        before = healthy()
+        before['platform'].update(publicationHeld=4, publicationFailed=10)
+        memory = check.memory(before)
+        after = healthy()
+        after['platform'].update(publicationHeld=7, publicationFailed=12)
+        result = {a['id']: a for a in check.evaluate(after, THRESHOLDS, now=NOW, previous={'alerts': [], 'memory': memory})}
+        self.assertEqual(result['DELIVERY_HELD_GROWTH']['evidence']['growth'], 3)
+        self.assertNotIn('DELIVERY_FAILED_GROWTH', result)               # +2 is under the threshold of 3
+        after['platform']['publicationFailed'] = 13
+        self.assertIn('DELIVERY_FAILED_GROWTH', {a['id'] for a in check.evaluate(after, THRESHOLDS, now=NOW, previous={'memory': memory})})
+        self.assertNotIn('DELIVERY_HELD_GROWTH', {a['id'] for a in check.evaluate(after, THRESHOLDS, now=NOW)})
+
+    def test_M6_work_due_and_nothing_reaching_discord(self):
+        snapshot = with_(('queue', 'oldestDueLagSeconds'), 1200.0)
+        snapshot['progress'].update(lastClaimAgeSeconds=5.0, lastAdmissionAgeSeconds=2.0,     # claims and admissions go on
+                                    lastAcceptedCreateAgeSeconds=1900.0, lastReadbackAgeSeconds=650.0)
+        self.assertEqual(found(snapshot, 'SILENT_HALT_NO_CREATE'), 'warn')
+        snapshot['progress']['lastReadbackAgeSeconds'] = 1850.0
+        self.assertEqual(found(snapshot, 'SILENT_HALT_NO_CREATE'), 'page')
+        snapshot['coordinator']['guards']['policy']['hold'] = True
+        self.assertEqual(found(snapshot, 'SILENT_HALT_NO_CREATE'), 'warn')
+        self.assertIsNone(found(with_(('queue', 'oldestDueLagSeconds'), 60.0), 'SILENT_HALT_NO_CREATE'))
+
+    def test_M5_the_probing_message_no_longer_says_hold_first(self):
+        snapshot = healthy()
+        snapshot['security']['instance']['topActorDenials10m'] = 40
+        message = [a['message'] for a in alerts(snapshot) if a['id'] == 'CROSS_TENANT_PROBING'][0]
+        self.assertNotIn('hold first', message)
+        self.assertIn('hold only if the probe fails or exposure is confirmed', message)
+
+    def test_M8_fetch_refuses_plain_http_to_another_machine(self):
+        bearer = secrets.token_hex(16)
+        with patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('no request may be made')):
+            for url in ('http://rafii.example.invalid/api/ops/discord/health', 'ftp://rafii.example.invalid/', 'file:///etc/hosts'):
+                with self.subTest(url=url):
+                    self.assertEqual(check.fetch(url, bearer), {'unavailable': True, 'reason': 'insecure_url'})
+
+    def test_M8_fetch_never_follows_a_redirect_and_never_sends_the_bearer_elsewhere(self):
+        bearer = secrets.token_hex(16)
+        seen = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append((self.path, self.headers.get('Authorization')))
+                if self.path.startswith('/moved'):
+                    self.send_response(302)
+                    self.send_header('Location', 'http://127.0.0.1:%d/elsewhere' % self.server.server_address[1])
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b'{}')
+
+            def log_message(self, *args):
+                pass
+        server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            got = check.fetch('http://127.0.0.1:%d/moved' % server.server_address[1], bearer, timeout=5)
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertEqual(got, {'unavailable': True, 'reason': 'http_302'})
+        self.assertEqual([path for path, _auth in seen], ['/moved'])
+
+    def test_M8_fetch_has_one_overall_deadline(self):
+        bearer = secrets.token_hex(16)
+
+        class Slow(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                try:
+                    for _ in range(40):              # a byte every 0.1 s: each read is quick, the whole is not
+                        self.wfile.write(b' ')
+                        self.wfile.flush()
+                        time.sleep(0.1)
+                except OSError:
+                    pass
+
+            def log_message(self, *args):
+                pass
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Slow)
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            started = time.monotonic()
+            got = check.fetch('http://127.0.0.1:%d/' % server.server_address[1], bearer, timeout=1.0)
+            took = time.monotonic() - started
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertEqual(got, {'unavailable': True, 'reason': 'deadline'})
+        self.assertLess(took, 2.5)
+
+    def test_L3_an_internal_error_exits_3_and_a_log_drain_envelope_is_read(self):
+        with tempfile.TemporaryDirectory() as folder, patch('sys.stdout', io.StringIO()) as printed, \
+                patch.object(check, 'evaluate', side_effect=RuntimeError('bug')):
+            path = Path(folder) / 'snapshot.json'
+            path.write_text(json.dumps(healthy()))
+            self.assertEqual(check.main(['evaluate', str(path), '--phase', 'open', '--now', str(NOW)]), 3)
+        self.assertEqual(json.loads(printed.getvalue()), {'error': 'RuntimeError', 'worst': None})
+        line = json.dumps({'message': json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'idle', 'counters': {}})})
+        self.assertEqual(check.parse_logs([line], 600)['laneLines'], 1)
 
 
 if __name__ == '__main__':

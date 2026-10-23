@@ -78,7 +78,8 @@ class FakeDatabase:
     def execute(self, sql, params=None):
         self.statements.append(sql)
         self.result = None
-        for name, marker in (('queue', 'pr_discord_worker_projection'), ('ledger', 'pr_discord_request_admissions'),
+        for name, marker in (('queue', 'pr_discord_worker_projection'), ('ledger', 'ORDER BY request_seq DESC LIMIT'),
+                             ('unresolved', "state = 'uncertain' AND is_publish"),
                              ('coordinator', 'pr_discord_rate_state'), ('servers', 'pr_encrypted_credentials'),
                              ('platform', 'FROM public.pr_operational_snapshots'), ('requests', 'FROM public.pr_request_metrics')):
             if marker in sql and name in self.fail:
@@ -87,6 +88,8 @@ class FakeDatabase:
             self.result = [('2000ms', '500ms', NOW)]
         elif 'pr_discord_worker_projection' in sql:
             self.result = [(2, 1, 3, 420.5, NOW - 30)]
+        elif "state = 'uncertain' AND is_publish" in sql:
+            self.result = [(1, 0, 2, NOW - 4000)]
         elif 'pr_discord_request_admissions' in sql:
             self.result = [(120, NOW - 700, NOW - 2, 40, 33, 2, 1, 1, 2, 1, 0, 0, 0, 3, 0, 9, 60, 1, 80, 0, 0,
                             NOW - 3, NOW - 1)]

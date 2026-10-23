@@ -188,7 +188,9 @@ class Priorities(unittest.TestCase):
         for rule, severity in calls:
             literal = re.fullmatch(r"'(page|warn|info)',", severity.strip())
             emitted.setdefault(rule, set()).update({literal.group(1)} if literal else {'page', 'warn'})
-        self.assertEqual(len(emitted), 36)
+        for rule in re.findall(r"'([A-Z][A-Z0-9_]+_GROWTH)'", source):    # raised in a loop, always 'warn'
+            emitted.setdefault(rule, set()).add('warn')
+        self.assertEqual(len(emitted), 40)
         rows = {(row['rule'], row['severity']) for row in self.policy['priorities']}
         missing = sorted((rule, severity) for rule, severities in emitted.items() for severity in severities if (rule, severity) not in rows)
         self.assertEqual(missing, [])

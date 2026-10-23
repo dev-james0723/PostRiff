@@ -28,6 +28,8 @@
     {"rule": "DELIVERY_STUCK_SENT", "severity": "warn", "priority": "P1"},
     {"rule": "DELIVERY_CUSTOMER_FAILURES", "severity": "warn", "priority": "P2"},
     {"rule": "DELIVERY_DISCORD_5XX", "severity": "warn", "priority": "P2"},
+    {"rule": "DELIVERY_HELD_GROWTH", "severity": "warn", "priority": "P1"},
+    {"rule": "DELIVERY_FAILED_GROWTH", "severity": "warn", "priority": "P1"},
     {"rule": "RATE_CREDENTIAL_HOLD", "severity": "page", "priority": "P0"},
     {"rule": "RATE_INVALID_REQUESTS", "severity": "page", "priority": "P0"},
     {"rule": "RATE_INVALID_BUDGET", "severity": "page", "priority": "P0"},
@@ -50,6 +52,10 @@
     {"rule": "SILENT_HALT_PROJECTION", "severity": "page", "priority": "P0"},
     {"rule": "SILENT_HALT_OPERATOR_HOLD", "severity": "warn", "priority": "P1"},
     {"rule": "SILENT_HALT_LANE_STOPS", "severity": "warn", "priority": "P2"},
+    {"rule": "SILENT_HALT_NO_CREATE", "severity": "page", "priority": "P0"},
+    {"rule": "SILENT_HALT_NO_CREATE", "severity": "warn", "priority": "P1"},
+    {"rule": "SILENT_HALT_SECTION", "severity": "page", "priority": "P1"},
+    {"rule": "SILENT_HALT_SECTION", "severity": "warn", "priority": "P2"},
     {"rule": "BACKLOG_LAG", "severity": "page", "priority": "P1"},
     {"rule": "BACKLOG_LAG", "severity": "warn", "priority": "P2"},
     {"rule": "CONFIG_GATE", "severity": "page", "evidence": {"mode": "open"}, "priority": "P0"},
@@ -117,8 +123,8 @@
     "escalateNowWhenFirstChannelFails": true
   },
   "autoHold": {
-    "_note": "Option D. Only with RAFII_ONCALL_AUTO_HOLD_ENABLED exactly 'true' and an injected executor. Engages the PHONE-RUNBOOK HOLD_ON statement on these page-level rules; never lifts it.",
-    "rules": ["CROSS_TENANT_PROBE_FAILED", "CROSS_TENANT_PROBING", "DELIVERY_UNCERTAIN", "RATE_INVALID_REQUESTS", "RATE_INVALID_BUDGET"],
+    "_note": "Option D, an owner decision, off by default: only with RAFII_ONCALL_AUTO_HOLD_ENABLED exactly 'true' and an injected executor. The review of 8e76afdd and the Release Captain advise against automating the hold, because the hold itself strands posts (read-backs parked 24 h when the lane does not own Discord, approvals lapsing from about 55 minutes after each post's scheduled time). If the owner enables it anyway, it engages the PHONE-RUNBOOK HOLD_ON statement only on a failing isolation probe (a confirmed exposure); never on probing, which is the gate working; never lifts it.",
+    "rules": ["CROSS_TENANT_PROBE_FAILED"],
     "severity": "page"
   },
   "heartbeat": {"maxAgeSeconds": 180},

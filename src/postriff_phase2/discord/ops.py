@@ -21,6 +21,9 @@ is read.
   row per workspace);
 - deliveries, traffic and progress: the newest SAMPLE_LIMIT coordinator admissions by request_seq (its unique index),
   filtered by time inside the database;
+- unresolved: every publish admission still uncertain, sent but unanswered, or holding a live permit, whatever its age,
+  through the partial index pr_discord_admission_unresolved (migration 124; these rows stay until a reviewed release,
+  W-02 OPEN-QUESTIONS Q3, so they are few);
 - coordinator: the four application-wide rows by primary key, and a count by kind of the rows that carry a hold, a
   block or a circuit (one pass over that operational table);
 - servers used: the connect gate's own count (Discord credential rows plus live installation starts; the statement
@@ -268,6 +271,24 @@ def guard_keys(provider):
     return {key: GUARDS[key[:3]] for key in keys if key[:3] in GUARDS}
 
 
+_UNRESOLVED = '''SELECT
+    (SELECT count(*) FROM public.pr_discord_request_admissions WHERE state = 'uncertain' AND is_publish),
+    (SELECT count(*) FROM public.pr_discord_request_admissions
+      WHERE state = 'sent' AND is_publish AND sent_at <= clock_timestamp() - make_interval(secs => %(stuck)s)),
+    (SELECT count(*) FROM public.pr_discord_request_admissions
+      WHERE state IN ('reserved', 'sealed') AND expires_at > clock_timestamp() AND is_publish),
+    (SELECT extract(epoch FROM min(coalesce(sent_at, reserved_at)))::double precision FROM public.pr_discord_request_admissions
+      WHERE is_publish AND (state = 'uncertain'
+                            OR state = 'sent' AND sent_at <= clock_timestamp() - make_interval(secs => %(stuck)s)))'''
+
+
+def read_unresolved(cur, now, context):
+    cur.execute(_UNRESOLVED, {'stuck': STUCK_SENT_SECONDS})
+    uncertain, stuck, live, oldest = cur.fetchone()
+    return {'status': 'observed', 'uncertainPublishes': int(uncertain), 'stuckSentPublishes': int(stuck),
+            'livePermits': int(live), 'oldestUnresolvedAgeSeconds': _age(now, oldest)}
+
+
 def _guard(row, now):
     _key, kind, hold, limit, remaining, reset, blocked, circuit, updated, expires, window = row
     rolled = discord_worker.finite(reset) and reset <= now
@@ -396,8 +417,9 @@ def snapshot(worker, values=None, *, clock=time.time, monotonic=time.monotonic):
                         "extract(epoch FROM clock_timestamp())::double precision", (STATEMENT_TIMEOUT,))
             db_now = float(cur.fetchone()[2])
             result['observedAt'] = round(db_now, 3)
-            for name, read in (('queue', read_queue), ('ledger', read_ledger), ('coordinator', read_coordinator),
-                               ('servers', read_servers), ('platform', read_platform), ('requests', read_requests)):
+            for name, read in (('queue', read_queue), ('ledger', read_ledger), ('unresolved', read_unresolved),
+                               ('coordinator', read_coordinator), ('servers', read_servers), ('platform', read_platform),
+                               ('requests', read_requests)):
                 found[name] = _savepoint(cur, errors, name, read, db_now, context)
     except Exception as error:
         errors.append({'section': 'database', 'error': type(error).__name__})
@@ -405,6 +427,7 @@ def snapshot(worker, values=None, *, clock=time.time, monotonic=time.monotonic):
     ledger = found.get('ledger')
     result['queue'] = queue[0] if queue else _unavailable('queue', errors)
     result['deliveries'] = ledger[0] if ledger else _unavailable('ledger', errors)
+    result['unresolved'] = found.get('unresolved') or _unavailable('unresolved', errors)
     progress = {'lastClaimAgeSeconds': None, 'lastAdmissionAgeSeconds': None, 'lastAcceptedCreateAgeSeconds': None,
                 'lastReadbackAgeSeconds': None, 'sampleSpanSeconds': None}
     progress.update(queue[1] if queue else {})

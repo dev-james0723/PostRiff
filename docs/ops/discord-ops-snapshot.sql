@@ -5,11 +5,13 @@
 -- workspace, member, job, channel, server, message, scope key or token. Same statements and field names as
 -- src/postriff_phase2/discord/ops.py (a real-PostgreSQL test compares the two), with three differences: no process
 -- view (lane status, effective gate, cap, flags and policy come only from the route), the application-wide guard
--- rows are chosen by kind (policy and invalid are one row each; the bot's global and credential rows need the bot
--- token to name, so only their kind counts are here), and no optional founder tables. Feed the result to
+-- rows are chosen by kind (for policy and invalid the most recently updated row of the kind, which is the current key's
+-- after an egress change; the bot's global and credential rows need the bot token to name, so only their kind counts
+-- are here), and no optional founder tables. Feed the result to
 -- `python3 scripts/discord_ops_check.py evaluate -` (the JSON value of the `snapshot` column).
 -- Cost: one pass over the due-work projection, the newest 20,000 coordinator admissions through the request_seq
--- index, one pass over the coordinator's state rows, and the connect gate's own server count. No customer state.
+-- index, the unresolved publish admissions through their partial index, one pass over the coordinator's state rows,
+-- and the connect gate's own server count. No customer state.
 WITH observed AS MATERIALIZED (SELECT clock_timestamp() AS at, extract(epoch FROM clock_timestamp())::double precision AS epoch),
 queue AS (
     SELECT count(p.workspace_id) FILTER (WHERE p.next_at <= o.epoch) AS due,
@@ -64,8 +66,18 @@ queue AS (
            extract(epoch FROM max(s.outcome_at) FILTER (WHERE s.route_key = encode(sha256(convert_to('GET:/channels/{id}/messages/{id}', 'UTF8')), 'hex')
                                                           AND s.state = 'observed' AND s.status_code BETWEEN 200 AND 299))::double precision AS last_readback
     FROM sample s CROSS JOIN observed o
+), unresolved AS (
+    SELECT (SELECT count(*) FROM public.pr_discord_request_admissions WHERE state = 'uncertain' AND is_publish) AS uncertain,
+           (SELECT count(*) FROM public.pr_discord_request_admissions
+             WHERE state = 'sent' AND is_publish AND sent_at <= clock_timestamp() - interval '120 seconds') AS stuck,
+           (SELECT count(*) FROM public.pr_discord_request_admissions
+             WHERE state IN ('reserved', 'sealed') AND expires_at > clock_timestamp() AND is_publish) AS live,
+           (SELECT extract(epoch FROM min(coalesce(sent_at, reserved_at)))::double precision
+              FROM public.pr_discord_request_admissions
+             WHERE is_publish AND (state = 'uncertain'
+                                   OR state = 'sent' AND sent_at <= clock_timestamp() - interval '120 seconds')) AS oldest
 ), guard_rows AS (
-    SELECT r.kind,
+    SELECT DISTINCT ON (r.kind) r.kind,
            jsonb_build_object(
                'present', true, 'hold', r.manual_hold,
                'blocked', coalesce(r.blocked_until > o.at, false), 'circuit', coalesce(r.circuit_until > o.at, false),
@@ -79,6 +91,7 @@ queue AS (
                'policyDaysLeft', round((extract(epoch FROM r.policy_expires_at - o.at) / 86400)::numeric, 2)) AS guard
     FROM public.pr_discord_rate_state r CROSS JOIN observed o
     WHERE r.kind IN ('policy', 'invalid')
+    ORDER BY r.kind, r.updated_at DESC
 ), kinds AS (
     SELECT r.kind,
            jsonb_build_object('holds', count(*) FILTER (WHERE r.manual_hold),
@@ -116,6 +129,9 @@ SELECT jsonb_build_object(
         'creates', l.creates, 'accepted', l.accepted, 'rejectedCustomer', l.customer, 'rejectedSystem', l.system,
         'rateLimited', l.limited, 'uncertain', l.uncertain, 'blocked', l.blocked, 'inFlight', l.in_flight,
         'stuckSent', l.stuck_new, 'stuckSentTotal', l.stuck_all),
+    'unresolved', jsonb_build_object(
+        'status', 'observed', 'uncertainPublishes', u.uncertain, 'stuckSentPublishes', u.stuck, 'livePermits', u.live,
+        'oldestUnresolvedAgeSeconds', CASE WHEN u.oldest > 0 THEN round(greatest(0, o.epoch - u.oldest)::numeric, 1) END),
     'coordinator', jsonb_build_object(
         'status', 'observed_by_kind',
         'guards', coalesce((SELECT jsonb_object_agg(g.kind, g.guard) FROM guard_rows g), '{}'::jsonb),
@@ -128,4 +144,4 @@ SELECT jsonb_build_object(
     'servers', jsonb_build_object('status', 'observed', 'counted', sv.counted, 'inFlight', sv.in_flight,
                                   'used', sv.counted + sv.in_flight),
     'errors', '[]'::jsonb) AS snapshot
-FROM observed o CROSS JOIN queue q CROSS JOIN ledger l CROSS JOIN servers sv;
+FROM observed o CROSS JOIN queue q CROSS JOIN ledger l CROSS JOIN unresolved u CROSS JOIN servers sv;

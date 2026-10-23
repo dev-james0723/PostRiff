@@ -38,7 +38,7 @@ The owner adopted the on-call policy in reply 15 (`AUTHORIZATION-RECORD.md`) **a
 
 | # | Need | What exists (file:line) | Status |
 |---|---|---|---|
-| 18 | The Discord alerts (36 rule ids, `scripts/discord_ops_check.py`) feed the pipeline | Not connected. `rafii_control.founder_incidents.detector` has a CHECK of four values (`migrations/postriff/055_rafii_control_founder_contact.sql:63`), so a new detector needs an additive migration. | MISSING |
+| 18 | The Discord alerts (40 rule ids, `scripts/discord_ops_check.py`) feed the pipeline | Not connected. `rafii_control.founder_incidents.detector` has a CHECK of four values (`migrations/postriff/055_rafii_control_founder_contact.sql:63`), so a new detector needs an additive migration. | MISSING |
 | 19 | The absence of alerts is detected | `founder-watchdog.yml` runs every 10 minutes (`:11`) and fails when the founder cron heartbeat is older than 600 s (`founder_sources.py:177`, `:185-206`, `:247-277`). It needs the repository secret `RAFII_WATCHDOG_DSN`. It notifies only through GitHub (e-mail or app; no call). | PARTIAL |
 
 ## 5. Paths that can silence a P0 at night today
@@ -55,7 +55,7 @@ All of these are default settings or a person's own settings, so they need no fa
 
 The engine on this branch (`src/rafii_control/oncall/`) routes P0 around 1 to 5 by design: its own timers, a roster, no quiet hours for P0, and per-person, per-step idempotency. Items 6 and 7 are the owner's settings.
 
-## 6. The 36 alert rules as P0, P1 and P2 (a proposal the owner edits)
+## 6. The 40 alert rules as P0, P1 and P2 (a proposal the owner edits)
 
 P0 means "wake someone at 3 a.m.": it is dangerous to continue, or every customer is affected now. P1 is handled in duty hours and acknowledged within 15 minutes. P2 is e-mail and the dashboard. The machine-readable copy is `docs/ops/h07-oncall-policy.json` (`priorities`). The first matching row wins; anything not listed falls back to: page is P1, warn is P2.
 
@@ -71,6 +71,8 @@ P0 means "wake someone at 3 a.m.": it is dangerous to continue, or every custome
 | DELIVERY_STUCK_SENT | P1 | | needs reconciliation |
 | DELIVERY_CUSTOMER_FAILURES | P2 | | the customers' server set-up |
 | DELIVERY_DISCORD_5XX | P2 | | Discord outage; nothing destructive to do |
+| DELIVERY_HELD_GROWTH | P1 | | approvals ran out: customers must approve again |
+| DELIVERY_FAILED_GROWTH | P1 | | more posts failing than before |
 | RATE_CREDENTIAL_HOLD | | **P0** | every Discord request refused |
 | RATE_INVALID_REQUESTS | | **P0** | IP restriction danger for every customer |
 | RATE_INVALID_BUDGET | P1 | **P0** | ban danger below 25% |
@@ -87,6 +89,8 @@ P0 means "wake someone at 3 a.m.": it is dangerous to continue, or every custome
 | SILENT_HALT_PROJECTION | | **P0** | lane stops with "schema" |
 | SILENT_HALT_OPERATOR_HOLD | P1 | | a hold is on: decide, approvals lapse |
 | SILENT_HALT_LANE_STOPS | P2 | | abnormal shard stop reasons |
+| SILENT_HALT_NO_CREATE | P1 | **P0** | work due and nothing reaches Discord for 30 minutes |
+| SILENT_HALT_SECTION | P2 | P1 (persistent) | one payload section is blind |
 | BACKLOG_LAG | P2 | P1 | lateness; the no-progress page covers a halt |
 | CONFIG_GATE | | P1; **P0 when the gate is open in the canary phase** | an accidental public opening is a security event |
 | CONFIG_FLAGS | | **P0** | Discord switches off: posts held |

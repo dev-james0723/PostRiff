@@ -1,45 +1,65 @@
 # PHONE RUNBOOK: stop, close and roll back Discord with the Mac offline (H-07)
 
-Everything here needs only a phone browser: the **Supabase dashboard SQL editor** (project `postriff-phase2-private`) and the **Vercel dashboard** (team `team_PgXY5VdAYKcsv0RLoDPHscNq`, project `prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L`), or an agent using the same through its connectors. Alert ids come from `scripts/discord_ops_check.py`; severities and thresholds from `docs/ops/discord-alert-thresholds.json`. Rules that never bend: stop first, investigate second; never resend an uncertain post; holds are lifted only on the Release Captain's word; every action is written in the ledger with the time (UTC). Whoever acts tells the owner (James, Release Captain) at once. **This does not make H-07 VERIFIED**: the on-call hours and the alert channels are the owner's to confirm (`ALERT-CHANNELS.md`).
+Everything here needs only a phone browser: the **Supabase dashboard SQL editor** (project `postriff-phase2-private`) and the **Vercel dashboard** (team `team_PgXY5VdAYKcsv0RLoDPHscNq`, project `prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L`), or an agent using the same through its connectors. Alert ids (36) come from `scripts/discord_ops_check.py`; severities and thresholds from `docs/ops/discord-alert-thresholds.json`. Rules that never bend: stop first, investigate second; never resend an uncertain post; holds are set and lifted only with the Release Captain's authority; every action is written in the ledger with the time (UTC). Whoever acts tells the owner (James, Release Captain) at once. **This does not make H-07 VERIFIED**: who is on call and how alerts reach them is the owner's (`ALERT-CHANNELS.md`, `H07-EVIDENCE.md`).
+
+Measurements quoted below are from disposable PostgreSQL 16 clusters with the real worker and coordinator and a mock Discord, on the merged head `d864f25f` (W-02 `5fc6cb21`); the probe outputs are listed in `H07-EVIDENCE.md`. They are not Production observations.
+
+## First: which worker owns Discord right now
+
+Read the health payload (`/api/ops/discord/health`, or `SNAPSHOT` below without the process view): `lane.enabled` and `lane.ready`.
+
+- **Lane flag on and ready**: the W-02 lane loops own Discord. Under a hold they stop before claiming anything; created posts keep their read-back budget and verify after the lift (measured).
+- **Lane flag off, or on but not ready, or the RC1 build after a rollback**: the minute cron's frozen path owns Discord. Under a hold it still claims: each unsent post is pushed back 5 minutes, and **each created post awaiting its read-back burns one check per claim; at the fifth (about 25 s of claims) it is parked for 24 hours as "uncertain, manual provider review"**, although the message is in Discord. The lift does not bring it back (measured, RC1 file `2a5a523d` included). A customer's "post now" also claims through this path.
 
 ## The levers, fastest first
 
-1. **Hold** (seconds, no deploy): the `HOLD_ON` statement below. Every new Discord request (posts, reads, connects) is refused before it is sent; queued posts wait, nothing is lost. A post whose send permit was reserved just before the hold can still go out: at most the one step each running loop had in flight (docs/w02/AS-BUILT.md, Turning it off). Approvals last an hour, so a hold longer than that means re-approvals. Works only on a build with `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` (and, for login-token refreshes, commit `29bc8ab2` or later).
-2. **Close new connections only** (seconds): promote the **dark twin** of the serving SHA (its deployment id is in the release record). Existing connections and queued posts keep working.
-3. **Roll back the serving build** (seconds, no rebuild): promote the previous production deployment (below).
-4. **Kill switch** (a build, about 3 minutes, needs the owner's approval): a twin with `POSTRIFF_OAUTH_DISCORD_DISABLED=true`.
+1. **Database hold** (seconds, no deploy, Release Captain's authority): `HOLD_ON` below, which must return a row. Every new Discord request (posts, read-backs, connects) is refused before it is sent. What it costs, measured:
+   - Posts not yet sent are not lost while the hold is short: each claim pushes them back 5 minutes. **But an approval ends 1 hour after the post's own scheduled time, so a post becomes "held" (a person must approve it again) from about 55 minutes after its scheduled time**, counted from when it was due, not from when the hold started: posts already late lapse sooner. The lift does not revive a held post.
+   - Created posts awaiting their read-back are parked for 24 hours when a Discord-claiming worker runs during the hold (section above). With the lane owning Discord they are not.
+   - A permit reserved before the hold can still be used: at most the one step each running loop had in flight. A permit that the hold blocked after sealing is now proven unsent and retried (W-02 `466232ab`, `f525aa17`).
+   - The hold lives in the database: a restore rewinds it (section "After any database restore").
+   - Works only on a build with `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` (and, for login-token refreshes, commit `29bc8ab2` or later).
+2. **Discord-paused build** (minutes; a staged build and a promote, so a Production operation for the owner): the serving SHA staged with `POSTRIFF_DISCORD_RATE_POLICY` set to a value that does not parse. Every process then has no coordinator and refuses Discord requests before sending, whatever the database says; due posts wait (the minute cron pushes each back 5 minutes); nothing is held, parked or marked uncertain. It does not depend on the database, so it survives a restore and does not strand posts the way the hold can. Evidence is the restore lane's drill and W-02's recovery tests (`RESTORE-HAZARD-DRILL.md`), not a Vercel build; prepare it in advance as a staged candidate.
+3. **Close new connections only** (seconds): promote the **dark twin** of the serving SHA (its deployment id is in the release record). Existing connections and queued posts keep working.
+4. **Roll back the serving build** (seconds, no rebuild): promote the previous production deployment (below).
+
+**Not stops:** turning the W-02 lane flag off (the minute cron takes Discord back on the frozen path). **Destructive stops:** the kill switch (`POSTRIFF_OAUTH_DISCORD_DISABLED=true`, a build) and turning rate limits off both make the worker hold every due post and mark every destination "verification required", so every customer must verify and approve again. Use them only on the owner's decision.
 
 ## Symptom, first action, undo
 
 | Symptom | Alert id (severity) | First action | Undo | Tell |
 |---|---|---|---|---|
-| Cross-tenant data seen, or one member refused other workspaces many times, or a failing isolation probe | `CROSS_TENANT_PROBING` (page), `CROSS_TENANT_PROBE_FAILED` (page), `CROSS_TENANT_DISCORD` (warn) | `HOLD_ON`, then close new connections; keep the log lines (actor key only) | captain's word: `HOLD_OFF`, promote the open build | owner now; privacy path, RUNBOOK-INCIDENT 4.H |
-| Posts may have reached Discord with no answer; a wrong or unapproved send | `DELIVERY_UNCERTAIN` (page at 3) | `HOLD_ON`; never resend; reconcile by read-back only | `HOLD_OFF` after the cause is known | owner |
+| Isolation is broken: the Q-05 probe fails, or cross-tenant data was seen | `CROSS_TENANT_PROBE_FAILED` (page), or confirmed exposure | `HOLD_ON`, then close new connections; keep the log lines (actor key only) | captain's word: `HOLD_OFF`, promote the open build | owner now; privacy path, RUNBOOK-INCIDENT 4.H |
+| One member refused other workspaces many times, or a refusal on a Discord route | `CROSS_TENANT_PROBING` (warn 10, page 30 in 10 min), `CROSS_TENANT_DISCORD` (warn) | **no hold**: each refusal is the gate working, no data left. Find the actor key in the logs; check the isolation probe; a stale tab or old link is the usual cause | none | owner if it pages; hold only if the probe fails or exposure is confirmed |
+| Posts may have reached Discord with no answer; a wrong or unapproved send | `DELIVERY_UNCERTAIN` (page at 3 in 15 min; warn while any is unresolved) | wrong or unapproved send: `HOLD_ON` (or the paused build when the lane does not own Discord); otherwise never resend and reconcile by read-back | `HOLD_OFF` after the cause is known | owner |
 | Bot token rejected (401) | `DELIVERY_UNAUTHORIZED`, `RATE_CREDENTIAL_HOLD` (page) | `HOLD_ON` (stops a 401 storm); only the owner resets the token, then a new build | `HOLD_OFF` once the new build answers | owner (only the owner can rotate) |
 | Near a Discord IP restriction | `RATE_INVALID_BUDGET` (page below 25%), `RATE_INVALID_REQUESTS` (page) | close new connections; if it keeps falling, `HOLD_ON` | promote the open build after the window resets and the cause is known | owner |
 | Discord outage, 5xx, embargo | `DELIVERY_DISCORD_5XX`, `RATE_EMBARGO`, `RATE_ROUTE_CIRCUITS` (warn; embargo over 5 min pages) | nothing destructive: watch discordstatus.com, post the customer notice (RUNBOOK-INCIDENT 5) | none | owner, for information |
 | Rate policy expiring or expired | `RATE_POLICY` (warn under 7 days, page under 1 or invalid) | renew: `scripts/discord_rate_policy.py generate`, owner sets the variable, a build and a promotion | none | owner (an environment change needs the owner's approval) |
-| Work is due and nothing is claimed or sent | `SILENT_HALT_NO_PROGRESS`, `SILENT_HALT_NO_SHARDS`, `SILENT_HALT_LANE_NOT_READY` (page) | if it began after a promotion, roll back the serving build; otherwise read the payload's `lane.blocker` and `config` and fix the named cause | promote again | owner |
-| The health payload does not answer | `SILENT_HALT_HEALTH_UNANSWERED`, `SILENT_HALT_DATABASE` (page) | open `https://rafii.io/api/health` and the Supabase and Vercel status pages; run `SNAPSHOT` below; roll back if it followed a promotion | as above | owner |
-| Posts late | `BACKLOG_LAG` (warn above 5 min, page above 15) | was a burst declared? If not, treat as a halt (row above) | none | owner if it pages |
+| Work is due and nothing is claimed, admitted or created | `SILENT_HALT_NO_PROGRESS`, `SILENT_HALT_NO_CREATE`, `SILENT_HALT_NO_SHARDS`, `SILENT_HALT_LANE_NOT_READY` (page) | if it began after a promotion, roll back the serving build; otherwise read the payload's `lane.blocker` and `config` and fix the named cause | promote again | owner |
+| The health payload does not answer, is malformed, or a section fails | `SILENT_HALT_HEALTH_UNANSWERED`, `SILENT_HALT_DATABASE` (page), `SILENT_HALT_SECTION` (warn, page when it persists) | open `https://rafii.io/api/health` and the Supabase and Vercel status pages; run `SNAPSHOT` below; roll back if it followed a promotion | as above | owner |
+| Posts late | `BACKLOG_LAG` (warn above 15 min, page above 45) | a declared burst drains in about 23 minutes and one busy workspace can need 40; past 45 treat it as a halt (row above), before approvals start lapsing at about 55 | none | owner if it pages |
+| Approvals lapsing or posts failing | `DELIVERY_HELD_GROWTH`, `DELIVERY_FAILED_GROWTH` (warn) | read which posts became held or failed (founder notices); a lapse means re-approval by each customer | none | owner |
 | A build without the open settings is serving | `CONFIG_GATE`, `CONFIG_CAP`, `CONFIG_REVIEWED`, `CONFIG_FLAGS` (page) | promote the recorded open build again; find which lane built the other | promote back | owner, and the lane that built it |
 | Server cap filling | `CONFIG_CAP_USED` (warn 80%, page 90%) | compare with the Developer Portal count (RUNBOOK-LAUNCH 6) | none | owner decides the next cap |
-| A hold is on | `SILENT_HALT_OPERATOR_HOLD` (warn) | ask the captain whether it should still be on | `HOLD_OFF` on the captain's word | captain |
+| A hold is on | `SILENT_HALT_OPERATOR_HOLD` (warn) | ask the captain whether it should still be on: approvals lapse and, off the lane, read-backs park | `HOLD_OFF` on the captain's word | captain |
 
 ## The statements (paste into the Supabase SQL editor; each is one block)
 
 ```sql
--- H07:HOLD_ON  stop every Discord request (application-wide policy row)
-UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy';
+-- H07:HOLD_ON  stop every Discord request (application-wide policy row); it must return a row
+UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy' RETURNING kind, manual_hold;
+```
+
+**Zero rows returned means there is no hold.** The policy row is created by the coordinator's first request, so a database that never admitted one (or was restored to before it) has none, and the next request creates it unheld. Run `HOLD_INSERT` at once, then `HOLD_READBACK`.
+
+```sql
+-- H07:HOLD_OFF  resume, only on the Release Captain's word; it must return a row
+UPDATE public.pr_discord_rate_state SET manual_hold = false WHERE kind = 'policy' RETURNING kind, manual_hold;
 ```
 
 ```sql
--- H07:HOLD_OFF  resume, only on the Release Captain's word
-UPDATE public.pr_discord_rate_state SET manual_hold = false WHERE kind = 'policy';
-```
-
-```sql
--- H07:HOLD_READBACK  run after either statement
+-- H07:HOLD_READBACK  run after either statement, and again two minutes later
 SELECT count(*) AS policy_rows,
        count(*) FILTER (WHERE manual_hold) AS held,
        (SELECT round(extract(epoch FROM now() - reserved_at)) FROM public.pr_discord_request_admissions
@@ -47,10 +67,10 @@ SELECT count(*) AS policy_rows,
 FROM public.pr_discord_rate_state WHERE kind = 'policy';
 ```
 
-Healthy: `policy_rows 1, held 0`, and `seconds_since_last_request` small while posts are going out. Held: `policy_rows 1, held 1`, and `seconds_since_last_request` keeps growing (run it again after two minutes; a step already in flight may finish, nothing new starts). **`policy_rows 0` means the hold cannot work by `UPDATE`** (no request was ever admitted on this database, for example after a restore to an early point): run `HOLD_INSERT` with the Discord application id (Developer Portal, General Information; it is public), then the read-back again.
+Healthy: `policy_rows 1, held 0`, and `seconds_since_last_request` small while posts are going out. Held: `policy_rows 1, held 1`, and `seconds_since_last_request` keeps growing (a step already in flight may finish; nothing new starts). `policy_rows 0`: no hold is possible by `UPDATE`; use `HOLD_INSERT`. **`policy_rows 2` with `held 1` two minutes after a `HOLD_INSERT`: the typed application id was wrong**, the coordinator created its own row unheld and posts are going out: run `HOLD_ON` (it holds every policy row) and read back again.
 
 ```sql
--- H07:HOLD_INSERT  only when HOLD_READBACK shows policy_rows 0; replace the id between the quotes
+-- H07:HOLD_INSERT  only when HOLD_ON returned no row; replace the id between the quotes
 INSERT INTO public.pr_discord_rate_state(scope_key, kind, limit_count, remaining, window_seconds, reset_at,
                                          manual_hold, policy_revision, policy_expires_at)
 VALUES ('00:' || encode(sha256(convert_to('DISCORD_APPLICATION_ID', 'UTF8')), 'hex'), 'policy', 1, 0, 1, now(),
@@ -59,21 +79,49 @@ ON CONFLICT (scope_key) DO UPDATE SET manual_hold = true;
 ```
 
 ```sql
--- H07:DRAIN_CHECK  before rolling back to an older worker; also monitoring Q7 and M2
-WITH sample AS MATERIALIZED (
-    SELECT state FROM public.pr_workspaces
-    WHERE state ? 'phase2' AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock'
-    ORDER BY id LIMIT 5000
-), jobs AS MATERIALIZED (
-    SELECT j FROM sample s CROSS JOIN LATERAL jsonb_array_elements(coalesce(s.state #> '{phase2,jobs}', '[]'::jsonb)) j
-    WHERE j #>> '{manifest,platform}' = 'Discord'
-)
-SELECT count(*) FILTER (WHERE j ->> 'leaseOwner' IS NOT NULL
-                          AND (j ->> 'leaseUntil')::double precision > extract(epoch FROM clock_timestamp())) AS live_leases,
-       count(*) FILTER (WHERE j #>> '{discordWorker,stage}' = 'sealed') AS sealed_now,
-       count(*) FILTER (WHERE j ->> 'state' = 'uncertain') AS uncertain_to_reconcile
-FROM jobs;
+-- H07:HOLD_KEYCHECK  after HOLD_INSERT: does the typed application id name the coordinator's own row? same id as above
+SELECT count(*) FILTER (WHERE scope_key = '00:' || encode(sha256(convert_to('DISCORD_APPLICATION_ID', 'UTF8')), 'hex')) AS typed_key_rows,
+       count(*) AS policy_rows,
+       (SELECT count(*) FROM public.pr_discord_request_admissions
+         WHERE scope_keys @> ARRAY['00:' || encode(sha256(convert_to('DISCORD_APPLICATION_ID', 'UTF8')), 'hex')]) AS admissions_on_typed_key,
+       (SELECT count(*) FROM public.pr_discord_request_admissions) AS admissions
+FROM public.pr_discord_rate_state WHERE kind = 'policy';
 ```
+
+The id is proven when `typed_key_rows = policy_rows = 1` and either `admissions_on_typed_key = admissions` (the coordinator has admitted requests on this database, all on that key) or, on a database with no admissions yet, `policy_rows` is still 1 two minutes after the cron ran. Anything else: the id is wrong; find it in the Developer Portal (General Information; it is public) and repeat.
+
+```sql
+-- H07:DRAIN_CHECK  before switching to an older worker. Complete, not sampled: due-work projection and admissions index
+WITH due AS MATERIALIZED (
+    SELECT w.state FROM public.pr_discord_worker_projection p
+    JOIN public.pr_workspaces w ON w.id = p.workspace_id
+    WHERE p.next_at IS NOT NULL
+), jobs AS MATERIALIZED (
+    SELECT j FROM due d
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(d.state #> '{phase2,jobs}') = 'array'
+                                                 THEN d.state #> '{phase2,jobs}' ELSE '[]'::jsonb END) j
+    WHERE j #>> '{manifest,platform}' = 'Discord'
+), admissions AS MATERIALIZED (
+    SELECT (SELECT count(*) FROM public.pr_discord_request_admissions
+             WHERE state IN ('reserved', 'sealed') AND expires_at > clock_timestamp() AND is_publish)
+         + (SELECT count(*) FROM public.pr_discord_request_admissions
+             WHERE state = 'sent' AND is_publish AND sent_at > clock_timestamp() - interval '120 seconds') AS in_flight,
+           (SELECT count(*) FROM public.pr_discord_request_admissions
+             WHERE state = 'sent' AND is_publish AND sent_at <= clock_timestamp() - interval '120 seconds') AS stuck_sent,
+           (SELECT count(*) FROM public.pr_discord_request_admissions WHERE state = 'uncertain' AND is_publish) AS uncertain
+)
+SELECT (SELECT count(*) FROM jobs WHERE j ->> 'leaseOwner' IS NOT NULL
+          AND public.pr_discord_queue_number(j -> 'leaseUntil') > extract(epoch FROM clock_timestamp())) AS live_leases,
+       a.in_flight AS publishes_in_flight,
+       (SELECT count(*) FROM jobs WHERE j #>> '{discordWorker,stage}' = 'sealed') AS sealed_now,
+       (SELECT count(*) FROM jobs WHERE j ->> 'state' = 'uncertain') AS uncertain_to_reconcile,
+       a.stuck_sent AS stuck_sent_admissions,
+       a.uncertain AS uncertain_admissions,
+       (SELECT count(*) FROM jobs WHERE coalesce(j ->> 'state', '') NOT IN ('verified', 'failed', 'canceled', 'held')) AS non_terminal_jobs
+FROM admissions a;
+```
+
+Counts only. It reads the state of the workspaces the due-work projection lists (those with Discord work not finished) and the admissions through their unresolved-state index, so it is complete at any number of workspaces. **Switch only at `live_leases 0` and `publishes_in_flight 0`.** `sealed_now`, `uncertain_to_reconcile` and the two admission counts are posts to reconcile by read-back, never to resend: the older worker never recreates a sealed or accepted post (W-02 rollback tests). `non_terminal_jobs` must be 0 for the `dpl_47SGx…` target only. A workspace whose Discord job has an unreadable `nextAt` or `leaseUntil` is left out of the projection, and out of this count; the W-02 lane does not claim it either.
 
 `SNAPSHOT`: `docs/ops/discord-ops-snapshot.sql` is the whole health picture as one row of JSON (read-only, counts only), for when the protected route cannot be called from a phone (a browser cannot add its header).
 
@@ -85,15 +133,23 @@ FROM jobs;
 
 ## Before rolling back to an older worker: the order
 
-1. `HOLD_ON`, then `HOLD_READBACK` (held 1).
-2. Wait two minutes (a lease lasts 45 s; a step in flight finishes), then `DRAIN_CHECK`: **`live_leases 0` and `sealed_now 0`** before switching. `uncertain_to_reconcile` is reconciled by read-back by either worker, never resent.
-3. Promote the older build; read back the alias.
-4. `HOLD_OFF` on the captain's word; `HOLD_READBACK` (held 0); watch `BACKLOG_LAG` and `SILENT_HALT_NO_PROGRESS` clear. The rollback to `dpl_47SGx…` (no Discord v2 code) additionally needs every Discord job terminal (monitoring Q7), because that build does not know the v2 manifests.
+0. **Before step 1, get the Release Captain's authority for both `HOLD_ON` and `HOLD_OFF`**: the lift in step 4 must follow the alias read-back without waiting for a second call, because the older worker claims Discord and, under the hold, parks every created post's read-back for 24 hours and lets approvals run out.
+1. `HOLD_ON` (it must return a row; otherwise `HOLD_INSERT`, `HOLD_KEYCHECK`), then `HOLD_READBACK` (held 1).
+2. Wait two minutes (a lease lasts 45 s; a step in flight finishes), then `DRAIN_CHECK`: **`live_leases 0` and `publishes_in_flight 0`** before switching.
+3. Promote the older build; read back the alias (`sourceRevision`, `build.deploymentId`).
+4. **At once** `HOLD_OFF` (it must return a row) and `HOLD_READBACK` (held 0); watch `BACKLOG_LAG` and `SILENT_HALT_NO_PROGRESS` clear and `DELIVERY_UNCERTAIN` stay where `DRAIN_CHECK` left it.
 
-## After any database restore (M-03 section 6)
+Alternative for steps 1 and 4: the Discord-paused build (lever 2) instead of the database hold, when it was staged in advance. It strands nothing, but it is a promote of its own, so the order becomes paused build, `DRAIN_CHECK`, older build.
 
-A restore rewinds the database, and the duplicate protection (intents, leases, coordinator admissions) lives in the database, so a post sent after the restore point looks unsent and would be sent again while its approval lasts. And **the hold is in the database too**, so the restore can remove it. Therefore: (1) before restoring, `HOLD_ON` and stop the senders outside the database (promote a kill-switch twin, or have the owner disable the project's cron jobs in Vercel settings); (2) **immediately after the restore, before any worker runs: `HOLD_ON` again, `HOLD_READBACK` must show held 1** (use `HOLD_INSERT` if it shows policy_rows 0); (3) reconcile every Discord post of the rewound interval against the destination channels; (4) re-enable the senders, then `HOLD_OFF` only on the captain's word. The restore drill itself is another lane's (`RC2-EVIDENCE-PACKET.md`); until it has a receipt this is documented, not proven.
+**The `dpl_47SGx…` target (no Discord v2 code) needs `non_terminal_jobs 0`, and the hold of step 1 stops jobs from finishing.** Decide before step 1, with the owner:
+- **(a) Drain with the hold off** (posts are kept): stay on the current build without a hold and stop new Discord work at the source (close new connections with the dark twin; customers stop scheduling new Discord posts), run `DRAIN_CHECK` until `non_terminal_jobs 0`, then steps 1 to 4. It takes as long as the queue: hours if posts are scheduled ahead.
+- **(b) Cancel the remaining Discord jobs** (fast; those posts are lost and each customer must be told): an owner decision and a customer notice; there is no reviewed bulk-cancel statement in this runbook, and job rows are never edited by hand (RUNBOOK-INCIDENT 4.G).
+- Otherwise roll back to a v2 build (the previous production deployment) instead, which needs neither.
+
+## After any database restore
+
+A restore rewinds the database, and the duplicate protection (intents, leases, coordinator admissions) and **the hold itself** live in it: posts sent after the restore point look unsent and are sent again while their approvals last, and a hold set before the restore is gone. The restore lane's drill measured both (`RESTORE-HAZARD-DRILL.md`) and wrote a procedure, `RESTORE-RUNBOOK-PROPOSAL.md` section 4.J, **a proposal that is not in force** until the owner adopts it. Three points from it that this runbook already follows: a hold must prove itself (`HOLD_ON` returns a row, then `HOLD_READBACK`); the Discord-paused build (lever 2) is the stop that does not live in the database, so it is the one that survives an in-place restore; the kill switch and rate limits off are not the stop to use. Its reconciliation tool is not reviewed and writes job rows; no step here relies on it. The order this runbook supports without it: before the restore, the paused build and `HOLD_ON`; after it, before anything else runs, `HOLD_ON` again (or `HOLD_INSERT`, `HOLD_KEYCHECK`), reconcile every Discord post of the rewound interval against the destination channels by hand, then the normal build, then `HOLD_OFF` on the captain's word.
 
 ## Not covered
 
-No 24/7 cover exists: alerts reach a person only through the channels the owner configures (`ALERT-CHANNELS.md`), inside the hours the owner confirms. Not drilled on Production: the SQL editor from a phone, a real promotion or rollback, the Vercel log pipeline, real alert delivery (`DRILL-RECEIPT-ISOLATED.md` says what the isolated drills prove). The hold does nothing on a build with rate limits off; closing connections by promoting the dark twin assumes a build-level gate wins over a project variable, which is unproven (`DURABLE-OPEN-CONFIG-PROPOSAL.md` 3.3). The token reset, the policy renewal and the kill switch need the owner and a build. Rollback targets older than Vercel's deployment retention may no longer exist: check the target is listed before relying on it. Message deletion in Discord is the owner's decision only.
+No 24/7 cover exists until the owner names it (`H07-EVIDENCE.md`). Not drilled on Production: the SQL editor from a phone, a real promotion or rollback, the paused build on Vercel, the Vercel log pipeline, real alert delivery (`DRILL-RECEIPT-ISOLATED.md` says what the isolated drills prove). The hold does nothing on a build with rate limits off; closing connections by promoting the dark twin assumes a build-level gate wins over a project variable, which is unproven (`DURABLE-OPEN-CONFIG-PROPOSAL.md` 3.3). A loop that stops between sealing a post and sending it leaves that post "uncertain" with no message id (W-02's own control test); only a person can reconcile it. The token reset, the policy renewal and the kill switch need the owner and a build. Rollback targets older than Vercel's deployment retention may no longer exist: check the target is listed before relying on it. Message deletion in Discord is the owner's decision only.
