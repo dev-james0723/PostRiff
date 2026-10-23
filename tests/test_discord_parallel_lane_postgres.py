@@ -841,16 +841,36 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         tick, warnings = self.lagging(worker)
         self.assertEqual(warnings, [], 'quiet once drained')
 
+    def expire_after_the_first_create(self, provider, seconds):
+        """The reviewed policy ends `seconds` after the first create reaches Discord, whatever the runner's start-up
+        time (a policy that ends a fixed time after the test builds it can end before the loops have sent
+        anything). The policy in force is long-lived; the first create's answer replaces it, once, by a short one
+        built at that instant, as a deployment whose policy runs out mid-run. Returns the list that receives that
+        policy's expiry (empty until the first create)."""
+        ended, lock = [], threading.Lock()
+
+        def after(method, path, answer):
+            if method == 'POST' and path.endswith('/messages'):
+                with lock:
+                    if not ended:
+                        raw, expires = short_policy(self.cluster.now(), seconds)
+                        provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP, policy=raw)
+                        ended.append(expires)
+        self.wire.after = after
+        return ended
+
     def test_a_policy_that_expires_mid_run_stops_every_loop_and_renewal_resumes(self):
         tenants = [F.Tenant(n) for n in range(48)]
         worker = self.start(tenants, 1, latency=.1)
         provider = self.hosted.providers['discord']
-        raw, expires = short_policy(self.cluster.now(), 4)
-        provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP, policy=raw)
+        ended = self.expire_after_the_first_create(provider, 4)
         results, failures = F.run_lanes(worker, 4, seconds=60)
         self.assertEqual(failures, [])
         self.assertEqual([r['stoppedBy'] for r in results], ['coordinator_unavailable'] * 4, 'every loop stopped')
         self.assertEqual({r['status']['blocker'] for r in results}, {'coordinator_unavailable'})
+        self.assertEqual(len(ended), 1, 'a first create went out, which started the short policy')
+        expires = ended[0]
+        self.wire.after = None
         found = F.jobs(self.cluster)
         claims = [event['at'] for job in found.values() for event in job.get('events', []) if event['state'] == 'claimed']
         self.assertTrue(claims and min(claims) < expires)
