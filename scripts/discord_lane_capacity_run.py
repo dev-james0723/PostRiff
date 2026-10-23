@@ -1033,7 +1033,8 @@ class Harness:
             held = [float(d) for (d,) in db.execute(
                 """SELECT extract(epoch from outcome_at - reserved_at)::double precision
                    FROM public.pr_discord_request_admissions
-                   WHERE reserved_at >= to_timestamp(%s) AND outcome_at IS NOT NULL""", (start,)).fetchall()]
+                   WHERE reserved_at >= to_timestamp(%s) AND outcome_at IS NOT NULL AND state = 'observed'""",
+                (start,)).fetchall()]  # answered requests only: a blocked permit was never in flight
             admission_window = {'count': len(admitted), 'byCredential': by_kind,
                                 'peakTrailingSecond': analysis.peak_trailing(admitted, 1.0),
                                 'peakCalendarSecond': analysis.peak_calendar_second(admitted),
