@@ -100,7 +100,7 @@ class SharedPathsOnPostgres(unittest.TestCase):
                               capture_output=True, text=True, timeout=600, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
         if done.returncode:
             raise RuntimeError('scenario failed on %s: %s' % (tree, done.stderr[-3000:]))
-        return json.loads(done.stdout)
+        return json.loads(next(line for line in reversed(done.stdout.splitlines()) if line.startswith('{')))
 
     @classmethod
     def _run(cls, *args):

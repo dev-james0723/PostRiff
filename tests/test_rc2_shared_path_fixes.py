@@ -15,6 +15,7 @@ import atexit
 import copy
 import inspect
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -41,7 +42,8 @@ def _probe(script, tree, *args):
                           env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     if done.returncode:
         raise AssertionError('%s failed on %s: %s' % (script, tree, done.stderr[-3000:]))
-    return json.loads(done.stdout)
+    # The probe prints one JSON line first; under the synthetic transport fence its receipt line follows.
+    return json.loads(done.stdout.splitlines()[0])
 
 
 class LiveTree:
@@ -248,6 +250,212 @@ class ChannelsReadAddsNoTransaction(unittest.TestCase):
     def test_connections_v2_off_reads_nothing_more(self):
         listing, transactions = self.read([self.link()], connections_v2=False)
         self.assertEqual((listing['discordIdentities'], transactions), ([], 2))
+
+
+# --- PR-1: the public Discord interactions route while the feature is off ---------------------------------------------
+QUIET_OFF = {'status': 404, 'code': 'not_found', 'logLevels': ['INFO'], 'unsigned': 404, 'runtimeStarted': False,
+             'variants': {'get': 404, 'http': 404, 'textPlain': 404, 'runtimeStarted': False}}
+
+
+class DiscordInteractionsOffIsQuiet(unittest.TestCase):
+    """PR-1 (LOW). POST /api/discord/interactions is answered before the bearer and origin checks. With the user-install
+    flag unset RC1 answered 503 discord_interaction_unavailable, which the request logger writes at ERROR, after starting
+    the hosted runtime in a cold process: any scanner could create ERROR lines and 5xx counts. Live has no such route
+    and answers the same request 403 (application guard) at INFO without the runtime. While the feature is off the route
+    now does not exist: 404 at INFO for any method, scheme or body, without the runtime (the coordinator's choice; the
+    trade-off against Discord's 401 expectation is in discord/interactions.route_unavailable)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.record = _probe('rc2_interactions_probe.py', ROOT)
+
+    def test_every_off_state_is_a_quiet_404_without_the_runtime(self):
+        for case in ('cold', 'warm', 'killed', 'absent'):
+            with self.subTest(case=case):
+                self.assertEqual(self.record[case], QUIET_OFF)
+
+    def test_on_keeps_signature_verification_and_reports_misconfiguration(self):
+        import io
+        import logging
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        from postriff_phase2.hosted_app import HostedApplication
+        app_id, now = '1234567', 1800000000
+        key = Ed25519PrivateKey.generate()
+        config = {'applicationId': app_id, 'publicKey': key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex(),
+                  'endpoint': 'https://rafii.example.invalid/api/discord/interactions'}
+        provider = SimpleNamespace(client_id=app_id, user_install_v1_enabled=True, interaction_config_raw=config, execution_enabled=True)
+        oauth = SimpleNamespace(providers={'discord': provider}, repository=SimpleNamespace(connection_factory=None),
+                                public_base_url='https://rafii.example.invalid')
+        app = HostedApplication(service=SimpleNamespace(oauth=oauth))
+        raw = json.dumps({'type': 1, 'application_id': app_id}).encode()
+
+        def send(signature):
+            environ = {'REQUEST_METHOD': 'POST', 'PATH_INFO': '/api/discord/interactions', 'wsgi.url_scheme': 'https',
+                       'CONTENT_LENGTH': str(len(raw)), 'CONTENT_TYPE': 'application/json', 'wsgi.input': io.BytesIO(raw),
+                       'HTTP_X_SIGNATURE_TIMESTAMP': str(now), 'HTTP_X_SIGNATURE_ED25519': signature,
+                       'HTTP_HOST': 'rafii.example.invalid', 'REMOTE_ADDR': '203.0.113.9'}
+            statuses = []
+            with patch('postriff_phase2.discord.interactions.time.time', return_value=now), \
+                    self.assertLogs('postriff.request', 'INFO') as logged:
+                body = b''.join(app(environ, lambda status, headers, exc_info=None: statuses.append(int(status.split()[0]))))
+            return statuses[-1], json.loads(body), [r.levelname for r in logged.records]
+
+        self.assertEqual(send(key.sign(str(now).encode() + raw).hex()), (200, {'type': 1}, ['INFO']))
+        status, body, levels = send('00' * 64)
+        self.assertEqual((status, body.get('code'), levels), (401, 'discord_interaction_unavailable', ['INFO']))
+        provider.interaction_config_raw = None  # on, but not configured: the operator must see it
+        status, body, levels = send(key.sign(str(now).encode() + raw).hex())
+        self.assertEqual((status, body.get('code'), levels), (503, 'discord_interaction_unavailable', ['ERROR']))
+
+    def test_the_route_decides_on_and_off_exactly_as_the_adapter_flags_say(self):
+        """A cold process reads the variable the provider registry reads, with the same exact-string rule; a running one
+        asks the mounted adapter: Discord mounted, the user-install flag on, and no kill switch."""
+        from types import SimpleNamespace
+        from postriff_phase2 import hosted_app, social_connectors
+        from postriff_phase2.discord.interactions import enabled
+        self.assertIn("values.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') == 'true'", inspect.getsource(social_connectors.DiscordProvider.mount))
+        self.assertIn("os.environ.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') == 'true'", inspect.getsource(hosted_app.HostedApplication._handle))
+        adapter = lambda flag, execution: SimpleNamespace(user_install_v1_enabled=flag, execution_enabled=execution)
+        self.assertEqual([enabled(None), enabled(adapter(True, True)), enabled(adapter(False, True)), enabled(adapter(True, False))],
+                         [False, True, False, False])
+
+
+@unittest.skipUnless(_rev(LIVE_REV), 'the live revision is not in this clone (shallow checkout)')
+class DiscordInteractionsOffMatchesLiveLogging(unittest.TestCase):
+    """PR-1, differential: live has no such route and answers the application guard's 403. Both builds answer with a
+    4xx at INFO without starting the runtime, in every off state; the status differs on purpose (404, the route does
+    not exist while the feature is off)."""
+
+    def test_same_log_level_status_class_and_no_runtime_as_live(self):
+        live, mine = _probe('rc2_interactions_probe.py', LiveTree.get()), _probe('rc2_interactions_probe.py', ROOT)
+        for case in ('cold', 'warm', 'killed', 'absent'):
+            with self.subTest(case=case):
+                self.assertEqual((live[case]['status'], live[case]['logLevels'], live[case]['runtimeStarted']), (403, ['INFO'], False))
+                self.assertEqual((mine[case]['logLevels'], mine[case]['runtimeStarted'], mine[case]['status'] // 100),
+                                 (live[case]['logLevels'], live[case]['runtimeStarted'], live[case]['status'] // 100))
+
+
+# --- ENV-1: database pool settings ---------------------------------------------------------------------------------------
+class PoolSettingsNeverTakeTheApiDown(unittest.TestCase):
+    """ENV-1 (LOW). runtime_from_environment ran int() on POSTRIFF_DB_POOL_MAX_CONNECTIONS and
+    POSTRIFF_DB_POOL_MAX_WAITING even with the pool off, so one malformed value failed runtime construction and every
+    runtime route answered 503. Now a limit that is not a whole number in its range keeps the pool off (fail-closed:
+    one connection per transaction, as without the pool) and logs one WARNING per process without the value."""
+
+    def setUp(self):
+        from postriff_phase2 import hosted_app
+        from postriff_phase2.oauth import CredentialVault
+        self.hosted_app = hosted_app
+        warned = getattr(hosted_app, '_POOL_SETTINGS_WARNED', None)
+        if warned is not None:  # absent before the fix
+            warned.clear()
+            self.addCleanup(warned.clear)
+        self.env = {'POSTRIFF_DATABASE_URL': 'postgresql://synthetic:synthetic@127.0.0.1:1/none?sslmode=disable',
+                    'POSTRIFF_SUPABASE_URL': 'https://abcdefghijklmnopqrst.supabase.co',
+                    'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': 'sb_publishable_' + 'x' * 30,
+                    'POSTRIFF_SUPABASE_SECRET_KEY': 'sb_secret_' + 'y' * 30,
+                    'POSTRIFF_CREDENTIAL_KEY': CredentialVault.generate_key(),
+                    'POSTRIFF_PUBLIC_BASE_URL': 'https://app.rafii.invalid'}
+
+    def build(self, **changes):
+        from postriff_phase2.postgres_pool import PooledPostgresFactory
+        with self.assertLogs('postriff.request', 'INFO') as logged:
+            logging.getLogger('postriff.request').info('probe')  # assertLogs needs a record when nothing else logs
+            service, _, _ = self.hosted_app.runtime_from_environment({**self.env, **changes})
+        factory = service.repository.connection_factory
+        warnings = [r.getMessage() for r in logged.records if r.levelname == 'WARNING']
+        return isinstance(factory, PooledPostgresFactory), factory, warnings
+
+    def test_a_malformed_limit_with_the_pool_off_keeps_the_api_up_and_logs_once_without_the_value(self):
+        for name in ('POSTRIFF_DB_POOL_MAX_CONNECTIONS', 'POSTRIFF_DB_POOL_MAX_WAITING'):
+            with self.subTest(variable=name):
+                getattr(self.hosted_app, '_POOL_SETTINGS_WARNED', []).clear()
+                pooled, _, warnings = self.build(**{name: 'twenty-five'})
+                self.assertFalse(pooled)
+                self.assertEqual(len(warnings), 1, warnings)
+                self.assertEqual(json.loads(warnings[0]), {'event': 'database.pool_settings_invalid', 'variables': [name],
+                                                           'poolRequested': False, 'pool': 'off'})
+                self.assertNotIn('twenty-five', warnings[0])
+
+    def test_a_bad_limit_with_the_pool_requested_keeps_the_pool_off(self):
+        for value in ('lots', '0', '33', '1e3', ''):
+            with self.subTest(value=value):
+                getattr(self.hosted_app, '_POOL_SETTINGS_WARNED', []).clear()
+                pooled, _, warnings = self.build(POSTRIFF_DB_POOL_ENABLED='true', POSTRIFF_DB_POOL_MAX_CONNECTIONS=value)
+                self.assertFalse(pooled, 'fail-closed: no pool with limits it cannot honour')
+                self.assertEqual([json.loads(w)['poolRequested'] for w in warnings], [True])
+
+    def test_the_warning_is_written_once_per_process(self):
+        self.build(POSTRIFF_DB_POOL_MAX_WAITING='many')
+        _, _, again = self.build(POSTRIFF_DB_POOL_MAX_WAITING='many')
+        self.assertEqual(again, [])
+
+    def test_valid_settings_are_used_exactly_as_before(self):
+        pooled, factory, warnings = self.build(POSTRIFF_DB_POOL_ENABLED='true', POSTRIFF_DB_POOL_MAX_CONNECTIONS='12',
+                                               POSTRIFF_DB_POOL_MAX_WAITING='40')
+        self.assertTrue(pooled)
+        self.assertEqual((factory._max_size, factory._max_waiting, warnings), (12, 40, []))
+        pooled, _, warnings = self.build()
+        self.assertEqual((pooled, warnings), (False, []))
+        pooled, factory, _ = self.build(POSTRIFF_DB_POOL_ENABLED='true')
+        self.assertEqual((pooled, factory._max_size, factory._max_waiting), (True, 20, 64))
+
+
+# --- Independent review (pre-existing, LOW): cron authorization on non-ASCII headers ---------------------------------
+class CronAuthorizationRefusesNonAsciiHeaders(unittest.TestCase):
+    """/api/cron/agent-tasks and /api/cron/worker compared the Authorization header with hmac.compare_digest on str
+    values, which raises TypeError for non-ASCII text (a WSGI header carries raw bytes as latin-1): an unauthenticated
+    request answered 500 with an ERROR line. Like the W-02 shard route, a non-ASCII header or secret is now refused 401.
+    Pre-existing on live; found by the independent review."""
+    SECRET = 'c' * 32
+
+    def call(self, app, path, authorization):
+        import io
+        statuses = []
+        environ = {'REQUEST_METHOD': 'GET', 'PATH_INFO': path, 'wsgi.url_scheme': 'https', 'wsgi.input': io.BytesIO(b''),
+                   'HTTP_HOST': 'rafii.invalid', 'REMOTE_ADDR': '203.0.113.9', 'HTTP_AUTHORIZATION': authorization}
+        with self.assertLogs('postriff.request', 'INFO') as logged:
+            body = b''.join(app(environ, lambda status, headers, exc_info=None: statuses.append(int(status.split()[0]))))
+        return statuses[-1], json.loads(body).get('code'), [r.levelname for r in logged.records]
+
+    def apps(self):
+        from types import SimpleNamespace
+        from postriff_phase2.hosted_app import HostedApplication
+        reached = []
+
+        def tick():
+            reached.append('worker')
+            raise __import__('postriff_alpha.domain', fromlist=['AlphaError']).AlphaError('worker reached', 409)
+        return HostedApplication(cron_secret=self.SECRET), HostedApplication(service=SimpleNamespace(), worker=SimpleNamespace(tick=tick),
+                                                                             cron_secret=self.SECRET), reached
+
+    def test_a_non_ascii_header_is_refused_401_at_info_on_both_routes(self):
+        agent_tasks, worker, reached = self.apps()
+        for header in ('Bearer \u00e9' + 'c' * 31, 'Bearer \xff\xfe', '\u20ac'):
+            for app, path in ((agent_tasks, '/api/cron/agent-tasks'), (worker, '/api/cron/worker')):
+                with self.subTest(path=path, header=header.encode('unicode_escape')):
+                    self.assertEqual(self.call(app, path, header), (401, 'unauthenticated', ['INFO']))
+        self.assertEqual(reached, [])
+
+    def test_a_non_ascii_secret_is_refused_401(self):
+        from postriff_phase2.hosted_app import HostedApplication
+        app = HostedApplication(cron_secret='\u00e9' * 20)
+        self.assertEqual(self.call(app, '/api/cron/agent-tasks', 'Bearer ' + '\u00e9' * 20), (401, 'unauthenticated', ['INFO']))
+
+    def test_ascii_headers_are_judged_as_before(self):
+        from unittest.mock import patch
+        agent_tasks, worker, reached = self.apps()
+        for app, path in ((agent_tasks, '/api/cron/agent-tasks'), (worker, '/api/cron/worker')):
+            with self.subTest(path=path):
+                self.assertEqual(self.call(app, path, 'Bearer wrong-secret-0123456789abcdef')[0], 401)
+        self.assertEqual(self.call(worker, '/api/cron/worker', 'Bearer ' + self.SECRET)[0], 409, 'the right secret reaches the tick')
+        self.assertEqual(reached, ['worker'])
+        with patch('postriff_phase2.agent_runtime_v2.task_engine.cron.tick', return_value={'status': 'ok'}), \
+                patch.object(type(agent_tasks), '_runtime', lambda self: object()):
+            self.assertEqual(self.call(agent_tasks, '/api/cron/agent-tasks', 'Bearer ' + self.SECRET)[0], 200)
 
 
 if __name__ == '__main__':
