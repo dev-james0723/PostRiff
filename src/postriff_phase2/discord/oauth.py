@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 import secrets
+import time
 import uuid
 from contextlib import contextmanager
 from urllib.parse import urlencode
@@ -21,6 +22,12 @@ from .authorization import digest, snowflake
 
 def fail(message='Reconnect Discord and authorize the server and channel again.', status=409):
     raise AlphaError(message, status, code='discord_connection_required')
+
+
+# The API function is killed after 300 seconds, so a refresh claim older than this has no live claimant.
+REFRESH_CLAIM_TTL = 360
+# The refresh token is spent once Discord has answered; keep the new pair through a transient database error.
+SETTLE_ATTEMPTS = 3
 
 
 def identity_capabilities():
@@ -134,8 +141,12 @@ class DiscordConnections:
         response = adapter._discord_http(method, path, headers=headers, credential_kind='user' if bearer else 'oauth',
                                          bearer=bearer, user_id=user_id, **kwargs)
         if response.get('status') not in (200, 201, 204):
-            error = AlphaError('Discord access is unavailable. Reconnect if permissions were removed.', 409 if response.get('status') in (400, 401, 403) else 503)
-            error.discord_permanent = response.get('status') in (400, 401, 403)
+            # Only Discord's own JSON refusal (or invalid_grant) is a verdict on the person's consent. An HTML/WAF page,
+            # an unknown body or a 5xx is not: it must never revoke, disconnect or zero anything.
+            permanent = adapter.is_discord_denial(response)
+            error = (AlphaError('Discord access is unavailable. Reconnect if permissions were removed.', 409) if permanent else
+                     AlphaError('Discord did not confirm this just now. Nothing was changed. Try again shortly.', 503))
+            error.discord_permanent = permanent
             error.discord_status = response.get('status')
             raise error
         return response.get('body')
@@ -343,6 +354,22 @@ class DiscordConnections:
                 target['status'] = 'revoked'
             cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,authorization_generation=%s::uuid,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='discord'", (generation, workspace, channel['id']))
 
+    @staticmethod
+    def suspend_dependents(state, identity_id):
+        """Fail closed without destroying. The identity cannot be used until the person links it again, so nothing bound
+        to it may send or be re-verified (bind_identity refuses), and each card shows "Finish setup" with its approved
+        jobs held. The installation, its destinations and its credential row are left exactly as they are: they come
+        back when the same Discord user links the same identity again (save_identity)."""
+        for channel in state.get('phase2', {}).get('channels', []):
+            if channel.get('discordIdentityConnectionId') == identity_id and not channel.get('revoked'):
+                channel.update(capabilityVerified=False, discordSuspended=True)
+
+    def _suspend_identity(self, cur, workspace, state, record):
+        record.update(status='reconnect_required', dependentsSuspended=True)
+        record.pop('refreshClaim', None); record.pop('refreshStartedAt', None)
+        self.suspend_dependents(state, record['id'])
+        self.save_state(cur, workspace, state)
+
     def save_identity(self, workspace, token, context, body, user, scopes):
         with self.local(workspace, token) as (cur, state, actor):
             if actor != context['memberId']:
@@ -352,10 +379,21 @@ class DiscordConnections:
             prior = next((x for x in links if x['id'] == connection), None)
             if prior and prior.get('authorizationGeneration') != context['identityGenerations'].get(connection):
                 fail('Discord changed during connection. Reload and start again.')
-            if prior:
+            # An identity that was only suspended (an unconfirmed refresh) keeps its servers when the same person links
+            # the same Discord account again; any other relink fences every dependent installation, as before.
+            resumed = bool(prior and prior.get('status') == 'reconnect_required' and prior.get('dependentsSuspended') is True
+                           and prior.get('userId') == user['id'])
+            if prior and not resumed:
                 self.invalidate_dependents(cur, workspace, state, connection)
             expires = self.oauth.clock() + body['expires_in']
             generation = self.upsert(cur, workspace, connection, user['id'], {'v': 1, 'kind': 'identity', 'applicationId': self.adapter.client_id, 'memberId': actor, 'user': user['id'], 'at': body['access_token']}, scopes, expires, body.get('refresh_token'))
+            if resumed:
+                # The installations' envelopes name this consent generation; the same subject coming back restores it.
+                generation = prior['authorizationGeneration']
+                cur.execute("UPDATE public.pr_encrypted_credentials SET authorization_generation=%s::uuid WHERE workspace_id=%s AND connection_id=%s AND provider='discord'", (generation, workspace, connection))
+                for channel in state.get('phase2', {}).get('channels', []):
+                    if channel.get('discordIdentityConnectionId') == connection:
+                        channel.pop('discordSuspended', None)
             record = {'id': connection, 'workspaceId': workspace, 'applicationId': self.adapter.client_id, 'userId': user['id'],
                       'account': str(user.get('global_name') or user.get('username') or user['id'])[:128],
                       'authorizedBy': actor, 'authorizedAt': self.oauth.clock(), 'authorizationGeneration': generation,
@@ -393,13 +431,20 @@ class DiscordConnections:
         return {'connected': True, 'connectionId': connection, 'account': channel['account'], 'discordPurpose': 'installation', 'missingScopes': []}
 
     def _fresh_identity(self, workspace, token, connection):
-        claim, fast = None, None
+        claim, fast, stale = None, None, False
         with self.local(workspace, token) as (cur, state, actor):
             record = identity_record(state, connection, actor)
             row, envelope = self.bind_identity(cur, workspace, record)
             if record.get('refreshClaim'):
-                fail('Discord identity refresh is pending or requires reconnecting.')
-            if row[3] and float(row[3]) > self.oauth.clock() + 60:
+                started = record.get('refreshStartedAt')
+                if (isinstance(started, (int, float)) and not isinstance(started, bool)
+                        and self.oauth.clock() - started <= REFRESH_CLAIM_TTL):
+                    fail('Discord identity refresh is pending or requires reconnecting.')
+                # No live claimant any more (a killed or crashed refresh). Whether its rotating token was spent cannot be
+                # known, so the identity stays closed, visibly, but what hangs on it is suspended, not destroyed.
+                self._suspend_identity(cur, workspace, state, record)
+                stale = True
+            elif row[3] and float(row[3]) > self.oauth.clock() + 60:
                 fast = {'connectionId': connection, 'authorizationGeneration': row[4], 'userId': envelope['user'], 'bearer': envelope['at'], 'scopes': list(row[5])}
             else:
                 if not row[2]:
@@ -408,6 +453,8 @@ class DiscordConnections:
                 record.update(refreshClaim=claim, refreshStartedAt=self.oauth.clock())
                 self.save_state(cur, workspace, state)
                 refresh = self.oauth.vault.decrypt(row[2], row[1])
+        if stale:
+            fail('Discord refresh could not be confirmed. Reconnect before publishing.')
         if fast is not None:
             # Local expiry is not proof that Discord still authorizes this user.
             try:
@@ -415,6 +462,8 @@ class DiscordConnections:
                 if user['id'] != fast['userId']:
                     fail('The Discord identity changed. Reconnect.')
             except AlphaError as error:
+                # discord_permanent is set only for Discord's own JSON refusal; an HTML/WAF page, a 5xx or a lost
+                # connection reach here as an ordinary unavailable error and change nothing.
                 if getattr(error, 'discord_permanent', False) or error.code == 'discord_connection_required':
                     with self.local(workspace, token) as (cur, state, actor):
                         record = identity_record(state, connection, actor)
@@ -433,13 +482,18 @@ class DiscordConnections:
             return fast
         from .rate_limits import RateCoordinatorUnavailable, RateDelayed
 
-        def reconnect_required():
+        def reconnect_required(destroy=False):
+            """Fail closed. `destroy` only when Discord itself refused the grant; otherwise the servers are suspended."""
             with self.local(workspace, token) as (cur, state, actor):
                 record = identity_record(state, connection, actor)
                 if record.get('refreshClaim') == claim and record.get('authorizationGeneration') == row[4]:
-                    record['status'] = 'reconnect_required'
-                    self.invalidate_dependents(cur, workspace, state, connection)
-                    self.save_state(cur, workspace, state)
+                    if destroy:
+                        record['status'] = 'reconnect_required'
+                        record.pop('refreshClaim', None); record.pop('refreshStartedAt', None)
+                        self.invalidate_dependents(cur, workspace, state, connection)
+                        self.save_state(cur, workspace, state)
+                    else:
+                        self._suspend_identity(cur, workspace, state, record)
             fail('Discord refresh could not be confirmed. Reconnect before publishing.')
 
         def release_claim():
@@ -460,37 +514,58 @@ class DiscordConnections:
             release_claim()
             raise
         except AlphaError as refused:
-            if getattr(refused, 'discord_status', None) != 429:
-                reconnect_required()
-            # Discord itself answered 429: the request was rate limited and not processed, so the refresh token is
-            # unspent either. Same outcome as a coordinator refusal; any other answer stays ambiguous.
-            release_claim()
-            raise RateDelayed(cause='provider_429') from refused
+            status = getattr(refused, 'discord_status', None)
+            if getattr(refused, 'discord_permanent', False):
+                reconnect_required(destroy=True)  # Discord itself refused this grant (invalid_grant or its JSON 401/403)
+            if status == 429:
+                # Discord itself answered 429: the request was rate limited and not processed, so the refresh token is
+                # unspent either. Same outcome as a coordinator refusal.
+                release_claim()
+                raise RateDelayed(cause='provider_429') from refused
+            if isinstance(status, int) and 400 <= status < 500:
+                # Answered, but not by Discord's token endpoint (an HTML/WAF page, a proxy) or as a refusal of the request
+                # itself: the grant was not exercised, so the token is unspent and nothing is ambiguous.
+                release_claim()
+                raise
+            reconnect_required()  # a 5xx or a lost connection: Discord may have rotated the token before failing
         except Exception:
             reconnect_required()
         # From here the old refresh token is spent, so a failure to verify the new one cannot be retried.
+        different = False
         try:
             body = self.token_body(response)
             user, scopes = self.verified_user(body['access_token'], row[5], envelope['user'])
-            if user['id'] != envelope['user']:
-                fail('Discord refreshed a different identity. Reconnect.')
-        except Exception:
-            reconnect_required()
-        with self.local(workspace, token) as (cur, state, actor):
-            record = identity_record(state, connection, actor)
-            current, _ = self.bind_identity(cur, workspace, record)
-            if record.get('refreshClaim') != claim or current[4] != row[4] or current[0] != row[0]:
-                fail('Discord changed while refreshing. Reload the connection.')
-            envelope['at'] = body['access_token']
-            ciphertext, key = self.oauth.vault.encrypt(json.dumps(envelope))
-            refresh_ct = self.oauth.vault.encrypt(body.get('refresh_token') or refresh)[0]
-            expires = self.oauth.clock() + body['expires_in']
-            cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,scopes=%s,access_expires_at=to_timestamp(%s),rotated_at=now(),updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND authorization_generation=%s::uuid AND access_ciphertext=%s AND revoked_at IS NULL", (ciphertext, refresh_ct, key, scopes, expires, workspace, connection, row[4], row[0]))
-            if cur.rowcount != 1:
-                fail()
-            record.pop('refreshClaim', None); record.pop('refreshStartedAt', None)
-            record.update(expiresAt=expires, discoverGuilds='guilds' in scopes)
-            self.save_state(cur, workspace, state)
+            different = user['id'] != envelope['user']
+        except Exception as error:
+            reconnect_required(destroy=bool(getattr(error, 'discord_permanent', False)))
+        if different:
+            reconnect_required()  # Discord refreshed a different identity
+        for attempt in range(SETTLE_ATTEMPTS):
+            try:
+                with self.local(workspace, token) as (cur, state, actor):
+                    record = identity_record(state, connection, actor)
+                    current, _ = self.bind_identity(cur, workspace, record)
+                    if record.get('refreshClaim') != claim or current[4] != row[4] or current[0] != row[0]:
+                        fail('Discord changed while refreshing. Reload the connection.')
+                    envelope['at'] = body['access_token']
+                    ciphertext, key = self.oauth.vault.encrypt(json.dumps(envelope))
+                    refresh_ct = self.oauth.vault.encrypt(body.get('refresh_token') or refresh)[0]
+                    expires = self.oauth.clock() + body['expires_in']
+                    cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,scopes=%s,access_expires_at=to_timestamp(%s),rotated_at=now(),updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND authorization_generation=%s::uuid AND access_ciphertext=%s AND revoked_at IS NULL", (ciphertext, refresh_ct, key, scopes, expires, workspace, connection, row[4], row[0]))
+                    if cur.rowcount != 1:
+                        fail()
+                    record.pop('refreshClaim', None); record.pop('refreshStartedAt', None)
+                    record.update(expiresAt=expires, discoverGuilds='guilds' in scopes)
+                    self.save_state(cur, workspace, state)
+                break
+            except AlphaError:
+                raise  # a conflict (the claim or the credential changed) is not a database fault
+            except Exception:
+                # A transient database error must not strand the identity with a spent token and a claim nobody settles.
+                if attempt + 1 < SETTLE_ATTEMPTS:
+                    time.sleep(.05 * 2 ** attempt)
+        else:
+            reconnect_required()  # still failing: make it visible instead of leaving a silent dead end
         return {'connectionId': connection, 'authorizationGeneration': row[4], 'userId': user['id'], 'bearer': body['access_token'], 'scopes': scopes}
 
     def user_guilds(self, identity):

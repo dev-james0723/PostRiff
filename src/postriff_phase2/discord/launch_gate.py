@@ -133,7 +133,8 @@ def guild_cap(values=None):
 
 def has_footprint(state):
     """True when this workspace already has a live Discord server card or a linked identity. An identity whose refresh
-    failed ('reconnect_required') still counts: its person must be able to reconnect, and its dependants are revoked."""
+    failed ('reconnect_required') still counts: its person must be able to reconnect, and its dependants are revoked or,
+    after an unconfirmed refresh, suspended until the same Discord user links again."""
     phase2 = state.get('phase2') if isinstance(state, dict) else None
     if not isinstance(phase2, dict):
         return False
