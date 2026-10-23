@@ -457,13 +457,17 @@ class OAuthService:
         return f"{pinned or base}/api/oauth/{provider_id}/callback"
 
     def _discord_flags_consistent(self):
-        """G2E-A-08. Approvals (AUTHORIZATION_V2) without the linked-identity connection flow (CONNECTIONS_V2) is a
-        mistyped flag, not a mode: the original flow it would leave reachable stores envelopes that carry no authorizer,
-        so the worker could not check that the member who connected is still allowed to. Fail closed, as 503."""
+        """G2E-A-08. In hosted production, approvals (AUTHORIZATION_V2) without the linked-identity connection flow
+        (CONNECTIONS_V2) is a mistyped flag, not a mode: the original flow it would leave reachable stores envelopes that
+        carry no authorizer, so the worker could not check that the member who connected is still allowed to. Fail closed,
+        as 503. Outside production that combination stays available: it is the staged P0 rollout the disposable-database
+        gates (postgres_discord_authorization.py) exercise, and nothing customer-facing runs there."""
         discord = self.providers.get('discord') if hasattr(self.providers, 'get') else None
         if (discord is not None and getattr(discord, 'authorization_v2_enabled', False)
                 and not getattr(discord, 'connections_v2_enabled', False)):
-            raise AlphaError('Discord connection authorization is not enabled.', 503)
+            from .discord import launch_gate
+            if launch_gate.hosted_production():
+                raise AlphaError('Discord connection authorization is not enabled.', 503)
 
     # --- start ----------------------------------------------------------------------
     def start(self, workspace_id, token, provider_id, capability, inputs=None):

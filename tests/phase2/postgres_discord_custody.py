@@ -316,11 +316,16 @@ def a08_mixed_flags_fail_closed():
     w = World()
     _, install = w.link(w.owner_token)
     w.provider.connections_v2_enabled = False  # AUTHORIZATION_V2 on, CONNECTIONS_V2 mistyped
-    for label, call in (('start', lambda: w.oauth.start(w.workspace, w.owner_token, 'discord', 'publish')),
-                        ('worker grant', lambda: w.oauth.discord_grant_for_worker(w.workspace, install))):
-        calls = len(w.wire.lifecycle_calls)
-        error = refused(call)
-        check(f'A-08 {label} refused with 503 in the mixed-flag mode', error is not None and error.status == 503 and len(w.wire.lifecycle_calls) == calls, str(error))
+    saved = os.environ.get('VERCEL_ENV')
+    os.environ['VERCEL_ENV'] = 'production'  # the guard is for hosted production; the staged P0 gate runs this mode elsewhere
+    try:
+        for label, call in (('start', lambda: w.oauth.start(w.workspace, w.owner_token, 'discord', 'publish')),
+                            ('worker grant', lambda: w.oauth.discord_grant_for_worker(w.workspace, install))):
+            calls = len(w.wire.lifecycle_calls)
+            error = refused(call)
+            check(f'A-08 {label} refused with 503 in the mixed-flag mode', error is not None and error.status == 503 and len(w.wire.lifecycle_calls) == calls, str(error))
+    finally:
+        os.environ.pop('VERCEL_ENV', None) if saved is None else os.environ.__setitem__('VERCEL_ENV', saved)
     w.provider.connections_v2_enabled = True
     check('A-08 control: with both flags on the worker grant works', w.oauth.discord_grant_for_worker(w.workspace, install)['provider'] == 'discord')
 

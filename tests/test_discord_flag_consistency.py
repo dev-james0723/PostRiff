@@ -1,9 +1,10 @@
 """G2E-A-08 (P4): AUTHORIZATION_V2 on with CONNECTIONS_V2 mistyped left the original connect flow reachable, and its
 envelopes pass the worker grant with no authorizer check. That combination must fail closed (503) on every entry."""
 import json
+import os
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.oauth import CredentialVault, OAuthService
@@ -19,6 +20,11 @@ def oauth(authorization, connections):
 
 
 class MixedFlagsFailClosed(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.dict(os.environ, {'VERCEL_ENV': 'production'})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_start_complete_and_the_worker_grant_refuse_with_503_before_any_work(self):
         service, adapter = oauth(True, False)
         legacy = json.dumps({'v': 2, 'guild': GUILD, 'user': USER})  # the original flow's envelope: no kind, no identity link
@@ -34,6 +40,21 @@ class MixedFlagsFailClosed(unittest.TestCase):
             self.assertEqual(raised.exception.status, 503)
         cur.execute.assert_not_called()
         adapter.transport.assert_not_called()
+
+    def test_outside_hosted_production_the_staged_p0_combination_is_still_available(self):
+        """postgres_discord_authorization.py runs the original flow with approvals on and connections off."""
+        for env in ({'VERCEL_ENV': 'preview'}, {'VERCEL_ENV': '', 'POSTRIFF_ENVIRONMENT': 'development'}):
+            with patch.dict(os.environ, env):
+                service, _ = oauth(True, False)
+                service._discord_flags_consistent()
+
+    def test_production_is_read_the_way_the_launch_gate_reads_it(self):
+        for env in ({'VERCEL_ENV': ' Production '}, {'VERCEL_ENV': '', 'POSTRIFF_ENVIRONMENT': 'production'}):
+            with patch.dict(os.environ, env):
+                service, _ = oauth(True, False)
+                with self.assertRaises(AlphaError) as raised:
+                    service._discord_flags_consistent()
+                self.assertEqual(raised.exception.status, 503)
 
     def test_the_consistent_combinations_are_not_refused_by_this_guard(self):
         for authorization, connections in ((False, False), (True, True), (False, True)):
