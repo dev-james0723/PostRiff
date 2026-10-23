@@ -162,13 +162,22 @@ hardening, relevant to this plan:
   short-lived Environment secret, and the workflow exchanges it at the fixed Supabase
   `POST /auth/v1/verify`. The base URL and Supabase URL are **hard-coded in the workflow**; a
   request branch carries only a SHA and a mode, so editing a request can never redirect credentials.
-- **The probe is SHA-pinned and hash-pinned.** The request carries `probeSha256`; the workflow
-  refuses a fetched probe whose hash differs, so the reviewed probe cannot be swapped under the
-  same commit. Every probe change gets an independent delta review before a request branch is built.
-- **The probe runs under a minimal environment** (`env -i` with only `PATH` and the `Q05_*` it
-  needs) and `python3 -I`, so no inherited secret or local module can reach or influence it.
-- **A≠B and key hygiene are enforced in the workflow too**: a `service_role`/secret key is refused
-  (decoded locally, never printed), and both throwaway e-mails must carry the `q05` marker.
+- **The probe is SHA-pinned and pinned to its REVIEWED hash.** Every probe change gets an
+  independent delta review; the review record carries the probe's full sha256. The request maker
+  **requires** that value as `--reviewed-probe-sha256 <64 hex>` (the Release Captain supplies it; it
+  is never derived from the request's own SHA) and refuses to build when the probe at the SHA
+  differs. The workflow accepts only a full 64-hex `probeSha256` and refuses a fetched probe whose
+  hash is not exactly that value.
+- **The probe runs under a minimal environment** (only `PATH` and the `Q05_*` it needs, built with
+  shell builtins and self-checked) and `python3 -I`, so no inherited secret or local module can
+  reach or influence it.
+- **No secret on a command line.** E-mails, codes, the key and session tokens reach `curl` and `jq`
+  only through private header files (`-H @file`) and stdin, never argv.
+- **Key and e-mail hygiene are enforced in the workflow too**: the key is an allowlist — only the
+  publishable key (`sb_publishable_…`) or a JWT whose role is `anon`, after trimming; anything else
+  (a secret key, a `service_role` or `authenticated` JWT, an unknown shape) is refused before any
+  request. Both throwaway e-mails must carry the `q05` marker. In gate mode the serving build is
+  checked **before** any one-time code is spent, and the sign-out trap is installed before minting.
 
 **generic vs gate mode (M6).** A **generic** run is a `--smoke` run of **whatever build is serving
 right now**; the step summary prints that build's `/api/health` `sourceRevision`. On the build live

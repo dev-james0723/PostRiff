@@ -30,14 +30,22 @@ python -m unittest tests.test_q05_probe_coverage
 
 # no-DB unit tests (redirect safety, A!=B guard, strict scope scoring) — run everywhere:
 python -m unittest tests.test_q05_probe_unit
+# no-DB: the real probe against a loopback fake of two FRESH accounts (no Discord identity, members
+# ordered like the app) — smoke passes, gate fails as undiscovered, member_remove targets only the owner:
+python -m unittest tests.test_q05_probe_fresh
 
 # or drive the backend directly and read the JSON result:
 python tests/q05_backend.py run --allow-writes --allow-send-risk --victim-is-synthetic
+
+# any other checkout (e.g. a detached export of the RC2 integration tip):
+#   git archive <sha> src tests migrations | tar -x -C <dir>; echo <sha> > <dir>/SOURCE_SHA
+Q05_TARGET_ROOT=<dir> python -m unittest tests.test_q05_tenant_probe_local tests.test_q05_tenant_probe_mutations
 ```
 
-The database-backed modules **skip cleanly** (not error) when the PostgreSQL 16 binaries or psycopg
-are absent, so they run under `python -m unittest discover -s tests`; `test_q05_probe_unit` needs
-no database and always runs.
+Use a Python that has `psycopg` (this work used `/opt/prvenv/bin/python`; any venv with psycopg 3
+works). The database-backed modules **skip cleanly** (not error) when the PostgreSQL 16 binaries or
+psycopg are absent, so they run under `python -m unittest discover -s tests`; `test_q05_probe_unit`
+and `test_q05_probe_fresh` need no database and always run.
 
 ## Result on clean RC1 source
 

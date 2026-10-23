@@ -12,12 +12,12 @@ are the only steps you do.
 ## One time
 
 1. **Make two throwaway accounts the normal way.** On the website, sign up account **A** and
-   account **B** exactly like any customer (Google, or "email me a code"). Use two e-mail addresses
-   you control, and do **not** turn on two-factor for them. (Do **not** add users in the Supabase
-   dashboard — these must be real sign-ups.)
-   - Each address's **local part must contain the marker `q05`** (plus-addressing works, e.g.
-     `you+q05a@gmail.com` and `you+q05b@gmail.com`). The workflow refuses any e-mail without the
-     marker, so one of your everyday accounts can never be used against the live site by mistake.
+   account **B** with **"e-mail me a code"**, each with a **plus-addressed** e-mail you control whose
+   local part carries the marker `q05` — for example `you+q05a@gmail.com` and `you+q05b@gmail.com`
+   (both arrive in your normal inbox). Do **not** use a social sign-in for these: its address has no
+   `q05` marker, and the workflow refuses any e-mail without it, so one of your everyday accounts can
+   never be used against the live site by mistake. Do **not** turn on two-factor for them, and do
+   **not** add users in the Supabase dashboard — these must be real sign-ups.
 2. **Create the GitHub Environment** (GitHub → the repo → Settings → Environments → New
    environment), name it exactly `rafii-q05-probe`:
    - Required reviewers: **you**. Turn **Prevent self-review OFF** (you are also the pusher).
@@ -40,9 +40,12 @@ are the only steps you do.
    **single-use and short-lived** — the provider decides how long, and it is not guaranteed, so treat
    them as expiring soon: set them and approve **right away**. Put the codes **only** in these secret
    fields — never in the chat and never back into the website.
-4. Tell the agent to push the request branch. The agent gives you a **commit id and title**. Compare
-   **at least the first 12 hex characters** of the commit id (a 7-character short id is not enough to
-   trust) and the title.
+4. Tell the agent to push the request branch. The request is built with
+   `make_request_branch.sh … --reviewed-probe-sha256 <64 hex>`: the **Release Captain supplies that
+   reviewed probe hash** from the independent review record of the probe, and the request is refused
+   if the probe at the requested SHA is not exactly what was reviewed. The agent then gives you a
+   **commit id and title**. Compare **at least the first 12 hex characters** of the commit id (a
+   7-character short id is not enough to trust) and the title.
 5. GitHub shows the run as **waiting for review**. Open it, confirm the commit id (≥12 hex) and the
    title match what the agent told you, and **Approve**. The run signs in both accounts and runs the
    probe; the result (route **templates** and counts only — never ids, tokens, or your content)
