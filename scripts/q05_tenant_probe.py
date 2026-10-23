@@ -737,10 +737,16 @@ def write_markdown(path, cases, summary, flags, config):
         lines.append("> WRITE COVERAGE: **NOT RUN.** This run proves reads only. "
                      "Gate G4 requires a run with `--allow-writes` in BOTH directions.")
         lines.append("")
+    if flags.smoke:
+        lines.append("> SMOKE MODE: undiscovered victim objects are reported NOT RUN below and do "
+                     "**not** fail this run. This is a smoke run, not the G4 gate. Only a FAIL or "
+                     "an inconclusive control fails a smoke run.")
+        lines.append("")
     if summary["undiscovered"]:
         lines.append(f"> NOT RUN (undiscovered victim objects): **{summary['undiscovered']}** "
                      "case(s). These are NOT passes; the gate is not met until the victim "
-                     "objects exist and the cases run.")
+                     "objects exist and the cases run"
+                     + (" (allowed in this smoke run)." if flags.smoke else "."))
         lines.append("")
     if summary["inconclusive"]:
         lines.append(f"> INCONCLUSIVE: **{summary['inconclusive']}** control(s) failed. "
@@ -777,9 +783,10 @@ class Flags:
         self.allow_writes = args.allow_writes
         self.allow_send_risk = args.allow_send_risk
         self.victim_is_synthetic = args.victim_is_synthetic
+        self.smoke = getattr(args, "smoke", False)
 
 
-def summarize(cases):
+def summarize(cases, smoke=False):
     s = {k: 0 for k in ("total", "passed", "failed", "not_run_gated", "undiscovered",
                          "controls_passed", "controls_failed", "reads", "writes",
                          "blast_state", "blast_send", "blast_inert", "inconclusive")}
@@ -809,8 +816,13 @@ def summarize(cases):
                 s["undiscovered"] += 1
             else:
                 s["not_run_gated"] += 1
-    # exit 0 only if no FAIL, no inconclusive control, no undiscovered victim case.
-    s["exit"] = 0 if (s["failed"] == 0 and s["inconclusive"] == 0 and s["undiscovered"] == 0) else 1
+    # exit 0 only if no FAIL, no inconclusive control, and (unless --smoke) no undiscovered
+    # victim case. --smoke is for a smoke run against a build that cannot yet hold the Discord
+    # objects some cases need: undiscovered cases are still reported loudly as NOT RUN, they
+    # just do not fail the exit. A FAIL or an inconclusive control always fails, in any mode.
+    s["smoke"] = bool(smoke)
+    ok = s["failed"] == 0 and s["inconclusive"] == 0 and (smoke or s["undiscovered"] == 0)
+    s["exit"] = 0 if ok else 1
     return s
 
 
@@ -824,6 +836,9 @@ def main(argv=None):
                         help="also run send-blast cases (needs --allow-writes)")
     parser.add_argument("--victim-is-synthetic", action="store_true",
                         help="declare the victim tenants synthetic; required for send cases")
+    parser.add_argument("--smoke", action="store_true",
+                        help="smoke run: undiscovered victim objects are reported NOT RUN but do "
+                             "not fail the exit (a FAIL or inconclusive control still does)")
     parser.add_argument("--budget", type=int, default=600, help="max requests (default 600)")
     parser.add_argument("--delay", type=float, default=0.02, help="seconds between requests")
     parser.add_argument("--out-md", default=None, help="path for the Markdown receipt")
@@ -912,7 +927,7 @@ def main(argv=None):
 
     all_cases = attack_cases + control_cases + snapshot_cases
     # snapshot failures also make the run inconclusive-equivalent (counted as FAIL)
-    summary = summarize(all_cases)
+    summary = summarize(all_cases, smoke=flags.smoke)
     # fold snapshot FAILs into failed count already done by summarize (kind=control)
     # but snapshot FAIL is counted as controls_failed/inconclusive which is correct.
 
