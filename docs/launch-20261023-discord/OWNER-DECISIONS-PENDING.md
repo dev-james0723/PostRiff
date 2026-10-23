@@ -71,6 +71,19 @@ Labels: [Certain] measured or read exactly; [Likely] strong inference; [Guessing
 - **Fact.** Every capacity receipt uses a throw-away PostgreSQL on the test machine at 2 ms. Production runs on the smallest Supabase compute behind Supavisor with TLS; the lock benchmark shows the coordinator lock turns into a ceiling at about 4 ms.
 - **I would propose** one run against the existing `rafii-consumer-staging` Supabase project (same region as production) with synthetic data in a throw-away schema, or a Supabase branch (a new cost). It needs you to put one connection secret into a GitHub Environment (I cannot) and to confirm that project's compute class matches production's. The Depot run (paid) should come after it.
 
+## D-11. Customer-visible behaviour that came with the identity and isolation fixes (G2a branch `727187b2`)
+
+- **Fact [Certain from the author's report; my re-run of its tests is in the change log].** Seven behaviours changed. None blocks engineering. I keep these defaults unless you object, because each closes a finding the independent early review ranked MEDIUM or HIGH.
+  1. A Cloudflare or WAF page, a 5xx or a dropped connection on Discord's side no longer revokes a customer's Discord link (A-01). The link closes and its servers are suspended: cards show "Finish setup", queued posts are held, credentials are untouched, and the same Discord user linking again restores them. Before, one bad answer sent every customer back to relink. No notification fires for a suspended card yet (a follow-up UI hint).
+  2. Removing a member, a member leaving, or dropping below "manage connections" disconnects their Discord link and revokes the servers installed through it (A-03). A temporary downgrade of an admin followed by a re-upgrade means those servers need a fresh install (before, they only stopped working while the admin was downgraded). Strongest argument against: support cost for a rare event. I keep it: the alternative leaves an ex-member's personal credential live inside the workspace, which contradicts the privacy text.
+  3. Reads that reach Discord are throttled at 30 a minute per member and 120 a minute per workspace, and channel lists are reused for 45 s (10 s when empty): a channel created in Discord can take up to 45 s to show in the picker (A-05).
+  4. "Save as draft" is capped at 60,000 characters in total, 2,000 variants and 12 MB per workspace and 30 saves a minute, and drafts cannot be deleted yet (C-03). This lowers the cost of accepting the feature in D-5 (SC-1), but a workspace at a ceiling needs support: if the feature stays in RC2 a delete action should come first.
+  5. At most 30 Discord servers per workspace and 15 per member, and a disconnected server still counts (C-05). Raising either is a one-number change before the freeze.
+  6. The workspace snapshot no longer lists other members' Discord identity links (A-07); the web client does not read it.
+  7. An admin pressing Verify on a card whose installer has gone gets "reauthorization required" once, instead of the system silently using the ex-member's token (A-02).
+- **What I need from you:** nothing unless you object to 2, 4 or 5.
+- **One thing only a real capture can settle:** the fix for item 1 assumes Discord answers a revoked user token with a JSON body `{message, code}`; if the real body has no integer code the customer would see "temporarily unavailable" instead of "reconnect". Step 6b of the tester session (no message sent) captures it.
+
 ## D-10. Things I need only at the end
 
 - Public and private test channel ids and a time slot for the tester session (G3); two throw-away accounts A and B and short-lived sign-in codes, asked last, with minimal steps (G4 hosted); the approvals listed in Packet 3 (the Production builds, promotions, variables, real messages); the decision on the paid Depot run and its cost ceiling.
