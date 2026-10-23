@@ -91,6 +91,15 @@ class UnsentWrites(Claims):
         self.assertEqual(self.config.patches, [])
         self.assertEqual([row['state'] for row in self.limiter.patch_admissions()], ['blocked'])
 
+    def test_an_admission_callback_that_cannot_be_called_is_refused_before_the_coordinator_is_asked(self):
+        path = f'/guilds/{self.ia.guild}/members/@me'
+        reserved = len([call for call in self.limiter.calls if call[0] == 'reserve'])
+        with self.assertRaises(AlphaError) as raised:
+            self.w.s.adapter._bot('PATCH', path, body={'nick': 'Unguarded'}, write_authorize=lambda: True, write_admitted='not callable')
+        self.assertEqual((raised.exception.status, raised.exception.code), (409, 'discord_sender_name_required'))
+        self.assertEqual(len([call for call in self.limiter.calls if call[0] == 'reserve']), reserved)
+        self.assertEqual(self.config.patches, [])
+
     def test_a_custody_change_while_the_admission_is_recorded_is_its_own_refusal_and_frees_the_claim(self):
         original = self.limiter.reserve
 
