@@ -1,0 +1,76 @@
+# Read-only routes compared between the live build and the candidate (scripts/impact_compare.py).
+# One route per line: METHOD PATH [kind=page|api|asset|shape] [expect=REGEX]. GET and HEAD only.
+# expect= lists the changes that are intended: a route is EXPECTED when every changed line of text, metadata, links or
+# JSON matches it and status and compared headers are equal. Anything else that differs is DIFF and needs a look.
+# kind=shape: an authenticated route asked WITHOUT a session; both builds must refuse it the same way (normally 401).
+# The workspace id below is a placeholder that belongs to nobody; never put a real id or e-mail address in this file.
+
+# Public marketing pages
+GET /                                   kind=page
+GET /pricing                            kind=page
+GET /channels                           kind=page
+GET /channels/discord                   kind=page
+GET /channels/linkedin                  kind=page
+GET /channels/mastodon                  kind=page
+GET /docs                               kind=page
+GET /changelog                          kind=page
+GET /contact                            kind=page
+GET /security                           kind=page
+GET /status                             kind=page
+GET /post-doctor                        kind=page
+
+# Legal pages (packet row 14 approved Discord wording here; everything else must be unchanged)
+GET /privacy                            kind=page  expect=(?i)discord
+GET /terms                              kind=page
+GET /data-deletion                      kind=page  expect=(?i)discord
+
+# Sign-in and account entry pages
+GET /auth/sign-in                       kind=page
+GET /auth/sign-up                       kind=page
+GET /auth/reset                         kind=page
+GET /auth/verify                        kind=page
+GET /channels/connect                   kind=page
+GET /app                                kind=page
+GET /app/channels                       kind=page
+GET /app/queue                          kind=page
+# New page in the candidate (private Discord review entry); live answers 404 here.
+GET /app/queue/discord                  kind=page
+
+# Metadata and static files
+GET /robots.txt                         kind=asset
+GET /sitemap.xml                        kind=asset
+GET /manifest.webmanifest               kind=asset
+GET /favicon.ico                        kind=asset
+GET /icon                               kind=asset
+GET /apple-icon                         kind=asset
+GET /opengraph-image                    kind=asset
+GET /sw.js                              kind=asset
+HEAD /                                  kind=page
+
+# Public API (no session). The health answer names the source revision, which differs by design.
+GET /api/health                         kind=api   expect=sourceRevision
+GET /api/catalog                        kind=api
+GET /api/privacy/notice                 kind=api   expect=(?i)discord
+GET /api/content-types                  kind=api
+GET /api/content-formats                kind=api
+GET /api/content-type-packs             kind=api
+GET /api/tools                          kind=api
+GET /api/ideas/models                   kind=api
+GET /api/auth/config                    kind=api
+
+# Authenticated route shapes asked without a session (must be refused alike on both builds)
+GET /api/me                                                                                kind=shape
+GET /api/workspaces                                                                        kind=shape
+GET /api/workspaces/00000000-0000-4000-8000-000000000000                                   kind=shape
+GET /api/workspaces/00000000-0000-4000-8000-000000000000/channels                          kind=shape
+GET /api/workspaces/00000000-0000-4000-8000-000000000000/usage                             kind=shape
+GET /api/workspaces/00000000-0000-4000-8000-000000000000/channels/x/destinations           kind=shape
+# Routes that exist only in the candidate: without a session they must look exactly like any other refused route.
+GET /api/workspaces/00000000-0000-4000-8000-000000000000/discord/identities/x/guilds       kind=shape
+GET /api/workspaces/00000000-0000-4000-8000-000000000000/discord/private-review/x          kind=shape
+GET /api/workspaces/00000000-0000-4000-8000-000000000000/channels/x/discord-engagement     kind=shape
+# The signed Discord interactions endpoint is POST-only in the candidate; a GET shows how it answers strangers.
+GET /api/discord/interactions                                                              kind=shape
+GET /api/cron/worker                                                                       kind=shape
+# RC2 adds twelve W-02 shard crons; without the cron secret a shard refuses with its own cron message.
+GET /api/cron/discord-worker/0                                                             kind=shape expect=(?i)cron

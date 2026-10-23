@@ -619,8 +619,6 @@ class Phase2Store(Store):
                 from .discord.authorization import manifest_current
                 if not manifest_current(s, c, m):
                     return False
-            if c['platform'] == 'Facebook' and (not c.get('destinationId') or m.get('destinationId') != c['destinationId']):
-                return False
             if (m.get("workspaceId") != s["workspace"]["id"]
                     or m.get("brandHubId") != s["brandHub"]["id"]
                     or m.get("briefRevision") != s["brief"]["revision"]

@@ -48,13 +48,14 @@ import { CapabilityChips } from './capability-chips';
 import { ChannelHistorySheet } from './channel-history-sheet';
 import { HistoryImportControl } from './history-import-control';
 import { historyImportCopy } from '@/lib/channels/history-import-copy';
-import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
 import { discordRefusal } from '@/lib/channels/discord-refusal';
 import { usePreferences } from '@/lib/preferences';
 import type { ConnectRequest } from './connect-sheet';
 import { DestinationPicker } from './destination-picker';
 import { PinterestBoardsSheet } from './pinterest-boards-sheet';
 import { DiscordEngagementPanel } from './discord-engagement-panel';
+import { DiscordSenderNameControl } from './discord-sender-name-control';
 import { MastodonAccountControls } from './mastodon-account-controls';
 import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN, STATEFUL_GLASS } from './rafii-materials';
 
@@ -369,7 +370,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         />
       )}
 
-      {channel.platform === 'Discord' && <p className='text-muted-foreground text-sm' data-discord-sender>{channel.discordConnectionKind === 'webhook' ? dc.senderWebhook : dc.senderBot}</p>}
+      {channel.platform === 'Discord' && <p className='text-muted-foreground text-sm' data-discord-sender>{discordSenderLabel(dc, channel.discordConnectionKind, channel.discordSenderName)}</p>}
       {!disconnected && <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />}
       {!disconnected && channel.socialReadiness && (
         <ul className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Permissions for this account'>
@@ -443,6 +444,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
 
       {channel.platform === 'Mastodon' && canManage && !disconnected && <MastodonAccountControls connectionId={channel.id} account={channel.account} />}
       <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
+        {channel.platform === 'Discord' && channel.discordConnectionKind && canManage && !disconnected && <DiscordSenderNameControl channel={channel} />}
         {channel.platform === 'Discord' && !disconnected && <DiscordEngagementPanel channel={channel} />}
         {canManage && channel.platform === 'Instagram' && channel.capabilities.analytics?.level === 'Direct' && (
           <StatefulButton

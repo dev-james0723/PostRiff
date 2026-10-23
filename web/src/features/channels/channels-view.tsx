@@ -41,7 +41,7 @@ import { ConnectSheet, type ConnectRequest } from './connect-sheet';
 import { usePreferences } from '@/lib/preferences';
 import { discordCopy } from '@/lib/channels/discord-copy';
 import { DiscordPersonalAccounts } from './discord-personal-accounts';
-import { discordCanConnect } from '@/lib/channels/discord-personal-account';
+import { discordCanConnect, showDiscordPersonalAccounts } from '@/lib/channels/discord-personal-account';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 import { ConnectionHealthPanel } from './health/connection-health-panel';
 
@@ -390,7 +390,7 @@ function ChannelsPage() {
                 data-tour='channels-summary'
               />
 
-              {(providers.some(provider => provider.id === 'discord' && provider.discordConnectionsV2) || !!data?.discordIdentities?.length) && (
+              {showDiscordPersonalAccounts(providers.find(provider => provider.id === 'discord'), data?.discordIdentities) && (
                 <DiscordPersonalAccounts copy={discordUiCopy} identities={data?.discordIdentities ?? []}
                   available={providers.some(provider => provider.id === 'discord' && provider.discordConnectionsV2 === true)}
                   canManage={canManage} canConnect={discordCanConnect(providers.find(provider => provider.id === 'discord'), canManage)}

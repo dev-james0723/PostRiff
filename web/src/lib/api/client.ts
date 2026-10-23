@@ -1,4 +1,4 @@
-import type { DiscordIdentity } from './types';
+import type { DiscordIdentity, DiscordSenderProfile } from './types';
 import type { DiscordEngagementStatus, DiscordEngagementRead, DiscordEngagementPermissions, DiscordReplyReview, DiscordReplyApproval } from '@/lib/channels/discord-engagement';
 import type { LibraryMetadataHistory, LibraryMetadataReceipt, LibraryMetadataSelection } from './library-metadata';
 import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation, YouTubePolicyStatus, YouTubeAgentPageOptions, YouTubeAgentHistory, YouTubeAgentArchiveResult } from '@/lib/youtube/types';
@@ -384,6 +384,9 @@ export function createApi(getToken: TokenSource) {
         ...(iss ? { iss } : {})
       }),
     discordEngagement: (w: string, id: string) => get<DiscordEngagementStatus>(`${ws(w)}/channels/${encodeURIComponent(id)}/discord-engagement`),
+    discordSenderProfile: (w: string, id: string) => get<DiscordSenderProfile>(`${ws(w)}/channels/${encodeURIComponent(id)}/discord-sender-name`),
+    setDiscordSenderName: (w: string, id: string, body: { name: string; fingerprint: string; confirmed: boolean; sharedServerConfirmed?: boolean }) =>
+      send<DiscordSenderProfile>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/discord-sender-name`, body),
     discordEngagementConsent: (w: string, id: string, body: { destinationId: string; targetDigest: string; permissions: DiscordEngagementPermissions; confirmed: boolean; contentAccess?: 'mentions_only' | 'approved_content' }) =>
       send<DiscordEngagementStatus>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/discord-engagement/consent`, body),
     discordEngagementRead: (w: string, id: string, body: { destinationId: string; kind: 'analytics' | 'inbox' }) =>

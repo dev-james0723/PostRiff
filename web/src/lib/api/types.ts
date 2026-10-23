@@ -192,6 +192,7 @@ export interface DiscordDestination {
 
 export interface Manifest {
   senderKind?: 'bot' | 'webhook';
+  discordSenderName?: string;
   destinationId?: string;
   discord?: { schema: 'rafii.discord.publish.v2'; target: DiscordDestination; wireDigest: string; deliveryDigest: string; operationDigest: string; publicationId: string };
   workerBinding?: WorkerBinding;
@@ -431,7 +432,7 @@ export interface ChannelFolder {
 export interface Phase2State {
   execution: string;
   trial: Trial;
-  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[]; discordConnectionKind?: 'installation' | 'webhook' }[];
+  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[]; discordConnectionKind?: 'installation' | 'webhook'; discordSenderName?: string }[];
   assets: Asset[];
   reviews: Review[];
   jobs: Job[];
@@ -686,6 +687,7 @@ export interface RunSkill {
 
 export interface RunItemDecision {
   discord?: Manifest['discord'];
+  discordSenderName?: string | null;
   timing?: Manifest['timing'];
   decision: 'approve' | 'reject' | 'revise' | string;
   by: string;
@@ -1475,6 +1477,7 @@ export interface Capability {
 }
 
 export interface ChannelView {
+  discordSenderName?: string | null;
   discordEngagement?: { implemented: boolean; enabled: boolean };
   defaultDestinationId?: string | null;
   discordDestinations?: DiscordDestination[];
@@ -1502,6 +1505,17 @@ export interface ChannelView {
   accessTokenExpiresAt?: number | null;
   /** SHA-256 of the account's stored profile picture; null when the provider gave none. */
   pictureDigest?: string | null;
+}
+
+export interface DiscordSenderProfile {
+  connectionId: string;
+  senderKind: 'bot' | 'webhook';
+  scope: 'server' | 'connection';
+  guildId: string;
+  name: string;
+  maxLength: number;
+  fingerprint: string;
+  state: 'verified';
 }
 
 export interface ProviderView {

@@ -153,6 +153,8 @@ class PostgresWorkspaceRepository:
                 row = cur.fetchone()
                 if not row:
                     # Same status and message whether the workspace is foreign or nonexistent.
+                    from .security_signals import cross_tenant_denied
+                    cross_tenant_denied(principal)  # H-07: one capped, id-free log line; never raises
                     raise AlphaError("Workspace unavailable.", 403)
                 state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
                 if state.get('accountDeletion') and not (allow_deleting and row[2] == 'owner'):

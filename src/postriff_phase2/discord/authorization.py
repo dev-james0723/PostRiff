@@ -120,6 +120,9 @@ def wire_content(manifest):
                       'sha256': asset['hash'], 'bytes': asset['bytes'], 'mime': asset['mime']})
     wire = {'content': manifest['payload']['text'], 'allowed_mentions': {'parse': []}, 'files': files}
     if manifest.get('senderKind') == 'webhook': wire['flags'] = 4  # suppress automatic embeds; exact text-only contract
+    if 'discordSenderName' in manifest and manifest.get('senderKind') == 'webhook':
+        from .sender_names import validate_name
+        wire['username'] = validate_name(manifest['discordSenderName'], 'webhook')
     if manifest.get('operation') == 'discord.reply':
         reply = manifest.get('engagementReply') or {}
         text = manifest['payload']['text']
@@ -185,6 +188,9 @@ def freeze_manifest(state, channel, manifest, selected_id):
     record = destination(state, channel, selected_id)
     target = {k: copy.deepcopy(record.get(k)) for k in identity_keys(record) + LABELS}
     manifest['senderKind'] = sender_kind(target)
+    if manifest['senderKind'] == 'webhook' and 'discordSenderName' in channel:
+        from .sender_names import validate_name
+        manifest['discordSenderName'] = validate_name(channel['discordSenderName'], 'webhook')
     wire = wire_content(manifest)
     delivery_digest = digest({'workspaceId': manifest['workspaceId'],
                               'applicationId': target['applicationId'],
@@ -267,6 +273,18 @@ def job_authorized(state, channel, job, *, now=None):
                 and (not job.get('automation') or job['automation'].get('approvedVia') == 'human'))
     except (AlphaError, KeyError, TypeError, ValueError):
         return False
+
+
+def approved_campaign_channel(channel, decision):
+    """Use only the original human decision, never a request-supplied override."""
+    frozen = copy.deepcopy(channel)
+    if channel.get('discordConnectionKind') == 'webhook':
+        if decision.get('discordSenderName') is None:
+            frozen.pop('discordSenderName', None)
+        else:
+            from .sender_names import validate_name
+            frozen['discordSenderName'] = validate_name(decision['discordSenderName'], 'webhook')
+    return frozen
 
 
 def campaign_binding(state, channel, variant, selected_id, publish_at, zone, now):

@@ -5,3 +5,9 @@ export type DiscordCopy = typeof packs.en;
 export function discordCopy(locale: string): DiscordCopy {
   return packs[healthCopy(locale).lang];
 }
+
+export function discordSenderLabel(copy: DiscordCopy, kind?: string, name?: string | null): string {
+  return kind === 'webhook' && name
+    ? `${copy.senderNamePrefix}: ${name} · ${copy.senderWebhookKind}`
+    : kind === 'webhook' ? copy.senderWebhook : copy.senderBot;
+}

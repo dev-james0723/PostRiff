@@ -1,7 +1,7 @@
 'use client';
 
 import { usePreferences } from '@/lib/preferences';
-import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
 
 /**
  * Approve, request changes to, or reject one post of an automation run (`raffi_run_decide`, orchestration §4).
@@ -118,7 +118,8 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
         variantRevision: variant?.revision ?? item.variantRevision ?? null,
         excludedUnknowns: unknowns,
         acknowledgedWarnings: warnings,
-        ...(item.platform === 'Discord' && item.publishAt ? { destinationId, destinationGeneration: discordTarget?.resourceGeneration, publishAt: item.publishAt } : {}),
+        ...(item.platform === 'Discord' && item.publishAt ? { destinationId, destinationGeneration: discordTarget?.resourceGeneration, publishAt: item.publishAt,
+          ...(discordTarget?.senderKind === 'webhook' ? { discordSenderName: connection?.discordSenderName ?? null } : {}) } : {}),
         sourceUse: rewriteSources.flatMap((s) => (digests?.[s.id] ? [{ sourceId: s.id, factsDigest: digests[s.id] }] : [])),
         ...(note.trim() ? { note: note.trim() } : {})
       });
@@ -157,7 +158,7 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
               <SelectTrigger aria-label='Discord destination'><SelectValue placeholder='Choose an authorized server and channel' /></SelectTrigger>
               <SelectContent>{destinations.map((d) => <SelectItem key={d.id} value={d.id}>{d.guildName} · {d.channelName}</SelectItem>)}</SelectContent>
             </Select>
-            {discordTarget && <p className='text-sm' data-discord-sender>{discordTarget.senderKind === 'webhook' ? dc.senderWebhook : dc.senderBot}</p>}
+            {discordTarget && <p className='text-sm' data-discord-sender>{discordSenderLabel(dc, discordTarget.senderKind, connection?.discordSenderName)}</p>}
             {discordTarget ? <p className='text-muted-foreground text-xs' data-discord-target>{discordTarget.guildName} ({discordTarget.guildId}) · {discordTarget.channelName} ({discordTarget.channelId}) · {when}</p> : <Note>Authorize a Discord channel in Connections before approving this publication.</Note>}
           </div>
         )}

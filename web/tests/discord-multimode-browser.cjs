@@ -213,9 +213,9 @@ async function until(check) {
       const composer = page.getByRole('dialog');
       await composer.getByRole('combobox', {name: 'Draft', exact: true}).selectOption(input.variant.id);
       await composer.getByRole('combobox', {name: 'Account', exact: true}).selectOption(bot.id);
-      assert.match(await composer.locator('[data-discord-sender]').innerText(), /Sender: Rafii bot/);
+      assert.match(await composer.locator('[data-discord-sender]').innerText(), /Sender: server bot/);
       await composer.getByRole('combobox', {name: 'Account', exact: true}).selectOption(hook.id);
-      assert.match(await composer.locator('[data-discord-sender]').innerText(), /Sender: authorized Rafii webhook/);
+      assert.match(await composer.locator('[data-discord-sender]').innerText(), /Sender: authorized webhook/);
       assert.equal(await composer.getByRole('option', {name: identities[0].account, exact: true}).count(), 0);
       assert.equal(unexpected, 0);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);

@@ -158,7 +158,7 @@ def route_identity(method, path):
         'GET:/oauth2/@me', 'GET:/oauth2/applications/@me', 'POST:/oauth2/token', 'POST:/oauth2/token/revoke',
         'GET:/channels/{id}', 'GET:/channels/{id}/messages', 'GET:/channels/{id}/messages/{id}',
         'POST:/channels/{id}/messages', 'GET:/guilds/{id}', 'GET:/guilds/{id}/channels',
-        'GET:/guilds/{id}/members/{id}'}
+        'GET:/guilds/{id}/members/{id}', 'PATCH:/guilds/{id}/members/@me'}
     if template not in allowed:
         raise RateCoordinatorUnavailable()
     return template, _digest(major)
@@ -1099,6 +1099,53 @@ class SharedPostgresBudget:
 
     def note_transport_failure(self, permit):
         return self.observe(permit,{'status':503,'headers':{}},transport_failure=True)
+
+    def abandon_unsent_nickname(self, permit):
+        """Retire only a guarded, unbound nickname PATCH denied before IO.
+
+        No quota refund or fabricated provider response. Otherwise a known
+        unsent request would retain a discovery slot after its window expires.
+        """
+        if (not isinstance(permit, Permit) or permit.method != 'PATCH' or permit.binding_hash is not None
+                or permit.identity.kind != 'bot'):
+            raise RateCoordinatorUnavailable()
+        with self._transaction() as cur:
+            row = self._admission(cur, permit)
+            if row['intent'] is not None or row['route'] != _digest('PATCH:/guilds/{id}/members/@me'):
+                raise RateCoordinatorUnavailable()
+            if row['state'] in ('observed', 'blocked'):
+                return  # A late denied writer cannot degrade an already reconciled admission.
+            if row['state'] != 'sent':
+                raise RateCoordinatorUnavailable()
+            cur.execute(f"UPDATE {ADMISSIONS} SET state='blocked',outcome_at=clock_timestamp() WHERE id=%s::uuid AND state='sent' AND NOT is_publish AND method='PATCH' AND route_key=%s", (permit.id, _digest('PATCH:/guilds/{id}/members/@me')))
+            if cur.rowcount != 1:
+                raise RateCoordinatorUnavailable()
+
+    def reconcile_nickname(self, cur, permit, guild_id):
+        """Retire one idempotent nickname operation after a later live read.
+
+        Caller holds the workspace/credential custody and expired edit claim,
+        and has freshly observed this exact bot member. No provider status is
+        invented, no quota is refunded, and publication permits never qualify.
+        """
+        path = f'/guilds/{guild_id}/members/@me'
+        if (not isinstance(permit, Permit) or permit.method != 'PATCH' or permit.binding_hash is not None or permit.identity.kind != 'bot'
+                or not _ID.fullmatch(guild_id) or permit.path_key != _digest(path)):
+            raise RateCoordinatorUnavailable()
+        row = self._admission(cur, permit)
+        now = self._now(cur)
+        if (row['intent'] is not None or row['route'] != _digest('PATCH:/guilds/{id}/members/@me')
+                or row['reserved'] + 120 > now or row['expires'] > now):
+            raise RateCoordinatorUnavailable()
+        if row['state'] in ('observed', 'blocked'):
+            return
+        if row['state'] not in ('reserved', 'sent', 'uncertain'):
+            raise RateCoordinatorUnavailable()
+        # `observed` records the later member read, not the original PATCH's
+        # HTTP result. Keep status_code NULL and preserve every spent scope.
+        cur.execute(f"UPDATE {ADMISSIONS} SET state='observed',outcome_at=clock_timestamp(),status_code=NULL,rate_scope='unknown' WHERE id=%s::uuid AND state IN ('reserved','sent','uncertain') AND NOT is_publish AND method='PATCH' AND route_key=%s", (permit.id, _digest('PATCH:/guilds/{id}/members/@me')))
+        if cur.rowcount != 1:
+            raise RateCoordinatorUnavailable()
 
     def report(self):
         """Internal bounded aggregates, not customer data or a capacity claim."""
