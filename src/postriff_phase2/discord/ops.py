@@ -243,7 +243,7 @@ def read_ledger(cur, now, context):
 _GUARD_ROWS = '''SELECT scope_key, kind, manual_hold, limit_count, remaining,
        extract(epoch FROM reset_at)::double precision, extract(epoch FROM blocked_until)::double precision,
        extract(epoch FROM circuit_until)::double precision, extract(epoch FROM updated_at)::double precision,
-       extract(epoch FROM policy_expires_at)::double precision
+       extract(epoch FROM policy_expires_at)::double precision, window_seconds
 FROM public.pr_discord_rate_state WHERE scope_key = ANY(%s::text[])'''
 
 _KIND_ROWS = '''SELECT kind,
@@ -269,7 +269,7 @@ def guard_keys(provider):
 
 
 def _guard(row, now):
-    _key, kind, hold, limit, remaining, reset, blocked, circuit, updated, expires = row
+    _key, kind, hold, limit, remaining, reset, blocked, circuit, updated, expires, window = row
     rolled = discord_worker.finite(reset) and reset <= now
     ratio = None
     if limit:
@@ -279,7 +279,7 @@ def _guard(row, now):
     embargo = max(blocked or 0, circuit or 0) - now
     return {'present': True, 'hold': bool(hold), 'blocked': bool(blocked and blocked > now),
             'circuit': bool(circuit and circuit > now), 'embargoSeconds': round(max(0.0, embargo), 1),
-            'remaining': remaining, 'limit': limit, 'remainingRatio': ratio,
+            'remaining': remaining, 'limit': limit, 'windowSeconds': window, 'remainingRatio': ratio,
             'resetSeconds': round(max(0.0, reset - now), 1) if discord_worker.finite(reset) else None,
             'unchangedSeconds': _age(now, updated), 'policyDaysLeft': round((expires - now) / 86400, 2)
             if discord_worker.finite(expires) else None}

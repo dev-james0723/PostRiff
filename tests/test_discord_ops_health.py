@@ -93,7 +93,8 @@ class FakeDatabase:
             kinds = [ops.GUARDS[key[:3]] for key in keys]
             self.result = [(key, kind, False, 2000 if kind == 'invalid' else 25 if kind == 'policy' else None,
                             1500 if kind == 'invalid' else 20 if kind == 'policy' else None, NOW + 300, None, None,
-                            NOW - 10, NOW + 86400 * 9) for key, kind in zip(keys, kinds)]
+                            NOW - 10, NOW + 86400 * 9, 600.0 if kind == 'invalid' else 1.0 if kind == 'policy' else None)
+                           for key, kind in zip(keys, kinds)]
         elif 'pr_discord_rate_state' in sql:
             self.result = [('route', 0, 1, 3, 2, 0)]
         elif 'pr_encrypted_credentials' in sql:
