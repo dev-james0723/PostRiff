@@ -658,8 +658,7 @@ def phase_liveswap(work, args):
                     c0.stop('immediate')  # the in-place restore takes the database away under the running loops
                     restored, report = R.restore(base, base_dir / 'archive', target, base_dir / 'restored', port=port)
                     back = time.time()
-                    if variant == 'in_place':
-                        time.sleep(args.hold_delay)
+                    time.sleep(args.hold_delay)  # the same window for both: the operator needs a few seconds
                     with restored.connect() as db:
                         hold = T.set_hold(db)
                     held_at = time.time()
