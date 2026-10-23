@@ -1,6 +1,6 @@
 # OWNER DECISIONS PENDING (living document; none of them blocks today's engineering)
 
-Kept by the Release Captain. Written 2026-10-23 about 07:45Z, after owner reply 15. Nothing here is a request for approval of a Production operation (those are in `APPROVAL-PACKET-3-DRAFT.md`, not yet submitted). These are choices only the owner can make. Each says what I would choose, the strongest argument against it, the biggest risk, what would change my mind, and whether it can be undone. The release state is **NO-GO** until gates G1 to G7 all have evidence.
+Kept by the Release Captain. Written 2026-10-23 about 07:30Z, after owner reply 15. Nothing here is a request for approval of a Production operation (those are in `APPROVAL-PACKET-3-DRAFT.md`, not yet submitted). These are choices only the owner can make. Each says what I would choose, the strongest argument against it, the biggest risk, what would change my mind, and whether it can be undone. The release state is **NO-GO** until gates G1 to G7 all have evidence.
 
 Labels: [Certain] measured or read exactly; [Likely] strong inference; [Guessing] needs a fact I do not have.
 
