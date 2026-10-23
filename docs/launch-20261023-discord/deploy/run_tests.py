@@ -338,7 +338,7 @@ check('preflight never prints the user name', 'owner-user-name' not in text)
 check('preflight prints no table row or the word Encrypted', 'Encrypted' not in text and 'Production  ' not in text)
 check('preflight names present variables', 'present: POSTRIFF_DISCORD_BOT_TOKEN' in text and 'present: CRON_SECRET' in text)
 check('preflight runs the dry run with the build flags, --yes included', 'VERCEL-DRY: --dry --json --yes --prod --skip-domain --scope team_PgXY5VdAYKcsv0RLoDPHscNq' in calls)
-check('preflight reports the tester secret as a yes or no, never its value', 'ok   tester workspace secret: set, UUID shape' in text and UUID not in text)
+check('preflight reports the tester secret as a count and a fingerprint, never its value', 'ok   tester workspace secret: set, UUID shape' in text and UUID not in text)
 check('preflight never creates a deployment', 'VERCEL-ARGS' not in calls and calls.count('CALL: deploy') == 2)  # the help text and the dry run
 check('preflight summarises the dry run on the real 59.23.2 shape', 'framework: Other (none); files: 3; bytes: 42; ignored paths: 7' in text and 'top level: api=1 web=1' in text and 'informational): 0' in text, text[-800:])
 check('a template such as .env.example in the upload set is not a leak', 'ok   dry run: no env file, key file or certificate is in the upload set' in text)
@@ -393,9 +393,25 @@ for count in (1, 2):
     code, text, _ = pre(tester=','.join(ids))
     check(f'a gate list of {count} workspace(s) passes the preflight, with its fingerprint', code == 0 and f'set, UUID shape, {count} id(s), fingerprint {fingerprint(*ids)}' in text, text[-300:])
 check('the fingerprint does not depend on the order of the list', fingerprint(UUID, UUID_B, UUID_C) == fingerprint(UUID_C, UUID, UUID_B))
+UNSORTED = ','.join([UUID_C, UUID, UUID_B])
+DUPLICATE = ','.join([UUID, UUID_B, UUID])
+code, text, _ = pre(tester=UNSORTED)
+check('the preflight fingerprint of an unsorted list is the fingerprint of the sorted ids', code == 0 and f'3 id(s), fingerprint {fingerprint(UUID, UUID_B, UUID_C)}' in text, text[-300:])
+code, text, _ = pre(tester=DUPLICATE)
+check('the preflight keeps a duplicate in the fingerprint, so the owner sees the mismatch', code == 0 and f'3 id(s), fingerprint {fingerprint(UUID, UUID, UUID_B)}' in text and fingerprint(UUID, UUID, UUID_B) != fingerprint(UUID, UUID_B), text[-300:])
 shell_fp = subprocess.run(['bash', '-c', "printf '%s\\n' \"$@\" | LC_ALL=C sort | sha256sum | cut -c1-12", 'x', UUID_C, UUID, UUID_B], capture_output=True, text=True).stdout.strip()
 check('the documented shell command gives the same fingerprint', shell_fp == fingerprint(UUID, UUID_B, UUID_C), shell_fp)
 check('the workflow runs every step in the C locale', doc.get('env', {}).get('LC_ALL') == 'C')
+def locale_overrides():
+    found = []
+    for name, job in doc['jobs'].items():
+        found += [(name, key) for key in (job.get('env') or {}) if key == 'LANG' or key.startswith('LC_')]
+        for item in job.get('steps', []):
+            found += [(item.get('name', '?')[:30], key) for key in (item.get('env') or {}) if key == 'LANG' or key.startswith('LC_')]
+    return found
+
+
+check('no job or step overrides the locale (LANG, LC_*)', locale_overrides() == [], repr(locale_overrides()))
 for odd in ODD_GATES:
     code, text, _ = pre(tester=odd)
     check(f'an odd gate list fails the preflight ({odd[:14]!r}...)', code != 0 and 'FAIL tester workspace secret' in text and UUID not in text and UUID_B not in text)
@@ -444,7 +460,7 @@ check('d2 prints the deployment url, the Production and Inspect lines (real 59.2
 check('d2 writes the summary', 'open build of' in summary and 'URL: https://' in summary)
 code, text, args, *_ = build('d1')
 check('d1 builds with the tester gate', code == 0 and f'--env POSTRIFF_DISCORD_CONNECT_WORKSPACES={UUID} ' in args and '--meta rafiiTwin=dark' in args, args)
-check('d1 masks the tester id before anything else prints it', f'::add-mask::{UUID}' in text)
+check('d1 masks a single gate id before anything else prints it', f'::add-mask::{UUID}' in text)
 check('d1 without a tester id is refused', build('d1', tester='')[0] != 0)
 check('d1 with an upper-case tester id is refused', build('d1', tester=UUID.upper())[0] != 0)
 check('d1 with a tester id holding a line break is refused', build('d1', tester=UUID + '\n::set-env name=A::b')[0] != 0)
@@ -467,6 +483,10 @@ for ids in ([UUID], [UUID, UUID_B], [UUID, UUID_B, UUID_C]):
 traced_old_pattern = '+ echo ::add-mask::' + UUID + '\n+ echo ::add-mask::' + UUID_B
 check('the log model catches the old pattern (a traced echo of a single id before its mask exists)', UUID in '\n'.join(runner_view(traced_old_pattern, UUID + ',' + UUID_B)))
 check('d1 refuses four ids', build('d1', tester=','.join([UUID, UUID_B, UUID_C, UUID_D]))[0] != 0)
+code, text, *_ = build('d1', tester=UNSORTED)
+check('the d1 fingerprint of an unsorted list is the fingerprint of the sorted ids, as in the preflight', code == 0 and f'dark gate: 3 workspace id(s), fingerprint {fingerprint(UUID, UUID_B, UUID_C)}' in text, text[-300:])
+code, text, *_ = build('d1', tester=DUPLICATE)
+check('the d1 fingerprint keeps a duplicate, as in the preflight', code == 0 and f'dark gate: 3 workspace id(s), fingerprint {fingerprint(UUID, UUID, UUID_B)}' in text, text[-300:])
 for odd in ODD_GATES:
     check(f'd1 with an odd gate list is refused ({odd[:14]!r}...)', build('d1', tester=odd)[0] != 0)
 for odd in ('', 'd3', 'preflight', 'D1'):
