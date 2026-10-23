@@ -15,8 +15,8 @@ from unittest.mock import Mock, patch
 from discord_sender_name_settings_fixture import Settings
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.discord.sender_names import SenderNames
-from test_discord_sender_name import SettingsHarness, GUILD, APP, NOW, WORKSPACE, ACTOR
-from test_discord_sender_name_routes import BODY, Base as RouteBase
+from test_discord_sender_name import SettingsHarness, APP, NOW, WORKSPACE, ACTOR
+from test_discord_sender_name_routes import BODY
 
 
 class Harnessed(unittest.TestCase):
@@ -356,6 +356,17 @@ class CustodyConditions(unittest.TestCase):
                 outcome = t.w.attempt(t.w.get, t.A, t.ta, t.wa.connection)
                 self.assertEqual(outcome[0], status)
                 self.assertEqual(t.w.snapshot(), before)
+
+    def test_a_workspace_id_that_is_not_a_uuid_string_is_the_foreign_workspace_answer(self):
+        t = self.world()
+        for bad in (5, None, ['x'], b'bytes', 'not-a-uuid', '', 'x' * 5000, "x'; DROP TABLE public.pr_workspaces; --"):
+            with self.subTest(bad=repr(bad)[:40]), self.assertRaises(AlphaError) as raised:
+                SenderNames(t.w.s, bad, t.ta, t.wa.connection)
+            self.assertEqual((raised.exception.status, raised.exception.code, str(raised.exception)),
+                             (403, 'permission_denied', 'Workspace unavailable.'))
+        with self.assertRaises(AlphaError) as raised:
+            SenderNames(t.w.s, t.A, None, t.wa.connection)
+        self.assertEqual((raised.exception.status, raised.exception.code), (401, 'unauthenticated'))
 
     def test_a_card_of_another_platform_is_not_a_discord_connection(self):
         t = self.world()

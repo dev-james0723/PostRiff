@@ -15,8 +15,6 @@ from unittest.mock import patch
 
 import discord_sender_name_fixture as F
 from discord_sender_name_settings_fixture import Settings
-from postriff_alpha.domain import AlphaError
-from postriff_phase2.discord import sender_names as names
 
 FLAGS = {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true', 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}
 BODY = {'confirmed': True, 'sharedServerConfirmed': True}

@@ -4,7 +4,6 @@ Discord that records each request whole. The same properties on a real PostgreSQ
 test_discord_sender_name_postgres.py.
 """
 import copy
-import hashlib
 import json
 import os
 import threading
