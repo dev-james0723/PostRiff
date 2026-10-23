@@ -54,8 +54,8 @@ Today: BLOCKED, reasons `night_cover_not_declared` and `roster:{primary,backup}_
 | `tests/test_oncall_policy.py` (policy, duty hours across both 2026 New York transitions, rosters, the rule-to-priority table) | 17 OK |
 | `tests/test_oncall_engine.py` (engine, providers, store in memory, automatic hold logic, readiness) | 36 OK |
 | `tests/test_discord_ops_drills_postgres.py` offline part (runbook statements, the hold statements of the engine, migration 141 against the twin) | 4 OK |
-| `tests/test_discord_ops_drills_postgres.py` on PostgreSQL 16 (9 drills, `DRAIN_CHECK` at 5,201 workspaces, migration 141 applied twice) | see `DRILL-RECEIPT-ISOLATED.md` and the final report |
-| `tests/oncall_drills.py` / `tests/test_oncall_drills_postgres.py` (15 policy rows) | `ONCALL-DRILL-RECEIPT.md` |
+| `tests/test_discord_ops_drills_postgres.py` on PostgreSQL 16 (9 drills, `DRAIN_CHECK` at 5,201 workspaces, migration 141 applied twice) | 11 OK; receipt `DRILL-RECEIPT-ISOLATED.md`: 9 drills, 98 checks, 0 failed (source `b193adce`) |
+| `tests/oncall_drills.py` / `tests/test_oncall_drills_postgres.py` (15 policy rows) | receipt `ONCALL-DRILL-RECEIPT.md`: 15 rows, 41 checks, 0 failed (source `b193adce`); the wrapper is 13 tests |
 
 The thresholds file holds 45 values for the 40 alert ids (the reviewed head had 41 for 36).
 
@@ -107,4 +107,4 @@ Nothing below is requested by this branch; the Release Captain adds the rows to 
 
 ## 7. Restore
 
-A database restore rewinds the hold with everything else. The restore lane's `RESTORE-RUNBOOK-PROPOSAL.md` section 4.J (a proposal, not in force) and `RESTORE-HAZARD-DRILL.md` measured why a hold must prove itself and why the Discord-paused build is the stop that survives an in-place restore. `PHONE-RUNBOOK.md` follows both points and does not rely on that proposal's reconciliation tool, which is not reviewed.
+A database restore rewinds the hold with everything else. The restore lane's `RESTORE-RUNBOOK-PROPOSAL.md` section 4.J (a proposal, not in force) and `RESTORE-HAZARD-DRILL.md` (branch `claude/discord-restore-drill-20261023`, `af0543ef`) measured why a hold must prove itself and why the Discord-paused build is the stop that survives an in-place restore. `PHONE-RUNBOOK.md` follows both points and does not rely on that proposal's reconciliation tool, which is not reviewed.

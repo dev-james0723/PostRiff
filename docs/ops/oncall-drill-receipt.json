@@ -1,0 +1,822 @@
+{
+ "command": "POSTRIFF_PG_BIN=/usr/lib/postgresql/16/bin PYTHONPATH=src:tests python tests/oncall_drills.py",
+ "environment": "isolated",
+ "finishedAt": "2026-10-23T07:34:10Z",
+ "kind": "rafii.oncall.drill-receipt",
+ "policy": "docs/ops/h07-oncall-policy.json",
+ "postgres": "16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+ "providers": "fake (tests prove the decisions, not delivery)",
+ "python": "3.13.16",
+ "result": "PASS",
+ "rows": [
+  {
+   "checks": [
+    {
+     "check": "the shipped placeholder roster has no destinations (BLOCKED)",
+     "observed": [
+      "backup_without_email",
+      "backup_without_phone",
+      "backup_without_push",
+      "primary_without_email",
+      "primary_without_phone",
+      "primary_without_push"
+     ],
+     "pass": true
+    },
+    {
+     "check": "a named synthetic roster has no gap, a different Backup and every channel",
+     "observed": [],
+     "pass": true
+    },
+    {
+     "check": "an invalid roster is the engine's own P0",
+     "observed": null,
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R01",
+   "observed": {
+    "namedProblems": [],
+    "placeholderProblems": [
+     "backup_without_email",
+     "backup_without_phone",
+     "backup_without_push",
+     "primary_without_email",
+     "primary_without_phone",
+     "primary_without_push"
+    ],
+    "readinessToday": "BLOCKED"
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "roster",
+   "result": "PASS",
+   "seconds": 0.0,
+   "title": "A Primary and a Backup cover every minute; the shipped placeholder cannot carry P0"
+  },
+  {
+   "checks": [
+    {
+     "check": "second 0: push and e-mail to the Primary, nothing else",
+     "observed": [
+      "email:primary-1",
+      "push:primary-1"
+     ],
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R02",
+   "observed": {
+    "timeline": {
+     "0": [
+      "email:primary-1",
+      "push:primary-1"
+     ],
+     "300": [
+      "phone:primary-1"
+     ],
+     "600": [
+      "email:backup-1",
+      "phone:backup-1",
+      "push:backup-1"
+     ]
+    }
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "routing_p0",
+   "result": "PASS",
+   "seconds": 0.0,
+   "title": "P0 at 03:00 on a Saturday: push and e-mail to the Primary at once"
+  },
+  {
+   "checks": [
+    {
+     "check": "no call at 299.9 s",
+     "observed": 0,
+     "pass": true
+    },
+    {
+     "check": "a call to the Primary at 300 s",
+     "observed": [
+      "phone:primary-1"
+     ],
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R03",
+   "observed": {
+    "callsAt299_9": 0,
+    "timeline300": [
+     "phone:primary-1"
+    ]
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "escalation_5min",
+   "result": "PASS",
+   "seconds": 0.0,
+   "title": "Unacknowledged P0: a call to the Primary at 5 minutes, not before"
+  },
+  {
+   "checks": [
+    {
+     "check": "nothing to the Backup at 599.9 s",
+     "observed": [
+      "primary-1"
+     ],
+     "pass": true
+    },
+    {
+     "check": "push, e-mail and phone to the Backup at 600 s",
+     "observed": [
+      "email:backup-1",
+      "phone:backup-1",
+      "push:backup-1"
+     ],
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R04",
+   "observed": {
+    "pushesAt599_9": [
+     "primary-1"
+    ],
+    "timeline600": [
+     "email:backup-1",
+     "phone:backup-1",
+     "push:backup-1"
+    ]
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "escalation_10min_backup",
+   "result": "PASS",
+   "seconds": 0.0,
+   "title": "Unacknowledged P0: the Backup by push, e-mail and phone at 10 minutes"
+  },
+  {
+   "checks": [
+    {
+     "check": "duty hours: push and e-mail at once, the Backup at 15 minutes, no call",
+     "observed": {
+      "0": [
+       "email:primary-1",
+       "push:primary-1"
+      ],
+      "900": [
+       "email:backup-1",
+       "push:backup-1"
+      ]
+     },
+     "pass": true
+    },
+    {
+     "check": "night: e-mail at once, push at 09:00 New York time, the Backup at 09:15",
+     "observed": {
+      "0": [
+       "email:primary-1"
+      ],
+      "25200": [
+       "push:primary-1"
+      ],
+      "26100": [
+       "email:backup-1",
+       "push:backup-1"
+      ]
+     },
+     "pass": true
+    },
+    {
+     "check": "across the spring-forward night only duty minutes count (10 before 23:00, 5 after 09:00 EDT)",
+     "observed": [
+      1772975100.0
+     ],
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R05",
+   "observed": {
+    "day": {
+     "0": [
+      "email:primary-1",
+      "push:primary-1"
+     ],
+     "900": [
+      "email:backup-1",
+      "push:backup-1"
+     ]
+    },
+    "night": {
+     "0": [
+      "email:primary-1"
+     ],
+     "0 s after 09:00": [
+      "push:primary-1"
+     ],
+     "900 s after 09:00": [
+      "email:backup-1",
+      "push:backup-1"
+     ]
+    },
+    "springForwardBackupAt": [
+     1772975100.0
+    ]
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "routing_p1",
+   "result": "PASS",
+   "seconds": 0.9,
+   "title": "P1: push and e-mail in duty hours, the Backup after 15 duty minutes; at night e-mail now, push at 09:00"
+  },
+  {
+   "checks": [
+    {
+     "check": "one e-mail at 09:00, no push and no call",
+     "observed": {
+      "25200": [
+       "email:primary-1"
+      ]
+     },
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R06",
+   "observed": {
+    "timeline": {
+     "25200": [
+      "email:primary-1"
+     ]
+    }
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "routing_p2",
+   "result": "PASS",
+   "seconds": 0.9,
+   "title": "P2: e-mail in duty hours, nothing else"
+  },
+  {
+   "checks": [
+    {
+     "check": "each channel acknowledges and no call follows",
+     "observed": {
+      "dashboard": {
+       "calls": 0,
+       "ok": true,
+       "records": [
+        "email:primary-1"
+       ]
+      },
+      "email": {
+       "calls": 0,
+       "ok": true,
+       "records": [
+        "email:primary-1"
+       ]
+      },
+      "phone": {
+       "calls": 0,
+       "ok": true,
+       "records": [
+        "email:primary-1"
+       ]
+      },
+      "push": {
+       "calls": 0,
+       "ok": true,
+       "records": [
+        "email:primary-1"
+       ]
+      }
+     },
+     "pass": true
+    },
+    {
+     "check": "the acknowledgement is e-mailed as a record",
+     "observed": {
+      "dashboard": {
+       "calls": 0,
+       "ok": true,
+       "records": [
+        "email:primary-1"
+       ]
+      },
+      "email": {
+       "calls": 0,
+       "ok": true,
+       "records": [
+        "email:primary-1"
+       ]
+      },
+      "phone": {
+       "calls": 0,
+       "ok": true,
+       "records": [
+        "email:primary-1"
+       ]
+      },
+      "push": {
+       "calls": 0,
+       "ok": true,
+       "records": [
+        "email:primary-1"
+       ]
+      }
+     },
+     "pass": true
+    },
+    {
+     "check": "a forged link is refused and recorded",
+     "observed": {
+      "ok": false,
+      "reason": "bad_token"
+     },
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R07",
+   "observed": {
+    "byChannel": {
+     "dashboard": {
+      "calls": 0,
+      "ok": true,
+      "records": [
+       "email:primary-1"
+      ]
+     },
+     "email": {
+      "calls": 0,
+      "ok": true,
+      "records": [
+       "email:primary-1"
+      ]
+     },
+     "phone": {
+      "calls": 0,
+      "ok": true,
+      "records": [
+       "email:primary-1"
+      ]
+     },
+     "push": {
+      "calls": 0,
+      "ok": true,
+      "records": [
+       "email:primary-1"
+      ]
+     }
+    },
+    "forgedToken": {
+     "ok": false,
+     "reason": "bad_token"
+    }
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "acknowledgement",
+   "result": "PASS",
+   "seconds": 0.2,
+   "title": "An acknowledgement from push, e-mail, phone or the dashboard stops the chain"
+  },
+  {
+   "checks": [
+    {
+     "check": "a failed push brings the call forward to second 0",
+     "observed": [
+      "email:primary-1",
+      "phone:primary-1",
+      "push:primary-1"
+     ],
+     "pass": true
+    },
+    {
+     "check": "every channel failing opens ONCALL_DELIVERY_FAILED (P0) once",
+     "observed": null,
+     "pass": true
+    },
+    {
+     "check": "the failure alert reaches the Backup",
+     "observed": [
+      "email:backup-1",
+      "email:primary-1",
+      "phone:backup-1",
+      "phone:primary-1",
+      "push:backup-1",
+      "push:primary-1"
+     ],
+     "pass": true
+    },
+    {
+     "check": "a provider exception is a failed delivery, not a crash",
+     "observed": null,
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R08",
+   "observed": {
+    "metaDeliveries": [
+     "email:backup-1",
+     "email:primary-1",
+     "phone:backup-1",
+     "phone:primary-1",
+     "push:backup-1",
+     "push:primary-1"
+    ],
+    "metaPriority": "P0",
+    "pushDownSecond0": [
+     "email:primary-1",
+     "phone:primary-1",
+     "push:primary-1"
+    ],
+    "statuses": [
+     "accepted/None",
+     "failed/provider_exception",
+     "failed/scripted"
+    ]
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "delivery_fallback",
+   "result": "PASS",
+   "seconds": 0.0,
+   "title": "A failed channel brings the next step forward; all failing opens the engine's own P0"
+  },
+  {
+   "checks": [
+    {
+     "check": "one incident for 60 evaluations",
+     "observed": null,
+     "pass": true
+    },
+    {
+     "check": "every notification key is unique",
+     "observed": 12,
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R09",
+   "observed": {
+    "deliveries": 12,
+    "incidents": 1,
+    "seen": 60,
+    "unique": 12
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "dedupe",
+   "result": "PASS",
+   "seconds": 0.2,
+   "title": "A repeating alert is one incident and one notification per step and channel"
+  },
+  {
+   "checks": [
+    {
+     "check": "nothing pages inside the window; the chain starts when it ends",
+     "observed": [
+      600,
+      900
+     ],
+     "pass": true
+    },
+    {
+     "check": "a security alert pages inside the window",
+     "observed": {
+      "0": [
+       "email:primary-1",
+       "push:primary-1"
+      ]
+     },
+     "pass": true
+    },
+    {
+     "check": "the database alarm pages; no-progress and backlog are held as its symptoms",
+     "observed": null,
+     "pass": true
+    },
+    {
+     "check": "a flap within ten minutes reopens the incident without resending",
+     "observed": null,
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R10",
+   "observed": {
+    "flapIncidents": 1,
+    "flapPushes": 1,
+    "inhibitedRules": [
+     "SILENT_HALT_DATABASE"
+    ],
+    "maintenanceFirstPage": [
+     600
+    ],
+    "securityInWindow": [
+     "email:primary-1",
+     "push:primary-1"
+    ]
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "suppression",
+   "result": "PASS",
+   "seconds": 0.0,
+   "title": "Maintenance and a cause hold their symptoms; a security alert pages in any window; flapping is damped"
+  },
+  {
+   "checks": [
+    {
+     "check": "six pushes and one summary at once",
+     "observed": [
+      6,
+      1
+     ],
+     "pass": true
+    },
+    {
+     "check": "the held three after the window",
+     "observed": 9,
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R11",
+   "observed": {
+    "pushesAfterWindow": 9,
+    "pushesAtOnce": 6,
+    "summaries": 1
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "storm",
+   "result": "PASS",
+   "seconds": 0.0,
+   "title": "A storm: at most six pushes per person in ten minutes, one summary, the rest later"
+  },
+  {
+   "checks": [
+    {
+     "check": "every step, delivery, acknowledgement and resolution is in the timeline in order",
+     "observed": [
+      "opened",
+      "step",
+      "delivery",
+      "delivery",
+      "step",
+      "delivery",
+      "step",
+      "delivery",
+      "delivery",
+      "delivery",
+      "acknowledged",
+      "delivery",
+      "delivery",
+      "resolved",
+      "delivery",
+      "delivery"
+     ],
+     "pass": true
+    },
+    {
+     "check": "the session role cannot update or delete an event; the trigger refuses even the owner",
+     "observed": [
+      [
+       true,
+       true
+      ],
+      true
+     ],
+     "pass": true
+    },
+    {
+     "check": "a notification key can be claimed once only",
+     "observed": false,
+     "pass": true
+    },
+    {
+     "check": "one live incident per key; another environment sees nothing",
+     "observed": null,
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R12",
+   "observed": {
+    "duplicateClaim": false,
+    "otherEnvironmentSees": 0,
+    "ownerUpdateRefusedByTrigger": true,
+    "sessionUpdateDeleteRefused": [
+     true,
+     true
+    ],
+    "timeline": [
+     "opened",
+     "step",
+     "delivery",
+     "delivery",
+     "step",
+     "delivery",
+     "step",
+     "delivery",
+     "delivery",
+     "delivery",
+     "acknowledged",
+     "delivery",
+     "delivery",
+     "resolved",
+     "delivery",
+     "delivery"
+    ]
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "audit_trail",
+   "result": "PASS",
+   "seconds": 3.1,
+   "title": "PostgreSQL store (migration 140): an append-only timeline and unique notifications"
+  },
+  {
+   "checks": [
+    {
+     "check": "the watchdog role reads the heartbeat and nothing else",
+     "observed": null,
+     "pass": true
+    },
+    {
+     "check": "fresh: nothing; older than 180 s: ONCALL_HEARTBEAT_STALE",
+     "observed": [
+      "ONCALL_HEARTBEAT_STALE"
+     ],
+     "pass": true
+    },
+    {
+     "check": "after a gap the engine opens ONCALL_ENGINE_GAP (P1)",
+     "observed": null,
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R13",
+   "observed": {
+    "freshAlerts": [],
+    "gapPriority": "P1",
+    "staleAlerts": [
+     "ONCALL_HEARTBEAT_STALE"
+    ],
+    "watchdogReadsHeartbeat": 1,
+    "watchdogReadsIncidents": false
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "heartbeat",
+   "result": "PASS",
+   "seconds": 1.5,
+   "title": "The alert about the alerting: a stale heartbeat for the watchdog, a gap noticed after a restart"
+  },
+  {
+   "checks": [
+    {
+     "check": "the evaluator pages SILENT_HALT_NO_PROGRESS on the real payload",
+     "observed": null,
+     "pass": true
+    },
+    {
+     "check": "P0 chain: Primary at once, call at 5 minutes, Backup at 10",
+     "observed": {
+      "0": [
+       "SILENT_HALT_NO_PROGRESS:email:primary-1",
+       "SILENT_HALT_NO_PROGRESS:push:primary-1"
+      ],
+      "300": [
+       "SILENT_HALT_NO_PROGRESS:phone:primary-1"
+      ],
+      "600": [
+       "SILENT_HALT_NO_PROGRESS:email:backup-1",
+       "SILENT_HALT_NO_PROGRESS:phone:backup-1",
+       "SILENT_HALT_NO_PROGRESS:push:backup-1"
+      ]
+     },
+     "pass": true
+    },
+    {
+     "check": "the Backup acknowledges by phone; after the senders drain it resolves by itself",
+     "observed": [
+      {
+       "by": "backup-1",
+       "incident": "b1b271f6-009a-4501-95df-25471291dd0b",
+       "ok": true
+      },
+      "resolved"
+     ],
+     "pass": true
+    },
+    {
+     "check": "the resolution is e-mailed to both people paged",
+     "observed": null,
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R14",
+   "observed": {
+    "acknowledged": {
+     "by": "backup-1",
+     "incident": "b1b271f6-009a-4501-95df-25471291dd0b",
+     "ok": true
+    },
+    "afterDrain": [],
+    "evaluatorAlerts": [
+     "SILENT_HALT_NO_PROGRESS:page"
+    ],
+    "finalState": "resolved",
+    "pages": {
+     "0": [
+      "SILENT_HALT_NO_PROGRESS:email:primary-1",
+      "SILENT_HALT_NO_PROGRESS:push:primary-1"
+     ],
+     "300": [
+      "SILENT_HALT_NO_PROGRESS:phone:primary-1"
+     ],
+     "600": [
+      "SILENT_HALT_NO_PROGRESS:email:backup-1",
+      "SILENT_HALT_NO_PROGRESS:phone:backup-1",
+      "SILENT_HALT_NO_PROGRESS:push:backup-1"
+     ]
+    },
+    "records": [
+     "email:backup-1",
+     "email:backup-1",
+     "email:primary-1",
+     "email:primary-1"
+    ]
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "end_to_end",
+   "result": "PASS",
+   "seconds": 10.4,
+   "title": "Real evaluator alerts from the real payload into the engine, through to the Backup and resolution"
+  },
+  {
+   "checks": [
+    {
+     "check": "probing never holds (a refusal is the gate working)",
+     "observed": {
+      "held": 0,
+      "policy_rows": 1,
+      "seconds_since_last_request": "0"
+     },
+     "pass": true
+    },
+    {
+     "check": "a failed probe holds, read back held 1, and the lanes stop with operator_hold",
+     "observed": [
+      {
+       "held": 1,
+       "policy_rows": 1,
+       "seconds_since_last_request": "0"
+      },
+      "operator_hold"
+     ],
+     "pass": true
+    },
+    {
+     "check": "the engine opens its own P0 and never lifts the hold, even after the alert clears",
+     "observed": {
+      "held": 1,
+      "policy_rows": 1,
+      "seconds_since_last_request": "0"
+     },
+     "pass": true
+    }
+   ],
+   "doesNotProve": "delivery to a person: fake providers accept everything",
+   "id": "R15",
+   "observed": {
+    "afterAlertCleared": {
+     "held": 1,
+     "policy_rows": 1,
+     "seconds_since_last_request": "0"
+    },
+    "afterProbeFailed": {
+     "held": 1,
+     "policy_rows": 1,
+     "seconds_since_last_request": "0"
+    },
+    "afterProbing": {
+     "held": 0,
+     "policy_rows": 1,
+     "seconds_since_last_request": "0"
+    },
+    "engaged": "P0",
+    "laneStops": [
+     "operator_hold"
+    ]
+   },
+   "proves": "the engine decision on a simulated clock",
+   "requirement": "auto_hold_owner_decision",
+   "result": "PASS",
+   "seconds": 0.5,
+   "title": "Option D1 (off by default, advised against): the runbook HOLD_ON on a failed probe only"
+  }
+ ],
+ "sourceRevision": "b193adcefd8ace31f305b7c36193bc7c5c5c91c3",
+ "startedAt": "2026-10-23T07:33:49Z",
+ "version": 1
+}
