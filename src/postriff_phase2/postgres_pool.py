@@ -38,6 +38,9 @@ class PooledPostgresFactory:
     def _reset(self, connection):
         # The pool has already committed/rolled back the borrower's transaction.
         # Reset also protects against accidental session-scoped settings/roles.
+        # A borrower may have switched the session to autocommit (account deletion does, for its advisory lock). The
+        # next borrower must not inherit it: with autocommit on, every FOR UPDATE lock is released at statement end.
+        connection.autocommit = False
         with connection.transaction():
             for statement in ('RESET ROLE', 'RESET ALL'):
                 started, failure = time.monotonic(), None
