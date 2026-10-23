@@ -61,7 +61,7 @@ def capability_for(method, parts):
         return "api_tokens"
     if area in ("channels", "connectors") and len(parts) == 7 and parts[5] == "oauth" and parts[6] in ("start", "complete") and method == "POST":
         return "connections"
-    if area == 'channels' and len(parts) == 6 and parts[5] == 'refresh-authorization' and method == 'POST':
+    if area == 'channels' and len(parts) == 6 and parts[5] in ('refresh-authorization', 'discord-sender-name') and method == 'POST':
         return 'connections'
     if area in ("export", "profile-export") and len(parts) == 4 and method == "GET":
         return "exports"

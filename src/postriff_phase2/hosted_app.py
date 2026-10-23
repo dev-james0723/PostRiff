@@ -1164,6 +1164,12 @@ class HostedApplication:
                     return self._json(start_response, 200, operations[parts[6]](parts[2], token, parts[4], self._body(environ)))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
+                if len(parts) == 6 and parts[5] == 'discord-sender-name':
+                    discord = oauth.discord_connections
+                    if method == 'GET':
+                        return self._json(start_response, 200, discord.sender_profile(parts[2], token, parts[4]))
+                    if method == 'POST':
+                        return self._json(start_response, 200, discord.set_sender_name(parts[2], token, parts[4], self._body(environ)))
                 if len(parts) >= 7 and parts[5] == 'mastodon':
                     from .mastodon_management import handle as mastodon_handle
                     return mastodon_handle(self, environ, start_response, service, token, method, parts)

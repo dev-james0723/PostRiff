@@ -98,6 +98,7 @@ def customer_view(channel, matrix, now):
             "discordAuthorizationGeneration": channel.get("discordAuthorizationGeneration"),
             "discordIdentityConnectionId": channel.get("discordIdentityConnectionId"),
             "discordConnectionKind": channel.get("discordConnectionKind"),
+            "discordSenderName": channel.get("discordSenderName") if channel.get("discordConnectionKind") == 'webhook' else None,
             "providerAccountId": channel.get("providerAccountId")}
            if channel.get("platform") == "Discord" else {}),
     }
