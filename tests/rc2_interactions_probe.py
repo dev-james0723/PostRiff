@@ -8,6 +8,7 @@ status, the error code, the level of the request.completed log line and whether 
 and provider clients) was started. No database, network or credential.
 
   cold     a new process: no runtime built yet, the feature flag unset
+  (each case also sends a GET, a POST over http and a text/plain POST: "variants")
   warm     a process whose runtime is already running, with Discord mounted and its user-install flag off (Production)
   killed   the same with the Discord kill switch on (execution disabled)
   absent   the same with no Discord adapter mounted at all
@@ -39,12 +40,13 @@ class Capture(logging.Handler):
             self.levels.append(record.levelname)
 
 
-def send(app, body=b'{"type":1,"application_id":"123456789012345678"}', signed=True):
+def send(app, body=b'{"type":1,"application_id":"123456789012345678"}', signed=True, method='POST', scheme='https',
+         content_type='application/json'):
     capture = Capture()
     logging.getLogger('postriff.request').addHandler(capture)
     statuses = []
-    environ = {'REQUEST_METHOD': 'POST', 'PATH_INFO': '/api/discord/interactions', 'wsgi.url_scheme': 'https',
-               'CONTENT_TYPE': 'application/json', 'CONTENT_LENGTH': str(len(body)), 'wsgi.input': io.BytesIO(body),
+    environ = {'REQUEST_METHOD': method, 'PATH_INFO': '/api/discord/interactions', 'wsgi.url_scheme': scheme,
+               'CONTENT_TYPE': content_type, 'CONTENT_LENGTH': str(len(body)), 'wsgi.input': io.BytesIO(body),
                'HTTP_HOST': 'rafii.invalid', 'REMOTE_ADDR': '203.0.113.9'}
     if signed:
         environ.update(HTTP_X_SIGNATURE_TIMESTAMP='1800000000', HTTP_X_SIGNATURE_ED25519='00' * 64)
@@ -77,4 +79,10 @@ for name, app in (('cold', HostedApplication()),
                   ('absent', HostedApplication(service=service({})))):
     started.clear()
     record[name] = {**send(app), 'unsigned': send(app, signed=False)['status'], 'runtimeStarted': bool(started)}
+    # Other methods, schemes and bodies on the same path (statuses only; the live tree answers GET through its
+    # session path, which needs the runtime this probe refuses to start).
+    started.clear()
+    record[name]['variants'] = {'get': send(app, method='GET')['status'], 'http': send(app, scheme='http')['status'],
+                                'textPlain': send(app, content_type='text/plain')['status'],
+                                'runtimeStarted': bool(started)}
 print(json.dumps(record, sort_keys=True))

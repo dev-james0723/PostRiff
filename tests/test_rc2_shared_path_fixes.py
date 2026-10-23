@@ -252,20 +252,23 @@ class ChannelsReadAddsNoTransaction(unittest.TestCase):
 
 
 # --- PR-1: the public Discord interactions route while the feature is off ---------------------------------------------
-QUIET_OFF = {'status': 401, 'code': 'discord_interaction_unavailable', 'logLevels': ['INFO'], 'unsigned': 401, 'runtimeStarted': False}
+QUIET_OFF = {'status': 404, 'code': 'not_found', 'logLevels': ['INFO'], 'unsigned': 404, 'runtimeStarted': False,
+             'variants': {'get': 404, 'http': 404, 'textPlain': 404, 'runtimeStarted': False}}
 
 
 class DiscordInteractionsOffIsQuiet(unittest.TestCase):
     """PR-1 (LOW). POST /api/discord/interactions is answered before the bearer and origin checks. With the user-install
     flag unset RC1 answered 503 discord_interaction_unavailable, which the request logger writes at ERROR, after starting
-    the hosted runtime in a cold process: any scanner could create ERROR lines and 5xx counts. Live answers the same
-    request 403 (application guard) at INFO without the runtime. Off now answers 401 at INFO without the runtime."""
+    the hosted runtime in a cold process: any scanner could create ERROR lines and 5xx counts. Live has no such route
+    and answers the same request 403 (application guard) at INFO without the runtime. While the feature is off the route
+    now does not exist: 404 at INFO for any method, scheme or body, without the runtime (the coordinator's choice; the
+    trade-off against Discord's 401 expectation is in discord/interactions.route_unavailable)."""
 
     @classmethod
     def setUpClass(cls):
         cls.record = _probe('rc2_interactions_probe.py', ROOT)
 
-    def test_every_off_state_is_a_quiet_401_without_the_runtime(self):
+    def test_every_off_state_is_a_quiet_404_without_the_runtime(self):
         for case in ('cold', 'warm', 'killed', 'absent'):
             with self.subTest(case=case):
                 self.assertEqual(self.record[case], QUIET_OFF)
@@ -306,18 +309,24 @@ class DiscordInteractionsOffIsQuiet(unittest.TestCase):
         status, body, levels = send(key.sign(str(now).encode() + raw).hex())
         self.assertEqual((status, body.get('code'), levels), (503, 'discord_interaction_unavailable', ['ERROR']))
 
-    def test_the_route_reads_the_flag_exactly_as_the_adapter_does(self):
-        """The cold-process shortcut reads the variable the provider registry reads, with the same exact-string rule."""
-        source = inspect.getsource(__import__('postriff_phase2.social_connectors', fromlist=['x']).DiscordProvider.mount)
-        self.assertIn("values.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') == 'true'", source)
-        from postriff_phase2 import hosted_app
-        self.assertIn("os.environ.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') != 'true'", inspect.getsource(hosted_app.HostedApplication._handle))
+    def test_the_route_decides_on_and_off_exactly_as_the_adapter_flags_say(self):
+        """A cold process reads the variable the provider registry reads, with the same exact-string rule; a running one
+        asks the mounted adapter: Discord mounted, the user-install flag on, and no kill switch."""
+        from types import SimpleNamespace
+        from postriff_phase2 import hosted_app, social_connectors
+        from postriff_phase2.discord.interactions import enabled
+        self.assertIn("values.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') == 'true'", inspect.getsource(social_connectors.DiscordProvider.mount))
+        self.assertIn("os.environ.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') == 'true'", inspect.getsource(hosted_app.HostedApplication._handle))
+        adapter = lambda flag, execution: SimpleNamespace(user_install_v1_enabled=flag, execution_enabled=execution)
+        self.assertEqual([enabled(None), enabled(adapter(True, True)), enabled(adapter(False, True)), enabled(adapter(True, False))],
+                         [False, True, False, False])
 
 
 @unittest.skipUnless(_rev(LIVE_REV), 'the live revision is not in this clone (shallow checkout)')
 class DiscordInteractionsOffMatchesLiveLogging(unittest.TestCase):
     """PR-1, differential: live has no such route and answers the application guard's 403. Both builds answer with a
-    4xx at INFO without starting the runtime, in every off state; the status differs on purpose (401, see receive())."""
+    4xx at INFO without starting the runtime, in every off state; the status differs on purpose (404, the route does
+    not exist while the feature is off)."""
 
     def test_same_log_level_status_class_and_no_runtime_as_live(self):
         live, mine = _probe('rc2_interactions_probe.py', LiveTree.get()), _probe('rc2_interactions_probe.py', ROOT)

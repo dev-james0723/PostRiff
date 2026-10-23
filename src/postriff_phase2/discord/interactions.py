@@ -27,6 +27,20 @@ def deny(message='Discord interaction unavailable. Open Rafii to reconnect.', st
     raise AlphaError(message, status, code='discord_interaction_unavailable')
 
 
+def enabled(provider):
+    """The public interactions route exists: Discord mounted, the user-install flag on, and no Discord kill switch."""
+    return bool(provider and getattr(provider, 'user_install_v1_enabled', False) and getattr(provider, 'execution_enabled', True))
+
+
+def route_unavailable():
+    """The answer while the feature is off (PR-1): the same 404 as any other method on this path, so the route looks
+    like one that does not exist (live has none) and the request log writes an ordinary 4xx at INFO, where RC1 wrote a
+    503 at ERROR that any scanner could repeat. Trade-off, accepted: Discord's endpoint verification and its routine
+    checks expect 401 for a bad signature, so an interactions URL left registered in the Discord portal while the
+    feature is off may be flagged or removed by Discord; registering it is part of turning the feature on."""
+    raise AlphaError('Discord interaction route unavailable.', 404)
+
+
 def configuration(provider, *, verification_only=False):
     raw = getattr(provider, 'interaction_config_raw', None)
     try:
@@ -157,14 +171,9 @@ class DiscordInteractions:
 
     def receive(self, raw, timestamp, signature):
         started = self.monotonic()
-        # Off (Discord not mounted, the user-install flag unset, or the Discord kill switch on): nothing here vouches
-        # for a signature, so every request is answered as unverified, 401, before any key, body or database is read
-        # (PR-1). 401 is what Discord's endpoint verification and its routine invalid-signature checks expect, so a URL
-        # left registered is not removed, and a valid PING cannot make the endpoint verify. It is an ordinary 4xx for
-        # the request log and metrics; the former 503 wrote ERROR lines and 5xx counts for any scanner. With the
-        # feature on, a missing or wrong interaction configuration still answers 503 for the operator.
-        if (not self.provider or not getattr(self.provider, 'user_install_v1_enabled', False)
-                or not getattr(self.provider, 'execution_enabled', True)): deny()
+        # Off: the route does not exist (404), before any key, body or database is read (PR-1; see route_unavailable).
+        # With the feature on, a missing or wrong interaction configuration still answers 503 for the operator.
+        if not enabled(self.provider): route_unavailable()
         config = configuration(self.provider, verification_only=True)
         if config['endpoint'] != self.web_base_url + '/api/discord/interactions': deny(status=503)
         if (not isinstance(raw, bytes) or not 1 <= len(raw) <= 65536

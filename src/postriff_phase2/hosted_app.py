@@ -689,6 +689,14 @@ class HostedApplication:
                 return self._json(start_response, 200, discord_lane.run(self.worker, number, started=started,
                                                                          request_id=environ.get('postriff.request_id')))
             if path == '/api/discord/interactions':
+                from .discord import interactions as discord_interactions
+                # Feature off (the user-install flag unset, Discord not mounted, or its kill switch on): the route does
+                # not exist, a 404 for any method, scheme or body, decided before the runtime, a key, the body or the
+                # database is touched (PR-1). A cold process reads the flag as the provider registry does.
+                running = getattr(getattr(self.service, 'oauth', None), 'providers', None) if self.service is not None else None
+                if not (discord_interactions.enabled(running.get('discord')) if running is not None
+                        else os.environ.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') == 'true'):
+                    discord_interactions.route_unavailable()
                 if method != 'POST':
                     raise AlphaError('Discord interaction route unavailable.', 404)
                 if environ.get('wsgi.url_scheme') != 'https':
@@ -701,11 +709,6 @@ class HostedApplication:
                     raise AlphaError('Discord interaction body size invalid.', 413) from None
                 if not 0 < length <= 65536:
                     raise AlphaError('Discord interaction body size invalid.', 413)
-                if self.service is None and os.environ.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') != 'true':
-                    # Feature off (PR-1): refuse as unverified without starting the runtime for this public,
-                    # unauthenticated route. DiscordInteractions.receive gives the same answer once the runtime runs.
-                    from .discord.interactions import deny
-                    deny()
                 service = self._runtime()
                 from .discord.interactions import DiscordInteractions
                 oauth = service.oauth
