@@ -269,8 +269,12 @@ which carries no status.
 ## Turning it off
 
 - **Seconds:** the runbook's hold, `UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy'`.
-  Every loop stops before its next claim (at most the one step it has in flight, seconds) and every Discord request
-  everywhere is refused before transport. Lift with `manual_hold = false`. Only on the owner's word, as the runbook says.
+  Every loop stops before its next claim (at most the one step it has in flight, seconds) and every new Discord
+  request admission everywhere is refused before transport. A create whose permit was reserved before the hold can
+  still go out: neither the permit's consumption nor its live guard reads the hold, so until the coordinator next
+  records a response and blocks the remaining unused permits (Q4), the step a loop had in flight may still post
+  [reasoned from the code; measured: at most one create per loop after the hold, each claimed before it]. Lift with
+  `manual_hold = false`. Only on the owner's word, as the runbook says.
 - **Minutes:** a build without the flag (environment changes reach new deployments only), or promote the previous
   deployment. The minute cron then claims Discord again exactly as before, and the shard routes answer
   `{"enabled": false}` without starting the runtime.
