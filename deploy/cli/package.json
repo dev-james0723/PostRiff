@@ -1,0 +1,8 @@
+{
+  "name": "rafii-rc-deploy-cli",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "vercel": "59.23.2"
+  }
+}

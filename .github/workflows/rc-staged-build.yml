@@ -1,0 +1,214 @@
+name: RC staged build (owner approves every run)
+# One staged production-target build of one frozen SHA per push of a request branch. It never moves a domain (--skip-domain).
+# The Vercel token exists only as an environment secret of 'rafii-rc-deploy', whose required reviewer must approve each run,
+# and the job only starts for the owner's account on branches named claude/discord-launch-rc-deploy-{preflight,d1,d2}-*.
+# The workflow file lives on that request branch, not on the release candidate. This repository is public: every log line,
+# summary and the file itself are world-readable, so nothing here prints a secret, a user name or a customer id.
+on:
+  push:
+    branches:
+      - 'claude/discord-launch-rc-deploy-preflight-*'
+      - 'claude/discord-launch-rc-deploy-d1-*'
+      - 'claude/discord-launch-rc-deploy-d2-*'
+permissions:
+  contents: read
+  checks: read
+env:
+  TEAM: team_PgXY5VdAYKcsv0RLoDPHscNq
+  RC_BRANCH: claude/discord-launch-rc-20261023
+  NO_UPDATE_NOTIFIER: '1'
+  VERCEL_TELEMETRY_DISABLED: '1'
+jobs:
+  build:
+    if: github.repository == 'dev-james0723/PostRiff' && github.actor == 'dev-james0723'
+    # Under the job (after the 'if') so that a run that is skipped never replaces a request that is waiting for approval.
+    concurrency:
+      group: rc-staged-build
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: rafii-rc-deploy
+    steps:
+      - name: Check out the request branch (the workflow, the request and the CLI lock file, nothing else)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: request
+      - name: Read the request and refuse anything that is not the tip of the release-candidate branch with green CI
+        id: req
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [ "${GITHUB_RUN_ATTEMPT:-1}" = 1 ] || { echo 're-runs are refused; push a new request'; exit 1; }
+          case "$REF_NAME" in
+            claude/discord-launch-rc-deploy-preflight-*) mode=preflight ;;
+            claude/discord-launch-rc-deploy-d1-*) mode=d1 ;;
+            claude/discord-launch-rc-deploy-d2-*) mode=d2 ;;
+            *) echo 'unexpected branch'; exit 1 ;;
+          esac
+          age=$(( $(date +%s) - $(git -C request log -1 --format=%ct) ))
+          { [ "$age" -ge -60 ] && [ "$age" -le 43200 ]; } || { echo "the request commit is not from the last twelve hours (age ${age}s); push a new request"; exit 1; }
+          sha="$(python3 -I -c 'import json; print(json.load(open("request/deploy/REQUEST.json"))["sha"])')"
+          cap="$(python3 -I -c 'import json; print(json.load(open("request/deploy/REQUEST.json")).get("cap",""))')"
+          # Whole-string matches only (a value holding a line break can never pass), before anything is written to the step outputs.
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'the request does not hold a 40 hex SHA'; exit 1; }
+          if [ "$mode" != preflight ] || [ -n "$cap" ]; then
+            [[ "$cap" =~ ^[1-9][0-9]{0,5}$ ]] || { echo 'the request does not hold a server cap of 1 to 999999 (the code default on production is 90, so the line is mandatory)'; exit 1; }
+          fi
+          tip="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${RC_BRANCH}" --jq '.object.sha')"
+          [ "$tip" = "$sha" ] || { echo "the request SHA is not the current tip of ${RC_BRANCH}"; exit 1; }
+          # One answer for both the count and the verdict. Every job named below must have finished with success (a skipped job
+          # may not stand in for one of them), nothing else may be unfinished or red, and the list must not have been cut at 100.
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?per_page=100" > "$RUNNER_TEMP/cr.json"
+          jq -r '"check runs on the SHA: \(.total_count) (success \([.check_runs[]|select(.conclusion=="success")]|length), skipped \([.check_runs[]|select(.conclusion=="skipped")]|length))"' "$RUNNER_TEMP/cr.json"
+          jq -r '(["local-gates","scenes","founder","growth-studio","native-learning-browser","native-input","library","document-runtime","agent-ui","agent-ui-browser","qualification"] - [.check_runs[] | select(.conclusion == "success") | .name]) as $missing
+                 | (if ($missing | length) > 0 then "required but not success: " + ($missing | join(", ")) else "all 11 required jobs are success" end),
+                   "seen: " + ([.check_runs[] | "\(.name)=\(.conclusion // .status)"] | sort | join(" "))' "$RUNNER_TEMP/cr.json"
+          jq -e '.total_count == (.check_runs|length) and .total_count >= 12 and .total_count <= 100
+                 and ([.check_runs[] | select(.status != "completed" or ((.conclusion // "") | IN("success","skipped","neutral") | not))] | length) == 0
+                 and (["local-gates","scenes","founder","growth-studio","native-learning-browser","native-input","library","document-runtime","agent-ui","agent-ui-browser","qualification"]
+                      - [.check_runs[] | select(.conclusion == "success") | .name] | length) == 0' "$RUNNER_TEMP/cr.json" > /dev/null \
+            || { echo 'CI on the exact SHA is not complete and green'; exit 1; }
+          { echo "mode=$mode"; echo "sha=$sha"; echo "cap=$cap"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: Install the Vercel CLI from the reviewed lock file (exact tree, integrity checked, no install scripts)
+        working-directory: request/deploy/cli
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Fetch the frozen SHA (the repository holds orphan vendor gitlinks, which the generic checkout's cleanup cannot survive)
+        env:
+          SOURCE_SHA: ${{ steps.req.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git init -q rc
+          git -C rc remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git -C rc -c protocol.version=2 fetch -q --depth=1 origin "$SOURCE_SHA"
+          git -C rc checkout -q --detach FETCH_HEAD
+          test "$(git -C rc rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Preflight (read-only; every check is reported, then the step fails if any failed)
+        if: steps.req.outputs.mode == 'preflight'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_PgXY5VdAYKcsv0RLoDPHscNq
+          VERCEL_PROJECT_ID: prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L
+          SHA: ${{ steps.req.outputs.sha }}
+          TESTER_WORKSPACE_ID: ${{ secrets.TESTER_WORKSPACE_ID }}
+        run: |
+          set -uo pipefail
+          fail=0
+          ok() { echo "ok   $*"; }
+          bad() { echo "FAIL $*"; fail=1; }
+          if [[ "${VERCEL_TOKEN:-}" =~ ^[A-Za-z0-9_]{16,}$ ]]; then ok 'token: present and well-formed'; else bad 'token: missing, or it holds a space or line break'; echo 'RESULT: at least one check failed'; exit 1; fi
+          # Only a yes or no is printed: the value is a secret and the log is public.
+          if [[ "${TESTER_WORKSPACE_ID:-}" =~ ^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$ ]]; then ok 'tester workspace secret: set, UUID shape'; else bad 'tester workspace secret: missing or not a lower-case UUID (it must be an environment SECRET, not a variable)'; fi
+          if vercel --version 2>&1 | grep -qxF '59.23.2'; then ok 'CLI version is 59.23.2'; else bad 'CLI version is not 59.23.2'; fi
+          # In this CLI, --help exits with status 2; any other failure is a failure.
+          help="$(vercel deploy --help 2>&1 || [ $? -eq 2 ])" || bad 'deploy --help failed'
+          for flag in --prod --skip-domain --scope --meta --env --dry --json; do
+            if grep -q -e "$flag" <<< "$help"; then ok "deploy flag $flag exists"; else bad "deploy flag $flag is missing"; fi
+          done
+          # The log of a public repository is public: say whether the token works, never whose it is.
+          if vercel whoami --scope "$TEAM" > "$RUNNER_TEMP/who.txt" 2>&1; then ok 'the token is accepted by Vercel for the team scope'; else bad 'Vercel did not accept the token for the team scope'; grep -E '^Error' "$RUNNER_TEMP/who.txt" || true; fi
+          rm -f "$RUNNER_TEMP/who.txt"
+          if vercel env ls production --scope "$TEAM" > "$RUNNER_TEMP/envls.txt" 2>&1; then
+            awk '$1 ~ /^[A-Z][A-Z0-9_]*$/ {print $1}' "$RUNNER_TEMP/envls.txt" | sort -u > "$RUNNER_TEMP/names.txt"
+            ok "production env names listed: $(wc -l < "$RUNNER_TEMP/names.txt")"
+            for n in POSTRIFF_OAUTH_DISCORD_CLIENT_ID POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET POSTRIFF_DISCORD_BOT_TOKEN POSTRIFF_PUBLIC_BASE_URL POSTRIFF_CREDENTIAL_KEY CRON_SECRET; do
+              if grep -qx "$n" "$RUNNER_TEMP/names.txt"; then ok "present: $n"; else bad "missing: $n"; fi
+            done
+            echo '--- names that must not exist yet (empty is good):'
+            grep -E '^(POSTRIFF_OAUTH_DISCORD_DISABLED|POSTRIFF_OAUTH_DISCORD_REVIEWED|POSTRIFF_DISCORD_(ENGAGEMENT|WEBHOOK|USER_INSTALL|INTERACTION|MESSAGE_CONTENT)[A-Z0-9_]*|POSTRIFF_DISCORD_CONNECT_WORKSPACES|POSTRIFF_DISCORD_GUILD_CAP)$' "$RUNNER_TEMP/names.txt" || true
+            echo '--- Discord, worker and rate-policy names that exist:'
+            grep -E '^(POSTRIFF_DISCORD_[A-Z0-9_]*|POSTRIFF_WORKER_[A-Z0-9_]*|POSTRIFF_OAUTH_DISCORD_[A-Z0-9_]*)$' "$RUNNER_TEMP/names.txt" || true
+          else
+            bad 'could not list the production env names'
+            grep -E '^Error' "$RUNNER_TEMP/envls.txt" || true
+          fi
+          rm -f "$RUNNER_TEMP/envls.txt" "$RUNNER_TEMP/names.txt"
+          cd rc || { echo 'FAIL the fetched tree is missing'; echo 'RESULT: at least one check failed'; exit 1; }
+          if [ "$(git rev-parse HEAD)" = "$SHA" ]; then ok 'the fetched tree is the frozen SHA'; else bad 'the fetched tree is not the frozen SHA'; fi
+          if [ -z "$(git status --porcelain)" ]; then ok 'the tree is clean'; else bad 'the tree is not clean'; fi
+          if [ "$(grep -c '"deploymentEnabled": false' vercel.json)" = 1 ]; then ok 'vercel.json keeps Git deployments off'; else bad 'vercel.json no longer keeps Git deployments off exactly once'; fi
+          if grep -q experimentalServices vercel.json; then bad 'vercel.json uses experimentalServices (the CLI could rewrite it)'; else ok 'vercel.json has no experimentalServices'; fi
+          # Same path as the build up to the upload: it reads the project and the files and stops. No prompt, no deployment.
+          if vercel deploy --dry --json --yes --prod --skip-domain --scope "$TEAM" --meta "rafiiSourceSha=$SHA" --meta rafiiTwin=dry > "$RUNNER_TEMP/dry.json" 2> "$RUNNER_TEMP/dry.err"; then
+            ok 'dry run: the CLI read the project and the files and stopped before any upload'
+            if jq -r '"  framework: \(.framework.name // "?") (\(.framework.slug // "none")); files: \(.fileCount); bytes: \(.totalSize); ignored paths: \(.ignoredCount)",
+                      "  top level: " + ([.directories[]? | "\(.path)=\(.fileCount)"] | join(" ")),
+                      "  files under .github, desktop or docs (informational): \([.files[]?.path | select(startswith(".github/") or startswith("desktop/") or startswith("docs/"))] | length)"' "$RUNNER_TEMP/dry.json"; then
+              leaks="$(jq -r '[.files[]?.path | select(test("(^|/)(\\.env(\\.(?!example$|sample$|template$)[^/]*)?|broker\\.key|[^/]*\\.pem)$"))] | length' "$RUNNER_TEMP/dry.json")"
+              if [ "$leaks" = 0 ]; then ok 'dry run: no env file, key file or certificate is in the upload set'; else bad "dry run: $leaks secret-like file(s) are in the upload set"; fi
+            else
+              bad 'dry run: the output is not the JSON this CLI version documents'
+            fi
+          else
+            bad 'dry run failed'
+            grep -E '^(Error|>)' "$RUNNER_TEMP/dry.err" | head -n 10 || true
+          fi
+          if [ -z "$(git status --porcelain)" ] && [ ! -e .vercel ]; then ok 'the dry run left the tree clean (and wrote no .vercel folder)'; else bad 'the dry run changed the tree'; fi
+          rm -f "$RUNNER_TEMP/dry.json" "$RUNNER_TEMP/dry.err"
+          if [ "$fail" -eq 0 ]; then echo 'RESULT: every check passed'; else echo 'RESULT: at least one check failed'; exit 1; fi
+      - name: Stage the build (D1 dark or D2 open); prints the deployment URL and id only
+        if: steps.req.outputs.mode == 'd1' || steps.req.outputs.mode == 'd2'
+        timeout-minutes: 20
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_PgXY5VdAYKcsv0RLoDPHscNq
+          VERCEL_PROJECT_ID: prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L
+          MODE: ${{ steps.req.outputs.mode }}
+          SHA: ${{ steps.req.outputs.sha }}
+          CAP: ${{ steps.req.outputs.cap }}
+          # A secret, so that the public log never shows the value; handed to the d1 build only.
+          TESTER_WORKSPACE_ID: ${{ steps.req.outputs.mode == 'd1' && secrets.TESTER_WORKSPACE_ID || '' }}
+        run: |
+          set -euo pipefail
+          [[ "${VERCEL_TOKEN:-}" =~ ^[A-Za-z0-9_]{16,}$ ]] || { echo 'VERCEL_TOKEN is missing, or it holds a space or line break'; exit 1; }
+          cd rc
+          [ "$(git rev-parse HEAD)" = "$SHA" ] || { echo 'checkout is not the frozen SHA'; exit 1; }
+          [ -z "$(git status --porcelain)" ] || { echo 'working tree is not clean'; exit 1; }
+          [ "$(grep -c '"deploymentEnabled": false' vercel.json)" = "1" ] || { echo 'vercel.json no longer keeps Git deployments off'; exit 1; }
+          ! grep -q experimentalServices vercel.json || { echo 'vercel.json uses experimentalServices; the CLI could rewrite it before upload'; exit 1; }
+          case "$MODE" in
+            d1)
+              [ -n "${TESTER_WORKSPACE_ID:-}" ] || { echo 'the TESTER_WORKSPACE_ID secret is not set on the environment'; exit 1; }
+              [[ "$TESTER_WORKSPACE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || { echo 'TESTER_WORKSPACE_ID is not a lower-case UUID'; exit 1; }
+              echo "::add-mask::$TESTER_WORKSPACE_ID"
+              gate="$TESTER_WORKSPACE_ID"; twin=dark ;;
+            d2)
+              gate='*'; twin=open ;;
+            *)
+              echo 'unknown mode'; exit 1 ;;
+          esac
+          [[ "${CAP:-}" =~ ^[1-9][0-9]{0,5}$ ]] || { echo 'the server cap is missing or not a number from 1 to 999999'; exit 1; }
+          args=(--prod --skip-domain --yes --scope "$TEAM" --meta "rafiiSourceSha=$SHA" --meta "rafiiTwin=$twin"
+                --env "POSTRIFF_DISCORD_CONNECT_WORKSPACES=$gate" --env 'POSTRIFF_OAUTH_DISCORD_REVIEWED=true'
+                --env "POSTRIFF_DISCORD_GUILD_CAP=$CAP")
+          # One build, no retry. --yes is what the earlier builds of this project used (without it the API may ask to confirm the
+          # detected settings); what it could auto-accept is refused above (experimentalServices) or checked below (clean tree).
+          # stdout of the CLI is the deployment URL; its progress lines go to a file and only the useful ones are shown.
+          if ! vercel deploy "${args[@]}" > "$RUNNER_TEMP/deploy-url.txt" 2> "$RUNNER_TEMP/deploy.err"; then
+            grep -E '^(Error|Queued|Building|Completing)|^[^[:alnum:]]*(Production|Inspect)[[:space:]]' "$RUNNER_TEMP/deploy.err" || true
+            echo "deployment url, if one was created: $(tail -n 1 "$RUNNER_TEMP/deploy-url.txt" 2> /dev/null || true)"
+            echo 'vercel deploy failed (not retried)'
+            exit 1
+          fi
+          grep -E '^[^[:alnum:]]*(Production|Inspect)[[:space:]]' "$RUNNER_TEMP/deploy.err" || true
+          url="$(tail -n 1 "$RUNNER_TEMP/deploy-url.txt")"
+          [[ "$url" =~ ^https://[a-z0-9-]+\.vercel\.app$ ]] || { echo 'the CLI did not print a deployment URL'; exit 1; }
+          echo "twin=$twin sha=$SHA"
+          echo "deployment url: $url"
+          vercel inspect "$url" --scope "$TEAM" > "$RUNNER_TEMP/inspect.txt" 2>&1 || { grep -E '^Error' "$RUNNER_TEMP/inspect.txt" || true; echo 'vercel inspect failed: read the deployment id from the dashboard'; exit 1; }
+          grep -E '^\s*(id|name|target|status|url|Created|created|[Dd]uration|[Bb]uild|[Bb]illable|CPU)\b' "$RUNNER_TEMP/inspect.txt" || true
+          # Detection, not prevention: a skipped-domain build must not carry a production domain.
+          if grep -E '^[[:space:]]*[^[:alnum:][:space:]]+[[:space:]]*https://' "$RUNNER_TEMP/inspect.txt" | grep -Eq '//([A-Za-z0-9-]+\.)*rafii\.io(/|$|[[:space:]])|//(postriff-phase2-private|postriff-phase2-private-jamesau0723-6572s-projects)\.vercel\.app(/|$|[[:space:]])'; then
+            echo 'A PRODUCTION DOMAIN IS ATTACHED TO THIS BUILD: tell the owner and the agent now'
+            exit 1
+          fi
+          { [ -z "$(git status --porcelain)" ] && [ ! -e .vercel ]; } || { echo 'the CLI changed the working tree'; exit 1; }
+          { echo "### ${twin} build of ${SHA}"; echo "URL: ${url}"; } >> "$GITHUB_STEP_SUMMARY"
