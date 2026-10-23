@@ -266,6 +266,39 @@ class Idempotency(unittest.TestCase):
             self.assertNotEqual(T.fingerprint({**base, **change}), T.fingerprint(base), change)
 
 
+class CommandLine(unittest.TestCase):
+    """Refusals that happen before any connection or Discord request."""
+
+    def refused(self, *argv):
+        with self.assertRaises(T.ReconcileError) as caught:
+            T.main(list(argv))
+        return str(caught.exception)
+
+    def test_reconcile_never_reads_discord_without_live(self):
+        self.assertIn('--live', self.refused('reconcile', '--dsn', 'host=127.0.0.1 port=1', '--restore-point', '0',
+                                             '--interval-end', '1'))
+
+    def test_reconcile_needs_both_times(self):
+        self.assertIn('--restore-point', self.refused('reconcile', '--dsn', 'host=127.0.0.1 port=1', '--live'))
+
+    def test_lifting_the_hold_needs_confirmation_and_one_direction(self):
+        self.assertIn('--confirm', self.refused('hold', '--lift', '--dsn', 'host=127.0.0.1 port=1'))
+        self.assertIn('exactly one', self.refused('hold', '--dsn', 'host=127.0.0.1 port=1'))
+
+    def test_a_live_run_needs_the_token_variable(self):
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_TOKEN': ''}):
+            self.assertIn('token', self.refused('reconcile', '--dsn', 'host=127.0.0.1 port=1', '--live',
+                                                '--restore-point', '0', '--interval-end', '1'))
+
+    def test_times_need_a_zone(self):
+        with self.assertRaises(T.ReconcileError):
+            T.epoch('2026-10-23T05:00:00')
+        self.assertEqual(T.epoch('2026-10-23T05:00:00+00:00'), T.epoch('2026-10-23T05:00:00Z'))
+        self.assertEqual(T.epoch('1800000000.5'), 1800000000.5)
+
+
 class Reader(unittest.TestCase):
     def wire(self, pages, statuses=()):
         calls = []

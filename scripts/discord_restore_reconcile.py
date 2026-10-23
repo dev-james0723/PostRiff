@@ -584,13 +584,11 @@ def main(argv=None):
     if args.command == 'hold':
         if args.set == args.lift:
             raise ReconcileError('give exactly one of --set or --lift')
+        if args.lift and not args.confirm:
+            raise ReconcileError('lifting the hold needs --confirm (only on the Release Captain\'s word)')
         with factory() as db:
-            if args.set:
-                result = set_hold(db, application_id=args.application_id, create_missing=args.create_missing)
-            elif not args.confirm:
-                raise ReconcileError('lifting the hold needs --confirm (only on the Release Captain\'s word)')
-            else:
-                result = lift_hold(db)
+            result = (set_hold(db, application_id=args.application_id, create_missing=args.create_missing)
+                      if args.set else lift_hold(db))
         print(json.dumps(result))
         return 0 if (result['held'] if args.set else not result['held']) else 3
     if not (args.restore_point and args.interval_end):
