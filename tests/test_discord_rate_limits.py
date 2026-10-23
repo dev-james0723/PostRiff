@@ -126,24 +126,16 @@ class MemoryLedger:
                  r['state'] in ('reserved','sealed') and r['expires']>now)]
             self.result=[(len(pending),sum(alias not in r['keys'] for r in pending))]
         elif sql.startswith('WITH tick AS MATERIALIZED'):
-            key,window,band,horizon,_key,cap=params  # the clock and, with it, the application window's inputs (_reading)
-            moment=self.workspace.now if self.workspace else self.now
-            held=sum(r['application']==key and r['reserved']<=moment-window and (
-                r['state'] in ('reserved','sealed') and r['expires']>moment or
-                r['state'] in ('sent','uncertain') and r['expires']>moment-band and self.unobserved_at(r)>moment-horizon)
+            # the clock and, with it, the application window's inputs (_window_state); `to_timestamp` names the instant
+            explicit = 'to_timestamp(%s::double precision) AS at' in sql
+            at, (key, span, band, horizon, _key, scan, _span) = (params[0], params[1:]) if explicit else (None, params)
+            moment = at if explicit else self.workspace.now if self.workspace else self.now
+            held = sum(r['application'] == key and self.wire_time(r) <= moment - span and (
+                r['state'] in ('reserved', 'sealed') and r['expires'] > moment or
+                r['state'] in ('sent', 'uncertain') and r['expires'] > moment - band and self.wire_time(r) > moment - horizon)
                 for r in self.admissions.values())
-            newest=sorted((r for r in self.admissions.values() if r['application']==key),key=lambda r:-r['seq'])[:cap]
-            self.result=[(moment,held,[r['reserved'] for r in newest])]
-        elif sql.startswith('SELECT count(*) FROM public.pr_discord_request_admissions WHERE application_key='):
-            key,cutoff,now,band,since=params  # the application row's unresolved requests older than its window (_slide)
-            self.result=[(sum(r['application']==key and r['reserved']<=cutoff and (
-                r['state'] in ('reserved','sealed') and r['expires']>now or
-                r['state'] in ('sent','uncertain') and r['expires']>band and self.unobserved_at(r)>since)
-                for r in self.admissions.values()),)]
-        elif sql.startswith('SELECT extract(epoch from reserved_at)::double precision FROM public.pr_discord_request_admissions'):
-            key,limit=params  # the newest admissions of the application, newest first (_slide)
-            newest=sorted((r for r in self.admissions.values() if r['application']==key),key=lambda r:-r['seq'])[:limit]
-            self.result=[(r['reserved'],) for r in newest]
+            newest = sorted((r for r in self.admissions.values() if r['application'] == key), key=lambda r: -r['seq'])[:scan]
+            self.result = [(moment, held, [self.wire_time(r) for r in newest if self.wire_time(r) > moment - span])]
         elif sql.startswith('WITH reservation_clock AS MATERIALIZED'):
             self.now+=self.insert_delay
             moment=self.workspace.now if self.workspace else self.now
@@ -198,7 +190,8 @@ class MemoryLedger:
             if self.rowcount:r.update(state='observed',status=None,scope='unknown')
         else:raise AssertionError('Unrecognized synthetic SQL contract: '+sql[:110])
     @staticmethod
-    def unobserved_at(row):return row['sent'] if row.get('sent') is not None else row['reserved']  # coalesce(sent_at,reserved_at)
+    def wire_time(row):return row['sent'] if row.get('sent') is not None else row['reserved']  # coalesce(sent_at,reserved_at)
+    unobserved_at=wire_time
     def fetchone(self):return self.result.pop(0) if self.result else None
     def fetchall(self):result,self.result=self.result,[];return result
 
@@ -503,11 +496,10 @@ class AliasLearningRegression(unittest.TestCase):
         self.db.insert_delay=0
         self.assertIsInstance(self.s.reserve('GET',self.path,identity=self.identity),Permit)
 
-    def test_short_positive_window_is_usable_but_consume_never_extends_expiry(self):
+    def test_short_positive_deadline_is_usable_but_consume_never_extends_expiry(self):
         self.send()
-        deadline=self.db.now+.01
-        self.db.states[self.alias()]['reset']=deadline
-        permit=self.s.reserve('GET',self.path,identity=self.identity)
+        deadline=self.db.now+.01   # the caller's own deadline (a create's lease or approval): no route window ends a permit
+        permit=self.s.reserve('GET',self.path,identity=self.identity,valid_until=deadline)
         self.assertAlmostEqual(permit.expires_at,deadline,places=6)
         self.assertLess(permit.expires_at-self.db.now,.025)
         self.db.now=deadline
@@ -515,12 +507,11 @@ class AliasLearningRegression(unittest.TestCase):
         self.assertEqual(self.db.admissions[permit.id]['state'],'reserved')
         self.assertEqual(self.db.admissions[permit.id]['expires'],permit.expires_at)
 
-    def test_short_window_that_expires_during_insert_rolls_back_exactly(self):
+    def test_short_deadline_that_expires_during_insert_rolls_back_exactly(self):
         self.send()
-        self.db.states[self.alias()]['reset']=self.db.now+.01
         before=copy.deepcopy((self.db.states,self.db.maps,self.db.admissions))
         self.db.insert_delay=.02
-        with self.assertRaises(RateDelayed) as caught:self.s.reserve('GET',self.path,identity=self.identity)
+        with self.assertRaises(RateDelayed) as caught:self.s.reserve('GET',self.path,identity=self.identity,valid_until=self.db.now+.01)
         self.assertEqual(caught.exception.rate_cause,'permit_expired')
         self.assertEqual((self.db.states,self.db.maps,self.db.admissions),before)
 

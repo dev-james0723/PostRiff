@@ -226,16 +226,18 @@ class ExactCeilingArithmetic(Base):
         self.read()
         self.assertAlmostEqual(self.denied().retry_after_seconds, 1 + EPS, places=9)
 
-    def test_a_database_clock_behind_its_newest_admission_is_waited_out(self):
+    def test_a_database_clock_behind_an_admission_it_already_stamped_cannot_double_the_ceiling(self):
         self.at(5)
         for _ in range(2):
             self.read()
-        self.at(3)  # the clock stepped back two seconds: stamping now would put an admission before its predecessor
-        error = self.denied()
-        self.assertAlmostEqual(error.retry_after_seconds, 2 + EPS, places=9)
-        self.at(5 + 2e-6)
+        self.at(3)  # the clock stepped back two seconds: the two stamped at 5 are still in force, in the future
         self.read()
-        self.assertEqual(self.stamps(), sorted(self.stamps()))
+        error = self.denied()
+        self.assertAlmostEqual(error.retry_after_seconds, 1 + EPS, places=9, msg='the oldest of the three goes first')
+        self.at(4 + 2e-6)
+        self.read()
+        self.at(5 + 4e-6)
+        self.read()
         self.assertLessEqual(busiest_closed_window(self.stamps(), 1), 3)
 
 
@@ -343,11 +345,15 @@ class ReleasedReservations(Base):
         self.db.insert_delay = 0
         self.assertEqual(self.free_slots(), 3)
 
-    def test_an_unused_permit_holds_its_slot_for_one_window_and_no_longer(self):
+    def test_an_unused_permit_holds_its_slot_until_it_expires_and_no_longer(self):
         for _ in range(3):
-            self.create()                  # reserved, never consumed
+            self.create()                  # reserved, never consumed; the test policy's permit lifetime is 2 seconds
         self.denied(self.create)
-        self.at(1 + 2e-6)                  # a window old, and expired: nothing carries over
+        self.at(1.5)                       # older than its span, still usable: it may be consumed any moment
+        self.assertEqual(self.free_slots(), 0)
+        self.at(2 - 1e-6)
+        self.assertEqual(self.free_slots(), 0)
+        self.at(2 + 1e-6)                  # expired: nothing carries over
         self.assertEqual(self.free_slots(), 3)
 
     def test_an_abandoned_admission_is_not_refunded_inside_its_window(self):
@@ -358,10 +364,71 @@ class ReleasedReservations(Base):
         self.at(1 + 2e-6)
         self.assertEqual(self.free_slots(), 3)
 
-    def test_a_permit_cannot_outlive_the_window_that_paid_for_it(self):
-        self.assertAlmostEqual(self.create().expires_at, T0 + 1, places=6)
+    def test_a_permit_lives_the_policy_lifetime_lease_and_approval_and_no_window_ends_it(self):
+        self.assertAlmostEqual(self.create().expires_at, T0 + 2, places=6)           # permit_ttl_seconds, longer than the window
         self.setUp(3, .4)
-        self.assertAlmostEqual(self.create().expires_at, T0 + .4, places=6)
+        self.assertAlmostEqual(self.create().expires_at, T0 + 2, places=6)           # not the .4-second window
+        self.setUp(3, 1)
+        self.assertAlmostEqual(self.s.reserve('GET', self.path(), identity=self.identity, valid_until=T0 + 1.5).expires_at,
+                               T0 + 1.5, places=6)                                  # the caller's lease or approval ends first
+        self.assertAlmostEqual(self.s.reserve('GET', self.path(), identity=self.identity, valid_until=T0 + 9).expires_at,
+                               T0 + 2, places=6)                                    # and never extends the lifetime
+        with self.assertRaises(RateDelayed) as caught:
+            self.s.reserve('GET', self.path(), identity=self.identity, valid_until=T0 - 1)
+        self.assertEqual(caught.exception.rate_cause, 'window_expiring')            # a deadline already past admits nothing
+
+    def test_a_permit_is_usable_after_the_window_that_reserved_it_ended(self):
+        path, later = '/guilds/700000000000000001', '/guilds/700000000000000002'
+        permit = self.s.reserve('GET', path, identity=self.identity)
+        self.at(1.9)
+        self.s.consume(permit, 'GET', path)                                          # it used to die at 1.0
+        self.assertEqual(self.db.admissions[permit.id]['state'], 'sent')
+        unused = self.s.reserve('GET', later, identity=self.identity)                # reserved at 1.9, lives to 3.9
+        self.at(4.0)
+        with self.assertRaises(RateDelayed):
+            self.s.consume(unused, 'GET', later)
+        self.assertEqual(self.db.admissions[unused.id]['state'], 'reserved')
+
+
+class WireTime(Base):
+    """An admission occupies a slot from the moment it can reach Discord. A create is admitted as a permit and
+    reaches Discord only when it is consumed, which can be seconds later: its slot runs from its use, not its reservation,
+    or a late create would land in a window that already holds the cap."""
+    def test_a_create_used_late_occupies_a_slot_from_its_use_not_from_its_reservation(self):
+        self.setUp(2, 1)
+        permit = self.s.reserve('GET', '/guilds/700000000000000100', identity=self.identity)   # reserved at T0
+        self.at(1.5)
+        self.assertEqual(self.free_slots(), 1, 'the unused permit still holds one of the two slots')
+        self.s.consume(permit, 'GET', '/guilds/700000000000000100')                            # on the wire at T0 + 1.5
+        self.s.observe(permit, OK)
+        self.at(1.6)
+        self.read()                                                                           # the second slot
+        self.at(1.7)
+        error = self.denied()
+        self.assertAlmostEqual(error.retry_after_seconds, 2.5 + EPS - 1.7, places=6, msg='the create frees at its use + 1')
+        self.at(2.5 + 2e-6)
+        self.read()
+        wires = [row['sent'] if row['sent'] is not None else row['reserved'] for row in self.db.admissions.values()]
+        self.assertLessEqual(busiest_closed_window(wires, 1), 2)
+
+    def test_a_permit_that_is_never_used_costs_one_span_from_its_reservation_after_it_expires(self):
+        self.setUp(2, 1)
+        self.s.reserve('GET', '/guilds/700000000000000200', identity=self.identity)
+        self.at(2 + 1e-6)                                                                     # expired unused
+        self.assertEqual(self.free_slots(), 2)
+        self.read()
+        self.assertEqual(self.free_slots(), 1)
+
+    def test_the_slot_of_a_used_permit_does_not_free_when_the_answer_comes(self):
+        """A request answered at once still occupies its span: the answer says nothing of when the next may leave."""
+        self.setUp(1, 1)
+        permit = self.s.reserve('GET', '/guilds/700000000000000300', identity=self.identity)
+        self.at(.9)
+        self.s.consume(permit, 'GET', '/guilds/700000000000000300')
+        self.s.observe(permit, OK)
+        self.at(1.5)                                                                          # a window after the RESERVATION
+        error = self.denied()
+        self.assertAlmostEqual(error.retry_after_seconds, .9 + 1 + EPS - 1.5, places=6)
 
 
 class SlidingModel:
@@ -375,24 +442,23 @@ class SlidingModel:
 
     def decide(self, now):
         """('ok', None) or ('wait', seconds until the next admission is possible)."""
-        held = 0
+        held, occupied = 0, []
         for row in self.rows:
-            if row['at'] <= now - self.span - EPS:  # older than its slot: counts only while unresolved and able to matter
-                if row['state'] in ('reserved', 'sealed') and row['expires'] > now:
-                    held += 1
-                elif row['state'] in ('sent', 'uncertain') and row['sent'] > now - self.window - self.margin:
-                    held += 1
+            wire = row['sent'] if row['sent'] is not None else row['at']   # a permit not used yet has no wire time
+            if wire > now - self.span - EPS:   # inside its span: it occupies a slot whatever became of it
+                occupied.append(wire)
+            elif row['state'] in ('reserved', 'sealed') and row['expires'] > now:   # older: only while it may still be used
+                held += 1
+            elif row['state'] in ('sent', 'uncertain') and wire > now - self.window - self.margin:   # or still unanswered
+                held += 1
         self.decisions['retained'] += held > 0
         slots = self.capacity - held
         if slots <= 0:
             outcome = 'wait', self.window
         else:
-            newest = sorted((row['at'] for row in self.rows), reverse=True)[:slots]
-            busy = [at + self.span + EPS for at in newest if at + self.span + EPS > now]
-            if newest and newest[0] > now:
-                outcome = 'wait', newest[0] + EPS - now
-            else:
-                outcome = ('wait', min(busy) - now) if len(busy) >= slots else ('ok', None)
+            occupied.sort()
+            outcome = (('wait', occupied[len(occupied) - slots] + self.span + EPS - now)
+                       if len(occupied) >= slots else ('ok', None))
         self.decisions[outcome[0]] += 1
         return outcome
 
@@ -417,7 +483,7 @@ class RandomizedAgainstModel(unittest.TestCase):
         identity = RequestIdentity.make(APP, 'bot', 'randomized-bot')
         model = SlidingModel(capacity, window, MARGIN, guard)
         outstanding = []      # (permit, path, model row) in the order they were admitted
-        every_stamp = []      # all admission times, kept here because old rows are pruned from the double below
+        every_wire = {}       # each admission's wire time (its reservation until a permit is used), kept because old rows are pruned
         serial, on_hold = 0, False
         span = model.span
         steps = [0, 1e-6, 2e-6, .5e-6, .01, .2, window / 2, window - 1e-6, window, window + .5e-6, window + 2e-6,
@@ -453,7 +519,7 @@ class RandomizedAgainstModel(unittest.TestCase):
                     self.assertFalse(on_hold, label(step, 'granted under a hold'))
                     self.assertEqual(expected[0], 'ok', label(step, 'granted but the model waits %r' % (expected,)))
                     at = db.admissions[permit.id]['reserved']
-                    every_stamp.append(at)
+                    every_wire[permit.id] = at
                     row = {'at': at, 'state': 'sent' if read else 'reserved', 'sent': at if read else None,
                            'expires': permit.expires_at}
                     model.rows.append(row)
@@ -467,6 +533,7 @@ class RandomizedAgainstModel(unittest.TestCase):
                         self.assertLessEqual(row['expires'], now, label(step, 'consume refused before expiry'))
                     else:
                         row['state'], row['sent'] = 'sent', now
+                        every_wire[permit.id] = now
             elif roll < .85 and outstanding and not on_hold:   # resolve a sent request one way or another
                 permit, path, row = rng.choice(outstanding)
                 if row['state'] == 'sent':
@@ -492,8 +559,8 @@ class RandomizedAgainstModel(unittest.TestCase):
                                                                            'app_capacity': capacity})
         # The invariant, from the ledger alone: no closed interval of one window holds more than the cap that was in
         # force. (A tightening can only lower it, so the initial cap is the weakest bound; the model checked the rest.)
-        self.assertLessEqual(busiest_closed_window(every_stamp, window), base['app_capacity'], 'seed %d' % seed)
-        self.assertLessEqual(busiest_closed_window(every_stamp, model.span), base['app_capacity'], 'seed %d, span' % seed)
+        self.assertLessEqual(busiest_closed_window(list(every_wire.values()), window), base['app_capacity'], 'seed %d' % seed)
+        self.assertLessEqual(busiest_closed_window(list(every_wire.values()), model.span), base['app_capacity'], 'seed %d, span' % seed)
         return model.decisions
 
     def test_every_seed_agrees_with_the_model_and_keeps_the_ceiling(self):

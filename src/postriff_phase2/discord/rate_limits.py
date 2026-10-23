@@ -24,6 +24,7 @@ ROUTES = 'public.pr_discord_route_buckets'
 ADMISSIONS = 'public.pr_discord_request_admissions'
 MAX_EPOCH = 253402300799.0  # representable through year9999; excessive hints hold
 SLOT_EPSILON = 1e-6  # one tick of the database clock (timestamptz keeps whole microseconds)
+MAX_PERMIT_SECONDS = 10.0  # SafetyPolicy.parse refuses a longer permit_ttl_seconds: the longest a permit can wait to be used
 # A sent row's expiry is at or after the moment it was marked sent, give or take the time consume's UPDATE waited for
 # its lock (statement_timeout is 5 s). Bounding the unresolved scan by expires_at, which the partial index holds, as
 # well as by the sent time keeps it to the unresolved rows of the last window plus margin, however many old ones leaked.
@@ -378,36 +379,58 @@ class SharedPostgresBudget:
             self.policy.require_current(now)
         return now
 
-    def _reading(self, cur, row):
-        """`now` after the locks, as _policy(cur) reads it, plus what the application window needs, in the SAME statement.
+    def _scan_limit(self, cap, window):
+        """How many of the newest admissions hold every one that can still occupy a slot (_window_state).
+
+        A slot is occupied from an admission's wire time (sent_at, else reserved_at) for one span, and a permit is used
+        at most MAX_PERMIT_SECONDS after it was reserved, so an occupied slot belongs to an admission reserved within
+        span + MAX_PERMIT_SECONDS. At most `cap` admissions are made in any span (the invariant _slide keeps), so this
+        many of the newest cover that time with one span to spare. Fewer than `cap` would refuse nothing wrongly."""
+        span = self._span(window)
+        return min(100000, max(cap + 1, cap * (math.ceil((span + MAX_PERMIT_SECONDS) / span) + 1)))
+
+    def _window_state(self, cur, cap, window, at=None):
+        """The database clock (or `at`) and what the application window needs, in ONE statement.
 
         The sliding window must look at the admissions while the application row is held, and every statement under
         that lock lengthens the time every other request waits for it (the coordinator's row lock bounds the whole
-        system). The clock is read there anyway, so the unresolved admissions older than the window (a count) and the
-        newest `cap` admission times ride along: the exact ceiling costs no round trip. They answer for the cap and
-        window of the stored row; _slide asks again only if a reviewed policy has just changed either.
+        system). The clock is read there anyway, so the admissions that still occupy a slot ride along: the exact
+        ceiling costs no round trip. An admission occupies a slot from the moment it can reach Discord, its `sent_at`
+        (a read is sent when it is admitted, a create when its permit is consumed), else from its reservation, for one
+        span. Older ones that may still reach Discord keep a slot too (`held`): a permit not yet used or expired, and a
+        request sent but never answered, for _horizon at most.
         """
-        cap, window = row['cap'], row['window']
-        cur.execute(f'''WITH tick AS MATERIALIZED (SELECT clock_timestamp() AS at)
+        span, horizon = self._span(window) + SLOT_EPSILON, self._horizon(window)
+        clock, lead = ('clock_timestamp()', ()) if at is None else ('to_timestamp(%s::double precision)', (at,))
+        cur.execute(f'''WITH tick AS MATERIALIZED (SELECT {clock} AS at)
             SELECT extract(epoch from tick.at)::double precision,
                 (SELECT count(*) FROM {ADMISSIONS} WHERE application_key=%s
-                    AND reserved_at<=tick.at-make_interval(secs=>%s)
+                    AND coalesce(sent_at,reserved_at)<=tick.at-make_interval(secs=>%s)
                     AND state IN ('reserved','sealed','sent','uncertain')
                     AND (state IN ('reserved','sealed') AND expires_at>tick.at
                          OR state IN ('sent','uncertain') AND expires_at>tick.at-make_interval(secs=>%s)
                             AND coalesce(sent_at,reserved_at)>tick.at-make_interval(secs=>%s))),
-                array(SELECT extract(epoch from reserved_at)::double precision FROM {ADMISSIONS}
-                    WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s)
-            FROM tick''', (self.application_key,self._span(window)+SLOT_EPSILON,self._horizon(window)+SENT_SLACK,
-                           self._horizon(window),self.application_key,cap))
+                array(SELECT extract(epoch from newest.wire)::double precision FROM (
+                        SELECT coalesce(sent_at,reserved_at) AS wire FROM {ADMISSIONS}
+                        WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s) newest
+                    WHERE newest.wire>tick.at-make_interval(secs=>%s))
+            FROM tick''', (*lead,self.application_key,span,horizon+SENT_SLACK,horizon,
+                           self.application_key,self._scan_limit(cap,window),span))
         value = cur.fetchone()
         if (not value or len(value) != 3 or not valid_number(value[0]) or type(value[1]) is not int or value[1] < 0
-                or not isinstance(value[2], list) or len(value[2]) > cap or not all(valid_number(s) for s in value[2])):
+                or not isinstance(value[2], list) or not all(valid_number(s) for s in value[2])):
             raise RateCoordinatorUnavailable()
+        return value[0], {'cap': cap, 'window': window, 'held': value[1], 'occupied': sorted(value[2])}
+
+    def _reading(self, cur, row):
+        """`now` after the locks, as _policy(cur) reads it, with the window's inputs for the stored cap and window.
+
+        _slide asks again (_window_state at that `now`) only if a reviewed policy has just changed either."""
+        now, reading = self._window_state(cur, row['cap'], row['window'])
         if self.policy is None:
             raise RateCoordinatorUnavailable()
-        self.policy.require_current(value[0])
-        return value[0], {'cap': cap, 'window': window, 'held': value[1], 'stamps': value[2]}
+        self.policy.require_current(now)
+        return now, reading
 
     def _map(self, cur, identity, route, major):
         # Stable routes need only one round trip. A missing row is not a lock:
@@ -647,62 +670,42 @@ class SharedPostgresBudget:
     def _slide(self, cur, row, now, reading):
         """Set the application row's `left` and `reset` from the admissions themselves (an exact sliding window).
 
-        Exactness. Every reservation of this application holds its policy row FOR UPDATE from before `now` is read
-        until it commits, and it is the only writer of this application's admissions, so request_seq order is
-        admission order and, while the database clock does not run backwards, reserved_at never decreases along it.
-        The `slots`-th newest admission is then the one whose age decides the next admission: a slot is free only
-        STRICTLY more than one window (plus the arrival headroom, _span) after the admission that held it. So admission
-        i+cap is stamped more than one span after admission i, and no closed interval of one window, nor of one span,
-        holds more than `cap` admissions. The caller
-        stamps its own admission at or after `now`, which can only widen that gap. A database clock behind its newest
-        admission is waited out, not trusted, so the order assumption cannot be broken by a step backwards.
+        What is counted. Every admission occupies one slot from its wire time `w` (sent_at when it has one, else
+        reserved_at) until w + span, whatever became of it (answered, released, blocked, expired): none is refunded
+        inside its span, as the fixed window never refunded one inside its own. A permit that has not been used yet has
+        no wire time, so it occupies a slot until it is used (then from sent_at) or expires; an admission sent and never
+        answered occupies one for at most _horizon. Such older admissions are `held` (see _window_state). A slot is free
+        only STRICTLY more than one span after the wire time that held it.
 
-        Every admission counts for exactly one window whatever became of it (used, released, blocked, expired,
-        observed): none is refunded inside its window, as the fixed window never refunded one inside its own. An
-        admission still unresolved after that window keeps one slot for a bounded time (_horizon): sent/uncertain
-        rows, and reserved/sealed rows until their expiry. It is counted once, never again for a later window.
+        Exactness. This reservation holds its policy row FOR UPDATE from before `now` is read until it commits and
+        admits only when occupied slots + held < cap. Using a permit (consume) moves it from "held" to "occupying from
+        sent_at" without changing the count, and no other event adds to it. So at every instant at most `cap` wire
+        times lie in any half-open span, hence at most `cap` in any CLOSED interval of one window: no trailing second of
+        wire times holds more than `cap`. The requests themselves arrive at the wire some time after their wire time;
+        that spread is what the span's headroom (SLOT_GUARD_SECONDS) absorbs: arrivals stay within `cap` per window
+        whenever the spread is at most the headroom. A database clock behind a wire time already stamped is waited out,
+        not trusted: that wire time is simply still inside its span.
 
         left: free slots before this request. reset: when the next slot frees if none is free; otherwise now + window,
-        the bound a permit has always had (it cannot outlive the window that paid for it). Returns the reset to store
-        when this request's own admission will fill the window, else None.
+        the bound a poll has always had. Returns the reset to store when this request's own admission will fill the
+        window, else None.
         """
         cap, window = row['cap'], row['window']
-        span = self._span(window)
-        stamps = None
-        if (reading['cap'], reading['window']) == (cap, window):
-            held = reading['held']
-        else:  # a reviewed policy changed the cap or window just now: the reading answered for the old ones
-            cur.execute(f'''SELECT count(*) FROM {ADMISSIONS} WHERE application_key=%s AND reserved_at<=to_timestamp(%s)
-                AND state IN ('reserved','sealed','sent','uncertain')
-                AND (state IN ('reserved','sealed') AND expires_at>to_timestamp(%s)
-                     OR state IN ('sent','uncertain') AND expires_at>to_timestamp(%s)
-                        AND coalesce(sent_at,reserved_at)>to_timestamp(%s))''',
-                (self.application_key,now-span-SLOT_EPSILON,now,now-self._horizon(window)-SENT_SLACK,now-self._horizon(window)))
-            held = cur.fetchone()[0]
-            if type(held) is not int or held < 0:
-                raise RateCoordinatorUnavailable()
-        slots = cap - held
+        span = self._span(window) + SLOT_EPSILON
+        if (reading['cap'], reading['window']) != (cap, window):
+            # a reviewed policy changed the cap or window just now: the reading answered for the old ones
+            _now, reading = self._window_state(cur, cap, window, at=now)
+        slots = cap - reading['held']
         row['left'], row['reset'] = 0, now + window  # resolution alone can free a slot: poll once per window
         if slots <= 0:
             return None
-        if (reading['cap'], reading['window']) == (cap, window):
-            stamps = reading['stamps'][:slots]
-        else:
-            cur.execute(f'''SELECT extract(epoch from reserved_at)::double precision FROM {ADMISSIONS}
-                WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s''', (self.application_key,slots))
-            stamps = [value[0] for value in cur.fetchall()]
-            if len(stamps) > slots or any(not valid_number(stamp) for stamp in stamps):
-                raise RateCoordinatorUnavailable()
-        if stamps and stamps[0] > now:
-            row['reset'] = stamps[0] + SLOT_EPSILON  # the clock is behind its newest admission: wait for it
+        occupied = reading['occupied']  # ascending wire times that are still inside their span
+        if len(occupied) >= slots:
+            row['reset'] = occupied[len(occupied) - slots] + span  # the oldest one that must go before a slot is free
             return None
-        busy = [stamp + span + SLOT_EPSILON for stamp in stamps if stamp + span + SLOT_EPSILON > now]
-        if len(busy) >= slots:
-            row['reset'] = busy[-1]  # the oldest of the newest `slots` admissions frees first
-            return None
-        row['left'], row['reset'] = slots - len(busy), now + window
-        if row['left'] == 1:  # this admission fills the window: the next slot is the oldest busy one's (or its own)
-            return busy[-1] if busy else now + span + SLOT_EPSILON
+        row['left'], row['reset'] = slots - len(occupied), now + window
+        if row['left'] == 1:  # this admission fills the window: the next slot is the oldest occupied one's (or its own)
+            return occupied[0] + span if occupied else now + span
         return None
 
     def _insert(self, cur, permit, route, major, bucket, keys, binding, *, read_sent=False):
@@ -780,8 +783,13 @@ class SharedPostgresBudget:
                         wait,wait_scope = row['reset']-now,kind
             if wait > 0:
                 raise RateDelayed(wait,scope=wait_scope)
+            # A permit lives as long as its caller can use it: the policy's permit lifetime, the caller's own deadline
+            # (a create's lease and approval) and the policy's end; no window ends it. A window that ends while the
+            # permit is unused refills its row counting this permit as pending (_roll), and the application window
+            # keeps a slot for it until it is used or expires (_slide), so using it late is paid for in the later window.
+            # It used to end with the earliest reset of its rows (at most the 1-second application window): 11.5% of the
+            # create preflights of a 5,000-post run were repeated because the permit died before it could be sealed.
             expiry = round(min(now+self.policy.permit_ttl_seconds,self.policy.expires_at,
-                         *(r['reset'] for r in rows.values() if r['cap'] is not None),
                          valid_until if valid_number(valid_until) else MAX_EPOCH),6)
             # A fixed headroom margin rejects usable short provider windows
             # and can repeatedly restart OAuth. INSERT and consume independently
