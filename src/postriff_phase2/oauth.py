@@ -456,12 +456,22 @@ class OAuthService:
             pinned = None
         return f"{pinned or base}/api/oauth/{provider_id}/callback"
 
+    def _discord_flags_consistent(self):
+        """G2E-A-08. Approvals (AUTHORIZATION_V2) without the linked-identity connection flow (CONNECTIONS_V2) is a
+        mistyped flag, not a mode: the original flow it would leave reachable stores envelopes that carry no authorizer,
+        so the worker could not check that the member who connected is still allowed to. Fail closed, as 503."""
+        discord = self.providers.get('discord') if hasattr(self.providers, 'get') else None
+        if (discord is not None and getattr(discord, 'authorization_v2_enabled', False)
+                and not getattr(discord, 'connections_v2_enabled', False)):
+            raise AlphaError('Discord connection authorization is not enabled.', 503)
+
     # --- start ----------------------------------------------------------------------
     def start(self, workspace_id, token, provider_id, capability, inputs=None):
         inputs = inputs or {}
         if not isinstance(inputs, dict):
             raise AlphaError('Expected structured connection inputs.', 400)
         if provider_id == 'discord':
+            self._discord_flags_consistent()
             # Who may START a Discord connection is decided before any provider request (launch_gate).
             from .discord import launch_gate
             launch_gate.require_connect_access(self.discord_connections, workspace_id, token)
@@ -588,6 +598,8 @@ class OAuthService:
 
     # --- complete (authenticated exchange) ----------------------------------------
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
+        if provider_id == 'discord':
+            self._discord_flags_consistent()
         if provider_id == 'discord' and getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
             return self.discord_connections.complete(workspace_id, token, state, code, error, iss=iss)
         if provider_id == 'pinterest':
@@ -1150,6 +1162,7 @@ class OAuthService:
         owns the workspace lock and no request is made, only the database checks (active authorizer, generations).
         Lock order is workspace -> credential; no network occurs under either lock.
         """
+        self._discord_flags_consistent()
         if cur is None:
             if getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
                 self.discord_connections.installation_identity(workspace_id, connection_id)
