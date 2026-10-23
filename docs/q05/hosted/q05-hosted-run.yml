@@ -1,0 +1,160 @@
+name: Q-05 hosted isolation probe (owner approves every run)
+# Runs scripts/q05_tenant_probe.py against the HOSTED app from GitHub Actions, because the owner's
+# Mac is offline. It never deploys, builds, promotes, aliases or changes a setting; it only signs in
+# two throwaway accounts, reads and (cross-tenant) attacks each other's tenant, and reports.
+#
+# The workflow file lives on an ephemeral request branch (claude/discord-q05-run-*), not on the probe
+# branch. Its only credentials are the environment secrets of 'rafii-q05-probe', whose required
+# reviewer must approve each run. It does NOT use VERCEL_TOKEN or any build environment. This
+# repository is PUBLIC: every log line, step summary and this file are world-readable, so nothing
+# here prints a token, a password, an e-mail address or a workspace id (each is masked at source).
+#
+# The targets are HARD-CODED below (base URL and Supabase URL): a request branch carries only a SHA
+# and a mode, so editing a request can never redirect credentials to another host.
+on:
+  push:
+    branches:
+      - 'claude/discord-q05-run-*'
+permissions:
+  contents: read
+env:
+  BASE_URL: https://rafii.io
+  SUPABASE_URL: https://buoyhkbodnhzngaotoel.supabase.co
+  RC_BRANCH: claude/discord-q05-probe-20261023
+jobs:
+  probe:
+    if: github.repository == 'dev-james0723/PostRiff' && github.actor == 'dev-james0723'
+    # Under the job (after the 'if') so a skipped run never replaces a request waiting for approval.
+    concurrency:
+      group: q05-hosted-run
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: rafii-q05-probe
+    steps:
+      - name: Check out the request branch (the workflow and the request, nothing else)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: request
+      - name: Read the request and refuse anything but a fresh request for a tip-of-probe-branch SHA
+        id: req
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [ "${GITHUB_RUN_ATTEMPT:-1}" = 1 ] || { echo 're-runs are refused; push a new request'; exit 1; }
+          case "$REF_NAME" in
+            claude/discord-q05-run-*) : ;;
+            *) echo 'unexpected branch'; exit 1 ;;
+          esac
+          age=$(( $(date +%s) - $(git -C request log -1 --format=%ct) ))
+          { [ "$age" -ge -60 ] && [ "$age" -le 43200 ]; } || { echo "the request commit is not from the last twelve hours (age ${age}s); push a new request"; exit 1; }
+          sha="$(python3 -I -c 'import json; print(json.load(open("request/probe/REQUEST.json"))["sha"])')"
+          mode="$(python3 -I -c 'import json; print(json.load(open("request/probe/REQUEST.json")).get("mode",""))')"
+          # Whole-string matches only, before anything is written to the step outputs.
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'the request does not hold a 40 hex SHA'; exit 1; }
+          case "$mode" in
+            generic|gate) : ;;
+            *) echo 'mode must be "generic" or "gate"'; exit 1 ;;
+          esac
+          # The SHA must be the current tip of the probe branch. ls-remote needs no token on a public repo.
+          tip="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/${RC_BRANCH}" | awk 'NR==1{print $1}')"
+          [ -n "$tip" ] || { echo "could not read the tip of ${RC_BRANCH}"; exit 1; }
+          [ "$tip" = "$sha" ] || { echo "the request SHA is not the current tip of ${RC_BRANCH}"; exit 1; }
+          { echo "sha=$sha"; echo "mode=$mode"; } >> "$GITHUB_OUTPUT"
+      - name: Fetch the probe script at that exact SHA (manual fetch; the repo has orphan vendor gitlinks)
+        env:
+          SOURCE_SHA: ${{ steps.req.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git init -q rc
+          git -C rc remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git -C rc -c protocol.version=2 fetch -q --depth=1 origin "$SOURCE_SHA"
+          git -C rc checkout -q --detach FETCH_HEAD
+          test "$(git -C rc rev-parse HEAD)" = "$SOURCE_SHA"
+          git -C rc show "HEAD:scripts/q05_tenant_probe.py" > "$GITHUB_WORKSPACE/probe.py"
+          grep -q 'Q-05 cross-tenant isolation probe' "$GITHUB_WORKSPACE/probe.py" || { echo 'the fetched file is not the Q-05 probe'; exit 1; }
+      - name: Sign in both accounts, resolve their workspaces, and run the probe
+        env:
+          MODE: ${{ steps.req.outputs.mode }}
+          # Credential modes, in order of preference: (a) single-use e-mail OTP codes + e-mails, or
+          # (b) ready-made short-lived access tokens. No password grant, no dashboard-created users.
+          # Each secret is read only in this step.
+          Q05_EMAIL_A: ${{ secrets.Q05_EMAIL_A }}
+          Q05_CODE_A: ${{ secrets.Q05_CODE_A }}
+          Q05_EMAIL_B: ${{ secrets.Q05_EMAIL_B }}
+          Q05_CODE_B: ${{ secrets.Q05_CODE_B }}
+          Q05_TOKEN_A: ${{ secrets.Q05_TOKEN_A }}
+          Q05_TOKEN_B: ${{ secrets.Q05_TOKEN_B }}
+          Q05_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.Q05_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          GUARD='X-Postriff-Request: founder-alpha'
+          # Mask every secret input before it could reach a log line (belt and braces with "never print").
+          for s in "${Q05_SUPABASE_PUBLISHABLE_KEY:-}" "${Q05_EMAIL_A:-}" "${Q05_EMAIL_B:-}" "${Q05_CODE_A:-}" "${Q05_CODE_B:-}" "${Q05_TOKEN_A:-}" "${Q05_TOKEN_B:-}"; do
+            [ -n "$s" ] && echo "::add-mask::$s" || true
+          done
+          mint_token() {
+            who="$1"; email=""; code=""; ready=""
+            case "$who" in
+              A) email="${Q05_EMAIL_A:-}"; code="${Q05_CODE_A:-}"; ready="${Q05_TOKEN_A:-}" ;;
+              B) email="${Q05_EMAIL_B:-}"; code="${Q05_CODE_B:-}"; ready="${Q05_TOKEN_B:-}" ;;
+            esac
+            # (a) single-use e-mail OTP code: exchange it for a short-lived access token (public verify endpoint).
+            if [ -n "$email" ] && [ -n "$code" ]; then
+              [ -n "${Q05_SUPABASE_PUBLISHABLE_KEY:-}" ] || { echo "account $who: Q05_SUPABASE_PUBLISHABLE_KEY is required with an OTP code" >&2; return 1; }
+              body="$(jq -nc --arg e "$email" --arg t "$code" '{type:"email",email:$e,token:$t}')"
+              resp="$(curl -sS -X POST "$SUPABASE_URL/auth/v1/verify" -H "apikey: $Q05_SUPABASE_PUBLISHABLE_KEY" -H 'Content-Type: application/json' --data "$body")" || { echo "account $who: OTP verify request failed" >&2; return 1; }
+              tok="$(printf '%s' "$resp" | jq -r '.access_token // empty' 2>/dev/null || true)"
+              [ -n "$tok" ] || { echo "account $who: the OTP code did not verify (expired, already used, or wrong e-mail)" >&2; return 1; }
+              printf '%s' "$tok"; return 0
+            fi
+            # (b) a ready-made short-lived access token pasted by the owner.
+            if [ -n "$ready" ]; then printf '%s' "$ready"; return 0; fi
+            echo "account $who: set Q05_EMAIL_$who + Q05_CODE_$who (preferred) or Q05_TOKEN_$who" >&2
+            return 1
+          }
+          resolve_ws() {
+            token="$1"
+            curl -sS -X POST "$BASE_URL/api/auth/verify" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -H "$GUARD" -H "Origin: $BASE_URL" --data '{}' >/dev/null 2>&1 || true
+            wsjson="$(curl -sS "$BASE_URL/api/workspaces" -H "Authorization: Bearer $token")" || { echo 'workspace list request failed' >&2; return 1; }
+            ws="$(printf '%s' "$wsjson" | jq -r 'if ((.workspaces // []) | length) == 1 then .workspaces[0].workspaceId else empty end' 2>/dev/null || true)"
+            [ -n "$ws" ] || { echo 'could not resolve exactly one workspace for this account' >&2; return 1; }
+            printf '%s' "$ws"
+          }
+          mint_state() {
+            token="$1"; ws="$2"
+            resp="$(curl -sS -X POST "$BASE_URL/api/workspaces/$ws/channels/discord/oauth/start" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -H "$GUARD" -H "Origin: $BASE_URL" --data '{"capability":"identity","input":{"discordPurpose":"identity"}}' 2>/dev/null)" || return 0
+            url="$(printf '%s' "$resp" | jq -r '.authorizeUrl // empty' 2>/dev/null || true)"
+            printf '%s' "$url" | sed -n 's/.*[?&]state=\([A-Za-z0-9_-]*\).*/\1/p'
+          }
+          TOKEN_A="$(mint_token A)" || exit 1; echo "::add-mask::$TOKEN_A"
+          TOKEN_B="$(mint_token B)" || exit 1; echo "::add-mask::$TOKEN_B"
+          WS_A="$(resolve_ws "$TOKEN_A")" || { echo 'account A: workspace resolution failed'; exit 1; }; echo "::add-mask::$WS_A"
+          WS_B="$(resolve_ws "$TOKEN_B")" || { echo 'account B: workspace resolution failed'; exit 1; }; echo "::add-mask::$WS_B"
+          VICTIM_A=""; VICTIM_B=""
+          if [ "$MODE" = gate ]; then
+            # Best effort: a pending OAuth transaction per account for the state-binding case. If Discord
+            # v2 is not live the start call returns nothing; the probe then reports that case NOT RUN and
+            # gate fails, which correctly says the build is not ready. These transactions expire in 10 min.
+            VICTIM_A="$(mint_state "$TOKEN_A" "$WS_A")"; [ -n "$VICTIM_A" ] && echo "::add-mask::$VICTIM_A" || true
+            VICTIM_B="$(mint_state "$TOKEN_B" "$WS_B")"; [ -n "$VICTIM_B" ] && echo "::add-mask::$VICTIM_B" || true
+          fi
+          args=(--allow-writes --victim-is-synthetic --delay 0.05 --out-md receipt.md --out-json cases.jsonl)
+          if [ "$MODE" = generic ]; then args+=(--smoke); fi
+          rc=0
+          Q05_BASE_URL="$BASE_URL" Q05_TOKEN_A="$TOKEN_A" Q05_TOKEN_B="$TOKEN_B" \
+            Q05_WORKSPACE_A="$WS_A" Q05_WORKSPACE_B="$WS_B" \
+            Q05_VICTIM_A_OAUTH_STATE="$VICTIM_A" Q05_VICTIM_B_OAUTH_STATE="$VICTIM_B" \
+            python3 "$GITHUB_WORKSPACE/probe.py" "${args[@]}" || rc=$?
+          # The receipt is templated (routes only, no ids, bodies or tokens): safe for the public summary.
+          { echo "## Q-05 hosted probe (${MODE}) against ${BASE_URL}"; echo; cat receipt.md 2>/dev/null || echo '(no receipt produced)'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MODE" = gate ]; then
+            # Gate completeness: the ONLY NOT RUN cases allowed are the send-blast ones (send-risk is never
+            # enabled here, so a wrongly-accepted attack can still never cause a real Discord message).
+            bad="$(jq -rs '[.[] | select(.verdict == "NOT_RUN" and .blast != "send")] | length' cases.jsonl 2>/dev/null || echo 999)"
+            [ "$bad" = 0 ] || { echo "gate: ${bad} case(s) were NOT RUN that must run (only send-blast cases may be gated off)"; rc=1; }
+          fi
+          echo "probe exit: ${rc} (mode ${MODE})"
+          exit "$rc"
