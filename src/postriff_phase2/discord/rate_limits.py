@@ -24,6 +24,10 @@ ROUTES = 'public.pr_discord_route_buckets'
 ADMISSIONS = 'public.pr_discord_request_admissions'
 MAX_EPOCH = 253402300799.0  # representable through year9999; excessive hints hold
 SLOT_EPSILON = 1e-6  # one tick of the database clock (timestamptz keeps whole microseconds)
+# A sent row's expiry is at or after the moment it was marked sent, give or take the time consume's UPDATE waited for
+# its lock (statement_timeout is 5 s). Bounding the unresolved scan by expires_at, which the partial index holds, as
+# well as by the sent time keeps it to the unresolved rows of the last window plus margin, however many old ones leaked.
+SENT_SLACK = 6.0
 _ID = re.compile(r'^[0-9]{5,25}$')
 _HASH = re.compile(r'^[a-f0-9]{64}$')
 _LABEL = re.compile(r'^[A-Za-z0-9_.:-]{1,64}$')
@@ -386,10 +390,12 @@ class SharedPostgresBudget:
                     AND reserved_at<=tick.at-make_interval(secs=>%s)
                     AND state IN ('reserved','sealed','sent','uncertain')
                     AND (state IN ('reserved','sealed') AND expires_at>tick.at
-                         OR state IN ('sent','uncertain') AND coalesce(sent_at,reserved_at)>tick.at-make_interval(secs=>%s))),
+                         OR state IN ('sent','uncertain') AND expires_at>tick.at-make_interval(secs=>%s)
+                            AND coalesce(sent_at,reserved_at)>tick.at-make_interval(secs=>%s))),
                 array(SELECT extract(epoch from reserved_at)::double precision FROM {ADMISSIONS}
                     WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s)
-            FROM tick''', (self.application_key,self._span(window)+SLOT_EPSILON,self._horizon(window),self.application_key,cap))
+            FROM tick''', (self.application_key,self._span(window)+SLOT_EPSILON,self._horizon(window)+SENT_SLACK,
+                           self._horizon(window),self.application_key,cap))
         value = cur.fetchone()
         if (not value or len(value) != 3 or not valid_number(value[0]) or type(value[1]) is not int or value[1] < 0
                 or not isinstance(value[2], list) or len(value[2]) > cap or not all(valid_number(s) for s in value[2])):
@@ -665,8 +671,9 @@ class SharedPostgresBudget:
             cur.execute(f'''SELECT count(*) FROM {ADMISSIONS} WHERE application_key=%s AND reserved_at<=to_timestamp(%s)
                 AND state IN ('reserved','sealed','sent','uncertain')
                 AND (state IN ('reserved','sealed') AND expires_at>to_timestamp(%s)
-                     OR state IN ('sent','uncertain') AND coalesce(sent_at,reserved_at)>to_timestamp(%s))''',
-                (self.application_key,now-span-SLOT_EPSILON,now,now-self._horizon(window)))
+                     OR state IN ('sent','uncertain') AND expires_at>to_timestamp(%s)
+                        AND coalesce(sent_at,reserved_at)>to_timestamp(%s))''',
+                (self.application_key,now-span-SLOT_EPSILON,now,now-self._horizon(window)-SENT_SLACK,now-self._horizon(window)))
             held = cur.fetchone()[0]
             if type(held) is not int or held < 0:
                 raise RateCoordinatorUnavailable()
