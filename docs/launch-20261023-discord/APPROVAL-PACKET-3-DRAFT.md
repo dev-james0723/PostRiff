@@ -1,0 +1,44 @@
+# APPROVAL PACKET 3 (DRAFT, NOT SUBMITTED): the Production operations for RC2
+
+Started 2026-10-23 about 05:50Z under owner reply 14 ("finish a complete RC2 evidence packet, then submit the Production operations that need approval"). **Nothing in this file is requested yet.** It is the skeleton, so that the order, the prerequisites and the rollback of every operation are fixed before the evidence is complete. The packet is submitted only when `RC2-EVIDENCE-PACKET.md` shows stage 5a green on a named, frozen RC2 SHA. Every row is for that SHA only; if the head moves, a new revision replaces this one and an earlier yes does not carry over.
+
+Rollback target for every row that changes what customers are served: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, serving `rafii.io` today).
+
+## 0. Fields to fill when the packet is submitted
+
+| Field | Value |
+|---|---|
+| Frozen RC2 SHA / branch / draft PR | TBD (`claude/discord-launch-rc2-20261023`, DO NOT MERGE) |
+| Exact-SHA CI | TBD: run links per workflow |
+| Final-SHA security review (G2) | TBD: report, `SECURITY-FIX-EVIDENCE.md` rows CLOSED |
+| Local cross-tenant probe on the exact SHA (Q-05, 5a) | TBD: receipt |
+| Capacity evidence | TBD: GitHub-runner receipts (sandbox class) and the Depot run row 13 |
+| Customer-impact re-run on the final SHA | TBD: `CUSTOMER-IMPACT-INVENTORY.md` section 11 |
+| Stop and rollback method, monitors | TBD: isolated drill receipts (`docs/ops/DRILL-RECEIPT-ISOLATED.md` on the ops branch), owner's on-call hours and alert channels (H-07) |
+
+## 1. Rows (order is the order of execution)
+
+| # | Who | Operation | Needs first | Risk | Rollback | Cost | Stage |
+|---|---|---|---|---|---|---|---|
+| 1 | owner | Set the GitHub Environment secret `TESTER_WORKSPACE_ID` (environment `rafii-rc-deploy`) to the dark gate list: the tester workspace id, then the workspace ids of the two throwaway accounts A and B, comma separated, no spaces (one to three ids; the workflow refuses anything else). The agent cannot read or set it. | accounts A and B created by normal sign-up (no fake users); their workspace ids known to the owner | a wrong id admits the wrong workspace to Discord on the dark build only; the printed count and fingerprint show it before approval | edit the secret | $0 | 5b prep |
+| 2 | agent | Production project variables for the lane, one batch, type `plain`, read back by name and value: `POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED=true` (exact names and any lane budget variable from `docs/w02/AS-BUILT.md` at the frozen SHA), plus the decision of row 3. Env applies to new builds only. | row 1 not required; 5a green | a later build of another lane that contains this code would run the lane (impossible for lines without the code); the live build is untouched | remove the names | $0 | 5b prep |
+| 3 | owner decision | **WB-1:** the two worker-budget variables set on 2026-10-23 (`POSTRIFF_WORKER_MAX_JOBS=25`, `POSTRIFF_WORKER_MAX_SECONDS=40`) apply to every provider's minute worker, including a rebuild of the live line. Keep, lower or remove them now that the lane carries Discord. Recommendation to be written from the fixes agent's analysis. | analysis in `RC2-EVIDENCE-PACKET.md` | other providers' scheduled-post throughput changes | restore the values | $0 | 5b prep |
+| 4 | owner (tap) | Preflight run of the build workflow v4b (read-only; GitHub Environment approval of the named request commit). Prints the gate count and fingerprint; the owner recomputes the fingerprint with the command in `BUILD-VIA-GITHUB-ACTIONS.md` section 8 and compares. | rows 1 and 2 | none (reads names only, `--dry`, no deployment) | none | $0 | 5b prep |
+| 5 | owner (tap) | **Dark build D1'** of the frozen SHA: `vercel deploy --prod --skip-domain` through workflow v4b, gate = the row 1 list, cap 10000, reviewed flag, one build, no retry. | rows 1 to 4; the owner confirms count and fingerprint in the log of row 4 | a staged build has no customer domain and runs no cron until promoted | delete nothing, never promote it | build minutes only | 5b |
+| 6 | agent | Verify D1' read-only: file fingerprint against the SHA, READY state, no customer-facing alias, the connect catalog reads `discordAccess.reason = allowlisted` for each listed workspace and `invite_only` for an unlisted one (this route cannot read the value back), non-Discord page comparison against `dpl_47SG` (finding DEP-1 of the impact inventory), the tenant isolation smoke. | row 5 | none | none | $0 | 5b |
+| 7 | owner (separate approval) | **Promote D1'** to serve `rafii.io` (the private canary: the gate admits only the three listed workspaces; every customer gets the RC2 code with Discord closed to them). Crons (the minute worker and the 12 lane shards) start on this deployment. | row 6 all green; stop and rollback rehearsed in isolation; monitors ready | all customers run the RC2 code (impact inventory: FB-1, CH-1 fixed, remaining items listed); a defect there is visible to all customers | promote `dpl_47SG` back (no rebuild); set the operator hold first if Discord work is in flight (`RUNBOOK-INCIDENT.md`) | $0 | 5b |
+| 8 | agent, with owner approval | Rehearse the operator hold and the rollback on Production: `UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy'`, observe that every loop stops and nothing is admitted, lift it; then the rollback to `dpl_47SG` and the re-promotion of D1'. | row 7 | a short Discord pause for the three listed workspaces only | the rehearsal is the rollback | $0 | 5b |
+| 9 | owner + agent | **Tester session (G3):** at most the three messages already approved, on the approved account and channel, text approved by the owner at that moment (script `TESTER-SESSION-SCRIPT.md`). Any message outside the earlier approval is asked precisely first. | row 7 | real posts in the owner's own server | delete the messages | $0 | 5b |
+| 10 | owner (taps) | **Hosted A/B isolation runs (G4)**: both directions, reads and writes, no side effects, accounts A and B, short-lived sign-in codes the owner supplies last and with minimal steps (`docs/q05` on the probe branch). Each run is a GitHub Environment approval of a named request commit. | row 7; the reviewed probe tip; accounts A and B | denied requests must have no side effect; the probe is read-and-deny by design | none needed; sign out | $0 | 5b |
+| 11 | owner | Confirm real on-call hours and alert channels (H-07) and the three proposals of the ops report (founder-incident stage with a migration, a Discord watchdog workflow with a read-only role, the agent check-in schedule). Until then H-07 is NOT VERIFIED. | the ops review | an unattended release | none | TBD | 5c |
+| 12 | owner | M-03: one sentence from Supabase, Database, Backups: what the Point in Time tab says and what Scheduled backups lists. Decision on enabling PITR (needs a larger compute; price to be confirmed on the billing page). | none | restore without a verified backup | n/a | TBD | 5c |
+| 13 | owner + agent | **Capacity run on Depot (G5)** against section 4 of `RELEASE-DEFINITION-v2.md`: S1, S2, S0 and the fault set on the frozen SHA; cost ceiling to be set from the harness's inert Depot draft (the earlier Stage A ceiling was $4.32). | sandbox-class receipts show the lane can meet the standard | spend only | none | TBD | 5c |
+| 14 | owner (tap) | **Open build D2'** (gate `*`, cap, reviewed flag) of the same frozen SHA, one build. | rows 7 to 13 VERIFIED; the Release Captain has the whole packet | none until promoted | never promote it | build minutes only | 5c |
+| 15 | owner (separate approval) | **Promote D2' (the full opening)** and **make the open setting durable** (project variables for the gate and the cap, `DURABLE-OPEN-CONFIG-PROPOSAL.md`). | row 14 | every eligible workspace can connect; abuse, capacity and Discord-ban risks become live | promote the previous build; set the hold; the cap can be lowered by a new build | $0 | 5c |
+| 16 | owner + agent | **Fresh-customer acceptance (G7)** on the opened production: a brand-new ordinary workspace, no allowlist; at most two messages to a new blank private server (`FRESH-CUSTOMER-ACCEPTANCE.md`). | row 15 | real posts in the owner's own server | delete the messages; hold | $0 | 5c |
+
+## 2. What this packet will say honestly when submitted
+
+- Which gates are VERIFIED, which are not, and the evidence level of each (measured, reproduced, reasoned, owner-attested). A gate without a receipt is NOT RUN.
+- The release state remains **NO-GO** until G1 to G7 all have evidence; this packet is how the last steps get approved, not a claim that they are done.
+- The costs, the real blast radius of rows 7 and 15 (all customers receive the code at row 7, even though Discord stays closed to them), and the rollback times measured in the drills, not estimated.
