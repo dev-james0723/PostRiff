@@ -33,7 +33,7 @@ Started 2026-10-23 about 04:40Z under owner reply 13 ("continue engineering unti
 | Exact-SHA CI | NOT RUN | - |
 | Security configuration checks (required and forbidden names, flags, policy valid, crons registered, cron secret length, upload set clean, Git deployments off, dependency audits) | NOT RUN for RC2. The build route's preflight exists and passed for RC1 (run 39882363204); W-02 added the lane check to `scripts/check_postriff_hosted_preflight.py` | `BUILD-VIA-GITHUB-ACTIONS.md` |
 | Customer-impact inventory (no observable regression or side effect for existing customers while Discord is off for them) | IN PROGRESS: **first findings are not clean.** FB-1 HIGH (Facebook approvals break in RC1: half-carried integration, fix in progress on `claude/discord-rc2-fixes-20261023`), CH-1 and BG-1 and WB-1 MEDIUM, PR-1 and SC-1 LOW to MEDIUM | branch `claude/discord-impact-20261023` (`docs/CUSTOMER-IMPACT-INVENTORY.md`) |
-| Build workflow v4 (dark gate list of up to five workspaces) | written, 165 offline checks, independent delta review running | `BUILD-VIA-GITHUB-ACTIONS.md` section 8 |
+| Build workflow v4b (dark gate list of up to three workspaces: tester, A, B) | v4 independently reviewed (no CRITICAL/HIGH; ready after the owner sets the secret); the reviewer's MEDIUM-1 and LOW-1..5 applied in v4b: count and fingerprint printed, `LC_ALL=C`, xtrace-safe masks, bound three, 196 offline checks, reviewer's three live mutants and five of mine caught; short re-review of the delta pending; nothing built from it | `BUILD-VIA-GITHUB-ACTIONS.md` section 8 |
 
 ## 3. Stage 5b (private canary) and 5c (pre-public)
 

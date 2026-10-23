@@ -25,7 +25,7 @@ No value in this file is secret and none was read from production. "Where" says 
 ## Hazards recorded while building this
 
 - The flags are on only for the literal string `true` (the worker flag also accepts `1`): a value such as `TRUE` or `yes` silently leaves a feature off. Read values back, do not trust that a variable exists.
-- Quote every `--env` assignment on the build command, in particular `'POSTRIFF_DISCORD_CONNECT_WORKSPACES=*'`: the `*` is a shell glob character, and zsh (the macOS default shell) stops with "no matches found" instead of passing it. Read the value back from the deployment before promoting it.
+- Quote every `--env` assignment on the build command, in particular `'POSTRIFF_DISCORD_CONNECT_WORKSPACES=*'`: the `*` is a shell glob character, and zsh (the macOS default shell) stops with "no matches found" instead of passing it. Read the value back from the deployment before promoting it. (Built through the GitHub Actions route this is not possible; use the gate count and fingerprint the workflow prints and the hosted `discordAccess.reason` check, `BUILD-VIA-GITHUB-ACTIONS.md` section 8.)
 - A mistyped Discord v2 flag (anything but the exact string `true`) leaves the v2 flows off and the original Discord connect flow on. On this candidate the original flow is behind the same gate and under the same cap, so a typo cannot open an uncapped path.
 - Do not create the new variables as type `sensitive`: sensitive values cannot be read back, which makes this matrix unauditable. Use `plain` for non-secret flags and numbers.
 - Project env is shared by every lane. Variables above that are inert without the Discord code are safe to set early; the two dangerous values stay on the build commands.

@@ -18,6 +18,9 @@ env:
   RC_BRANCH: claude/discord-launch-rc-20261023
   NO_UPDATE_NOTIFIER: '1'
   VERCEL_TELEMETRY_DISABLED: '1'
+  # A bracket range such as [0-9a-f] matches more than sixteen characters in many locales (full-width and other-script digits,
+  # accented letters); the C locale makes every shape check below mean what it says.
+  LC_ALL: C
 jobs:
   build:
     if: github.repository == 'dev-james0723/PostRiff' && github.actor == 'dev-james0723'
@@ -105,11 +108,12 @@ jobs:
           ok() { echo "ok   $*"; }
           bad() { echo "FAIL $*"; fail=1; }
           if [[ "${VERCEL_TOKEN:-}" =~ ^[A-Za-z0-9_]{16,}$ ]]; then ok 'token: present and well-formed'; else bad 'token: missing, or it holds a space or line break'; echo 'RESULT: at least one check failed'; exit 1; fi
-          # Only a yes or no is printed: the value is a secret and the log is public.
-          # The dark twin's connect gate: one lower-case workspace UUID, or up to five separated by single commas (the tester workspace
-          # and the two Q-05 accounts); only the count is printed.
+          # The dark twin's connect gate: one lower-case workspace UUID, or up to three separated by single commas (the tester workspace
+          # and the two Q-05 accounts). The value is a secret and the log is public, so only a count and a short fingerprint are
+          # printed; the owner recomputes the fingerprint from the ids with:
+          #   printf '%s\n' <id> <id> <id> | LC_ALL=C sort | sha256sum | cut -c1-12
           uuid='[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}'
-          if [[ "${TESTER_WORKSPACE_ID:-}" =~ ^${uuid}(,${uuid}){0,4}$ ]]; then ok "tester workspace secret: set, UUID shape, $(( $(tr -cd ',' <<< "$TESTER_WORKSPACE_ID" | wc -c) + 1 )) id(s)"; else bad 'tester workspace secret: missing, or not one to five lower-case UUIDs separated by single commas (it must be an environment SECRET, not a variable)'; fi
+          if [[ "${TESTER_WORKSPACE_ID:-}" =~ ^${uuid}(,${uuid}){0,2}$ ]]; then ok "tester workspace secret: set, UUID shape, $(( $(tr -cd ',' <<< "$TESTER_WORKSPACE_ID" | wc -c) + 1 )) id(s), fingerprint $(tr ',' '\n' <<< "$TESTER_WORKSPACE_ID" | sort | sha256sum | cut -c1-12)"; else bad 'tester workspace secret: missing, or not one to three lower-case UUIDs separated by single commas (it must be an environment SECRET, not a variable)'; fi
           if vercel --version 2>&1 | grep -qxF '59.23.2'; then ok 'CLI version is 59.23.2'; else bad 'CLI version is not 59.23.2'; fi
           # In this CLI, --help exits with status 2; any other failure is a failure.
           help="$(vercel deploy --help 2>&1 || [ $? -eq 2 ])" || bad 'deploy --help failed'
@@ -177,14 +181,20 @@ jobs:
           [ -z "$(git status --porcelain)" ] || { echo 'working tree is not clean'; exit 1; }
           [ "$(grep -c '"deploymentEnabled": false' vercel.json)" = "1" ] || { echo 'vercel.json no longer keeps Git deployments off'; exit 1; }
           ! grep -q experimentalServices vercel.json || { echo 'vercel.json uses experimentalServices; the CLI could rewrite it before upload'; exit 1; }
+          gate_note=''
           case "$MODE" in
             d1)
               [ -n "${TESTER_WORKSPACE_ID:-}" ] || { echo 'the TESTER_WORKSPACE_ID secret is not set on the environment'; exit 1; }
               uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-              [[ "$TESTER_WORKSPACE_ID" =~ ^${uuid}(,${uuid}){0,4}$ ]] || { echo 'TESTER_WORKSPACE_ID is not one to five lower-case UUIDs separated by single commas'; exit 1; }
-              echo "::add-mask::$TESTER_WORKSPACE_ID"
+              [[ "$TESTER_WORKSPACE_ID" =~ ^${uuid}(,${uuid}){0,2}$ ]] || { echo 'TESTER_WORKSPACE_ID is not one to three lower-case UUIDs separated by single commas'; exit 1; }
+              # The whole value, then every id on its own line, are masked before anything else can print one. The ids travel in a
+              # here-string, which 'set -x' never echoes, so a traced run cannot show an id before its mask exists (a shell loop
+              # around printf would be traced with the id as its argument).
+              # shellcheck disable=SC2001
+              sed 's/^/::add-mask::/' <<< "${TESTER_WORKSPACE_ID}"$'\n'"${TESTER_WORKSPACE_ID//,/$'\n'}"
               IFS=, read -r -a gate_ids <<< "$TESTER_WORKSPACE_ID"
-              for gate_id in "${gate_ids[@]}"; do echo "::add-mask::$gate_id"; done
+              gate_note="dark gate: ${#gate_ids[@]} workspace id(s), fingerprint $(tr ',' '\n' <<< "$TESTER_WORKSPACE_ID" | sort | sha256sum | cut -c1-12)"
+              echo "$gate_note"
               gate="$TESTER_WORKSPACE_ID"; twin=dark ;;
             d2)
               gate='*'; twin=open ;;
@@ -223,4 +233,4 @@ jobs:
             echo 'note: the project internal default domain (login-protected) follows this build; rafii.io is not attached'
           fi
           { [ -z "$(git status --porcelain)" ] && [ ! -e .vercel ]; } || { echo 'the CLI changed the working tree'; exit 1; }
-          { echo "### ${twin} build of ${SHA}"; echo "URL: ${url}"; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "### ${twin} build of ${SHA}"; echo "URL: ${url}"; [ -z "$gate_note" ] || echo "$gate_note"; } >> "$GITHUB_STEP_SUMMARY"

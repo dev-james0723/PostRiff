@@ -4,6 +4,7 @@ Nothing leaves this machine: `gh` and `vercel` are stubs, `git` is the real one 
 bare repository (insteadOf). The stub `vercel` mimics what the pinned CLI (59.23.2) really does where that was read from its
 source or observed: `--version` prints two lines, `deploy --help` exits with status 2, progress lines carry no colon.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -184,7 +185,7 @@ def write_request(root, body, age=60):
     commit_all(req, when=time.time() - age)
 
 
-def run(script, root, extra_env=None, cwd_sub='work'):
+def run(script, root, extra_env=None, cwd_sub='work', flags=(), merge=False):
     path = os.path.join(root, 'step.sh')
     open(path, 'w').write('#!/usr/bin/env bash\n' + script)
     env = {
@@ -205,10 +206,13 @@ def run(script, root, extra_env=None, cwd_sub='work'):
         'GIT_CONFIG_VALUE_0': GITHUB_URL,
         'GIT_TERMINAL_PROMPT': '0',
     }
+    env.update({key: value for key, value in doc.get('env', {}).items() if key == 'LC_ALL'})  # the workflow's own job environment
     env.update(extra_env or {})
-    done = subprocess.run(['bash', path], cwd=os.path.join(root, cwd_sub), env=env, capture_output=True, text=True)
+    # merge=True keeps stdout and stderr in the order they were written, as the runner's log does; otherwise stderr follows stdout
+    streams = {'stdout': subprocess.PIPE, 'stderr': subprocess.STDOUT} if merge else {'capture_output': True}
+    done = subprocess.run(['bash', *flags, path], cwd=os.path.join(root, cwd_sub), env=env, text=True, **streams)
     out = open(os.path.join(root, 'out.txt')).read() if os.path.exists(os.path.join(root, 'out.txt')) else ''
-    return done.returncode, done.stdout + done.stderr, out
+    return done.returncode, (done.stdout or '') + (done.stderr or ''), out
 
 
 def read(root, name):
@@ -353,12 +357,45 @@ code, text, _ = pre(tester=UUID.upper())
 check('an upper-case tester secret fails the preflight', code != 0 and 'FAIL tester workspace secret' in text and UUID.upper() not in text)
 UUID_B, UUID_C = '11111111-2222-3333-4444-555555555555', '66666666-7777-8888-9999-aaaaaaaaaaaa'
 GATE3 = ','.join([UUID, UUID_B, UUID_C])
-ODD_GATES = (','.join([UUID] * 6), UUID + ',', ',' + UUID, UUID + ', ' + UUID_B, UUID + ',*', UUID + ',' + UUID_C.upper(),
-             UUID + '\n' + UUID_B, UUID + ';' + UUID_B, UUID + ',,' + UUID_B, '*', UUID + ' ' + UUID_B)
+UUID_D = 'dddddddd-eeee-4fff-8000-0123456789ab'
+# Not allowed: more than three ids, stray separators or spaces, a wildcard, upper case, and characters that some locales read as
+# hex digits or hyphens (full-width and Arabic-Indic digits, an accented letter, a Unicode hyphen, a zero-width space).
+ODD_GATES = (','.join([UUID, UUID_B, UUID_C, UUID_D]), ','.join([UUID] * 4), ','.join([UUID] * 5), ','.join([UUID] * 6),
+             UUID + ',', ',' + UUID, UUID + ', ' + UUID_B, UUID + ',*', UUID + ',' + UUID_C.upper(),
+             UUID + '\n' + UUID_B, UUID + ';' + UUID_B, UUID + ',,' + UUID_B, '*', UUID + ' ' + UUID_B,
+             UUID.replace('0', '０', 1), UUID.replace('0', '٠', 1), UUID.replace('a', 'à', 1),
+             UUID.replace('-', '‐', 1), UUID + '​', '﻿' + UUID)
+
+
+def fingerprint(*ids):
+    """What the owner recomputes with: printf '%s\\n' <id> <id> | LC_ALL=C sort | sha256sum | cut -c1-12"""
+    return hashlib.sha256(('\n'.join(sorted(ids)) + '\n').encode()).hexdigest()[:12]
+
+
+def runner_view(text, secret):
+    """The log as a reader sees it: the whole secret is masked from the first line; a mask line is consumed by the runner and
+    masks that value from then on, for the lines after it only."""
+    masks, shown = [secret], []
+    for line in text.splitlines():
+        if line.startswith('::add-mask::'):
+            masks.append(line[len('::add-mask::'):])
+            continue
+        for value in sorted((m for m in masks if m), key=len, reverse=True):
+            line = line.replace(value, '***')
+        shown.append(line)
+    return shown
+
+
 code, text, _ = pre(tester=GATE3)
-check('a gate list of three workspaces passes the preflight and prints only a count', code == 0 and 'ok   tester workspace secret: set, UUID shape, 3 id(s)' in text and UUID not in text and UUID_B not in text and UUID_C not in text, text[-400:])
-code, text, _ = pre(tester=','.join([UUID] * 5))
-check('a gate list of five workspaces passes the preflight', code == 0 and 'set, UUID shape, 5 id(s)' in text)
+check('a gate list of three workspaces passes the preflight and prints only a count and a fingerprint', code == 0 and f'ok   tester workspace secret: set, UUID shape, 3 id(s), fingerprint {fingerprint(UUID, UUID_B, UUID_C)}' in text and UUID not in text and UUID_B not in text and UUID_C not in text, text[-400:])
+for count in (1, 2):
+    ids = [UUID, UUID_B][:count]
+    code, text, _ = pre(tester=','.join(ids))
+    check(f'a gate list of {count} workspace(s) passes the preflight, with its fingerprint', code == 0 and f'set, UUID shape, {count} id(s), fingerprint {fingerprint(*ids)}' in text, text[-300:])
+check('the fingerprint does not depend on the order of the list', fingerprint(UUID, UUID_B, UUID_C) == fingerprint(UUID_C, UUID, UUID_B))
+shell_fp = subprocess.run(['bash', '-c', "printf '%s\\n' \"$@\" | LC_ALL=C sort | sha256sum | cut -c1-12", 'x', UUID_C, UUID, UUID_B], capture_output=True, text=True).stdout.strip()
+check('the documented shell command gives the same fingerprint', shell_fp == fingerprint(UUID, UUID_B, UUID_C), shell_fp)
+check('the workflow runs every step in the C locale', doc.get('env', {}).get('LC_ALL') == 'C')
 for odd in ODD_GATES:
     code, text, _ = pre(tester=odd)
     check(f'an odd gate list fails the preflight ({odd[:14]!r}...)', code != 0 and 'FAIL tester workspace secret' in text and UUID not in text and UUID_B not in text)
@@ -385,14 +422,14 @@ for token in ('', 'short', 'tok_0123456789abcdef0123\n', 'tok_0123456789abcdef01
 print('build step')
 
 
-def build(mode, cap='10000', tester=UUID, rc_json=None, token='tok_0123456789abcdef0123', wrong_head=False, dirty=False, extra=None):
+def build(mode, cap='10000', tester=UUID, rc_json=None, token='tok_0123456789abcdef0123', wrong_head=False, dirty=False, extra=None, xtrace=False):
     root, sha = workspace(**({'rc_json': rc_json} if rc_json is not None else {}))
     with_rc(root, sha)
     if dirty:
         open(os.path.join(root, 'work', 'rc', 'stray.txt'), 'w').write('x')
     env = {'VERCEL_TOKEN': token, 'MODE': mode, 'SHA': ('0' * 40) if wrong_head else sha, 'TESTER_WORKSPACE_ID': tester, 'CAP': cap}
     env.update(extra or {})
-    code, text, _ = run(BUILD, root, env)
+    code, text, _ = run(BUILD, root, env, flags=('-x',) if xtrace else (), merge=True)
     result = (code, text, read(root, 'args.log'), read(root, 'calls.log'), read(root, 'summary.md'), sha)
     shutil.rmtree(root)
     return result
@@ -415,7 +452,21 @@ check('d1 with a wildcard tester id is refused', build('d1', tester='*')[0] != 0
 code, text, args, *_ = build('d1', tester=GATE3)
 check('d1 builds with a gate list of three workspaces, in the given order', code == 0 and f'--env POSTRIFF_DISCORD_CONNECT_WORKSPACES={GATE3} ' in args and '--meta rafiiTwin=dark' in args, args)
 check('d1 masks the whole gate list and every id in it', all(f'::add-mask::{x}' in text for x in (GATE3, UUID, UUID_B, UUID_C)), text[-600:])
-check('d1 builds with a gate list of five workspaces', build('d1', tester=','.join([UUID] * 5))[0] == 0)
+lines = text.splitlines()
+mask_at = [i for i, line in enumerate(lines) if line.startswith('::add-mask::')]
+note_at = [i for i, line in enumerate(lines) if line.startswith('dark gate:')]
+check('d1 prints an id only on a mask line', all(line.startswith('::add-mask::') for line in lines if any(x in line for x in (UUID, UUID_B, UUID_C))), text[-400:])
+check('d1 masks before it prints anything else (the first output lines are the masks, then the count)', mask_at == list(range(len(mask_at))) and len(mask_at) == 4 and note_at and note_at[0] > mask_at[-1], repr(lines[:8]))
+check('d1 prints how many ids the dark gate holds and their fingerprint', f'dark gate: 3 workspace id(s), fingerprint {fingerprint(UUID, UUID_B, UUID_C)}' in text, text[-500:])
+check('d1 writes the same count and fingerprint to the step summary', f'dark gate: 3 workspace id(s), fingerprint {fingerprint(UUID, UUID_B, UUID_C)}' in build('d1', tester=GATE3)[4])
+check('d2 prints no dark gate line and none in the summary', 'dark gate' not in build('d2', tester='')[1] and 'dark gate' not in build('d2', tester='')[4])
+for ids in ([UUID], [UUID, UUID_B], [UUID, UUID_B, UUID_C]):
+    code, text, *_ = build('d1', tester=','.join(ids), xtrace=True)
+    shown = '\n'.join(runner_view(text, ','.join(ids)))
+    check(f'a traced (bash -x) d1 build with {len(ids)} id(s) shows no id to a reader of the log', code == 0 and not any(x in shown for x in ids), shown[-600:])
+traced_old_pattern = '+ echo ::add-mask::' + UUID + '\n+ echo ::add-mask::' + UUID_B
+check('the log model catches the old pattern (a traced echo of a single id before its mask exists)', UUID in '\n'.join(runner_view(traced_old_pattern, UUID + ',' + UUID_B)))
+check('d1 refuses four ids', build('d1', tester=','.join([UUID, UUID_B, UUID_C, UUID_D]))[0] != 0)
 for odd in ODD_GATES:
     check(f'd1 with an odd gate list is refused ({odd[:14]!r}...)', build('d1', tester=odd)[0] != 0)
 for odd in ('', 'd3', 'preflight', 'D1'):
