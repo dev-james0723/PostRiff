@@ -370,6 +370,55 @@ def p5_a_reconnect_naming_another_server_takes_no_free_cap_slot():
                 os.environ[key] = value
 
 
+PROJECTION_OWNERS = """SELECT 'table ' || c.relname AS object, r.rolname AS owner, r.rolsuper, r.rolbypassrls
+  FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner
+ WHERE c.relnamespace = 'public'::regnamespace AND c.relname = 'pr_discord_worker_projection'
+UNION ALL
+SELECT 'function ' || p.proname, r.rolname, r.rolsuper, r.rolbypassrls
+  FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
+ WHERE p.pronamespace = 'public'::regnamespace
+   AND p.proname IN ('pr_discord_projection_refresh', 'pr_discord_workspace_projection_trigger')"""
+PROJECTION_FUNCTIONS = ('pr_discord_projection_refresh(uuid,jsonb,bigint)', 'pr_discord_queue_number(jsonb)', 'pr_discord_workspace_projection_trigger()')
+
+
+@scenario
+def a10_the_projection_owner_must_bypass_row_level_security():
+    """Migration 126's SECURITY DEFINER trigger writes a FORCE-RLS table: the same query as docs/discord-custody-20261023/G2A-NOTES.md."""
+    with psycopg.connect(DSN, autocommit=True) as db:  # the harness loads rls.sql only; migration 126 brings its own BEGIN/COMMIT
+        if db.execute("SELECT to_regclass('public.pr_discord_worker_projection')").fetchone()[0] is None:
+            db.execute((ROOT / 'migrations/postriff/126_discord_worker_projection.sql').read_text())
+    with connection() as db:
+        rows = db.execute(PROJECTION_OWNERS).fetchall()
+    check('A-10 the projection table and both definer functions are owned by a role that bypasses RLS', len(rows) == 3 and all(r[2] or r[3] for r in rows), rows)
+    w = World()
+    with connection() as db:
+        db.execute('DROP ROLE IF EXISTS g2a_nobypass')
+        db.execute('CREATE ROLE g2a_nobypass NOLOGIN')
+        db.execute('GRANT USAGE ON SCHEMA public TO g2a_nobypass')
+        db.execute('ALTER TABLE public.pr_discord_worker_projection OWNER TO g2a_nobypass')
+        for function in PROJECTION_FUNCTIONS:
+            db.execute(f'ALTER FUNCTION public.{function} OWNER TO g2a_nobypass')
+    try:
+        with connection() as db:
+            flagged = [r for r in db.execute(PROJECTION_OWNERS).fetchall() if not (r[2] or r[3])]
+        check('A-10 the diagnostic flags the objects of an owner without BYPASSRLS', len(flagged) == 3, flagged)
+        failure = None
+        try:
+            w.sql('UPDATE public.pr_workspaces SET revision = revision + 1 WHERE id = %s', w.workspace)
+        except psycopg.errors.Error as error:
+            failure = error
+        check('A-10 with such an owner EVERY workspace update fails (what the check guards against)', failure is not None and 'row-level security' in str(failure), str(failure)[:120])
+    finally:
+        with connection() as db:
+            db.execute('ALTER TABLE public.pr_discord_worker_projection OWNER TO postriff_test')
+            for function in PROJECTION_FUNCTIONS:
+                db.execute(f'ALTER FUNCTION public.{function} OWNER TO postriff_test')
+            db.execute('REVOKE USAGE ON SCHEMA public FROM g2a_nobypass')
+            db.execute('DROP ROLE g2a_nobypass')
+    w.sql('UPDATE public.pr_workspaces SET revision = revision + 1 WHERE id = %s', w.workspace)
+    check('A-10 restored, workspace updates work again', True)
+
+
 failed = [name for name, ok, _ in CHECKS if not ok]
 print('RAFII_G2A_CUSTODY_JSON ' + json.dumps({'checks': len(CHECKS), 'failed': failed}))
 sys.exit(1 if failed or not CHECKS else 0)
