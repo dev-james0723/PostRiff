@@ -26,6 +26,7 @@ import discord_lane_fixture as F
 from postriff_phase2.discord import worker as discord_worker
 from postriff_phase2.discord.rate_limits import SharedPostgresBudget
 
+SETTLED = ('verified', 'held', 'uncertain', 'failed', 'canceled')  # nothing more happens without a person
 FROZEN_SOURCE = F.ROOT / 'tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt'
 FROZEN_SHA256 = '8fdfd6e3dc461a88a9d4784a587491e22ada54b27585480a41609fb8c64f76de'  # pragma: allowlist secret -- content hash of the pinned source
 
@@ -86,18 +87,35 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual(len(self.wire.requests(method='POST')), expected)
         return found
 
+    def drain(self, worker, loops, *, seconds, rounds=4):
+        """The lane as consecutive cron minutes: `loops` shards run, and run again while any post still waits to
+        be sent or verified (at most `rounds` times). A slow runner may need another minute for what a fast one
+        finishes in one, as production would; the properties are checked on the outcome, not on how many minutes
+        it took. Returns every loop's result."""
+        every = []
+        for _ in range(rounds):
+            results, failures = F.run_lanes(worker, loops, seconds=seconds)
+            self.assertEqual(failures, [])
+            every.extend(results)
+            if all(job['state'] in SETTLED for job in F.jobs(self.cluster).values()):
+                break
+        return every
+
     # (a) exactly once with many loops ---------------------------------------------------------------------------
 
     def test_many_loops_create_every_post_exactly_once(self):
         tenants = [F.Tenant(n) for n in range(24)]
         worker = self.start(tenants, 5)
-        results, failures = F.run_lanes(worker, 8, seconds=60)
-        self.assertEqual(failures, [])
+        results = self.drain(worker, 8, seconds=60)
         self.assert_each_created_once_and_verified(120)
         self.assertEqual(sum(r['counters']['posted'] for r in results), 120)
         self.assertEqual(sum(r['counters']['verified'] for r in results), 120)
-        self.assertEqual({r['stoppedBy'] for r in results}, {'idle'})
         self.assertEqual(self.wire.route429, 0)
+        # Drained, every loop stops at once as idle, claiming nothing.
+        idle, failures = F.run_lanes(worker, 8, seconds=60)
+        self.assertEqual(failures, [])
+        self.assertEqual({r['stoppedBy'] for r in idle}, {'idle'})
+        self.assertEqual(sum(r['counters']['claimed'] for r in idle), 0)
 
     def test_loops_racing_on_one_workspace_send_one_post_at_a_time(self):
         tenant = F.Tenant(0)
@@ -111,8 +129,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 live.append(sum(1 for job in state['phase2']['jobs']
                                 if job.get('leaseOwner') and job.get('leaseUntil', 0) > time.time()))
         self.wire.after = watch
-        results, failures = F.run_lanes(worker, 6, seconds=90)
-        self.assertEqual(failures, [])
+        self.drain(worker, 6, seconds=90)
         self.assert_each_created_once_and_verified(10)
         self.assertEqual(set(live), {1}, 'at most one live Discord lease per workspace, whatever the loop count')
 
@@ -183,27 +200,37 @@ class ParallelLaneOnPostgres(unittest.TestCase):
 
     # (b) the shared request coordinator caps every loop together ------------------------------------------------
 
+    # Requests per one-second window. Low enough that twelve loops want more on any runner, a slow one too: the
+    # cap must bind for the test to say anything, and the uncapped control must still exceed twice it.
+    RATE = 3
+
     def rate_run(self, capacity):
+        """Twelve loops for twelve seconds over 80 posts. Returns the loops' results and how often a loop found
+        the application window spent and waited for the next one (outlook or create-permit waits)."""
         tenants = [F.Tenant(n) for n in range(40)]
-        worker = self.start(tenants, 2, capacity=capacity, ceiling=2 * 10)
-        started = time.monotonic()
-        F.run_lanes(worker, 12, seconds=12)
-        return time.monotonic() - started
+        worker = self.start(tenants, 2, capacity=capacity, ceiling=2 * self.RATE)
+        results, failures = F.run_lanes(worker, 12, seconds=12)
+        self.assertEqual(failures, [])
+        # Each loop ran on its own twelve-second budget and stopped in order (the loop's timing itself is proven
+        # on a scripted clock in test_discord_parallel_lane.TheLoop; a wall-clock bound here measures the runner).
+        self.assertEqual({r['budget']['maxSeconds'] for r in results}, {12.0})
+        self.assertLessEqual({r['stoppedBy'] for r in results}, {'time_budget', 'rate_wait', 'idle'})
+        return results, sum(r['counters']['rateWaits'] + r['counters']['permitWaits'] for r in results)
 
     def test_the_coordinator_caps_the_request_rate_across_all_loops(self):
-        elapsed = self.rate_run(10)
+        _, waits = self.rate_run(self.RATE)
         calls = self.wire.calls
-        self.assertGreater(len(calls), 60, 'the run was busy enough to meet the cap')
+        self.assertGreater(waits, 0, 'the run was busy enough to meet the cap')
         # Fixed one-second windows: any trailing second holds at most two windows' worth.
-        self.assertLessEqual(self.wire.peak_second, 20)
+        self.assertLessEqual(self.wire.peak_second, 2 * self.RATE)
         self.assertEqual(self.wire.over_ceiling, 0)
         span = calls[-1][0] - calls[0][0]
-        self.assertLessEqual(len(calls), 10 * (span + 2), 'never above the policy on average')
+        self.assertLessEqual(len(calls), self.RATE * (span + 2), 'never above the policy on average')
         self.assertEqual(self.wire.duplicates(), 0)
-        self.assertLess(elapsed, 12 + 30)
 
     def test_control_the_same_run_exceeds_that_ceiling_when_the_policy_allows_it(self):
-        self.rate_run(1000)
+        _, waits = self.rate_run(1000)
+        self.assertEqual(waits, 0, 'no loop waited for an application window')
         self.assertGreater(self.wire.over_ceiling, 0, 'so the capped run above is the coordinator doing the work')
 
     def admissions(self, reserve, count, offset=0):
@@ -266,9 +293,9 @@ class ParallelLaneOnPostgres(unittest.TestCase):
             original = hosted_worker.due_workspaces_sql
             replaced = lambda *a, **k: original(*a, **k).replace('ORDER BY hint.last_claimed_at,w.id', 'ORDER BY w.id')
             with patch.object(hosted_worker, 'due_workspaces_sql', replaced):
-                F.run_lanes(worker, loops, seconds=90)
+                self.drain(worker, loops, seconds=90)
         else:
-            F.run_lanes(worker, loops, seconds=90)
+            self.drain(worker, loops, seconds=90)
         return tenants, self.claim_order()
 
     def claim_order(self):
@@ -310,7 +337,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         # Six workspaces connected to the same server channel: the limit is the channel's, across tenants.
         tenants = [F.Tenant(n, guild='6100000', channel='7100000') for n in range(6)]
         worker = self.start(tenants, 3)
-        F.run_lanes(worker, 6, seconds=90)
+        self.drain(worker, 6, seconds=90)
         self.assertEqual(self.wire.route429, 0, 'no create was refused by the channel limit')
         times = sorted(at for created in self.wire.creates.values() for at, _, _ in created)
         self.assertEqual(len(times), 18)
@@ -409,7 +436,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
                            (json.dumps(state), workspace))
         self.wire.after = None
-        F.run_lanes(worker, 4, seconds=60)
+        self.drain(worker, 4, seconds=60)
         # A hold also blocks every reserved-but-unused create permit (existing rule). A loop that was between
         # sealing and sending records its post as uncertain: nothing was sent, and it waits for manual review.
         found = F.jobs(self.cluster).values()
@@ -470,7 +497,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         return seen[0]
 
     def test_a_global_429_pauses_every_loop_without_a_retry_storm(self):
-        started = self.embargo_run(lambda worker: F.run_lanes(worker, 4, seconds=40))
+        started = self.embargo_run(lambda worker: self.drain(worker, 4, seconds=40))
         during = [call for call in self.wire.calls if started < call[0] < started + 3.9]
         self.assertLessEqual(len(during), 3, 'inside the embargo only requests already admitted may still arrive')
         found = F.jobs(self.cluster).values()
@@ -580,7 +607,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         tracker = F.ConnectionTracker()
         tenants = [F.Tenant(n) for n in range(12)]
         worker = self.start(tenants, 2, tracker=tracker)
-        F.run_lanes(worker, 6, seconds=60)
+        self.drain(worker, 6, seconds=60)
         self.assert_each_created_once_and_verified(24)
         self.assertEqual(tracker.thread_peak, 1)
         self.assertLessEqual(tracker.peak, 6)
@@ -721,8 +748,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
             self.assertGreater(warning['oldestEligibleLagSeconds'], 600)
             self.assertEqual((warning['laneOwnsDiscord'], warning['laneBlocker'], warning['depth']), (True, None, 32))
         self.assertEqual(self.wire.calls, [], 'nothing was sent during the gap')
-        results, failures = F.run_lanes(worker, 1, seconds=90)  # the crons arrive again
-        self.assertEqual(failures, [])
+        self.drain(worker, 1, seconds=90)  # the crons arrive again
         self.assert_each_created_once_and_verified(32)
         # The backlog drains fairly: the rotation's first two rounds cover every workspace (see the fairness test).
         self.assert_rotation(tenants, self.claim_order())
@@ -755,8 +781,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP,
                                                      policy=F.policy(self.cluster.now(), capacity=200))
         self.skip_push_back()
-        results, failures = F.run_lanes(worker, 4, seconds=60)
-        self.assertEqual(failures, [])
+        self.drain(worker, 4, seconds=60)
         stuck = []
         for job in F.jobs(self.cluster).values():
             creates = len(self.wire.creates.get(F.nonce(job), []))
@@ -821,7 +846,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 try:
                     _, failures = F.run_lanes(self.worker, 2, seconds=6)
                     self.assertEqual(failures, [])
-                    deadline = time.monotonic() + 60
+                    deadline = time.monotonic() + 240  # a wait for an outcome: it ends as soon as all are verified
                     while (time.monotonic() < deadline
                            and {job['state'] for job in F.jobs(self.cluster).values()} != {'verified'}):
                         time.sleep(.5)
@@ -852,7 +877,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                                  'a live lane lease is left alone')
                 self.assertEqual(len(self.wire.calls), calls, 'and so is its workspace: one live lease each')
                 time.sleep(3.5)  # the dead loop's lease expires
-                deadline = time.monotonic() + 45
+                deadline = time.monotonic() + 180  # a wait for an outcome: it ends as soon as it is reached
                 while time.monotonic() < deadline:
                     frozen.tick(10, 20)
                     found = F.jobs(self.cluster)
@@ -909,8 +934,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         on = self.minute(worker)
         self.assertTrue(on['discordParallelLane'])
         self.assertEqual((on['processed'], len(self.wire.calls)), (0, calls), 'the minute cron claims no Discord')
-        _, failures = F.run_lanes(worker, 3, seconds=60)
-        self.assertEqual(failures, [])
+        self.drain(worker, 3, seconds=60)
         self.assert_each_created_once_and_verified(20)
 
 
