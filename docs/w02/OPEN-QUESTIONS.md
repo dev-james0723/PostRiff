@@ -39,7 +39,10 @@ reviewer.
 **Q4. What the operator hold does to a post mid-handoff.** Setting the hold also blocks every reserved-but-unused create
 permit (existing coordinator rule). A loop that had sealed a post's intent but not yet sent it records the post as
 'uncertain' though nothing was sent; it then waits for manual review [measured: test (e), at most one per loop]. Accept
-(the hold is an emergency brake), or have such a post recorded as provably unsent (a protocol change).
+(the hold is an emergency brake), or have such a post recorded as provably unsent (a protocol change). Since changed, for
+the hold and for an embargo alike (AS-BUILT.md, "A permit blocked after sealing"): when consume() refuses the blocked
+permit before any transport, the post is proven unsent and released; a process that dies between sealing and sending
+still leaves its post 'uncertain'.
 
 **Q5. How many shards, and their cost.** The branch adds 12 cron entries (`/api/cron/discord-worker/0` to `/11`), so
 Vercel starts 12 invocations every minute whether or not there is work: about 17,000 a day, 520,000 a month. With the flag

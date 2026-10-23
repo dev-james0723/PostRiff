@@ -489,7 +489,9 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.wire.after = None
         self.drain(worker, 4, seconds=60)
         # A hold also blocks every reserved-but-unused create permit (existing rule). A loop that was between
-        # sealing and sending records its post as uncertain: nothing was sent, and it waits for manual review.
+        # sealing and sending used to record its post as uncertain with nothing sent; consume() now refuses the
+        # blocked permit before any transport and the post is released unsent and sent once (section (m)). The
+        # bounds below hold either way.
         found = F.jobs(self.cluster).values()
         stopped = [job for job in found if job['state'] != 'verified']
         self.assertLessEqual(len(stopped), 4)
@@ -1059,6 +1061,113 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 self.assertEqual((result['status']['ready'], result['status']['blocker']), (False, reason))
                 self.assertEqual((counted.connections, counted.statements), (0, []))
         self.repair()
+
+    # (m) an embargo seen while posts are sealed ---------------------------------------------------------------------
+
+    def global_429(self, retry):
+        """Discord answers another bot request with a global 429, observed by the coordinator as in production: the
+        bot's global row is embargoed and every reserved or sealed permit of the bot is blocked (observe()).
+        Returns (when it was observed, the end of the embargo), both epoch seconds."""
+        provider = self.hosted.providers['discord']
+        limiter, identity = provider.rate_limiter, provider._rate_identity('bot')
+        permit = limiter.reserve_read('GET', '/guilds/6900999', identity=identity)
+        seen = time.time()
+        limiter.observe(permit, {'status': 429, 'headers': {'retry-after': str(retry), 'x-ratelimit-global': 'true',
+                                                            'x-ratelimit-scope': 'global'},
+                                 'body': {'message': 'You are being rate limited.', 'retry_after': retry, 'global': True}})
+        with self.cluster.connect(autocommit=True) as db:
+            until = db.execute("SELECT extract(epoch from blocked_until)::double precision FROM public.pr_discord_rate_state "
+                               "WHERE kind='global'").fetchone()[0]
+        return seen, until
+
+    def test_a_global_429_seen_while_posts_are_sealed_sends_each_once_after_the_embargo(self):
+        """Three loops each hold a sealed post when a global 429 is observed. consume() refuses each blocked permit
+        before any transport, the worker proves the intent unsent from the admission row and releases the post for
+        the embargo's remaining time: none is left uncertain, and each is created exactly once, after the embargo."""
+        tenants = [F.Tenant(n) for n in range(3)]
+        worker = self.start(tenants, 1)
+        limiter = self.hosted.providers['discord'].rate_limiter
+        real, lock, sealed, embargo, first = limiter.consume, threading.Lock(), threading.Barrier(3), [], []
+
+        def consume(permit, method, path, **kwargs):
+            if permit.binding_hash:
+                with lock:
+                    waits = len(first) < 3
+                    first.append(permit.id)
+                if waits:  # the first three creates: every loop has sealed its post
+                    try:
+                        sealed.wait(timeout=30)
+                    except threading.BrokenBarrierError:
+                        pass
+                    with lock:
+                        if not embargo:
+                            embargo.append(self.global_429(retry=3))
+            return real(permit, method, path, **kwargs)
+        with patch.object(limiter, 'consume', consume):
+            self.drain(worker, 3, seconds=40)
+        found = self.assert_each_created_once_and_verified(3)
+        (seen, until), = embargo
+        during = [wall for times in self.wire.creates.values() for _, _, wall in times if seen <= wall < until]
+        self.assertEqual(during, [], 'no create reached Discord during the embargo')
+        proofs = [[entry['unsentProof'] for entry in job.get('discordUnsentDispatches', [])] for job in found.values()]
+        released = [job for job in found.values()
+                    if 'embargo_blocked_admission' in [entry['unsentProof'] for entry in job.get('discordUnsentDispatches', [])]]
+        self.assertEqual(len(released), 3, proofs)
+        for job in released:
+            self.assertIn('A Discord embargo blocked the sealed permit before it was consumed; no POST was started; '
+                          'intent archived before safe rate wait', [event['message'] for event in job['events']])
+
+    def test_control_a_create_whose_transport_ran_and_failed_stays_uncertain(self):
+        """The same embargo, observed while one create is inside the transport, which then fails: the request may
+        have reached Discord, so that post stays uncertain for reconciliation and is never sent again."""
+        tenants = [F.Tenant(n) for n in range(2)]
+        worker = self.start(tenants, 1)
+        hit = []
+
+        def fail(method, path):
+            if method == 'POST' and not hit:
+                hit.append(self.global_429(retry=3))
+                raise ConnectionResetError('synthetic: the connection dropped after the request was handed over')
+        self.wire.fail = fail
+        self.drain(worker, 2, seconds=40)
+        found = F.jobs(self.cluster)
+        self.assertEqual(sorted(job['state'] for job in found.values()), ['uncertain', 'verified'])
+        lost = next(job for job in found.values() if job['state'] == 'uncertain')
+        self.assertEqual(self.wire.creates.get(F.nonce(lost), []), [])
+        self.assertEqual(len(self.wire.requests(method='POST')), 2, 'its one transport call, and the other post')
+        self.assertEqual(len(lost['discordDispatchIntents']), 1, 'its sealed intent stays for reconciliation')
+        self.assertFalse(lost.get('discordUnsentDispatches'))
+        self.assertEqual(self.wire.duplicates(), 0)
+
+    def test_control_a_loop_killed_between_seal_and_post_leaves_its_post_uncertain(self):
+        """A process that dies after sealing is not the refusal above, even when an embargo blocked its permit too:
+        recovery after its lease expires keeps the sealed intent for reconciliation (existing rule), never resends."""
+        worker = self.start([F.Tenant(0)], 2)
+        limiter = self.hosted.providers['discord'].rate_limiter
+        real, killed = limiter.consume, []
+
+        def consume(permit, method, path, **kwargs):
+            if permit.binding_hash and not killed:
+                killed.append(self.global_429(retry=1))
+                raise WorkerDied()
+            return real(permit, method, path, **kwargs)
+        with patch.object(discord_worker, 'LEASE_SECONDS', 3):
+            with patch.object(limiter, 'consume', consume):
+                _, failures = F.run_lanes(worker, 1, seconds=30)
+            self.assertEqual([type(error) for _, error in failures], [WorkerDied])
+            time.sleep(3.5)  # the dead loop's lease expires
+            self.drain(worker, 1, seconds=30)
+        found = F.jobs(self.cluster)
+        self.assertEqual(sorted(job['state'] for job in found.values()), ['uncertain', 'verified'])
+        dead = next(job for job in found.values() if job['state'] == 'uncertain')
+        self.assertEqual(self.wire.creates.get(F.nonce(dead), []), [])
+        self.assertIn('Expired Discord intent requires reconciliation; never repost',
+                      [event['message'] for event in dead['events']])
+        with self.cluster.connect(autocommit=True) as db:
+            blocked = db.execute("SELECT count(*) FROM public.pr_discord_request_admissions WHERE is_publish "
+                                 "AND publication_id=%s AND state='blocked' AND sent_at IS NULL", (dead['id'],)).fetchone()[0]
+        self.assertEqual(blocked, 1, 'its permit was blocked unsent, and still only an in-call refusal proves that')
+        self.assertEqual(self.wire.duplicates(), 0)
 
     # (l) the lag warning sees every workspace -----------------------------------------------------------------------
 
