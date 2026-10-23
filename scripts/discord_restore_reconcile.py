@@ -50,7 +50,6 @@ Live use (`reconcile --live`) needs the bot token in an environment variable (ne
 database's connection string in another; agents must not run it against Production without the owner's approval.
 """
 import argparse
-import copy
 import hashlib
 import json
 import os
@@ -58,7 +57,7 @@ import re
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 VERSION = 1
 MARKER = 'restoreReconciliation'

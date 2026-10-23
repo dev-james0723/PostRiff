@@ -24,10 +24,8 @@ Results: --results (JSON). Run it under `nice`; it uses a few hundred MB under -
 """
 import argparse
 import copy
-import hashlib
 import json
 import os
-import random
 import shutil
 import subprocess
 import sys
@@ -35,7 +33,6 @@ import threading
 import time
 import traceback
 from collections import Counter, defaultdict
-from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 

@@ -454,8 +454,9 @@ class RestoreProcedureOnPostgres(unittest.TestCase):
                 self.assertFalse(T.lift_hold(db)['held'])
             worker = F.base_worker(restored, F.social(restored, tenants, wire, capacity=200))
             F.run_lanes(worker, 2, seconds=20)
-            deadline = time.time() + 60
-            while time.time() < deadline and any(j['state'] == 'scheduled' for j in F.jobs(restored).values()):
+            deadline = time.time() + 120
+            waiting = ('scheduled', 'uncertain', 'provider_accepted')  # a create or a read-back still to come
+            while time.time() < deadline and any(j['state'] in waiting for j in F.jobs(restored).values()):
                 F.run_lanes(worker, 2, seconds=20)
                 time.sleep(1)
             final = F.jobs(restored)
