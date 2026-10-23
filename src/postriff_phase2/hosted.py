@@ -230,6 +230,9 @@ class PostgresWorkspaceRepository:
         if action.startswith(('voice_sample', 'brand_brain_')) or action == 'voice_profile_analyze':
             audit_event = lambda state: ('voice.' + action, payload.get('sourceId', ''), {'requestId': payload.get('requestId'), 'activeRevision': state.get('speaker', {}).get('activeRevision')})
         after, before = None, None
+        if action == manual_drafts.ACTION:
+            # A person saves a handful of drafts a minute; the same transaction that saves them counts them (G2E-C-03).
+            before = lambda cur, state, principal: throttle(cur, f'manual-draft:{workspace_id}', 30, 60)
         if action == 'p2_review':
             from .mastodon_media import prepare_library
             payload = copy.deepcopy(payload)
