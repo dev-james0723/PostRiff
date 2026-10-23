@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "title": "W-02 Discord capacity standard (gate G5), machine-readable",
+  "source": "docs/launch-20261023-discord/RELEASE-DEFINITION-v2.md section 4 (proposed 2026-10-23); owner reply 13, relayed by the Release Captain on 2026-10-23: accepted provisionally as the RC2 stress-test threshold. The normalLoad block is the Release Captain's draft of the same day.",
+  "status": "provisional (owner reply 13)",
+  "rules": [
+    "A measure is PASS only when this run measured it and it meets its limit. Anything not measured is NOT MEASURED, never PASS.",
+    "Lateness is the mock Discord's own create time minus the post's due time; a post never sent counts as infinitely late.",
+    "A miss is answered by optimising requests per post, scheduling or throughput, never by lowering a limit here.",
+    "The 25 requests per second application ceiling is not raised without a new review. A run with a higher ceiling is information only and its receipt says so.",
+    "Negative-control scenarios (Ndup, Nmisroute, Nceiling) are expected to trip the counters; their verdict is whether the counter fired."
+  ],
+  "measures": [
+    {"id": "lateness_median", "name": "Lateness from T, median (never sent = infinite)", "path": "lateness.allPostsUnsentInfinite.median", "scale": 0.016666666666666666, "op": "<=", "limit": 12, "unit": "min", "appliesTo": ["S1", "S2", "S3"]},
+    {"id": "lateness_p95", "name": "Lateness from T, 95th percentile", "path": "lateness.allPostsUnsentInfinite.p95", "scale": 0.016666666666666666, "op": "<=", "limit": 25, "unit": "min", "appliesTo": ["S1", "S2", "S3"]},
+    {"id": "lateness_max", "name": "Lateness from T, maximum (the approval lives 60 min)", "path": "lateness.allPostsUnsentInfinite.max", "scale": 0.016666666666666666, "op": "<=", "limit": 40, "unit": "min", "appliesTo": ["S1", "S2", "S3"]},
+    {"id": "duplicates_nonce", "name": "Duplicate creates, by nonce", "path": "duplicates.byNonce", "op": "==", "limit": 0, "notFor": ["Ndup", "Nmisroute", "Nceiling"]},
+    {"id": "duplicates_post", "name": "Duplicate creates, by post id in the text", "path": "duplicates.byPostId", "op": "==", "limit": 0, "notFor": ["Ndup", "Nmisroute", "Nceiling"]},
+    {"id": "late_sends", "name": "Creates after the post's approval expired", "path": "sendsAfterApprovalExpiry", "op": "==", "limit": 0, "notFor": ["Ndup", "Nmisroute", "Nceiling"]},
+    {"id": "policy_ceiling", "name": "Requests above the 25/s policy ceiling in any trailing second (all credentials, as section 4 is written)", "path": "ceiling.aboveTwentyFiveAll", "op": "==", "limit": 0, "notFor": ["Ndup", "Nmisroute", "Nceiling"]},
+    {"id": "discord_global", "name": "Bot requests above Discord's 50/s global limit in any trailing second", "path": "ceiling.aboveFiftyBot", "op": "==", "limit": 0, "notFor": ["Ndup", "Nmisroute", "Nceiling"]},
+    {"id": "discord_route_creates", "name": "Create 429s from Discord's per-channel limit (5 per 5 s), not injected", "path": "requests.organicCreate429", "op": "==", "limit": 0, "notFor": ["Ndup", "Nmisroute", "Nceiling"]},
+    {"id": "discord_global_429", "name": "Global 429s received from Discord, not injected", "path": "requests.organicGlobal429", "op": "==", "limit": 0, "notFor": ["Ndup", "Nmisroute", "Nceiling"]},
+    {"id": "invalid_requests", "name": "Invalid requests (401, 403, 429) in the busiest 10 minutes, within the reviewed policy budget of 2,000 (Discord bans at 10,000)", "path": "requests.invalidPeak10Minutes", "op": "<=", "limit": 2000, "notFor": ["Ndup", "Nmisroute", "Nceiling"]},
+    {"id": "fairness_small", "name": "Every workspace with at most 5 posts fully sent within 15 min while the hot workspace has 3,000 due", "path": "fairness.smallCompletionAfterT.max", "scale": 0.016666666666666666, "op": "<=", "limit": 15, "unit": "min", "appliesTo": ["S2"]},
+    {"id": "held_or_lost", "name": "Posts held or lost (not verified at the mock) below 13,000 due in one minute", "path": "outcomes.notVerified", "op": "==", "limit": 0, "appliesTo": ["S1", "S2"]},
+    {"id": "held_bounded", "name": "Posts held at 13,000 or more due in one minute (a stated, bounded number)", "path": "outcomes.notVerified", "op": "report", "appliesTo": ["S3"]},
+    {"id": "db_peak", "name": "Peak pooled connections in use or waited for, as a share of the pool (at most 70%)", "path": "database.poolerDemandShare", "op": "<=", "limit": 0.7, "notFor": ["Ndup", "Nmisroute", "Nceiling", "Fdb"]},
+    {"id": "statement_timeouts", "name": "Statement timeouts (SQLSTATE 57014)", "path": "database.statementTimeouts", "op": "==", "limit": 0, "notFor": ["Ndup", "Nmisroute", "Nceiling", "Fdb"]},
+    {"id": "drain", "name": "Drain time, T to the last verified post (target about 25 min for 5,000)", "path": "drain.lastVerifiedAtMockAfterT", "scale": 0.016666666666666666, "op": "report", "unit": "min", "appliesTo": ["S1", "S2", "S3"]},
+    {"id": "requests_per_post", "name": "Requests per verified post, measured at the mock (the plan assumed 2; section 4 assumed 6)", "path": "requests.perVerifiedPost", "op": "report"}
+  ],
+  "normalLoad": {
+    "status": "draft (Release Captain, 2026-10-23)",
+    "scenario": "100 and 250 posts due per minute for 20 minutes, with natural minute-boundary jitter (S0-100, S0-250)",
+    "measures": [
+      {"id": "nl_within_2", "name": "Share of posts sent within 2 min of their due time", "path": "normal.within2", "op": ">=", "limit": 0.95, "appliesTo": ["S0-100", "S0-250"]},
+      {"id": "nl_within_5", "name": "Share sent within 5 min", "path": "normal.within5", "op": ">=", "limit": 0.99, "appliesTo": ["S0-100", "S0-250"]},
+      {"id": "nl_within_15", "name": "Share sent within 15 min", "path": "normal.within15", "op": ">=", "limit": 1.0, "appliesTo": ["S0-100", "S0-250"]},
+      {"id": "nl_not_sent", "name": "Share not sent for system reasons", "path": "normal.notSentShare", "op": "<=", "limit": 0.005, "appliesTo": ["S0-100", "S0-250"]}
+    ]
+  },
+  "scenarios": {
+    "smoke": "Harness self-check: every post verified, no duplicate, no late send, isolation holds, every invocation clean.",
+    "S1": "Section 4 measures on 5,000 posts due in one minute over about 2,000 workspaces.",
+    "S2": "Section 4 measures plus fairness with one workspace holding 3,000 of the 5,000.",
+    "S3": "13,000 posts due in one minute: report where approval expiry starts holding posts; none sent late.",
+    "S0-100": "normalLoad measures at 100 posts due per minute for 20 minutes.",
+    "S0-250": "normalLoad measures at 250 posts due per minute for 20 minutes.",
+    "baseline": "The frozen minute worker alone (lane flag off) on the S1 data for 10 minutes: its measured Discord posts per minute, compared with the 6 to 12 per minute that RC-RECEIPT and reply 5 state.",
+    "F429": "Global 429 (Retry-After), per-route 429 on creates and reads, and a Cloudflare HTML 429 ban page. Expected: inside a global embargo the mock sees at most the requests already admitted (no storm); creates resume after it; a post whose create got a 429 is held and never resent (existing rule); a route held by a ban page sends nothing until an operator lifts it (existing rule) and nothing is duplicated; every other post is verified.",
+    "F5xx": "Discord 500 and timeouts on create, landed or not. Expected: no affected post is created twice; each ends uncertain for manual reconciliation; every other post is verified; the slots of requests whose answer was lost are reported (open question Q3).",
+    "Fcrash": "SIGKILL of shard processes mid-step during S1, including during a create in flight. Expected: no duplicate; every post ends verified, or uncertain only where a kill landed between the sealed intent and the create's answer; no post left pending; the drain completes.",
+    "Fdb": "A small pool, added latency, lock holds on the coordinator's application row and on workspace rows, a statement timeout. Expected: no duplicate, no starvation (every workspace's posts end verified), lateness and errors reported.",
+    "Fexpiry": "A burst whose approvals expire 4 minutes into the run. Expected: no create after its approval expired; every post either verified before its expiry or held; some posts held (otherwise the scenario did not test expiry).",
+    "Fstall": "No cron fires for 10 minutes after T, then normal. Expected: nothing is sent during the stall, nothing is duplicated, every post is verified before its approval expires; lateness and drain after the restore reported.",
+    "Fflip": "Lane flag off from T+2 to T+6 min, then on. Expected: while off the shard routes answer disabled and the minute worker sends Discord; after on the lane sends again; no duplicate across the hand-over; every post verified.",
+    "Nmisroute": "Negative control: the harness sends about one create in ten to another tenant's channel. Expected: the isolation check fires for every one of them.",
+    "Ndup": "Negative control: the mock accepts every 25th create twice. Expected: both duplicate counters report exactly the double accepts.",
+    "Nceiling": "Negative control and information-only sensitivity: coordinator policy 100/s. Expected: the 25/s and 50/s counters fire; the throughput is reported as information only."
+  }
+}
