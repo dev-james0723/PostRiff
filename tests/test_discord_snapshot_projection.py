@@ -19,7 +19,7 @@ class TheSnapshotCarriesNoPersonalDiscordIdentity(unittest.TestCase):
             {'id': 'discord-identity-aaa', 'workspaceId': WORKSPACE, 'applicationId': '1234567', 'userId': OTHER_DISCORD,
              'account': 'Alice the Admin', 'authorizedBy': OTHER_MEMBER, 'authorizedAt': NOW, 'authorizationGeneration': 'gen-1',
              'status': 'linked', 'expiresAt': NOW + 3600, 'discoverGuilds': True, 'refreshClaim': 'claim-uuid', 'refreshStartedAt': NOW}]
-        state['phase2']['discordEngagement'] = {'consents': [{'secret': 'not for the snapshot'}]}
+        state['phase2']['discordEngagement'] = {'consents': [{'channel': 'consent record'}]}
         return state
 
     def test_other_members_identity_records_are_not_in_the_presented_state(self):
