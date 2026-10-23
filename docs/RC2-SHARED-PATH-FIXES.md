@@ -10,7 +10,7 @@ found the regressions below; this branch fixes them. Facts first; *inference* ma
 | Branch | `claude/discord-rc2-fixes-20261023` |
 | Base | the W-02 head `150ab4fa` (RC1 `2a5a523d` + the W-02 lane); later merged W-02 `4a776000` (test-only) and `820d8c7d` (RC2-1 in `lane.py`, W-02 tests), and the impact branch `9f1946cf` (docs, scripts and tests only) |
 | Live | `c5fc1fd1` (`dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg`) |
-| Head tested | `b9b1383b` (the last code fix is `2ca119ad`; after `b9b1383b` only documentation changed) |
+| Head tested | `60ca222d` (the last production-code fix is `2ca119ad`; after `60ca222d` only documentation changed) |
 | Method | every fix has tests that fail on `150ab4fa` and pass here; where a behaviour exists on live, the same probe or scenario runs with the live tree (`git archive c5fc1fd1`) and with this tree and the records are compared. No network, no Production access, nothing deployed |
 
 ## Summary
@@ -23,7 +23,8 @@ found the regressions below; this branch fixes them. Facts first; *inference* ma
 | UI-1 Personal Discord accounts | MEDIUM-LOW | `3d331c41` | `channels-view.tsx`, `discord-personal-account.ts` (+14 -2) | 3 of 4 web tests | not applicable (live has no such section) |
 | ENV-1 pool settings | LOW | `ad6f26ad` | `hosted_app.py`, `postgres_pool.py` (+38 -6) | 3 of 4 (8 errors with subtests) | live has no pool; the API stays up as on live |
 | Cron Authorization on non-ASCII headers (independent review) | LOW, pre-existing | `2ca119ad` | `hosted_app.py` (+8 -2) | 2 of 3 (7 failures), also on the live tree | an improvement over live (live answers 500) |
-| Impact suites merged, FB-1 and CH-1 as guards | | `7c8734cf`, `604417d2` | none | 3 guards fail with `IMPACT_RC_REV=150ab4fa` | the impact agent's live-versus-candidate suite: 32 tests OK |
+| Impact suites merged, FB-1 and CH-1 as guards | | `7c8734cf`, `604417d2`, `b9b1383b` | none | 3 guards fail with `IMPACT_RC_REV=150ab4fa` | the impact agent's live-versus-candidate suite: 32 tests OK |
+| Synthetic credentials generated at run time (offline secret scan, rule P2-SEC-CI-04) | | `438b5816`, `5c7531dc`, `60ca222d` | none (tests only) | the scan: 8 unexpected findings before `438b5816`, none on `60ca222d` | not applicable; the tests behave as before |
 
 ## FB-1: Facebook Page posts approved exactly as on live (`9c044aa7`)
 
@@ -178,6 +179,22 @@ ERROR line, on live too. Both now use the W-02 shard route's guard (refuse a sec
 passes on all. **Reported, not changed:** `/api/cron/worker` starts the runtime before it authenticates (live line 777,
 `150ab4fa` line 843, here line 883); the runtime also supplies `self.cron_secret` there.
 
+## Synthetic credentials at run time (`438b5816`, `5c7531dc`, `60ca222d`)
+
+The offline source scan (`scripts/consumer_ready_secrets.py`) reported 8 unexpected findings before `438b5816`, all in
+test files this branch added or merged from the impact branch: 6 `Secret Keyword` (synthetic Discord client secrets,
+Supabase keys, a PDF owner password) and 2 `Basic Auth Credentials` (database URLs with a user and password, never
+connected) in `impact_scenario.py`, `rc2_shared_path_scenario.py`, `test_customer_impact_dependencies.py`,
+`test_impact_compare.py` and `test_rc2_shared_path_fixes.py`. Following rule P2-SEC-CI-04, no scanner exception or
+allowlist entry was added. Every credential-shaped value in the files this branch added or merged is now made per run
+as `'synthetic-' + secrets.token_hex(12)` (through a `synthetic()` helper, so no literal follows a secret keyword; a
+random Fernet key where one is needed), including values the scanner does not flag (bot, page, user and session
+tokens, cron secrets, the capture test's bearer header and the fake builds' session cookie, the non-ASCII cron header
+and secret, whose first character stays non-ASCII). Database URLs carry no user or password. Values two builds or two
+processes must share are generated once per process (`test_impact_compare.SYNTHETIC`, the scenario's handoff file).
+The tests behave as before: the same failures on `150ab4fa` and the live tree, and a negative control with cookie
+redaction disabled fails on the generated cookie value.
+
 ## Half-carried changes in the integration (17e3844c, d4572f68) and where they came from
 
 Method (read-only, git objects): (1) for each non-Discord file `17e3844c` changed, every line the repair branch head it
@@ -280,21 +297,26 @@ statement (its pin updated in this branch).
   `test_a_workspace_with_a_linked_discord_identity_still_lists_it` on PostgreSQL instead.
 - Web typecheck, lint and the browser harnesses were not run: this checkout has no `node_modules` (the 34 web unit
   tests that need `typescript`, `react` or other packages fail identically on `150ab4fa` and here).
+- The impact branch `claude/discord-impact-20261023 @9f1946cf` itself still has the literal credential values (another
+  agent's branch); this branch carries the corrected copies of its tests.
 
-## Test runs on `b9b1383b`
+## Test runs on `60ca222d`
 
-All on a detached copy of `b9b1383b` (scratch worktree), Python 3.13 venv with psycopg, PostgreSQL 16 binaries, no
+All on a detached copy of `60ca222d` (scratch worktree), Python 3.13 venv with psycopg, PostgreSQL 16 binaries, no
 network. Receipts are kept in the session scratchpad, not in the repository.
 
 | Run | Command | Result |
 |---|---|---|
+| Offline source secret scan (local-gates step) | `PYTHONPATH=src:tests python scripts/consumer_ready_secrets.py` | status PASS: 3,384 files, 965 findings, every one matched by the repository's existing review rules (none added), 0 unexpected (before `438b5816`: 973 findings, 8 unexpected) |
 | Fenced Discord suite, as the qualification workflow runs it | `CI=true PYTHONPATH=scripts/linkedin_test_fence:src:tests RAFII_DISCORD_SYNTHETIC_FENCE=1 python -m unittest discover -s tests -p 'test_discord*.py'` | 577 tests OK, 49 skipped (the real-PostgreSQL tests stand down under the fence); fence receipt: 0 unexpected transport attempts, 0 real provider requests |
-| This branch's suites and the impact suites, real PostgreSQL | `POSTRIFF_PG_BIN=... python -m unittest test_rc2_shared_path_fixes test_rc2_shared_paths_postgres test_customer_impact_shared_paths test_impact_compare test_customer_impact_dependencies` | 63 tests OK, none skipped |
-| Web unit tests | `cd web && node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs` (Node 22, no `node_modules`) | 752 tests, 718 pass, 34 fail; the 34 are the same set as on `150ab4fa` (they need `typescript`, `react` or other packages this checkout lacks) |
-| Full repository discover | `PYTHONPATH=src:tests python -m unittest discover -s tests -p 'test_*.py'` (without `POSTRIFF_PG_BIN`, as the RC1 receipt's 6,141/391 count) | FULL_DISCOVER_RESULT |
+| This branch's suites and the impact suites, real PostgreSQL | `POSTRIFF_PG_BIN=... python -m unittest test_rc2_shared_path_fixes test_rc2_shared_paths_postgres test_customer_impact_shared_paths test_impact_compare test_customer_impact_dependencies` | 63 tests OK, none skipped (24, 7, 19, 11 and 2 by module) |
+| Web unit tests | `cd web && node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs` (Node 22, no `node_modules`) | 752 tests, 718 pass, 34 fail; the 34 are the same set as on `150ab4fa` (they need `typescript`, `react` or other packages this checkout lacks); the 4 UI-1 tests and the 7 launch-gate tests pass |
+| Full repository discover | `PYTHONPATH=src:tests python -m unittest discover -s tests -p 'test_*.py'` (without `POSTRIFF_PG_BIN`, as the RC1 receipt's 6,141/391 count) | 6,308 tests OK, 455 skipped (529 s) |
 
 Failing-before receipts (each test file copied onto a detached `150ab4fa`, or the live tree, and run there): FB-1, CH-1,
 PR-1 and ENV-1 offline tests (`all-offline-base-150ab4fa*.log`, `env1-base-150ab4fa.log`), the PostgreSQL proof
 (`pg-base-150ab4fa.log`, with the record summary `pg-summary.txt`), the impact guards with `IMPACT_RC_REV=150ab4fa`
 (`impact-guards-on-150ab4fa.log`), the UI-1 web test (3 of 4 fail), the cron guard on `150ab4fa` and on the live tree
-(`cron-guard-base-150ab4fa.log`), and the 404 tests on the 401 head `651e1899` (`pr1-404-on-651e1899.log`).
+(`cron-guard-base-150ab4fa.log`; with the run-time cron values of `60ca222d`:
+`cron-guard-runtime-credentials-base-and-live.log`, the same 2 of 3 tests and 7 failures), and the 404 tests on the 401
+head `651e1899` (`pr1-404-on-651e1899.log`).
