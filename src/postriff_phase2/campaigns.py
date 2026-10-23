@@ -779,9 +779,13 @@ def _decide(state: dict, root: dict, payload: dict, actor: str, now: float) -> d
             resource = discord_destination(state, channel, selected_id)
             if payload.get('destinationId') != selected_id or payload.get('destinationGeneration') != resource['resourceGeneration']:
                 raise AlphaError('The Discord destination changed. Review it again.', 409)
+            if resource.get('senderKind') == 'webhook' and payload.get('discordSenderName') != channel.get('discordSenderName'):
+                raise AlphaError('The webhook sender name changed. Review it again.', 409)
             binding = campaign_binding(state, channel, variant, selected_id, item['publishAt'], task['schedule']['timeZone'], now)
             item['destinationId'] = selected_id
             item['decision'].update(discord=binding['discord'], timing=binding['timing'])
+            if resource.get('senderKind') == 'webhook':
+                item['decision']['discordSenderName'] = binding.get('discordSenderName')
         item["approvedVia"] = "human"
         lifecycle.move(item if item["state"] != "needs_revision" else lifecycle.move(item, "ready_for_review", at=now), "approved", at=now)
         _history(occurrence, now, "approved", f"{item['platform']} post approved; it publishes at its scheduled time." if item.get("publishAt") else f"{item['platform']} draft approved.", actor)

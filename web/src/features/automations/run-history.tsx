@@ -1,7 +1,7 @@
 'use client';
 
 import { usePreferences } from '@/lib/preferences';
-import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
 
 /**
  * One run of a Raffi workflow automation (orchestration §2–§3): its lifecycle status, when it drafts, is reviewed and
@@ -95,7 +95,7 @@ export function RunDetail({ run, timeZone, canApprove, busy, onDecide, onOpenRun
       </div>
       {items.filter((item) => item.decision?.discord?.target).map((item) => {
         const target = item.decision!.discord!.target;
-        return <p key={`discord-${item.key}`} className='text-muted-foreground text-xs' data-discord-frozen-target>{target.senderKind === 'webhook' ? dc.senderWebhook : dc.senderBot} · Frozen target: {target.guildName} ({target.guildId}) · {target.channelName} ({target.channelId})</p>;
+        return <p key={`discord-${item.key}`} className='text-muted-foreground text-xs' data-discord-frozen-target>{discordSenderLabel(dc, target.senderKind, item.decision?.discordSenderName)} · Frozen target: {target.guildName} ({target.guildId}) · {target.channelName} ({target.channelId})</p>;
       })}
 
       {plan.length > 0 && (

@@ -158,7 +158,9 @@ class MemoryLedger:
             pid,expected=params;r=self.admissions[pid];self.rowcount=int(r['state']==expected)
             if self.rowcount:r['state']='sent'
         elif "SET state='blocked',outcome_at=clock_timestamp() WHERE id=" in sql:
-            r=self.admissions[params[0]];self.rowcount=int(r['state']=='sent' and r['method']=='GET' and not r['publish'])
+            method = 'PATCH' if "method='PATCH'" in sql else 'GET'
+            r=self.admissions[params[0]];self.rowcount=int(r['state']=='sent' and r['method']==method and not r['publish']
+                and (method == 'GET' or r['route'] == params[1]))
             if self.rowcount:r['state']='blocked'
         elif "SET state='blocked'" in sql:
             for r in self.admissions.values():
@@ -166,6 +168,10 @@ class MemoryLedger:
         elif 'SET state=%s,status_code=' in sql:
             state,status,scope,pid=params;r=self.admissions[pid];self.rowcount=int(r['state']=='sent')
             if self.rowcount:r.update(state=state,status=status,scope=scope)
+        elif "SET state='observed',outcome_at=clock_timestamp(),status_code=NULL" in sql:
+            pid,route=params;r=self.admissions[pid]
+            self.rowcount=int(r['state'] in ('reserved','sent','uncertain') and not r['publish'] and r['method']=='PATCH' and r['route']==route)
+            if self.rowcount:r.update(state='observed',status=None,scope='unknown')
         else:raise AssertionError('Unrecognized synthetic SQL contract: '+sql[:110])
     def fetchone(self):return self.result.pop(0) if self.result else None
     def fetchall(self):result,self.result=self.result,[];return result

@@ -392,6 +392,16 @@ class DiscordProvider(OAuthProvider):
     def _discord_http(self, method, path, *, credential_kind, bearer=None, user_id=None, **kwargs):
         from .discord.rate_limits import Permit, RateDelayed, RateCoordinatorUnavailable, UnconsumedPublishPermit, ReadAdmissionDelayed
         read_authorize = kwargs.pop('read_authorize', None)
+        write_authorize = kwargs.pop('write_authorize', None)
+        write_admitted = kwargs.pop('write_admitted', None)
+        if write_admitted is not None and (not callable(write_admitted) or not callable(write_authorize)):
+            raise AlphaError('Discord sender admission custody changed.', 409, code='discord_sender_name_required')
+        if method == 'PATCH' and re.fullmatch(r'/guilds/[0-9]{5,25}/members/@me', path) and not callable(write_authorize):
+            raise AlphaError('Discord nickname writes require current sender authorization.', 409, code='discord_sender_name_required')
+        if write_authorize is not None and (method != 'PATCH' or credential_kind != 'bot'
+                or not re.fullmatch(r'/guilds/[0-9]{5,25}/members/@me', path)
+                or not callable(write_authorize) or write_authorize() is not True):
+            raise AlphaError('Discord sender settings changed.', 409, code='discord_sender_name_required')
         if read_authorize is not None and (method != 'GET' or not callable(read_authorize) or read_authorize() is not True):
             raise AlphaError('Discord read consent changed.', 409, code='discord_engagement_consent_required')
         rate_permit = kwargs.pop('rate_permit', None)
@@ -428,6 +438,11 @@ class DiscordProvider(OAuthProvider):
                     if permit is None or permit.identity != self._rate_identity(credential_kind,bearer,user_id):
                         raise RateCoordinatorUnavailable()
                     if not direct_read:
+                        if write_admitted is not None:
+                            # Persist custody while still reserved. A crash
+                            # cannot strand a sent nickname admission with no
+                            # recoverable edit claim. No rate locks are held.
+                            write_admitted(permit)
                         self.rate_limiter.consume(permit, method, path, binding=binding, intent_id=intent_id, authorize=authorize)
                     break
                 except RateDelayed as error:
@@ -452,6 +467,17 @@ class DiscordProvider(OAuthProvider):
                 if self.rate_v1_enabled:
                     try:
                         self.rate_limiter.abandon_unsent_read(permit)
+                    except Exception:
+                        self.rate_coordinator_degraded = True
+                raise
+        if write_authorize is not None:
+            try:
+                if write_authorize() is not True:
+                    raise AlphaError('Discord sender settings changed.', 409, code='discord_sender_name_required')
+            except Exception:
+                if self.rate_v1_enabled:
+                    try:
+                        self.rate_limiter.abandon_unsent_nickname(permit)
                     except Exception:
                         self.rate_coordinator_degraded = True
                 raise

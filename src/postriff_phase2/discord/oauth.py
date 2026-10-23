@@ -95,6 +95,14 @@ class DiscordConnections:
         self.oauth.commands.engine.invalidate(state)
         cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace))
 
+    def sender_profile(self, workspace, token, connection):
+        from .sender_names import SenderNames
+        return SenderNames(self, workspace, token, connection).get()
+
+    def set_sender_name(self, workspace, token, connection, body):
+        from .sender_names import SenderNames
+        return SenderNames(self, workspace, token, connection).set(body)
+
     def read_credential(self, cur, workspace, connection):
         cur.execute("SELECT access_ciphertext,key_id,refresh_ciphertext,extract(epoch from access_expires_at),authorization_generation::text,scopes,provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='discord' AND revoked_at IS NULL FOR NO KEY UPDATE", (workspace, connection))
         row = cur.fetchone()

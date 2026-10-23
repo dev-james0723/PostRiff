@@ -129,10 +129,11 @@ def commit(engine, state: dict, principal: str, payload: dict, now: float) -> di
     variant = engine._variant(state, item["variantId"])
     decision = item.get("decision") or {}
     if item['platform'] == 'Discord':
-        from .discord.authorization import campaign_binding
+        from .discord.authorization import campaign_binding, approved_campaign_channel
         channel = next((c for c in state['phase2']['channels'] if c['id'] == item['channelId']), None)
         if not channel or not decision.get('discord') or not decision.get('timing'):
             raise AlphaError('Legacy Discord decisions need a fresh destination and time approval.', 409, code='discord_approval_required')
+        channel = approved_campaign_channel(channel, decision)
         binding = campaign_binding(state, channel, variant, item.get('destinationId'), publish_at, task['schedule']['timeZone'], now)
         if binding['discord'] != decision['discord'] or binding['timing'] != decision['timing']:
             raise AlphaError('The approved Discord destination, content or time changed.', 409, code='discord_approval_required')
@@ -176,6 +177,13 @@ def commit(engine, state: dict, principal: str, payload: dict, now: float) -> di
         engine.apply_phase2(_NoDatabase(), state, "review", {"variantId": variant["id"], "channelId": item["channelId"], 'destinationId': item.get('destinationId'), "acknowledgedWarnings": list(warnings), **timing}, device)
         review = state["phase2"]["reviews"][-1]
         if item['platform'] == 'Discord':
+            from .discord.authorization import freeze_manifest
+            # Ordinary review still checks all current connection/content gates.
+            # Bind its sender to the already approved human decision before the
+            # digest comparison and approval; the connection setting stays intact.
+            if channel.get('discordConnectionKind') == 'webhook':
+                review['manifest'].pop('discordSenderName', None)
+                freeze_manifest(state, channel, review['manifest'], item.get('destinationId'))
             queued = review['manifest']['discord']
             if any(queued[k] != decision['discord'][k] for k in ('schema', 'target', 'wireDigest', 'deliveryDigest', 'operationDigest')):
                 raise AlphaError('The Discord preview changed after human approval.', 409, code='discord_approval_required')

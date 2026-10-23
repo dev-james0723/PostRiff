@@ -456,7 +456,8 @@ class HostedSocial:
             if manifest.get('senderKind') == 'webhook':
                 from .discord.webhooks import request
                 response = request(provider, 'POST', provider.session(token),
-                    body={'content': wire['content'], 'allowed_mentions': wire['allowed_mentions'], 'flags': wire['flags']}, **rate_arguments)
+                    body={**{k: wire[k] for k in ('content', 'allowed_mentions', 'flags')},
+                          **({'username': wire['username']} if 'username' in wire else {})}, **rate_arguments)
             elif image:
                 raw, mime, _alt = image
                 file = wire['files'][0]
