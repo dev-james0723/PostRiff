@@ -262,6 +262,29 @@ class SharedPathsLiveVersusCandidate(unittest.TestCase):
                 # The projection trigger (migration 126, already in Production) adds one hint row per new workspace on both.
                 self.assertEqual(changed, {'pr_discord_worker_projection': WORKSPACES} if phase == 'bootstrap' else {}, (name, phase))
 
+    # --- the Discord surface with the gate closed ---------------------------------------------------------------------
+    def test_every_discord_entry_point_refuses_an_ordinary_workspace_without_side_effects(self):
+        """With POSTRIFF_DISCORD_CONNECT_WORKSPACES unset on production: connect starts, callbacks, identity, guild,
+        destination, engagement, interaction and execute entry points are all refused, with no write, no new row and
+        no provider request."""
+        outcomes = self.rc['surface']
+        self.assertGreaterEqual(len(outcomes), 9)
+        for name, outcome in outcomes.items():
+            with self.subTest(name):
+                self.assertEqual(outcome['outcome'], 'refused', outcome)
+                self.assertIn(outcome['status'], (403, 404, 409, 503), outcome)
+        phase = self.rc['phases']['surface']
+        self.assertEqual((phase['writes'], phase['rowsChanged'], phase['http']), ([], {}, []))
+        self.assertEqual(outcomes['oauth.start publish']['code'], 'discord_access_closed')
+
+    def test_pins_that_live_offers_the_original_discord_connect_and_the_candidate_closes_it(self):
+        """OBSERVABLE-INTENDED (the dark launch closes Discord to workspaces outside the gate): on live a member can start
+        the original bot-install flow, which records an OAuth transaction; the candidate refuses before any write."""
+        self.assertEqual(self.live['surface']['oauth.start publish']['outcome'], 'answered')
+        self.assertIn('authorizeUrl', self.live['surface']['oauth.start publish']['keys'])
+        self.assertIn('pr_oauth_transactions', self.live['phases']['surface']['rowsChanged'])
+        self.assertEqual(self.rc['surface']['oauth.start publish'], {'outcome': 'refused', 'status': 403, 'code': 'discord_access_closed'})
+
     # --- RC2 (W-02 parallel Discord lane) ------------------------------------------------------------------------------
     def test_w02_shard_does_nothing_with_the_lane_flag_off(self):
         """RC2 adds twelve per-minute crons. With POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED unset (Production today) a

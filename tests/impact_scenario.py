@@ -10,6 +10,7 @@ Phases, all with synthetic users and sessions (no Supabase, no provider, no netw
   read       workspace read (service.get) and Channels read (oauth.channels) for every workspace
   tick       one minute tick of the hosted worker after the post is due
   shard      W-02 trees only: one /api/cron/discord-worker shard invocation with the lane flag off, then on
+  surface    every Discord entry point, called by a member of a workspace with no Discord history
 Each phase records the database connections opened, every SQL statement (normalised), the statements that write and
 the table they write, the row count of every public table before and after, and any provider HTTP request attempted.
 """
@@ -27,7 +28,7 @@ import uuid
 parser = argparse.ArgumentParser()
 parser.add_argument('--tree', required=True)
 parser.add_argument('--dsn', required=True)
-parser.add_argument('--phases', default='bootstrap,prepare,read,tick,shard')
+parser.add_argument('--phases', default='bootstrap,prepare,read,tick,shard,surface')
 args = parser.parse_args()
 sys.path.insert(0, os.path.join(args.tree, 'src'))
 
@@ -273,5 +274,45 @@ if 'shard' in phases:
                 result = lane.run(worker, 0, values=values)
                 RECORD['shard-' + flag] = {'enabled': result.get('enabled'), 'processed': result.get('processed'),
                                            'stoppedBy': result.get('stoppedBy'), 'status': result.get('status')}
+
+if 'surface' in phases and len(people) > 1:
+    # Every Discord entry point a signed-in member of an ordinary workspace (no Discord history) can reach, with the gate
+    # unset on production. Each call's outcome is recorded; the phase records any write and any provider request.
+    person = people[1]
+    ws, tok = person['workspace'], person['token']
+    calls = {
+        'oauth.start publish': lambda: service.oauth.start(ws, tok, 'discord', 'publish'),
+        'oauth.start identity': lambda: service.oauth.start(ws, tok, 'discord', 'identity'),
+        'oauth.complete': lambda: service.oauth.complete(ws, tok, 'discord', 's' * 43, 'synthetic-code'),
+        'identities.guilds': lambda: service.oauth.discord_connections.guilds(ws, tok, 'discord-identity-impact'),
+        'identities.disconnect': lambda: service.oauth.discord_connections.disconnect_identity(ws, tok, 'discord-identity-impact'),
+        'channels.destinations': lambda: service.oauth.destinations(ws, tok, 'discord-impact-channel'),
+        'channels.remove_destination': lambda: service.oauth.remove_discord_destination(ws, tok, 'discord-impact-channel', 'destination-x'),
+        'engagement.status': lambda: service.discord_engagement.status(ws, tok, 'discord-impact-channel'),
+        'jobs.execute': lambda: PostgresWorker(factory, social=HostedSocial(service.oauth, providers)).execute_job(service.repository, ws, tok, 'job-impact', 'a' * 64),
+    }
+    try:
+        from postriff_phase2.discord.interactions import DiscordInteractions
+        endpoint = DiscordInteractions(providers.get('discord'), factory, 'https://app.impact.invalid')
+        calls.update({
+            'interactions.review_entry': lambda: endpoint.review_entry(service.oauth.discord_connections, ws, tok, 'discord-identity-impact'),
+            'interactions.bind': lambda: endpoint.bind(service.oauth.discord_connections, ws, tok, 'discord-identity-impact'),
+            'interactions.receive': lambda: endpoint.receive(b'{"type":1}', str(int(time.time())), '0' * 128),
+        })
+    except ImportError:
+        pass
+    outcomes = {}
+    with phase('surface'):
+        for name, call in calls.items():
+            try:
+                value = call()
+                outcomes[name] = {'outcome': 'answered', 'keys': sorted(value) if isinstance(value, dict) else type(value).__name__}
+            except AlphaError as error:
+                outcomes[name] = {'outcome': 'refused', 'status': error.status, 'code': getattr(error, 'code', None)}
+            except AttributeError:
+                outcomes[name] = {'outcome': 'absent'}
+            except Exception as error:  # noqa: BLE001 - record the class only
+                outcomes[name] = {'outcome': 'error', 'error': type(error).__name__}
+    RECORD['surface'] = outcomes
 
 print(json.dumps(RECORD, sort_keys=True, default=str))
