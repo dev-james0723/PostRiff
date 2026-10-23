@@ -512,7 +512,10 @@ class SenderNames:
             return False
         except RateCoordinatorUnavailable:
             if self.s.oauth.clock() < claim['expiresAt'] + CLAIM_GRACE_SECONDS:
-                raise
+                # The coordinator cannot settle the admission yet (for instance after the bot credential changed). The
+                # person sees the same pending answer as before the deadline, not the coordinator's own error.
+                fail('A sender-name change is still being settled. Try again in a few minutes.', 409,
+                     code='discord_sender_edit_pending', retryAfterSeconds=60)
             return True
 
     def _profile(self, kind, envelope, stamp, saved, observed, observed_at, reasons, names_on, nickname_on, *, member_nick=None):
@@ -582,6 +585,29 @@ class SenderNames:
         except Exception:
             pass   # the claim then simply runs to its deadline and a later read reconciles it
 
+    def _refuse_failed_write(self, caught, claim_id, progress):
+        """Translate an exception from the nickname PATCH call. Always raises.
+
+        Proven unsent (the final guard refused; or the coordinator refused before the guard's second pass and either no
+        admission had been recorded or the exception is RateDelayed, which `consume` raises only before it commits the
+        `sent` state): the claim is released at once and the refusal says nothing was sent. Anything else may have reached
+        Discord (transport failure, an observation failure): the claim stays until a later read settles it."""
+        from .rate_limits import RateCoordinatorUnavailable, RateDelayed
+        if caught is self.denied:
+            self.release_claim(claim_id)
+            raise caught
+        unsent = progress['passes'] < 2 and (progress['admitted'] is None or isinstance(caught, RateDelayed))
+        if not unsent:
+            fail('Discord did not confirm the nickname change. Wait two minutes, then reload its current value.', 409,
+                 code='discord_sender_edit_pending', retryAfterSeconds=PENDING_SECONDS)
+        self.release_claim(claim_id)
+        if isinstance(caught, RateDelayed):
+            fail('Discord is waiting for shared request capacity. Try again shortly; nothing was changed.', 429,
+                 code='discord_rate_delayed', retryAfterSeconds=max(1, math.ceil(caught.retry_after_seconds)))
+        if isinstance(caught, AlphaError) and not isinstance(caught, RateCoordinatorUnavailable):
+            raise caught    # for instance custody changing while the admission was recorded: its own, honest refusal
+        unavailable([{'code': 'provider_unavailable'}])
+
     def audit_reason(self, guild):
         """X-Audit-Log-Reason for the nickname PATCH: Discord shows it in the server's audit log, so a server admin can
         see that Rafii (not a person) changed the nickname and which opaque reference to quote to Rafii. A one-way
@@ -625,6 +651,10 @@ class SenderNames:
                 self.s.save_state(cur, self.workspace, state)
                 _, _, stamp = self.custody(cur, state, actor)
 
+            # How far the write got: the transport call comes right after the SECOND time the guard passes, so fewer than
+            # two passes means nothing can have been sent. `admitted` is the coordinator admission recorded in the claim.
+            progress = {'passes': 0, 'admitted': None}
+
             def admitted(permit):
                 nonlocal stamp
                 with self.s.local(self.workspace, self.token) as (cur, state, actor):
@@ -634,28 +664,38 @@ class SenderNames:
                     channel['discordSenderEdit'].update(rateAdmissionId=permit.id, rateExpiresAt=permit.expires_at)
                     self.s.save_state(cur, self.workspace, state)
                     _, _, stamp = self.custody(cur, state, actor)
+                progress['admitted'] = permit.id
+
+            def guard():
+                allowed = self.write_guard(stamp, claim_id)
+                progress['passes'] += 1
+                return allowed
             self.denied = None
             try:
                 response = self.s.adapter._bot('PATCH', f'/guilds/{envelope["guild"]}/members/@me', body={'nick': name},
                     headers={'X-Audit-Log-Reason': self.audit_reason(envelope['guild'])},
-                    write_authorize=lambda: self.write_guard(stamp, claim_id), write_admitted=admitted)
+                    write_authorize=guard, write_admitted=admitted)
             except Exception as caught:
-                if caught is self.denied:
-                    self.release_claim(claim_id)   # the final guard refused: nothing reached Discord
-                    raise
-                fail('Discord did not confirm the nickname change. Wait two minutes, then reload its current value.', 409,
-                     code='discord_sender_edit_pending', retryAfterSeconds=PENDING_SECONDS)
-            member = response.get('body')
-            if isinstance(response.get('status'), int) and 400 <= response['status'] < 500:
-                self.release_claim(claim_id)       # a definite refusal (permission, rate limit): the nickname is unchanged
-                fail('Discord refused the nickname change. Reload to check the permissions before trying again.', 409,
-                     code='discord_sender_write_unconfirmed')
-            if (response.get('status') != 200 or not isinstance(member, dict)
+                self._refuse_failed_write(caught, claim_id, progress)
+            member, status = response.get('body'), response.get('status')
+            if isinstance(status, int) and 400 <= status < 500:
+                # Discord answered and refused (permission, hierarchy, rate limit): the nickname is unchanged, so the
+                # claim must not make the next attempt wait. Never retried here: the person decides after fixing it.
+                self.release_claim(claim_id)
+                fail('Discord refused the nickname change. Check the permissions of the bot and of your role, then try again.',
+                     409, code='discord_sender_write_refused')
+            if (status != 200 or not isinstance(member, dict)
                     or (member.get('user') or {}).get('id') != envelope['botUserId'] or member.get('nick') != name):
                 fail('Discord did not confirm the new nickname. Reload to check its current value before trying again.', 409,
                      code='discord_sender_write_unconfirmed')
-            observed = self.s.adapter._json(self.s.adapter._bot('GET',
-                f'/guilds/{envelope["guild"]}/members/{envelope["botUserId"]}'), dict)
+            try:
+                observed = self.s.adapter._json(self.s.adapter._bot('GET',
+                    f'/guilds/{envelope["guild"]}/members/{envelope["botUserId"]}'), dict)
+            except Exception:
+                # The write was accepted: the claim stays so a later read settles it, and the wording must not say
+                # "nothing was sent" (which a rate-delayed read-back would otherwise report).
+                fail('Discord accepted the nickname change but it could not be verified yet. Reload to check its current value.',
+                     409, code='discord_sender_write_unconfirmed')
             if (observed.get('user') or {}).get('id') != envelope['botUserId'] or observed.get('nick') != name:
                 fail('The server nickname changed during verification. Reload before trying again.', 409,
                      code='discord_sender_write_unconfirmed')

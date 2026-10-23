@@ -540,12 +540,13 @@ class AmbiguousWrites(Base):
         self.assertEqual(config.patches, [])
         self.assertTrue(recovered['editable'])
 
-    def test_a_discord_refusal_is_a_distinct_unconfirmed_write_not_a_stale_setting(self):
+    def test_a_discord_refusal_is_a_distinct_refused_write_not_a_stale_setting(self):
         config = self.w.hooks.guild_config[self.ia.guild]
         config.reject_patch = True
         outcome = self.w.attempt(self.save, self.ta, self.A, self.ia, 'Refused Bot')
-        self.assertEqual(outcome[:2], (409, 'discord_sender_write_unconfirmed'))
+        self.assertEqual(outcome[:2], (409, 'discord_sender_write_refused'))
         self.assertEqual(self.w.channel(self.A, self.ia.connection).get('discordSenderName'), None)
+        self.assertNotIn('discordSenderEdit', self.w.channel(self.A, self.ia.connection))
 
 
 class Fanout(Base):

@@ -5,7 +5,9 @@ Nothing here reaches a network or reads an application credential. Every id, nam
 synthetic; webhook credentials are produced at run time, never written down.
 """
 import copy
+import hashlib
 import json
+import re
 import secrets
 import threading
 import uuid
@@ -154,8 +156,23 @@ class Hooks:
         self.fail_post = None          # callable(tenant, body) -> response dict, raise, or None
         self.guild_config = {}         # guild -> GuildConfig for the nickname routes (otherwise the plain preflight answers)
         self.before_patch = self.after_read = None   # one-shot hooks: callable() run before a nickname PATCH / after a read
+        self.lose_patch_response = False             # one-shot: Discord applies the nickname PATCH, the response never arrives
+        self.rate_headers = None                     # callable(method, path) -> headers, for runs through the real coordinator
 
     def __call__(self, method, url, headers=None, form=None, body=None, data=None):
+        response = self._route(method, url, headers, form, body, data)
+        if self.rate_headers is not None and not response.get('headers'):
+            response = {**response, 'headers': self.rate_headers(method, urlsplit(url).path.removeprefix('/api/v10'))}
+        return response
+
+    @staticmethod
+    def bucket_headers(method, path):
+        """Plausible rate-limit headers: one bucket per route template, generous limits."""
+        template = method + re.sub(r'[0-9]{5,}', '{id}', path.split('?')[0])
+        return {'x-ratelimit-bucket': hashlib.sha256(template.encode()).hexdigest()[:24], 'x-ratelimit-limit': '100',
+                'x-ratelimit-remaining': '90', 'x-ratelimit-reset-after': '2'}
+
+    def _route(self, method, url, headers, form, body, data):
         path = urlsplit(url).path.removeprefix('/api/v10')
         parts = path.strip('/').split('/')
         with self.lock:
@@ -199,6 +216,9 @@ class Hooks:
             if config.reject_patch:
                 return {'status': 403, 'body': {'message': 'Missing Permissions', 'code': 50013}, 'headers': {}}
             config.nick = body['nick']
+            if self.lose_patch_response:
+                self.lose_patch_response = False
+                raise TimeoutError('synthetic lost response')
             return self._ok({'user': {'id': BOT, 'username': 'Rafii'}, 'nick': config.nick, 'roles': []})
         if method != 'GET':
             raise AssertionError('Unexpected synthetic guild route')
@@ -285,3 +305,101 @@ class GuildConfig:
         self.nick = None
         self.patches, self.patch_headers = [], []
         self.reject_patch = False
+
+
+class FakeLimiter:
+    """The slice of the shared request coordinator that a nickname write touches, with every outcome scriptable.
+
+    It keeps the real coordinator's contract wherever the nickname flow depends on it: one Permit per admission, the states
+    reserved -> sent -> observed / uncertain / blocked, `reconcile_nickname` only for the same bot credential and only after the
+    admission has aged out. The real coordinator, on PostgreSQL, is exercised in test_discord_sender_name_postgres.py."""
+    application_key = 'a' * 64
+
+    def __init__(self, clock):
+        self.clock, self.policy = clock, SimpleNamespace(read_attempts=1)
+        self.admissions, self.calls, self.reconciled = {}, [], []
+        # exceptions raised for the nickname PATCH only
+        self.reserve_error = self.consume_error = None
+        self.after_consume = None      # callable() run right after an admission turned `sent`
+
+    # -- admission ------------------------------------------------------------------------------------------------------
+    def _admit(self, method, path, identity, state):
+        from postriff_phase2.discord.rate_limits import Permit, _digest
+        permit = Permit(str(uuid.uuid4()), self.application_key, method, _digest(path), identity, None, self.clock() + 30)
+        self.admissions[permit.id] = {'permit': permit, 'state': state, 'reserved': self.clock(), 'method': method, 'path': path}
+        return permit
+
+    def reserve_read(self, method, path, *, identity):
+        self.calls.append(('reserve_read', path))
+        return self._admit(method, path, identity, 'sent')
+
+    def reserve(self, method, path, *, identity, binding=None, valid_until=None):
+        self.calls.append(('reserve', path))
+        if method == 'PATCH' and self.reserve_error is not None:
+            raise self.reserve_error
+        return self._admit(method, path, identity, 'reserved')
+
+    def consume(self, permit, method, path, *, binding=None, intent_id=None, authorize=None):
+        self.calls.append(('consume', path))
+        if method == 'PATCH' and self.consume_error is not None:
+            raise self.consume_error
+        self.admissions[permit.id]['state'] = 'sent'
+        if method == 'PATCH' and self.after_consume is not None:
+            action, self.after_consume = self.after_consume, None
+            action()
+
+    def observe(self, permit, response, *, transport_failure=False):
+        self.calls.append(('observe', permit.method, response.get('status')))
+        self.admissions[permit.id]['state'] = 'uncertain' if transport_failure else 'observed'
+        return {'status': response.get('status'), 'retryAfterSeconds': 0, 'retryHintMalformed': False}
+
+    def note_transport_failure(self, permit):
+        return self.observe(permit, {'status': 503, 'headers': {}}, transport_failure=True)
+
+    def abandon_unsent_read(self, permit):
+        self.admissions[permit.id]['state'] = 'blocked'
+
+    def abandon_unsent_nickname(self, permit):
+        from postriff_phase2.discord.rate_limits import RateCoordinatorUnavailable
+        row = self.admissions[permit.id]
+        if row['state'] in ('observed', 'blocked'):
+            return
+        if row['state'] != 'sent':
+            raise RateCoordinatorUnavailable()
+        row['state'] = 'blocked'
+
+    # -- reconciliation -------------------------------------------------------------------------------------------------
+    def _reconcile(self, row, guild_id):
+        from postriff_phase2.discord.rate_limits import RateCoordinatorUnavailable, _digest
+        if (row['method'] != 'PATCH' or row['permit'].path_key != _digest(f'/guilds/{guild_id}/members/@me')
+                or row['state'] in ('reserved', 'sent', 'uncertain') and
+                (row['reserved'] + 120 > self.clock() or row['permit'].expires_at > self.clock())):
+            raise RateCoordinatorUnavailable()
+        if row['state'] in ('reserved', 'sent', 'uncertain'):
+            row['state'] = 'observed'
+
+    def reconcile_nickname(self, cur, permit, guild_id):
+        """The Permit-based method of the coordinator as shipped: it needs the bot credential's own identity."""
+        from postriff_phase2.discord.rate_limits import RateCoordinatorUnavailable
+        row = self.admissions.get(permit.id)
+        if row is None or row['permit'].identity != permit.identity:
+            raise RateCoordinatorUnavailable()
+        self.reconciled.append(('permit', permit.id))
+        self._reconcile(row, guild_id)
+
+    def state_of(self, admission_id):
+        return self.admissions[admission_id]['state']
+
+    def patch_admissions(self):
+        return [row for row in self.admissions.values() if row['method'] == 'PATCH']
+
+
+class FakeLimiterWithIds(FakeLimiter):
+    """What the coordinator offers once it can retire a nickname admission by id (docs/sender-name/REQUESTS-TO-RATE-LIMITER.md R2)."""
+    def reconcile_nickname_by_id(self, cur, admission_id, guild_id):
+        from postriff_phase2.discord.rate_limits import RateCoordinatorUnavailable
+        row = self.admissions.get(admission_id)
+        if row is None:
+            raise RateCoordinatorUnavailable()
+        self.reconciled.append(('id', admission_id))
+        self._reconcile(row, guild_id)

@@ -39,7 +39,7 @@ class Cursor:
     """Answers exactly the statements the sender-name code issues. Writes stay pending until the block exits cleanly."""
     def __init__(self, world, workspace):
         self.world, self.workspace, self.result = world, workspace, None
-        self.states, self.audit, self.throttle = {}, [], {}
+        self.states, self.audit, self.throttle, self.revoked = {}, [], {}, []
 
     def execute(self, sql, params=()):
         world, text = self.world, ' '.join(sql.split())
@@ -58,6 +58,8 @@ class Cursor:
         elif text.startswith('SELECT m.role,m.can_manage_connections FROM public.pr_memberships'):
             member = world.active(params[0], params[1])
             self.result = None if member is None else (member.role, member.flags.get('can_manage_connections', False))
+        elif text.startswith('UPDATE public.pr_encrypted_credentials SET revoked_at=now()'):
+            self.revoked.append(tuple(params))
         elif text.startswith('SELECT pg_advisory_xact_lock('):
             world.locks.append(params[0])
         elif text.startswith('UPDATE public.pr_workspaces SET state='):
@@ -86,6 +88,8 @@ class Cursor:
         for workspace, state in self.states.items():
             self.world.workspaces[workspace].state = state
         self.world.audit.extend(self.audit)
+        for key in self.revoked:
+            self.world.credentials[tuple(key)]['revoked'] = True
         self.world.throttles.update(self.throttle)
 
 
@@ -215,6 +219,23 @@ class Settings:
             'identityGeneration': identity_generation, 'connectionId': ids.connection}, scopes, guild, ids.generation)
         self.hooks.guild_config.setdefault(guild, F.GuildConfig())
         return ids
+
+    def rewrite_envelope(self, workspace, connection, **changes):
+        """Change fields of a stored credential envelope (re-encrypted), as a corrupted or foreign record would look."""
+        entry = self.credentials[(workspace, connection)]
+        row = entry['row']
+        self._store(workspace, connection, {**entry['envelope'], **changes}, row[5], row[6], row[4])
+
+    def set_row(self, workspace, connection, index, value):
+        """Replace one column of the stored credential row (3 expiry, 4 generation, 5 scopes, 6 account)."""
+        entry = self.credentials[(workspace, connection)]
+        entry['row'] = entry['row'][:index] + (value,) + entry['row'][index + 1:]
+
+    def use_limiter(self, *, by_id=False):
+        """Route the adapter's requests through a scriptable stand-in for the shared request coordinator."""
+        limiter = (F.FakeLimiterWithIds if by_id else F.FakeLimiter)(lambda: self.now)
+        self.s.adapter.rate_v1_enabled, self.s.adapter.rate_limiter = True, limiter
+        return limiter
 
     def revoke(self, workspace, connection):
         """What a disconnect does to the credential row and the card."""

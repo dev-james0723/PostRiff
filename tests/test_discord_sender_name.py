@@ -228,18 +228,41 @@ class SenderSettings(unittest.TestCase):
         self.assertEqual(h.patches, [('PATCH', f'/guilds/{GUILD}/members/@me', {'nick': 'D Festival 助手'})])
 
     def test_wrong_workspace_or_member_cannot_change_sender(self):
-        for corruption in ('workspace', 'member', 'generation', 'credential'):
-            with self.subTest(corruption=corruption):
-                h = SettingsHarness()
-                current = h.call(self, 'sender_profile')
+        # Every corruption exists BEFORE the first read. Applied after reading the profile it would be refused by the stale
+        # fingerprint whether or not the custody check exists (the independent review's finding on the earlier shape of this
+        # test); the one-condition-at-a-time table is in test_discord_sender_name_custody.py.
+        for kind, corruption in (('webhook', 'workspace'), ('webhook', 'generation'), ('webhook', 'credential'),
+                                 ('bot', 'workspace'), ('bot', 'generation')):
+            with self.subTest(kind=kind, corruption=corruption):
+                h = SettingsHarness(kind)
+                self.assertTrue(h.call(self, 'sender_profile')['editable'], 'the control: this harness answers')
                 if corruption == 'workspace': h.state['workspace']['id'] = 'other-workspace'
-                if corruption == 'member': h.actor = 'other-member'
                 if corruption == 'generation': h.channel['discordAuthorizationGeneration'] = 'changed-generation'
                 if corruption == 'credential': h.envelope['workspaceId'] = 'other-workspace'
                 with self.assertRaises(AlphaError):
-                    h.call(self, 'set_sender_name', {'name': 'Wrong brand', 'fingerprint': current['fingerprint'], 'confirmed': True})
+                    h.call(self, 'sender_profile')
+                with self.assertRaises(AlphaError) as refused:
+                    h.call(self, 'set_sender_name', {'name': 'Wrong brand', 'fingerprint': 'f' * 64, 'confirmed': True,
+                                                     'sharedServerConfirmed': True})
+                self.assertNotEqual(refused.exception.code, 'discord_sender_name_required', 'refused for custody, not for a stale form')
                 self.assertNotIn('discordSenderName', h.channel)
                 self.assertEqual(h.patches, [])
+
+    def test_a_bot_nickname_is_only_for_the_authorizing_member_but_any_connection_manager_edits_a_webhook_name(self):
+        h = SettingsHarness('bot')
+        h.actor = 'another-member'
+        profile = h.call(self, 'sender_profile')
+        self.assertFalse(profile['editable'])
+        with self.assertRaises(AlphaError) as refused:
+            h.call(self, 'set_sender_name', {'name': 'Wrong brand', 'fingerprint': profile['fingerprint'], 'confirmed': True,
+                                             'sharedServerConfirmed': True})
+        self.assertEqual(refused.exception.status, 403)
+        self.assertEqual(h.patches, [])
+        w = SettingsHarness()
+        w.actor = 'another-member'
+        saved = w.call(self, 'set_sender_name', {'name': 'Team brand', 'confirmed': True,
+                                                 'fingerprint': w.call(self, 'sender_profile')['fingerprint']})
+        self.assertEqual(saved['savedName'], 'Team brand')
 
     def test_stale_editor_cannot_overwrite_a_newer_saved_name(self):
         h = SettingsHarness()
