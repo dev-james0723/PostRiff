@@ -190,7 +190,10 @@ own adoption path (the late-receipt block in `PostgresWorker._claim`) writes exa
 (`providerReference`, state `uncertain`, an event) but runs only inside a worker claim and cannot reach a held job. So
 the tool writes those same fields, reviewed and fenced, and leaves `verified` to the product's read-back
 (`HostedSocial.reconcile_discord`, `PostgresWorker.complete`), which also restores the side records a verification
-writes (learning signal, publish outcome event) that the restore rewound.
+writes (learning signal, publish outcome event) that the restore rewound. Considered and not chosen: calling
+`PostgresWorker.complete()` with a synthetic claim so that `record_receipt` appends the receipt and the next claim adopts
+it. That uses more product code, but it is not atomic with the tool's unchanged-job check, cannot reach a held job, and
+leaves the job `scheduled` (so `assert_no_unresolved_repeat` would not yet block a re-approval) until a worker claims it.
 
 **Failure modes** [inference from the rules, the unit tests and the drill]:
 
@@ -256,6 +259,14 @@ decompressions), not data volume.
    product or in Discord shows them.
 8. [code] Discord's nonce (`sha256(idempotencyKey)[:25]`, `enforce_nonce: true`) is per approval, so a replay within
    Discord's window returns the first message, and the product then verifies that message by read-back (A2).
+9. [code, not drilled] A restore also rewinds rotated OAuth tokens. A person's Discord refresh token that rotated after
+   the restore point is stale in the restored database; the next refresh is refused by Discord and the product then
+   requires the person to reconnect (`reconnect_required()` in `discord/oauth.py`, deliberately not retried because a
+   rotating token may be spent). The bot token, which posts, is not stored in the database and is not affected.
+10. [code] A restored database also brings back disconnected destinations and revoked grants as of the restore point
+    (both live in the workspace row and `pr_encrypted_credentials`); while the bot is still in that server, the worker
+    could post to a destination the customer had disconnected after the restore point. This is the same class as the
+    cancellation in section 4 and needs the same human step.
 
 ## 10. What this drill does not prove
 
