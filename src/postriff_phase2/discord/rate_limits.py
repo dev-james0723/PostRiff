@@ -327,6 +327,12 @@ class SharedPostgresBudget:
     # whose answer was never observed keeps counting against a scope for that scope's window plus this margin, never
     # longer: after it nothing it did can fall inside any window the scope still holds.
     UNOBSERVED_MARGIN_SECONDS = 30.0
+    # Headroom for the delay between an admission and the request reaching Discord, which differs from request to
+    # request (the commit, a thread waking, the connection). Admissions are exact on the database clock; two requests
+    # admitted a window apart can still arrive less than a window apart when the earlier one is the slower. A slot
+    # therefore frees this long after the window, at most a tenth of it: no closed interval of window + guard holds more
+    # than the cap, a stronger bound than the window alone, and the sustained rate is cap x window / (window + guard).
+    SLOT_GUARD_SECONDS = 0.05
 
     def __init__(self, connection_factory, application_id, *, policy=None, **_compat):
         if not isinstance(application_id, str) or not _ID.fullmatch(application_id):
@@ -363,6 +369,35 @@ class SharedPostgresBudget:
         if forward:
             self.policy.require_current(now)
         return now
+
+    def _reading(self, cur, row):
+        """`now` after the locks, as _policy(cur) reads it, plus what the application window needs, in the SAME statement.
+
+        The sliding window must look at the admissions while the application row is held, and every statement under
+        that lock lengthens the time every other request waits for it (the coordinator's row lock bounds the whole
+        system). The clock is read there anyway, so the unresolved admissions older than the window (a count) and the
+        newest `cap` admission times ride along: the exact ceiling costs no round trip. They answer for the cap and
+        window of the stored row; _slide asks again only if a reviewed policy has just changed either.
+        """
+        cap, window = row['cap'], row['window']
+        cur.execute(f'''WITH tick AS MATERIALIZED (SELECT clock_timestamp() AS at)
+            SELECT extract(epoch from tick.at)::double precision,
+                (SELECT count(*) FROM {ADMISSIONS} WHERE application_key=%s
+                    AND reserved_at<=tick.at-make_interval(secs=>%s)
+                    AND state IN ('reserved','sealed','sent','uncertain')
+                    AND (state IN ('reserved','sealed') AND expires_at>tick.at
+                         OR state IN ('sent','uncertain') AND coalesce(sent_at,reserved_at)>tick.at-make_interval(secs=>%s))),
+                array(SELECT extract(epoch from reserved_at)::double precision FROM {ADMISSIONS}
+                    WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s)
+            FROM tick''', (self.application_key,self._span(window)+SLOT_EPSILON,self._horizon(window),self.application_key,cap))
+        value = cur.fetchone()
+        if (not value or len(value) != 3 or not valid_number(value[0]) or type(value[1]) is not int or value[1] < 0
+                or not isinstance(value[2], list) or len(value[2]) > cap or not all(valid_number(s) for s in value[2])):
+            raise RateCoordinatorUnavailable()
+        if self.policy is None:
+            raise RateCoordinatorUnavailable()
+        self.policy.require_current(value[0])
+        return value[0], {'cap': cap, 'window': window, 'held': value[1], 'stamps': value[2]}
 
     def _map(self, cur, identity, route, major):
         # Stable routes need only one round trip. A missing row is not a lock:
@@ -509,6 +544,10 @@ class SharedPostgresBudget:
                 or sorted(value[0] for value in changed) != ordered):
             raise RateCoordinatorUnavailable()
 
+    def _span(self, window):
+        """How long an admission occupies a slot of the application window: the window and its headroom."""
+        return window + min(self.SLOT_GUARD_SECONDS, window / 10)
+
     def _horizon(self, window):
         """How long an admission whose answer was never observed keeps counting against a scope with this window."""
         return window + self.UNOBSERVED_MARGIN_SECONDS
@@ -595,15 +634,16 @@ class SharedPostgresBudget:
             # the lapse of the wait, whichever is sooner, not the sentinel. (Denied below, so this is never stored.)
             row['reset'] = min(now + row['window'], row['freshAfter'] + self._horizon(row['window']))
 
-    def _slide(self, cur, row, now):
+    def _slide(self, cur, row, now, reading):
         """Set the application row's `left` and `reset` from the admissions themselves (an exact sliding window).
 
         Exactness. Every reservation of this application holds its policy row FOR UPDATE from before `now` is read
         until it commits, and it is the only writer of this application's admissions, so request_seq order is
         admission order and, while the database clock does not run backwards, reserved_at never decreases along it.
         The `slots`-th newest admission is then the one whose age decides the next admission: a slot is free only
-        STRICTLY more than one window after the admission that held it. So admission i+cap is stamped more than one
-        window after admission i, and no closed interval of one window holds more than `cap` admissions. The caller
+        STRICTLY more than one window (plus the arrival headroom, _span) after the admission that held it. So admission
+        i+cap is stamped more than one span after admission i, and no closed interval of one window, nor of one span,
+        holds more than `cap` admissions. The caller
         stamps its own admission at or after `now`, which can only widen that gap. A database clock behind its newest
         admission is waited out, not trusted, so the order assumption cannot be broken by a step backwards.
 
@@ -617,33 +657,41 @@ class SharedPostgresBudget:
         when this request's own admission will fill the window, else None.
         """
         cap, window = row['cap'], row['window']
-        cur.execute(f'''SELECT count(*) FROM {ADMISSIONS} WHERE application_key=%s AND reserved_at<=to_timestamp(%s)
-            AND state IN ('reserved','sealed','sent','uncertain')
-            AND (state IN ('reserved','sealed') AND expires_at>to_timestamp(%s)
-                 OR state IN ('sent','uncertain') AND coalesce(sent_at,reserved_at)>to_timestamp(%s))''',
-            (self.application_key,now-window-SLOT_EPSILON,now,now-self._horizon(window)))
-        held = cur.fetchone()[0]
-        if type(held) is not int or held < 0:
-            raise RateCoordinatorUnavailable()
+        span = self._span(window)
+        stamps = None
+        if (reading['cap'], reading['window']) == (cap, window):
+            held = reading['held']
+        else:  # a reviewed policy changed the cap or window just now: the reading answered for the old ones
+            cur.execute(f'''SELECT count(*) FROM {ADMISSIONS} WHERE application_key=%s AND reserved_at<=to_timestamp(%s)
+                AND state IN ('reserved','sealed','sent','uncertain')
+                AND (state IN ('reserved','sealed') AND expires_at>to_timestamp(%s)
+                     OR state IN ('sent','uncertain') AND coalesce(sent_at,reserved_at)>to_timestamp(%s))''',
+                (self.application_key,now-span-SLOT_EPSILON,now,now-self._horizon(window)))
+            held = cur.fetchone()[0]
+            if type(held) is not int or held < 0:
+                raise RateCoordinatorUnavailable()
         slots = cap - held
         row['left'], row['reset'] = 0, now + window  # resolution alone can free a slot: poll once per window
         if slots <= 0:
             return None
-        cur.execute(f'''SELECT extract(epoch from reserved_at)::double precision FROM {ADMISSIONS}
-            WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s''', (self.application_key,slots))
-        stamps = [value[0] for value in cur.fetchall()]
-        if len(stamps) > slots or any(not valid_number(stamp) for stamp in stamps):
-            raise RateCoordinatorUnavailable()
+        if (reading['cap'], reading['window']) == (cap, window):
+            stamps = reading['stamps'][:slots]
+        else:
+            cur.execute(f'''SELECT extract(epoch from reserved_at)::double precision FROM {ADMISSIONS}
+                WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s''', (self.application_key,slots))
+            stamps = [value[0] for value in cur.fetchall()]
+            if len(stamps) > slots or any(not valid_number(stamp) for stamp in stamps):
+                raise RateCoordinatorUnavailable()
         if stamps and stamps[0] > now:
             row['reset'] = stamps[0] + SLOT_EPSILON  # the clock is behind its newest admission: wait for it
             return None
-        busy = [stamp + window + SLOT_EPSILON for stamp in stamps if stamp + window + SLOT_EPSILON > now]
+        busy = [stamp + span + SLOT_EPSILON for stamp in stamps if stamp + span + SLOT_EPSILON > now]
         if len(busy) >= slots:
             row['reset'] = busy[-1]  # the oldest of the newest `slots` admissions frees first
             return None
         row['left'], row['reset'] = slots - len(busy), now + window
         if row['left'] == 1:  # this admission fills the window: the next slot is the oldest busy one's (or its own)
-            return busy[-1] if busy else now + window + SLOT_EPSILON
+            return busy[-1] if busy else now + span + SLOT_EPSILON
         return None
 
     def _insert(self, cur, permit, route, major, bucket, keys, binding, *, read_sent=False):
@@ -701,7 +749,7 @@ class SharedPostgresBudget:
             keys = self._keys(identity,route,major,bucket)
             rows = self._locked(cur,keys)
             previous = {key:dict(row) for key,row in rows.items()}
-            now = self._policy(cur)  # wall time after lock waits
+            now, reading = self._reading(cur,rows['00:'+self.application_key])  # wall time after lock waits
             wait, wait_scope = 0.0, 'unknown'
             filled_reset = None
             for key,row in rows.items():
@@ -709,7 +757,7 @@ class SharedPostgresBudget:
                 if row['hold']:
                     raise RateCoordinatorUnavailable()
                 if row['kind'] == 'policy':
-                    filled_reset = self._slide(cur,row,now)  # sets left/reset; denied below like any capped row
+                    filled_reset = self._slide(cur,row,now,reading)  # sets left/reset; denied below like any capped row
                 embargo = max((row['blocked'] or 0)-now,(row['circuit'] or 0)-now)
                 if embargo > wait:
                     wait,wait_scope = embargo,'embargo'

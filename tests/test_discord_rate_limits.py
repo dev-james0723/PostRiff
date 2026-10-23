@@ -125,6 +125,14 @@ class MemoryLedger:
                 (r['state'] in ('sent','uncertain') and (not bounded or self.unobserved_at(r)>since) or
                  r['state'] in ('reserved','sealed') and r['expires']>now)]
             self.result=[(len(pending),sum(alias not in r['keys'] for r in pending))]
+        elif sql.startswith('WITH tick AS MATERIALIZED'):
+            key,window,horizon,_key,cap=params  # the clock and, with it, the application window's inputs (_reading)
+            moment=self.workspace.now if self.workspace else self.now
+            held=sum(r['application']==key and r['reserved']<=moment-window and (
+                r['state'] in ('reserved','sealed') and r['expires']>moment or
+                r['state'] in ('sent','uncertain') and self.unobserved_at(r)>moment-horizon) for r in self.admissions.values())
+            newest=sorted((r for r in self.admissions.values() if r['application']==key),key=lambda r:-r['seq'])[:cap]
+            self.result=[(moment,held,[r['reserved'] for r in newest])]
         elif sql.startswith('SELECT count(*) FROM public.pr_discord_request_admissions WHERE application_key='):
             key,cutoff,now,since=params  # the application row's unresolved requests older than its window (_slide)
             self.result=[(sum(r['application']==key and r['reserved']<=cutoff and (

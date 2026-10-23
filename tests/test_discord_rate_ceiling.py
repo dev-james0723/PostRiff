@@ -14,6 +14,7 @@ import copy
 import heapq
 import random
 import unittest
+from unittest.mock import patch
 
 from postriff_phase2.discord.rate_limits import (
     SharedPostgresBudget, RequestIdentity, RateDelayed, RateCoordinatorUnavailable, Permit)
@@ -23,6 +24,7 @@ T0 = 1000
 EPS = 1e-6      # one tick of the database clock: the margin by which a slot frees AFTER a whole window
 # Written out here, not read from the implementation, so a change of the margin must change this file too.
 MARGIN = 30.0
+GUARD = .05     # the production headroom between a slot's window and its freeing (SLOT_GUARD_SECONDS), written out here
 OK = {'status': 200, 'headers': {}}
 
 
@@ -41,7 +43,12 @@ def busiest_closed_window(stamps, window):
 
 
 class Base(unittest.TestCase):
+    guard = 0.0   # the arithmetic is shown at the exact window; DefaultHeadroom runs with the production headroom
+
     def setUp(self, capacity=3, window=1, **more):
+        patcher = patch.object(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', self.guard, create=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.db = MemoryLedger(now=T0)
         self.make(capacity, window, **more)
 
@@ -232,6 +239,44 @@ class ExactCeilingArithmetic(Base):
         self.assertLessEqual(busiest_closed_window(self.stamps(), 1), 3)
 
 
+class DefaultHeadroom(Base):
+    """The production headroom (SLOT_GUARD_SECONDS, 50 ms on a one-second window): a slot frees that long after the window,
+    so two requests admitted a window apart arrive a window apart even when the earlier one is the slower."""
+    guard = GUARD
+
+    def test_a_slot_frees_a_window_plus_the_headroom_after_its_admission(self):
+        for _ in range(3):
+            self.read()
+        self.assertAlmostEqual(self.denied().retry_after_seconds, 1 + GUARD + EPS, places=9)
+        self.at(1 + 1e-3)                    # a window later, the headroom not yet over
+        self.denied()
+        self.at(1 + GUARD + 2e-6)
+        self.read()
+        self.assertLessEqual(busiest_closed_window(self.stamps(), 1 + GUARD), 3, 'the headroom is part of the bound')
+        self.assertLessEqual(busiest_closed_window(self.stamps(), 1), 3)
+
+    def test_the_headroom_never_exceeds_a_tenth_of_a_short_window(self):
+        self.make(2, .1)
+        self.read()
+        self.read()
+        self.assertAlmostEqual(self.denied().retry_after_seconds, .1 + .01 + EPS, places=9)
+
+    def test_the_headroom_costs_a_known_share_of_the_rate(self):
+        """cap x window / (window + headroom): 25 per second becomes 23.8, which is 95% of the ceiling."""
+        self.make(25, 1)
+        for second in range(4):
+            granted = 0
+            self.at(second * (1 + GUARD + 2e-6))   # the first instant the previous burst's slots are free
+            for _ in range(60):
+                try:
+                    self.read()
+                    granted += 1
+                except RateDelayed:
+                    break
+            self.assertEqual(granted, 25)
+        self.assertAlmostEqual(25 / (1 + GUARD), 23.81, places=2)
+
+
 class PolicyAndHold(Base):
     def test_tightening_applies_at_once_and_counts_what_was_already_admitted(self):
         self.make(5, 1)
@@ -323,15 +368,16 @@ class SlidingModel:
     """The specification as plain Python, tracking each request's state only from what the API told the caller.
 
     It shares nothing with the implementation: no SQL, no ledger rows, no scope keys."""
-    def __init__(self, capacity, window, margin):
+    def __init__(self, capacity, window, margin, guard):
         self.capacity, self.window, self.margin, self.rows = capacity, window, margin, []
+        self.span = window + min(guard, window / 10)   # how long an admission occupies a slot
         self.decisions = {'ok': 0, 'wait': 0, 'retained': 0}   # what the run actually exercised
 
     def decide(self, now):
         """('ok', None) or ('wait', seconds until the next admission is possible)."""
         held = 0
         for row in self.rows:
-            if row['at'] <= now - self.window - EPS:  # older than the window: counts only while unresolved and able to matter
+            if row['at'] <= now - self.span - EPS:  # older than its slot: counts only while unresolved and able to matter
                 if row['state'] in ('reserved', 'sealed') and row['expires'] > now:
                     held += 1
                 elif row['state'] in ('sent', 'uncertain') and row['sent'] > now - self.window - self.margin:
@@ -342,7 +388,7 @@ class SlidingModel:
             outcome = 'wait', self.window
         else:
             newest = sorted((row['at'] for row in self.rows), reverse=True)[:slots]
-            busy = [at + self.window + EPS for at in newest if at + self.window + EPS > now]
+            busy = [at + self.span + EPS for at in newest if at + self.span + EPS > now]
             if newest and newest[0] > now:
                 outcome = 'wait', newest[0] + EPS - now
             else:
@@ -360,16 +406,23 @@ class RandomizedAgainstModel(unittest.TestCase):
     def run_seed(self, seed):
         rng = random.Random(seed)
         capacity, window = rng.choice((1, 2, 3, 5, 8)), rng.choice((1, 1, .5, .25, 2))
+        guard = rng.choice((0.0, GUARD, GUARD, .2))   # none, the production headroom, and one wide enough to bind
+        with patch.object(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', guard, create=True):
+            return self.live(seed, rng, capacity, window, guard)
+
+    def live(self, seed, rng, capacity, window, guard):
         db = MemoryLedger(now=T0)
         base = policy(capacity, window)
         limiter = SharedPostgresBudget(db.connection, APP, policy=base)
         identity = RequestIdentity.make(APP, 'bot', 'randomized-bot')
-        model = SlidingModel(capacity, window, MARGIN)
+        model = SlidingModel(capacity, window, MARGIN, guard)
         outstanding = []      # (permit, path, model row) in the order they were admitted
         every_stamp = []      # all admission times, kept here because old rows are pruned from the double below
         serial, on_hold = 0, False
+        span = model.span
         steps = [0, 1e-6, 2e-6, .5e-6, .01, .2, window / 2, window - 1e-6, window, window + .5e-6, window + 2e-6,
-                 2 * window, 3.7, MARGIN, window + MARGIN + 2e-6, window + MARGIN - 1e-6]
+                 span - 1e-6, span, span + .5e-6, span + 2e-6, 2 * window, 3.7, MARGIN, window + MARGIN + 2e-6,
+                 window + MARGIN - 1e-6]
         label = lambda step, what: 'seed %d step %d: %s' % (seed, step, what)  # noqa: E731
         for step in range(self.STEPS):
             if db.now > T0 + 3000:
@@ -440,6 +493,7 @@ class RandomizedAgainstModel(unittest.TestCase):
         # The invariant, from the ledger alone: no closed interval of one window holds more than the cap that was in
         # force. (A tightening can only lower it, so the initial cap is the weakest bound; the model checked the rest.)
         self.assertLessEqual(busiest_closed_window(every_stamp, window), base['app_capacity'], 'seed %d' % seed)
+        self.assertLessEqual(busiest_closed_window(every_stamp, model.span), base['app_capacity'], 'seed %d, span' % seed)
         return model.decisions
 
     def test_every_seed_agrees_with_the_model_and_keeps_the_ceiling(self):
