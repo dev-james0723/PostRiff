@@ -18,9 +18,13 @@ tests/test_q05_tenant_probe_local.py and tests/test_q05_tenant_probe_mutations.p
 
     python tests/q05_backend.py run [--allow-writes] [--allow-send-risk]
 
-It prints one JSON object (the result) on stdout. The source tree under test is chosen by
-the Q05_SRC_ROOT environment variable (default: this repo's src), which lets the mutation
-tests point it at a patched copy without editing any tracked file.
+It prints one JSON object (the result) on stdout. The checkout under test is chosen by
+Q05_TARGET_ROOT (default: this repository): its src/ is the application, and its tests/
+(fixtures such as LifecycleWire, tests/phase2/rls.sql) and migrations/ build the schema, so
+the source, fixtures and schema always come from the SAME commit. Point it at a detached
+export (git archive <sha> src tests migrations) of another line, e.g. the RC2 integration
+tip, never at a deployable working tree. Q05_SRC_ROOT overrides only src/, which lets the
+mutation tests point it at a patched copy without editing any tracked file.
 """
 import argparse
 import copy
@@ -40,8 +44,11 @@ from uuid import uuid4
 from wsgiref.simple_server import WSGIServer, make_server
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SRC_ROOT = Path(os.environ.get("Q05_SRC_ROOT") or (REPO_ROOT / "src"))
-TESTS_ROOT = REPO_ROOT / "tests"
+# The checkout under test (application + its own fixtures + its own schema). The probe script
+# itself always comes from THIS repository (scripts/q05_tenant_probe.py).
+TARGET_ROOT = Path(os.environ.get("Q05_TARGET_ROOT") or REPO_ROOT)
+SRC_ROOT = Path(os.environ.get("Q05_SRC_ROOT") or (TARGET_ROOT / "src"))
+TESTS_ROOT = TARGET_ROOT / "tests"
 sys.path[:0] = [str(SRC_ROOT), str(TESTS_ROOT)]
 
 PG_BIN = Path(os.environ.get("POSTRIFF_PG_BIN") or "/usr/lib/postgresql/16/bin")
@@ -55,6 +62,19 @@ DISCORD_MIGRATIONS = (
 
 def pg_available():
     return (PG_BIN / "initdb").exists() and (PG_BIN / "postgres").exists()
+
+
+def target_sha():
+    """The commit the target checkout was exported from (SOURCE_SHA file written next to a
+    detached export), or this repository's HEAD when testing in place."""
+    marker = TARGET_ROOT / "SOURCE_SHA"
+    if marker.exists():
+        return marker.read_text().strip()
+    try:
+        return subprocess.run(["git", "-C", str(TARGET_ROOT), "rev-parse", "HEAD"], capture_output=True,
+                              text=True, check=True).stdout.strip()
+    except Exception:
+        return None
 
 
 class Cluster:
@@ -89,13 +109,13 @@ class Cluster:
         self._started = True
 
     def load_schema(self):
-        phase2 = REPO_ROOT / "tests/phase2"
+        phase2 = TARGET_ROOT / "tests/phase2"
         subprocess.run([str(PG_BIN / "psql"), "-X", self.dsn, "-v", "ON_ERROR_STOP=1", "-q",
                         "-f", str(phase2 / "rls.sql")], check=True, cwd=str(phase2),
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         for mig in DISCORD_MIGRATIONS:
             subprocess.run([str(PG_BIN / "psql"), "-X", self.dsn, "-v", "ON_ERROR_STOP=1", "-q",
-                            "-f", str(REPO_ROOT / "migrations/postriff" / mig)], check=True,
+                            "-f", str(TARGET_ROOT / "migrations/postriff" / mig)], check=True,
                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
 
     def stop(self):
@@ -376,6 +396,8 @@ def main(argv=None):
             db_effects = {k: side_effect_report(before[k], after[k]) for k in ("A", "B")}
             result = {
                 "status": "ran",
+                "targetRoot": str(TARGET_ROOT),
+                "targetSha": target_sha(),
                 "srcRoot": str(SRC_ROOT),
                 "probeExit": rc,
                 "summary": summary,

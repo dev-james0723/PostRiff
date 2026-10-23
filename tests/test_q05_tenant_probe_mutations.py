@@ -25,6 +25,8 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+# The checkout under test (see tests/q05_backend.py): mutations patch a copy of ITS src/.
+TARGET = Path(os.environ.get("Q05_TARGET_ROOT") or REPO)
 sys.path.insert(0, str(REPO / "tests"))
 
 try:
@@ -98,7 +100,7 @@ def run_mutated(name, send=True):
     tmp = tempfile.mkdtemp(prefix="q05-mut-")
     try:
         src = Path(tmp) / "src"
-        shutil.copytree(REPO / "src", src)
+        shutil.copytree(TARGET / "src", src)
         for rel, old, new in hunks:
             path = src / rel
             text = path.read_text()
