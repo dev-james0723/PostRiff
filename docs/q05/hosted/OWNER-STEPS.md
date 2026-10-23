@@ -45,7 +45,9 @@ are the only steps you do.
    reviewed probe hash** from the independent review record of the probe, and the request is refused
    if the probe at the requested SHA is not exactly what was reviewed. The agent then gives you a
    **commit id and title**. Compare **at least the first 12 hex characters** of the commit id (a
-   7-character short id is not enough to trust) and the title.
+   7-character short id is not enough to trust) and the title. Also compare the **16-hex probe-hash
+   prefix** printed in the request commit message ("Pins the REVIEWED probeSha256 …") with the start of
+   the probe hash in the review record; they must be identical.
 5. GitHub shows the run as **waiting for review**. Open it, confirm the commit id (≥12 hex) and the
    title match what the agent told you, and **Approve**. The run signs in both accounts and runs the
    probe; the result (route **templates** and counts only — never ids, tokens, or your content)
@@ -88,3 +90,14 @@ A gate run exercises the real write routes, so set the throwaway accounts up fir
   out**, so even a mistakenly-accepted write cannot post before you cancel it; cancel it afterward).
 - See `docs/q05/PLAN.md` for the full gate-mode method; the request must pin the promoted build's
   `expectSourceRevision`, and the workflow refuses to run if the serving build does not match.
+- **Customer sender names (RC2) need, per account:** one Discord **incoming-webhook** connection and one
+  **bot installation** connected through the normal flow. The probe never renames anything except, on a
+  gate run with writes, the account's **own** webhook sender name, which it saves once and restores.
+- **Prerequisite for the hosted same-server nickname case (later, nothing to do now):** a Discord
+  **server where both throwaway owners' Discord users are members** (with Manage Nicknames), so that
+  both workspaces can install the bot into that one server. Until that server exists, this case runs
+  only in the local harness.
+- **Optional, for the same-workspace sender-name cases:** other members of each workspace — a viewer,
+  an editor, an editor with connection-management, an admin who did not authorize the connections, and
+  a member removed again — each a plus-addressed throwaway sign-up. Without them those cases are
+  reported **NOT RUN** (they always run in the local harness).

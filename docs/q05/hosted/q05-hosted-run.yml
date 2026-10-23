@@ -75,10 +75,15 @@ jobs:
           set -euo pipefail
           git init -q rc
           git -C rc remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git -C rc -c protocol.version=2 fetch -q --depth=1 origin "$SOURCE_SHA"
-          git -C rc checkout -q --detach FETCH_HEAD
-          test "$(git -C rc rev-parse HEAD)" = "$SOURCE_SHA"
-          git -C rc show "HEAD:scripts/q05_tenant_probe.py" > "$GITHUB_WORKSPACE/probe.py"
+          # Read exactly ONE file and nothing else before the full-hash check: fetch the commit WITHOUT file
+          # contents (partial-clone filter; only commit and tree objects arrive), check nothing out, and read
+          # scripts/q05_tenant_probe.py straight from the requested commit — `git show` lazily downloads that
+          # one blob and no other file of the probe branch.
+          git -C rc config remote.origin.promisor true
+          git -C rc config remote.origin.partialclonefilter blob:none
+          git -C rc -c protocol.version=2 fetch -q --depth=1 --filter=blob:none origin "$SOURCE_SHA"
+          test "$(git -C rc rev-parse FETCH_HEAD)" = "$SOURCE_SHA"
+          git -C rc show "$SOURCE_SHA:scripts/q05_tenant_probe.py" > "$GITHUB_WORKSPACE/probe.py"
           grep -q 'Q-05 cross-tenant isolation probe' "$GITHUB_WORKSPACE/probe.py" || { echo 'the fetched file is not the Q-05 probe'; exit 1; }
           # The request pins the FULL sha256 of the probe from its independent review record (the request
           # maker refuses to build when the probe at the SHA differs). Refuse a fetched probe whose hash is

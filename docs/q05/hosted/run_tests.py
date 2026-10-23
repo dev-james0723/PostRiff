@@ -204,6 +204,8 @@ def workspace(probe_body=STUB_PROBE, gitlinks=True, git_repos=True):
     os.makedirs(os.path.join(src, 'scripts'))
     git('init', '-q', src)
     open(os.path.join(src, 'scripts', 'q05_tenant_probe.py'), 'w').write(probe_body)
+    # another file of the probe branch: the fetch step must never download it (only the probe's blob)
+    open(os.path.join(src, 'scripts', 'other_file.py'), 'w').write('OTHER FILE ' + 'x' * 4096 + '\n')
     if gitlinks:
         for name in ('vendor/a-gitlink', 'vendor/b-gitlink'):
             git('update-index', '--add', '--cacheinfo', f'160000,{"1" * 40},{name}', cwd=src)
@@ -212,6 +214,9 @@ def workspace(probe_body=STUB_PROBE, gitlinks=True, git_repos=True):
     bare = os.path.join(root, 'origin', 'PostRiff.git')
     git('clone', '-q', '--bare', src, bare)
     git('update-ref', f'refs/heads/{PROBE_BRANCH}', sha, cwd=bare)  # tip = the probe commit
+    # served over file:// with filtering allowed, like GitHub, so the partial (blob-less) fetch is real
+    git('config', 'uploadpack.allowFilter', 'true', cwd=bare)
+    git('config', 'uploadpack.allowAnySHA1InWant', 'true', cwd=bare)
     req = os.path.join(root, 'work', 'request')
     os.makedirs(os.path.join(req, 'probe'))
     git('init', '-q', req)
@@ -247,7 +252,7 @@ def run(script, root, extra_env=None):
         'FAKE_WS': FAKE_WS,
         'FAKE_STATE': FAKE_STATE,
         'GIT_CONFIG_COUNT': '1',
-        'GIT_CONFIG_KEY_0': f'url.{bare}.insteadOf',
+        'GIT_CONFIG_KEY_0': f'url.file://{bare}.insteadOf',
         'GIT_CONFIG_VALUE_0': GITHUB_URL,
         'GIT_TERMINAL_PROMPT': '0',
     }
@@ -393,6 +398,19 @@ def request_suite():
     req_case('an upper-case probeSha256 is refused', {'sha': 'SHA', 'mode': 'generic', 'probeSha256': PROBE_SHA256.upper()}, RUN_G, False)
 
 
+def fetch_footprint(root, sha):
+    """(working-tree entries of rc/, the other file's blob was downloaded?, the probe blob is present?).
+    rev-list --missing=print reports absent objects WITHOUT lazily fetching them."""
+    rc = os.path.join(root, 'work', 'rc')
+    entries = sorted(os.listdir(rc)) if os.path.isdir(rc) else None
+    src = os.path.join(root, 'src')
+    other = git('rev-parse', f'{sha}:scripts/other_file.py', cwd=src).stdout.strip()
+    probe_blob = git('rev-parse', f'{sha}:scripts/q05_tenant_probe.py', cwd=src).stdout.strip()
+    listing = subprocess.run([REAL_GIT, '-C', rc, 'rev-list', '--objects', '--missing=print', sha],
+                             capture_output=True, text=True).stdout.split()
+    return entries, (other in listing and '?' + other not in listing), (probe_blob in listing)
+
+
 def fetch_suite():
     print('fetch step')
     root, sha, alt = workspace()
@@ -400,6 +418,10 @@ def fetch_suite():
     # so the fetch step always has it set; pass it here as the real workflow does.
     code, text, _ = run(FETCH, root, {'SOURCE_SHA': sha, 'PROBE_SHA256': PROBE_SHA256})
     check('the probe is fetched at the exact SHA despite orphan gitlinks', code == 0 and 'Q-05 cross-tenant isolation probe' in read(root, 'work/probe.py'), text[-200:])
+    entries, other_downloaded, probe_present = fetch_footprint(root, sha)
+    check('the fetch checks nothing out: rc/ holds only .git (delta follow-up 1)', entries == ['.git'], str(entries))
+    check('only the probe file is downloaded: another file of the probe branch never is (blob-less fetch)',
+          probe_present and not other_downloaded, f'probe={probe_present} other={other_downloaded}')
     shutil.rmtree(root)
     root, sha, alt = workspace()
     code, text, _ = run(FETCH, root, {'SOURCE_SHA': '2' * 40, 'PROBE_SHA256': PROBE_SHA256})
@@ -651,13 +673,16 @@ def evaluate(path):
     results.append(req({'sha': 'SHA', 'mode': 'generic'}, RUN_G, attempt='2') != 0)
     results.append(req({'sha': 'SHA', 'mode': 'generic', 'probeSha256': PROBE_SHA256[:16]}, RUN_G) != 0)  # N3
 
-    # fetch: the reviewed probeSha256 must EQUAL the fetched probe's hash (no prefix match)
-    def fetch(probe_sha256):
+    # fetch: the reviewed probeSha256 must EQUAL the fetched probe's hash (no prefix match), and only that
+    # one file is ever downloaded, nothing checked out
+    def fetch(probe_sha256, footprint=False):
         root, sha, alt = workspace()
         code, _t, _o = run(fetchrun, root, {'SOURCE_SHA': sha, 'PROBE_SHA256': probe_sha256})
+        fp = fetch_footprint(root, sha) if footprint else None
         shutil.rmtree(root)
-        return code
-    results.append(fetch(PROBE_SHA256) == 0)
+        return (code, fp) if footprint else code
+    code, (entries, other_downloaded, probe_present) = fetch(PROBE_SHA256, footprint=True)
+    results.append(code == 0 and entries == ['.git'] and probe_present and not other_downloaded)
     results.append(fetch('deadbeef' * 8) != 0)
     results.append(fetch(PROBE_SHA256[:16]) != 0)                                                      # N3
 
@@ -742,6 +767,13 @@ MUTATIONS = [
     # delta-review N4: the key check is an allowlist; turning the fallback into "accept" is a denylist again
     ('accept any other key shape (denylist again)', "*) echo 'refusing: Q05_SUPABASE_PUBLISHABLE_KEY must be the publishable key (sb_publishable_...) or an anon JWT; a SECRET or unknown key is never used'; exit 1 ;;", "*) : ;;"),
     ('drop the probeSha256 verification', '[ "$actual" = "$PROBE_SHA256" ] || { echo \'the fetched probe does not match the reviewed probeSha256 in the request\'; exit 1; }', 'true'),
+    # delta follow-up 1: nothing but the probe file before the hash check
+    ('check out the probe-branch tree again before the hash check',
+     'git -C rc show "$SOURCE_SHA:scripts/q05_tenant_probe.py"',
+     'git -C rc checkout -q --detach FETCH_HEAD; git -C rc show "$SOURCE_SHA:scripts/q05_tenant_probe.py"'),
+    ('download every file of the probe branch (drop the blob-less fetch)', [
+        ('          git -C rc config remote.origin.partialclonefilter blob:none\n', ''),
+        ('fetch -q --depth=1 --filter=blob:none origin', 'fetch -q --depth=1 origin')]),
     # delta-review N3: a hash PREFIX must never be enough, in the request or at fetch
     ('accept a 16-hex probeSha256 prefix in the request', '[[ "$probesha" =~ ^[0-9a-f]{64}$ ]]', '[[ "$probesha" =~ ^[0-9a-f]{16,64}$ ]]'),
     ('compare only a prefix of the probe hash at fetch', '[ "$actual" = "$PROBE_SHA256" ] ||', '[[ "$actual" == "$PROBE_SHA256"* ]] ||'),
