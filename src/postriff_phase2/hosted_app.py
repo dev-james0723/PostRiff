@@ -688,6 +688,11 @@ class HostedApplication:
                 self._runtime()
                 return self._json(start_response, 200, discord_lane.run(self.worker, number, started=started,
                                                                          request_id=environ.get('postriff.request_id')))
+            if path.startswith('/api/ops/discord/'):
+                # H-07 operations health: read-only aggregates behind the shard route's cron-secret check, which runs
+                # before the runtime, database or provider clients start; the same 404 and 401 answers.
+                from .discord import ops as discord_ops
+                return discord_ops.answer(self, environ, start_response, method, path)
             if path == '/api/discord/interactions':
                 if method != 'POST':
                     raise AlphaError('Discord interaction route unavailable.', 404)
