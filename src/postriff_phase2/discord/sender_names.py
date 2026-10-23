@@ -356,9 +356,13 @@ class SenderNames:
             return True
         return False
 
+    @staticmethod
+    def _finite(value):
+        return type(value) in (int, float) and math.isfinite(value)
+
     def _pending_seconds(self, claim):
         expires = claim.get('expiresAt') if isinstance(claim, dict) else None
-        if type(expires) not in (int, float) or not math.isfinite(expires):
+        if not self._finite(expires):
             return PENDING_SECONDS
         return max(0, math.ceil(expires - self.s.oauth.clock()))
 
@@ -415,7 +419,7 @@ class SenderNames:
         if precheck is not None:
             precheck(kind, first, first_stamp)
         if claim and (not reconcile or not isinstance(claim, dict)
-                      or type(claim.get('expiresAt')) not in (int, float)
+                      or not self._finite(claim.get('expiresAt'))
                       or self.s.oauth.clock() < claim['expiresAt']):
             fail('A sender-name change is pending. Wait two minutes, then reload to verify it.', 409,
                  code='discord_sender_edit_pending', retryAfterSeconds=self._pending_seconds(claim))

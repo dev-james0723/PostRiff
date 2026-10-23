@@ -155,5 +155,170 @@ class FrozenName(unittest.TestCase):
         names.assert_sendable({'senderKind': 'webhook', 'discordSenderName': 'Acme Weekly'}, {names.ENV_SENDER_NAMES: 'true'})
 
 
+class ReadBack(unittest.TestCase):
+    """The created message's author name is compared with the frozen one after Unicode NFC and whitespace canonicalisation
+    (which Discord is documented to apply), not byte for byte (SNR-8); every real difference still fails."""
+    def manifest(self, name='Acme Weekly'):
+        return {'discord': {'target': {'channelId': '71', 'webhookId': '81'}}, 'payload': {'text': 'hello'},
+                **({'discordSenderName': name} if name is not None else {})}
+
+    @staticmethod
+    def body(username):
+        return {'id': '9', 'channel_id': '71', 'webhook_id': '81', 'author': {'id': '81', 'bot': True, 'username': username},
+                'content': 'hello', 'mentions': [], 'mention_roles': [], 'mention_everyone': False, 'attachments': [], 'embeds': []}
+
+    def matches(self, username, name='Acme Weekly'):
+        from postriff_phase2.discord.webhooks import message_matches
+        return message_matches(self.body(username), self.manifest(name), '9')
+
+    def test_equal_and_normalised_names_match(self):
+        self.assertTrue(self.matches('Acme Weekly'))
+        self.assertTrue(self.matches('Acme  Weekly'), 'Discord collapses repeated spaces')
+        self.assertTrue(self.matches(' Acme Weekly '))
+        self.assertTrue(self.matches('Acme\u00a0Weekly'))
+        self.assertTrue(self.matches('Cafe\u0301 Weekly', 'Caf\u00e9 Weekly'), 'decomposed Unicode equals composed')
+        self.assertTrue(self.matches('Caf\u00e9 Weekly', 'Cafe\u0301 Weekly'))
+
+    def test_every_real_difference_fails(self):
+        for username in ('acme weekly', 'Acme Weekl', 'Acme Weekly!', 'Acme Wee\u043aly', 'AcmeWeekly', '', None, 5, ['Acme Weekly']):
+            with self.subTest(username=username):
+                self.assertFalse(self.matches(username))
+
+    def test_an_unnamed_manifest_does_not_compare_the_author_name(self):
+        self.assertTrue(self.matches('Spare Webhook', None))
+        self.assertTrue(self.matches(None, None))
+
+    def test_the_other_checks_are_unchanged(self):
+        from postriff_phase2.discord.webhooks import message_matches
+        body = self.body('Acme Weekly')
+        self.assertTrue(message_matches(body, self.manifest(), '9'))
+        for key, value in (('id', '10'), ('channel_id', '72'), ('webhook_id', '82'), ('content', 'other'), ('mention_everyone', True),
+                           ('mentions', [{'id': '1'}]), ('mention_roles', ['5']), ('attachments', [{}]), ('embeds', [{}]),
+                           ('author', {'id': '82', 'bot': True, 'username': 'Acme Weekly'}),
+                           ('author', {'id': '81', 'bot': False, 'username': 'Acme Weekly'}),
+                           ('author', {'id': '81', 'username': 'Acme Weekly'}), ('author', None)):
+            for manifest in (self.manifest(), self.manifest(None)):
+                with self.subTest(key=key, named=bool(manifest.get('discordSenderName'))):
+                    self.assertFalse(message_matches({**body, key: value}, manifest, '9'))
+        for not_a_message in (None, [], 'text', 5):
+            self.assertFalse(message_matches(not_a_message, self.manifest(), '9'))
+        self.assertFalse(message_matches({k: v for k, v in body.items() if k != 'mention_everyone'}, self.manifest(), '9'))
+
+
+class Equivalence(unittest.TestCase):
+    def test_only_text_can_be_equivalent(self):
+        self.assertTrue(names.names_equivalent('Acme', 'Acme'))
+        self.assertFalse(names.names_equivalent(None, None))
+        self.assertFalse(names.names_equivalent(5, 5))
+        self.assertFalse(names.names_equivalent('Acme', None))
+        self.assertFalse(names.names_equivalent(None, 'Acme'))
+
+
+class Joiners(unittest.TestCase):
+    """Two invisible characters real text needs (emoji sequences, Persian and Indic words) and nothing else invisible."""
+    ZWJ, ZWNJ, VS16, SKIN = chr(0x200D), chr(0x200C), chr(0xFE0F), chr(0x1F3FD)
+    MAN, LAPTOP, FLAG, RAINBOW = chr(0x1F468), chr(0x1F4BB), chr(0x1F3F3), chr(0x1F308)
+    MEEM, FARSI_YEH = chr(0x0645), chr(0x06CC)
+
+    def problem(self, name, kind='webhook'):
+        return names.name_problem(name, kind)
+
+    def test_a_joiner_inside_one_emoji_sequence_is_accepted(self):
+        for name in (self.MAN + self.ZWJ + self.LAPTOP,
+                     self.MAN + self.SKIN + self.ZWJ + self.LAPTOP,
+                     self.FLAG + self.VS16 + self.ZWJ + self.RAINBOW,
+                     'Team ' + self.MAN + self.ZWJ + self.LAPTOP):
+            with self.subTest(name=name.encode('unicode_escape')):
+                self.assertIsNone(self.problem(name))
+                self.assertIsNone(self.problem(name, 'bot'))
+
+    def test_a_joiner_anywhere_else_is_refused(self):
+        cases = {
+            'leading': self.ZWJ + self.LAPTOP, 'trailing': self.LAPTOP + self.ZWJ,
+            'between Latin letters': 'a' + self.ZWJ + 'b', 'letter and emoji': 'a' + self.ZWJ + self.LAPTOP,
+            'emoji and letter': self.LAPTOP + self.ZWJ + 'b', 'after a variation selector only': self.VS16 + self.ZWJ + self.LAPTOP,
+            'a bare joiner': 'ab' + self.ZWJ, 'two in a row': self.MAN + self.ZWJ + self.ZWJ + self.LAPTOP}
+        for label, name in cases.items():
+            with self.subTest(label):
+                self.assertEqual(self.problem('x ' + name if label != 'leading' else name), 'control_or_format', label)
+
+    def test_a_non_joiner_is_only_for_scripts_that_need_it(self):
+        persian = self.MEEM + self.ZWNJ + self.FARSI_YEH
+        self.assertIsNone(self.problem(persian))
+        for label, name in {'Latin letters': 'a' + self.ZWNJ + 'b', 'leading': self.ZWNJ + self.MEEM, 'trailing': self.MEEM + self.ZWNJ,
+                            'between emoji': self.LAPTOP + self.ZWNJ + self.LAPTOP, 'letter and emoji': self.MEEM + self.ZWNJ + self.LAPTOP,
+                            'Latin extended-A': chr(0x0101) + self.ZWNJ + chr(0x0113)}.items():
+            with self.subTest(label):
+                self.assertEqual(self.problem('x ' + name if label != 'leading' else name), 'control_or_format', label)
+
+    def test_no_other_format_character_is_let_through_by_the_joiner_rule(self):
+        for code in (0x200B, 0x2060, 0xFEFF, 0x202E, 0x2066, 0x00AD):
+            with self.subTest(hex(code)):
+                self.assertEqual(self.problem('a' + chr(code) + 'b'), 'control_or_format')
+
+
+class Hierarchy(unittest.TestCase):
+    """Discord's role hierarchy for the person who installed the bot: the owner, or a role strictly above the bot's highest."""
+    GUILD = {'owner_id': '1', 'roles': [{'id': 'r1', 'position': 5}, {'id': 'r2', 'position': 2}, {'id': 'r3', 'position': 5},
+                                        {'id': 'bad', 'position': '7'}, {'id': 'none'}]}
+
+    def above(self, person, bot, user='9'):
+        return names._above(self.GUILD, person, bot, user)
+
+    def test_strictly_above_or_the_owner(self):
+        self.assertTrue(self.above(['r1'], ['r2']))
+        self.assertTrue(self.above(['r2', 'r1'], ['r2']))
+        self.assertFalse(self.above(['r2'], ['r1']))
+        self.assertFalse(self.above(['r1'], ['r3']), 'an equal position is not above')
+        self.assertTrue(self.above([], [], user='1'), 'the owner needs no role')
+        self.assertTrue(self.above(['r2'], ['r1'], user='1'))
+
+    def test_anything_unknown_fails_closed(self):
+        self.assertFalse(self.above(['unknown'], ['r2']))
+        self.assertFalse(self.above(['r1'], ['unknown']))
+        self.assertFalse(self.above(['bad'], ['r2']), 'a position that is not an integer')
+        self.assertFalse(self.above(['r1'], ['bad']))
+        self.assertFalse(self.above(['none'], ['r2']))
+        self.assertFalse(self.above(['r1'], ['none']))
+        self.assertFalse(names._above({'owner_id': '1', 'roles': 'x'}, ['r1'], ['r2'], '9'))
+        self.assertFalse(names._above({'owner_id': '1', 'roles': [None, 5]}, ['r1'], ['r2'], '9'))
+
+
+class NicknameFreeze(unittest.TestCase):
+    ON = {names.ENV_SENDER_NAMES: 'true', names.ENV_BOT_NICKNAME: 'true'}
+
+    def channel(self, **extra):
+        return {'discordConnectionKind': 'installation', 'discordBotNickname': {'value': 'Brand Bot', 'observedAt': 1.0}, **extra}
+
+    def test_the_observed_nickname_is_frozen_when_both_switches_are_on(self):
+        self.assertEqual(names.frozen_bot_nickname(self.channel(), self.ON), ('Brand Bot',))
+        self.assertEqual(names.frozen_bot_nickname(self.channel(discordBotNickname={'value': None, 'observedAt': 1}), self.ON), (None,))
+
+    def test_nothing_is_frozen_otherwise(self):
+        cases = {
+            'a webhook connection': (self.channel(discordConnectionKind='webhook'), self.ON),
+            'a connection of no kind': ({'discordBotNickname': {'value': 'Brand Bot', 'observedAt': 1}}, self.ON),
+            'master switch off': (self.channel(), {names.ENV_SENDER_NAMES: 'false', names.ENV_BOT_NICKNAME: 'true'}),
+            'nickname switch off': (self.channel(), {names.ENV_SENDER_NAMES: 'true', names.ENV_BOT_NICKNAME: 'false'}),
+            'nickname switch unset': (self.channel(), {names.ENV_SENDER_NAMES: 'true'}),
+            'never observed': ({'discordConnectionKind': 'installation'}, self.ON),
+            'record is not an object': (self.channel(discordBotNickname='Brand Bot'), self.ON),
+            'record has no value': (self.channel(discordBotNickname={'observedAt': 1}), self.ON),
+            'value is not text': (self.channel(discordBotNickname={'value': 5, 'observedAt': 1}), self.ON)}
+        for label, (channel, values) in cases.items():
+            with self.subTest(label):
+                self.assertIsNone(names.frozen_bot_nickname(channel, values))
+
+    def test_the_dispatch_gate_fails_closed(self):
+        names.assert_nickname_unchanged({'discordBotNickname': 'A'}, {'botNickname': 'A'})
+        names.assert_nickname_unchanged({'discordBotNickname': None}, {'botNickname': None})
+        for manifest, evidence in (({'discordBotNickname': 'A'}, {'botNickname': 'B'}), ({'discordBotNickname': 'A'}, {'botNickname': None}),
+                                   ({'discordBotNickname': None}, {'botNickname': 'B'}),
+                                   ({'discordBotNickname': 'A'}, {}), ({'discordBotNickname': None}, {})):
+            with self.subTest(manifest=manifest, evidence=evidence), self.assertRaises(AlphaError) as raised:
+                names.assert_nickname_unchanged(manifest, evidence)
+            self.assertEqual((raised.exception.status, raised.exception.code), (409, 'discord_bot_nickname_changed'))
+
+
 if __name__ == '__main__':
     unittest.main()

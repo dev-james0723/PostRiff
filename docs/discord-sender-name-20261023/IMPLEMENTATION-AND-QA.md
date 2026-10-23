@@ -5,6 +5,37 @@ Base: `claude/discord-launch-rc-20261023` at `2a5a523d788eef67a5c7dbed609a98efa6
 
 Status: implementation and local synthetic acceptance complete; production release and live Discord acceptance pending. This change has not been deployed, merged, or used to send a real Discord message. No production flags, secrets, database schema, domains or Vercel controls were changed.
 
+## Corrections after the independent review (RC2 integration branch)
+
+Added 2026-10-23 on `claude/discord-rc2-sendername-20261023`. The text below this section is the upstream branch's own account and is kept as
+written; where it conflicts with this section, this section is right. Full per-finding detail: `docs/sender-name/EVIDENCE.md`.
+
+1. **Who may edit.** A webhook name is a Rafii setting: any member who may manage connections edits it (the member who authorized the
+   webhook must still hold that permission). Only the member whose Discord account installed the bot may change the bot nickname. "Only the
+   authorizing member ... can edit" below is true for the bot only.
+2. **The sensitive-action gate is not what protects the POST.** `security_gate.require` returns immediately unless
+   `RAFII_ACCOUNT_PROTECTION_V2_MODE=enforce`, which nothing in the repository sets. The controls that actually apply are the fresh sign-in
+   (`assert_fresh`, the step-up window), the application guard header, the role check and the exact-state fingerprint.
+3. **The independent code review named under "Verification receipt" left no artifact in the repository**, and the regressions it refers to
+   were shadowed: the reviewer's deletion-mutation run found 58 of 101 mutants of the sender-name code surviving the upstream sender-name
+   tests. Do not cite that row as evidence. The mutation result for this branch is in `EVIDENCE.md`.
+4. **"That display name cannot be frozen per post"** stays true of what Discord renders, but Rafii no longer ignores it: with the nickname
+   capability on, a review records the nickname Discord last reported and a queued bot post is HELD at dispatch, nothing sent, if Discord
+   reports another one.
+5. **Several workspaces can hold one server.** The bot nickname is one value per server. Rafii writes it from a workspace only while that
+   workspace is the server's only live Rafii installation; with two, neither can (`nickname_authority_other_workspace`). The capability is
+   OFF by default (`POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED`), and the whole feature is OFF by default on hosted production
+   (`POSTRIFF_DISCORD_SENDER_NAMES_ENABLED` unset).
+6. **PostgreSQL.** "Local PostgreSQL binaries were unavailable" described the upstream machine. On this branch the PostgreSQL suites
+   (`tests/test_discord_sender_name_postgres.py`) run against a disposable PostgreSQL 16 cluster, including the real request coordinator,
+   the W-02 lane and the minute-tick worker. The owned cloud qualification (CI uses PostgreSQL 17) has still not been run for this change.
+7. **Rollback.** Besides queued manifests that carry a frozen custom name being held by the older worker, a NEW approval made under the older
+   worker silently drops the name, because the older worker ignores the setting. Customers' future posts would be sent under the
+   webhook's own name without any message. Say so in the rollback instructions.
+8. **Counts.** The test counts under "Verification receipt" are the upstream branch's. This branch's are in `EVIDENCE.md`.
+9. **Webhook route.** The webhook route (`POSTRIFF_DISCORD_WEBHOOK_V1_ENABLED`/`_QUALIFIED`) stays off at opening, so the webhook name ships
+   dark and nothing in this feature that a customer can reach in Wave 1 is a webhook.
+
 ## Customer behavior
 
 Connections now offers **Edit sender name** for an authorized Discord installation or incoming webhook. English, Traditional Chinese and Simplified Chinese include a sender preview, scope description, pending state, success receipt, reload recovery, and session-verification recovery. Only the authorizing member with workspace connection-management permission can edit.

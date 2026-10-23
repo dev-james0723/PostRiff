@@ -158,6 +158,8 @@ class Hooks:
         self.before_patch = self.after_read = None   # one-shot hooks: callable() run before a nickname PATCH / after a read
         self.lose_patch_response = False             # one-shot: Discord applies the nickname PATCH, the response never arrives
         self.rate_headers = None                     # callable(method, path) -> headers, for runs through the real coordinator
+        self.bot_id = BOT                            # what GET /users/@me says the bot's id is
+        self.webhook_name = DEFAULT_HOOK_NAME        # what GET /webhooks/{id}/{token} says the webhook's own name is
 
     def __call__(self, method, url, headers=None, form=None, body=None, data=None):
         response = self._route(method, url, headers, form, body, data)
@@ -180,7 +182,7 @@ class Hooks:
         if path == '/oauth2/applications/@me':
             return {'status': 200, 'body': {'id': APP}, 'headers': {}}
         if path == '/users/@me':
-            return {'status': 200, 'body': {'id': BOT, 'bot': True}, 'headers': {}}
+            return {'status': 200, 'body': {'id': self.bot_id, 'bot': True}, 'headers': {}}
         if parts[0] == 'guilds' and parts[1] in self.guild_config:
             return self._configured_guild(method, parts, body, headers)
         if parts[0] == 'guilds' and parts[1] in self.tenants:
@@ -219,19 +221,27 @@ class Hooks:
             if self.lose_patch_response:
                 self.lose_patch_response = False
                 raise TimeoutError('synthetic lost response')
+            if config.patch_response is not None:
+                return config.patch_response(copy.deepcopy(body))
             return self._ok({'user': {'id': BOT, 'username': 'Rafii'}, 'nick': config.nick, 'roles': []})
         if method != 'GET':
             raise AssertionError('Unexpected synthetic guild route')
         if len(parts) == 2:
-            answer = self._ok({'id': guild, 'name': 'Synthetic server', 'owner_id': config.owner_id, 'roles': [
+            answer = self._ok({'id': config.report_guild_id or guild, 'name': 'Synthetic server', 'owner_id': config.owner_id, 'roles': [
                 {'id': guild, 'permissions': str(DiscordProvider.PERMISSIONS), 'position': 0},
                 {'id': '11223344', 'permissions': str(config.user_permissions), 'position': config.user_position},
                 {'id': '22334455', 'permissions': str(config.bot_permissions), 'position': config.bot_position}]})
         elif len(parts) == 4 and parts[2] == 'members' and parts[3] == USER:
+            if config.user_member_missing:
+                return {'status': 404, 'body': {'message': 'Unknown Member', 'code': 10007}, 'headers': {}}
             answer = self._ok({'user': {'id': USER}, 'roles': ['11223344'], 'pending': False, 'communication_disabled_until': None})
         elif len(parts) == 4 and parts[2] == 'members' and parts[3] == BOT:
-            answer = self._ok({'user': {'id': BOT, 'username': 'Rafii'}, 'roles': ['22334455'], 'nick': config.nick,
-                               'pending': False, 'communication_disabled_until': None})
+            if config.bot_member_missing:
+                return {'status': 404, 'body': {'message': 'Unknown Member', 'code': 10007}, 'headers': {}}
+            named = {'global_name': config.bot_global_name} if config.bot_global_name else {}
+            answer = self._ok({'user': {'id': config.readback_user_id if config.readback_user_id and config.patches else BOT,
+                                        'username': 'Rafii', **named},
+                               'roles': ['22334455'], 'nick': config.nick, 'pending': False, 'communication_disabled_until': None})
         elif len(parts) == 3 and parts[2] == 'channels' and guild in self.tenants:
             answer = self._ok([{'id': self.tenants[guild].channel, 'guild_id': guild, 'name': 'synthetic', 'type': 0,
                                 'permission_overwrites': []}])
@@ -249,7 +259,7 @@ class Hooks:
             return {'status': 404, 'body': {'message': 'Unknown Webhook', 'code': 10015}, 'headers': {}}
         if method == 'GET' and len(parts) == 3:
             return self._ok({'id': hook, 'application_id': APP, 'guild_id': tenant.guild, 'channel_id': tenant.channel,
-                             'type': 1, 'name': DEFAULT_HOOK_NAME})
+                             'type': 1, 'name': self.webhook_name})
         if method == 'GET' and len(parts) == 5 and parts[3] == 'messages':
             message = self.messages.get(parts[4])
             return self._ok(copy.deepcopy(message)) if message else {'status': 404, 'body': {}, 'headers': {}}
@@ -305,6 +315,11 @@ class GuildConfig:
         self.nick = None
         self.patches, self.patch_headers = [], []
         self.reject_patch = False
+        self.patch_response = None        # callable(body) -> response, to answer a nickname PATCH differently from Discord
+        self.report_guild_id = None       # the id the server read answers with, when it should be another server
+        self.user_member_missing = self.bot_member_missing = False
+        self.bot_global_name = None       # the bot user's global display name, when it has no nickname
+        self.readback_user_id = None      # the user id the member read answers with once a PATCH happened
 
 
 class FakeLimiter:

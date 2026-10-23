@@ -60,6 +60,8 @@ class Cursor:
             self.result = None if member is None else (member.role, member.flags.get('can_manage_connections', False))
         elif text.startswith('UPDATE public.pr_encrypted_credentials SET revoked_at=now()'):
             self.revoked.append(tuple(params))
+        elif text.startswith('INSERT INTO public.pr_channel_capabilities'):
+            pass
         elif text.startswith('SELECT pg_advisory_xact_lock('):
             world.locks.append(params[0])
         elif text.startswith('UPDATE public.pr_workspaces SET state='):

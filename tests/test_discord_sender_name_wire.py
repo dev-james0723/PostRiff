@@ -502,6 +502,74 @@ class BotNicknameInTheApproval(unittest.TestCase):
                 self.assertNotIn(secret, reason)
         self.assertNotEqual(*reasons.values())
 
+    # -- automation (recurring tasks) binds the nickname the person saw, like it binds a webhook name -----------------------
+    def decide_and_commit(self, observed, shown, *, on_decision=True, on_commit=True, record_after='unset', index=31):
+        from postriff_phase2 import campaigns, publisher
+        tenant, world, config = self.world(observed=observed, index=index)
+        state, channel = tenant.state, tenant.channel_record
+        destination = auth.destination(state, channel, channel['defaultDestinationId'])
+        task = {'id': 'synthetic-task', 'status': 'active', 'schedule': {'timeZone': 'UTC'}}
+        item = {'key': 'synthetic-item', 'platform': 'Discord', 'channelId': channel['id'], 'variantId': tenant.variant['id'],
+                'state': 'ready_for_review', 'publishAt': F.NOW + 300}
+        run = {'id': 'synthetic-run', 'taskId': task['id'], 'items': [item]}
+        root = campaigns._root(state)
+        root['recurringTasks'].append(task)
+        root['occurrences'].append(run)
+        body = {'occurrenceId': run['id'], 'itemKey': item['key'], 'decision': 'approve', 'confirmed': True, 'variantRevision': 1,
+                'excludedUnknowns': [], 'acknowledgedWarnings': [], 'destinationId': destination['id'],
+                'destinationGeneration': destination['resourceGeneration'], 'publishAt': F.NOW + 300, 'discordBotNickname': shown}
+        with switch(True), nickname(on_decision):
+            campaigns._decide(state, root, body, F.ACTOR, F.NOW)
+        if record_after != 'unset':
+            channel['discordBotNickname'] = {'value': record_after, 'observedAt': F.NOW}
+        with switch(True), nickname(on_commit):
+            queued = publisher.commit(tenant.engine, state, F.ACTOR, {'occurrenceId': run['id'], 'itemKey': item['key']}, F.NOW + 60)
+        job = next(j for j in state['phase2']['jobs'] if j['id'] == queued['jobId'])
+        return tenant, world, config, item, job
+
+    def test_an_automation_approval_keeps_the_nickname_its_human_decision_showed(self):
+        tenant, world, config, item, job = self.decide_and_commit('Brand Bot', 'Brand Bot', record_after='Renamed Since')
+        self.assertEqual(item['decision']['discordBotNickname'], 'Brand Bot')
+        self.assertEqual(job['manifest']['discordBotNickname'], 'Brand Bot', 'frozen from the decision, not from the live record')
+        with switch(True), nickname(True):
+            self.assertTrue(auth.job_authorized(tenant.state, tenant.channel_record, job))
+            self.assertEqual(world.dispatch(job)['state'], 'provider_accepted')      # Discord still reports Brand Bot
+            config.nick = 'Renamed Since'
+            with self.assertRaises(AlphaError) as raised:
+                world.dispatch(job)
+        self.assertEqual(raised.exception.code, 'discord_bot_nickname_changed')
+
+    def test_an_automation_approval_made_on_a_stale_nickname_is_refused(self):
+        with self.assertRaises(AlphaError) as raised:
+            self.decide_and_commit('Brand Bot', 'The Nickname The Page Showed Earlier')
+        self.assertEqual(raised.exception.status, 409)
+        self.assertIn('nickname changed', str(raised.exception))
+        with self.assertRaises(AlphaError):
+            self.decide_and_commit('Brand Bot', None, index=32)          # a page that showed none while one was recorded
+
+    def test_a_decision_without_a_nickname_freezes_none_even_when_the_live_record_has_one_by_commit_time(self):
+        tenant, world, config, item, job = self.decide_and_commit(None, None, on_decision=False, on_commit=True,
+                                                                  record_after='Observed Later', index=33)
+        self.assertNotIn('discordBotNickname', item['decision'])
+        self.assertNotIn('discordBotNickname', job['manifest'])
+        config.nick = 'Anything'
+        with switch(True), nickname(True):
+            self.assertEqual(world.dispatch(job)['state'], 'provider_accepted')
+
+    def test_the_capability_going_off_between_decision_and_commit_asks_for_a_new_approval(self):
+        """The frozen nickname is part of the publication id (not of the wire), so a queue commit that would freeze something
+        else than the human decision did cannot proceed on the old approval."""
+        with self.assertRaises(AlphaError) as raised:
+            self.decide_and_commit('Brand Bot', 'Brand Bot', on_decision=True, on_commit=False, index=34)
+        self.assertEqual((raised.exception.status, raised.exception.code), (409, 'discord_approval_required'))
+
+    def test_a_nickname_less_bot_is_a_real_decision_too(self):
+        tenant, world, config, item, job = self.decide_and_commit(None, None, index=35)
+        self.assertIn('discordBotNickname', item['decision'])
+        self.assertIsNone(item['decision']['discordBotNickname'])
+        self.assertIn('discordBotNickname', job['manifest'])
+        self.assertIsNone(job['manifest']['discordBotNickname'])
+
 
 if __name__ == '__main__':
     unittest.main()

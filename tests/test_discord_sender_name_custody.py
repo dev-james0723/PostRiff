@@ -280,7 +280,13 @@ class CustodyConditions(unittest.TestCase):
         'card is a bot installation': lambda t: t.w.channel(t.A, t.wa.connection).update(discordConnectionKind='installation'),
         'credential is an installation': lambda t: t.w.rewrite_envelope(t.A, t.wa.connection, kind='installation'),
         'authorizer lost connection management': lambda t: setattr(t.w.workspaces[t.A].members[t.u3], 'role', 'viewer'),
+        'stored scopes lack webhook.incoming on both sides': lambda t: (
+            t.w.set_row(t.A, t.wa.connection, 5, ['identify']), t.w.channel(t.A, t.wa.connection).update(scopes=['identify'])),
+        'no authorization generation stored or on the card': lambda t: (
+            t.w.set_row(t.A, t.wa.connection, 4, None), t.w.channel(t.A, t.wa.connection).update(discordAuthorizationGeneration=None)),
     }
+    # What only the live validator (validate_webhook) can see: who authorized the webhook and whether they still may.
+    LIVE_ONLY = ('envelope names another member than the card', 'card names another authorizer', 'authorizer lost connection management')
 
     BOT = {
         'identity is no longer linked': lambda t: t.identity().update(status='reconnect_required'),
@@ -292,18 +298,31 @@ class CustodyConditions(unittest.TestCase):
         'stored scopes differ from the card': lambda t: t.w.set_row(t.A, t.ia.connection, 5, ['bot', 'identify', 'guilds']),
         'credential is a webhook': lambda t: t.w.rewrite_envelope(t.A, t.ia.connection, kind='webhook'),
         'credential of another application': lambda t: t.w.rewrite_envelope(t.A, t.ia.connection, applicationId='7654321'),
+        'identity record belongs to another workspace': lambda t: t.identity().update(workspaceId=t.B),
+        'identity link is gone': lambda t: t.w.workspaces[t.A].state['phase2']['discordIdentityLinks'].clear(),
+        'envelope names another server than the credential row': lambda t: t.w.rewrite_envelope(t.A, t.ia.connection, guild='9999999'),
+        'stored scopes lack the installation scope on both sides': lambda t: (
+            t.w.set_row(t.A, t.ia.connection, 5, ['identify']), t.w.channel(t.A, t.ia.connection).update(scopes=['identify'])),
+        'no authorization generation stored or on the card': lambda t: (
+            t.w.set_row(t.A, t.ia.connection, 4, None), t.w.channel(t.A, t.ia.connection).update(discordAuthorizationGeneration=None)),
         # An installation envelope carries no workspace or connection id (discord/oauth.py, the installation callback): its
         # binding to this workspace is the credential row's own key, so there is no such field to corrupt.
     }
 
-    def run_table(self, table, own):
+    def run_table(self, table, own, *, mock_live=False):
         for label, corrupt in table.items():
-            with self.subTest(corruption=label):
+            if mock_live and label in self.LIVE_ONLY:
+                continue
+            with self.subTest(corruption=label, live_validator=not mock_live):
                 t = self.world()
+                if mock_live:
+                    t.w.s.validate_webhook = Mock()      # custody must not lean on the live validator for what it checks itself
                 connection = getattr(t, own).connection
                 control = t.w.get(t.A, t.ta, connection)                  # the control: the same world answers
                 self.assertTrue(control['editable'], label)
                 t = self.world()
+                if mock_live:
+                    t.w.s.validate_webhook = Mock()
                 corrupt(t)
                 before = t.w.snapshot()
                 outcome = t.w.attempt(t.w.get, t.A, t.ta, connection)       # the corruption exists before the first read
@@ -317,6 +336,9 @@ class CustodyConditions(unittest.TestCase):
 
     def test_every_webhook_custody_condition_alone_refuses_the_read_and_the_write(self):
         self.run_table(self.WEBHOOK, 'wa')
+
+    def test_every_webhook_condition_that_custody_itself_checks_refuses_even_without_the_live_validator(self):
+        self.run_table(self.WEBHOOK, 'wa', mock_live=True)
 
     def test_every_bot_custody_condition_alone_refuses_the_read_and_the_write(self):
         self.run_table(self.BOT, 'ia')
@@ -333,6 +355,31 @@ class CustodyConditions(unittest.TestCase):
                 outcome = t.w.attempt(t.w.get, t.A, t.ta, t.wa.connection)
                 self.assertEqual(outcome[0], status)
                 self.assertEqual(t.w.snapshot(), before)
+
+    def test_a_card_of_another_platform_is_not_a_discord_connection(self):
+        t = self.world()
+        t.w.channel(t.A, t.wa.connection).update(platform='YouTube')
+        before = t.w.snapshot()
+        self.assertEqual(t.w.attempt(t.w.get, t.A, t.ta, t.wa.connection)[:2], (404, 'not_found'))
+        self.assertEqual(t.w.snapshot(), before)
+
+    def test_custody_itself_refuses_an_unknown_actor_and_a_non_authorizer_who_is_required_to_be_the_authorizer(self):
+        t = self.world()
+        other = t.w.member(t.A, t.w.user(3), 'admin')
+        with t.w.s.local(t.A, t.ta) as (cur, state, actor):
+            sender = SenderNames(t.w.s, t.A, t.ta, t.ia.connection)
+            with self.assertRaises(AlphaError) as raised:
+                sender.custody(cur, state, None)
+            self.assertEqual((raised.exception.status, raised.exception.code), (403, 'permission_denied'))
+            channel, envelope, stamp = sender.custody(cur, state, actor)           # the installer: fine
+            self.assertTrue(envelope['_authorizing'])
+        with t.w.s.local(t.A, other) as (cur, state, actor):
+            sender = SenderNames(t.w.s, t.A, other, t.ia.connection)
+            with self.assertRaises(AlphaError) as raised:
+                sender.custody(cur, state, actor)
+            self.assertEqual((raised.exception.status, raised.exception.code), (403, 'discord_sender_name_unavailable'))
+            channel, envelope, stamp = sender.custody(cur, state, actor, require_authorizer=False)
+            self.assertFalse(envelope['_authorizing'])
 
     def test_the_bot_authorizers_fresh_revalidation_gates_the_write_but_not_the_read(self):
         t = self.world()
