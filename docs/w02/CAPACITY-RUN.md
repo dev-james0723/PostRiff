@@ -141,6 +141,43 @@ no real secret.
   reports that measure as written and the Discord 50/s ceiling separately.
 - A count of zero is PASS only when something was sent; a run that sent nothing measures nothing.
 - `INFO PASS` / `INFO FAIL` mark an information-only run (an unreviewed setting such as a 100/s policy).
+- Time to verified (due time to the read-back the mock answered) sits next to lateness. The receipt also gives the
+  number of posts still unverified when the last create happened, and every unverified post by its final database
+  state and by whether the mock saw a create attempt for it (an `uncertain` post with no create was never sent).
+- The request ledger splits every request into the ideal real path (7 per post: the person's grant check
+  `GET /oauth2/@me`, four permission-witness reads, the create, the read-back) and named overhead. Overhead covers
+  the bot identity pair, repeated preflight passes, 429 answers, injected failures and extra creates or read-backs.
+  It counts preflight passes per post in one-post workspaces. The grant-custody line states that the real OAuthService
+  path ran, not the lane fixture's `Grants` stub, with the measured count.
+- The admission-to-observation time d and the busiest 60 s and 300 s request rates say how much of the 25/s budget
+  the lane could use (about 25/(1 + d) while in-flight requests are charged in two windows; see
+  `docs/w02/REQUEST-BUDGET.md`).
+- The machine line comes from the environment: a GitHub-hosted runner names itself (`RUNNER_ENVIRONMENT`,
+  `RUNNER_NAME`, `ImageOS`), anything else is "outside GitHub Actions".
+
+## The official runs on GitHub-hosted runners
+
+`docs/w02/ci/discord-lane-capacity.yml.txt` is inert text on this branch. `docs/w02/ci/make_request_branch.sh` builds
+an orphan request branch `claude/discord-capacity-run-<profile>-<suffix>` holding exactly that workflow,
+`capacity/REQUEST.json` and a `vercel.json` with Git deployments off. A push of it runs the profile on standard
+ubuntu-24.04 runners. The runner has PostgreSQL 17 from the signed PGDG repository and PgBouncer in transaction
+mode. It uses no secret and no environment, has a read-only token, fetches exact SHAs, and deploys nothing.
+
+| Profile | Jobs (one per scenario and pool) |
+|---|---|
+| `smoke`, `s0`, `s1`, `s2` | the scenario(s) on the tree under test |
+| `faults` | F429, F5xx, Fcrash, Fdb, Fexpiry, Fstall, Fflip, Nmisroute, Ndup, Nceiling |
+| `release` | every scenario, baseline included |
+| `baseline` | the frozen minute worker on the request's baseline SHA (default RC1) |
+| `lockbench` | only the shared request coordinator under 1 to 24 processes (`scripts/discord_lane_cap_lockbench.py`) |
+
+The receipt goes to the step summary. Raw evidence goes to the artifact: receipt, result, config, harness log,
+every child process's own output (`seed-*.out`, `pooler.out`, `pgbouncer.out`, `mock.out`), the mock's request log,
+PostgreSQL's log and PgBouncer's log. The per-run environment files are never uploaded.
+
+`python3 docs/w02/ci/run_tests.py` runs the workflow's own blocks against local git repositories. It covers request
+validation, exact-SHA fetches, the request script, action-validator and shellcheck. With `POSTRIFF_PG_BIN` set it
+adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (97 checks).
 
 ## The official run on Depot
 
