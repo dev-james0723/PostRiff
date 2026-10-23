@@ -1028,9 +1028,16 @@ class Harness:
                    WHERE reserved_at >= to_timestamp(%s) ORDER BY 1""", (start,)).fetchall()]
             by_kind = dict(db.execute("""SELECT coalesce(credential_kind,'?'),count(*) FROM public.pr_discord_request_admissions
                    WHERE reserved_at >= to_timestamp(%s) GROUP BY 1""", (start,)).fetchall())
+            # Admission to observation (d): while a request is in flight its admission stays pending, and a window
+            # restart charges it again (cap - pending), so the usable rate is about cap / (1 + mean d).
+            held = [float(d) for (d,) in db.execute(
+                """SELECT extract(epoch from outcome_at - reserved_at)::double precision
+                   FROM public.pr_discord_request_admissions
+                   WHERE reserved_at >= to_timestamp(%s) AND outcome_at IS NOT NULL""", (start,)).fetchall()]
             admission_window = {'count': len(admitted), 'byCredential': by_kind,
                                 'peakTrailingSecond': analysis.peak_trailing(admitted, 1.0),
-                                'peakCalendarSecond': analysis.peak_calendar_second(admitted)}
+                                'peakCalendarSecond': analysis.peak_calendar_second(admitted),
+                                'admissionToOutcomeSeconds': analysis.describe(held) if held else None}
             slow = []
             if self.config.get('pgStatStatements'):
                 try:

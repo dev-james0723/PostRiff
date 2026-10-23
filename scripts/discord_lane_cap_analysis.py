@@ -474,6 +474,8 @@ def analyse(run_dir):
                     'peakTrailingSecondBot': mock_summary.get('peakTrailingSecondBot'),
                     'peakCalendarSecondAll': peak_calendar_second([r['processed'] for r in window]),
                     'peakTenSecondAveragePerSecond': busiest_window([r['processed'] for r in window], 10.0) / 10.0,
+                    'busiest60sPerSecond': busiest_window([r['processed'] for r in window], 60.0) / 60.0,
+                    'busiest300sPerSecond': busiest_window([r['processed'] for r in window], 300.0) / 300.0,
                     'coordinatorAdmissions': extra.get('admissionWindow')},
         'ledger': ledger, 'grantCustody': custody,
         'requests': {'total': len(window), 'perVerifiedPost': requests_per_verified, 'byRoute': dict(routes),
@@ -891,10 +893,21 @@ def receipt(result, verdicts, config, differences, expectations=()):
                  'requests in any calendar second at the mock %s.%s' % (
                      c.get('peakCalendarSecondAll'),
                      (' The coordinator\'s own admission table (database clock, rows reserved during the run: %s; by '
-                      'credential %s): most in any trailing second %s, in any calendar second %s.' % (
+                      'credential %s): most in any trailing second %s, in any calendar second %s.%s' % (
                           admissions.get('count'), json.dumps(admissions.get('byCredential'), sort_keys=True),
-                          admissions.get('peakTrailingSecond'), admissions.get('peakCalendarSecond')))
+                          admissions.get('peakTrailingSecond'), admissions.get('peakCalendarSecond'),
+                          (' Admission to observation (d): mean %s s, median %s s, p95 %s s; an admission still in '
+                           'flight at a window restart is charged again, so the usable rate is about 25/(1 + d) = %s '
+                           'per second (inference, docs/w02/REQUEST-BUDGET.md section 1).' % (
+                               _fmt(admissions['admissionToOutcomeSeconds']['mean']),
+                               _fmt(admissions['admissionToOutcomeSeconds']['median']),
+                               _fmt(admissions['admissionToOutcomeSeconds']['p95']),
+                               _fmt(25 / (1 + admissions['admissionToOutcomeSeconds']['mean'])))
+                           if (admissions.get('admissionToOutcomeSeconds') or {}).get('mean') is not None else '')))
                      if admissions else ' Coordinator admission figures: not collected by this harness version.'))
+    lines.append('')
+    lines.append('Sustained rate at the mock: busiest 60 s averaged %s requests per second, busiest 300 s %s.' % (
+        _fmt(c.get('busiest60sPerSecond')), _fmt(c.get('busiest300sPerSecond'))))
     lines.append('')
     ledger = result.get('ledger')
     if ledger:
