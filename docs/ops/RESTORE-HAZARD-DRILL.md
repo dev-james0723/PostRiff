@@ -13,8 +13,8 @@ API; no application file changed.** Every id and text is synthetic. Facts are ma
    the same application code (provider, shared request coordinator, worker, W-02 lane loops) pointed at the restored
    database and at the same Discord created a second copy of **43 of the 46** messages customers had already seen
    (24 tenants: 19 got two duplicates, 5 got one). Of the other three, two were held because their one-hour approval
-   had ended before the resume and one was held after repeated 429 answers to its reads (the W-02 read-retry limit; inferred from its event and `release_discord_unsent`). At scale: **200 of 200**
-   (100 tenants, two duplicates each).
+   had ended before the resume, and one was held after repeated 429 answers to its reads (the W-02 read-retry limit;
+   inferred from its event and `release_discord_unsent`). At scale: **200 of 200** (100 tenants, two duplicates each).
 2. **What protected and what did not** [measured + code]. In the restored database every post was `scheduled` with no
    intent, no receipt, no lease and no coordinator admission: all four protections were rewound, so none fired. What
    did fire: **approval expiry** (a post whose approval ended before the resume is held, never sent late) and, for a
