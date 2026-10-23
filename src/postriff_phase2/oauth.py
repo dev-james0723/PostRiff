@@ -1413,7 +1413,12 @@ class OAuthService:
                 from .pinterest_analytics import describe
                 view['capabilities'] = describe(view.get('capabilities', {}), view.get('scopes', []),
                     analytics_enabled=getattr(self.providers.get('pinterest'), 'analytics_enabled', False))
-        linked = self.discord_connections.public_identities(workspace_id, token) if getattr(self.providers.get('discord'), 'connections_v2_enabled', False) else []
+        # The identity list opens its own repository transaction (a session verification, in Production a Supabase Auth
+        # call, and two more database connections). Only a workspace whose state, already read above, holds Discord
+        # identity links can have a non-empty list; every other workspace gets [] without that read, as live (CH-1).
+        linked = (self.discord_connections.public_identities(workspace_id, token)
+                  if getattr(self.providers.get('discord'), 'connections_v2_enabled', False)
+                  and snapshot['state'].get('phase2', {}).get('discordIdentityLinks') else [])
         return {'channels': views, 'providers': catalog, 'discordIdentities': linked}
 
     def token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False, pinterest_force_refresh=False):

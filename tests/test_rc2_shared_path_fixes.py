@@ -12,6 +12,7 @@ No database, network, provider or credential is used here; the real-PostgreSQL p
 tests/test_rc2_shared_paths_postgres.py.
 """
 import atexit
+import copy
 import inspect
 import json
 import os
@@ -20,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -163,6 +165,89 @@ class FacebookMatchesLive(unittest.TestCase):
         callers = subprocess.run(['git', '-C', str(ROOT), 'grep', '-l', 'public_connection_review', '--', 'src', 'api'],
                                  capture_output=True, text=True).stdout.split()
         self.assertEqual(sorted(callers), ['src/postriff_phase2/connection_review.py', 'src/postriff_phase2/discord/oauth.py'])
+
+
+# --- CH-1: the Channels read ---------------------------------------------------------------------------------------------
+class _EmptyCursor:
+    def __init__(self, log):
+        self.log = log
+
+    def execute(self, sql, params=None):
+        self.log.append(' '.join(str(sql).split())[:80])
+
+    def fetchone(self):
+        return None
+
+    def fetchall(self):
+        return []
+
+
+class _CountingRepository:
+    """Counts repository transactions: in Production each one verifies the session (a Supabase Auth getUser call and a
+    session-flag connection) and opens one more database connection for the locked workspace row."""
+    def __init__(self, state, actor):
+        self.state, self.actor, self.transactions, self.statements = state, actor, 0, []
+
+    @contextmanager
+    def transaction(self, token, workspace_id, **kwargs):
+        self.transactions += 1
+        yield _EmptyCursor(self.statements), (1, copy.deepcopy(self.state), 'owner', True, False, False, False), self.actor
+
+    def get(self, workspace_id, token):
+        with self.transaction(token, workspace_id, allow_deleting=True) as (_, row, _):
+            return {'revision': row[0], 'state': row[1]}
+
+
+class ChannelsReadAddsNoTransaction(unittest.TestCase):
+    """CH-1 (MEDIUM). With POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED=true (set in Production) OAuthService.channels()
+    called discord_connections.public_identities() for EVERY workspace: a third repository transaction (one more
+    Supabase Auth getUser call and two more database connections in Production) to return [] where no Discord identity
+    was ever linked. Live's Channels read is two repository transactions: get() and the capability read."""
+    WORKSPACE, ACTOR = '10000000-0000-4000-8000-0000000000c1', '20000000-0000-4000-8000-0000000000c1'
+
+    def read(self, links=None, connections_v2=True):
+        from postriff_phase2.auth import initial_phase2_state
+        from postriff_phase2.hosted import HostedPhase2Commands
+        from postriff_phase2.oauth import CredentialVault, OAuthService
+        from postriff_phase2.social_connectors import DiscordProvider
+        state = initial_phase2_state(self.WORKSPACE, self.ACTOR, 'Rafii member', 'studio', 1_800_000_000.0, execution='hosted-candidate')
+        if links is not None:
+            state['phase2']['discordIdentityLinks'] = links
+        discord = DiscordProvider('123456789012345678', 'synthetic-secret', 'synthetic.bot.token', 'https://app.rafii.invalid',
+                                  transport=lambda *a, **k: self.fail('no Discord request on a Channels read'))
+        discord.connections_v2_enabled = connections_v2
+        repository = _CountingRepository(state, self.ACTOR)
+        service = OAuthService(repository, HostedPhase2Commands(lambda: 1_800_000_000.0), CredentialVault(CredentialVault.generate_key()),
+                               {'discord': discord}, 'https://app.rafii.invalid', clock=lambda: 1_800_000_000.0)
+        listing = service.channels(self.WORKSPACE, 'synthetic-session')
+        return listing, repository.transactions
+
+    def link(self, **changes):
+        return {'id': 'discord-identity-1', 'workspaceId': self.WORKSPACE, 'authorizedBy': self.ACTOR, 'account': 'synthetic#0001',
+                'userId': '4242424242', 'status': 'linked', 'expiresAt': 1_800_086_400.0, 'discoverGuilds': False, **changes}
+
+    def test_a_workspace_without_discord_identity_links_costs_what_live_costs(self):
+        for links in (None, []):
+            with self.subTest(links=links):
+                listing, transactions = self.read(links)
+                self.assertEqual(listing['discordIdentities'], [])
+                self.assertEqual(transactions, 2, 'get() and the capability read, as live')
+
+    def test_a_linked_identity_is_still_listed_through_its_own_read(self):
+        listing, transactions = self.read([self.link()])
+        self.assertEqual(transactions, 3, 'unchanged: the identity read stays for a workspace that has links')
+        self.assertEqual(listing['discordIdentities'], [{
+            'id': 'discord-identity-1', 'account': 'synthetic#0001', 'userId': '4242424242', 'status': 'linked',
+            'expiresAt': 1_800_086_400.0, 'discoverGuilds': False, 'canPublish': False, 'canSchedule': False,
+            'capabilityReason': 'discord_identity_only', 'connectionKind': 'identity', 'postAsPersonalUser': False, 'senderKind': 'none'}])
+
+    def test_another_members_link_is_not_listed_as_before(self):
+        listing, _ = self.read([self.link(authorizedBy='20000000-0000-4000-8000-0000000000c2')])
+        self.assertEqual(listing['discordIdentities'], [])
+
+    def test_connections_v2_off_reads_nothing_more(self):
+        listing, transactions = self.read([self.link()], connections_v2=False)
+        self.assertEqual((listing['discordIdentities'], transactions), ([], 2))
 
 
 if __name__ == '__main__':
