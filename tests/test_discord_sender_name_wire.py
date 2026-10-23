@@ -29,6 +29,12 @@ def switch(on):
         yield
 
 
+@contextmanager
+def nickname(on):
+    with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true' if on else 'false'}):
+        yield
+
+
 def rc1_authorization():
     """The release candidate's own authorization module (2a5a523d), as a rollback would run it."""
     source = RC1_AUTHORIZATION.read_bytes()
@@ -397,6 +403,104 @@ class PerSendWire(unittest.TestCase):
         with switch(True):
             world.dispatch(job)
         self.assertEqual(world.wire.posts[0]['body']['allowed_mentions'], {'parse': []})
+
+
+class BotNicknameInTheApproval(unittest.TestCase):
+    """SNR-1b: Discord shows the server's CURRENT nickname for a bot post, so the nickname the person saw is frozen into
+    the approval and the dispatch preflight holds the post if Discord reports another one (nothing is posted)."""
+    def world(self, observed='Brand Bot', actual=None, *, index=20, record=True):
+        tenant = F.Tenant(index, None, kind='bot').build()
+        if record:
+            tenant.channel_record['discordBotNickname'] = {'value': observed, 'observedAt': F.NOW}
+        world = F.World([tenant])
+        config = world.wire.guild_config[tenant.guild] = F.GuildConfig()
+        config.nick = observed if actual is None else actual
+        return tenant, world, config
+
+    def test_the_observed_nickname_is_frozen_and_an_unchanged_one_posts(self):
+        tenant, world, _ = self.world()
+        with switch(True), nickname(True):
+            job = tenant.approve()
+            self.assertEqual(job['manifest']['discordBotNickname'], 'Brand Bot')
+            self.assertEqual(world.dispatch(job)['state'], 'provider_accepted')
+        self.assertEqual(world.wire.posts[0]['bot_channel'], tenant.channel)
+        self.assertNotIn('username', world.wire.posts[0]['body'])
+
+    def test_a_nickname_changed_after_approval_holds_the_post_with_a_stable_code_and_posts_nothing(self):
+        tenant, world, config = self.world()
+        with switch(True), nickname(True):
+            job = tenant.approve()
+            for renamed in ('Renamed By A Server Admin', None):          # a native rename, and a native removal
+                config.nick = renamed
+                with self.assertRaises(AlphaError) as raised:
+                    world.dispatch(job)
+                self.assertEqual((raised.exception.status, raised.exception.code), (409, 'discord_bot_nickname_changed'))
+                self.assertEqual(world.wire.posts, [])
+            config.nick = 'Brand Bot'                                     # the same approval proceeds if it is restored
+            self.assertEqual(world.dispatch(job)['state'], 'provider_accepted')
+
+    def test_no_observation_or_the_capability_off_freezes_nothing_and_holds_nothing(self):
+        for label, kwargs, on in (('never observed', {'record': False}, True), ('capability off', {}, False)):
+            with self.subTest(label):
+                tenant, world, config = self.world(index=21, **kwargs)
+                with switch(True), nickname(on):
+                    job = tenant.approve()
+                    self.assertNotIn('discordBotNickname', job['manifest'])
+                    config.nick = 'Renamed After'
+                    self.assertEqual(world.dispatch(job)['state'], 'provider_accepted')
+
+    def test_a_nickname_less_bot_is_frozen_as_none_and_a_later_nickname_holds(self):
+        tenant, world, config = self.world(observed=None, index=22)
+        with switch(True), nickname(True):
+            job = tenant.approve()
+            self.assertIn('discordBotNickname', job['manifest'])
+            self.assertIsNone(job['manifest']['discordBotNickname'])
+            config.nick = 'Someone Set One'
+            with self.assertRaises(AlphaError):
+                world.dispatch(job)
+
+    def test_the_frozen_nickname_is_tamper_evident_and_rc1_still_sends_a_bot_approval(self):
+        rc1 = rc1_authorization()
+        tenant, world, _ = self.world(index=23)
+        with switch(True), nickname(True):
+            job = tenant.approve()
+        self.assertTrue(auth.job_authorized(tenant.state, tenant.channel_record, job))
+        self.assertTrue(rc1.job_authorized(tenant.state, tenant.channel_record, job))     # wire and digests are unchanged
+        forged = copy.deepcopy(job)
+        forged['manifest']['discordBotNickname'] = 'Forged'
+        self.assertNotEqual(auth.digest(forged['manifest']), job['approvalDigest'])
+
+    def test_the_freeze_adds_no_discord_request_to_a_bot_post(self):
+        counts = []
+        for on in (True, False):
+            tenant, world, _ = self.world(index=24)
+            with switch(True), nickname(on):
+                job = tenant.approve()
+                world.dispatch(job)
+            counts.append(len(world.wire.calls))
+        self.assertEqual(counts[0], counts[1])
+
+    def test_the_nickname_write_carries_a_one_way_audit_log_reason(self):
+        from discord_sender_name_settings_fixture import Settings
+        w = Settings()
+        user, other = w.user(1), w.user(2)
+        first, second = w.workspace(1), w.workspace(2)
+        tokens = {first: w.member(first, user, 'owner'), second: w.member(second, other, 'owner')}
+        installs = {first: w.installation(first, 1, user, guild='6800001'), second: w.installation(second, 2, other, guild='6800002')}
+        reasons = {}
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true', 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}), \
+                patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True):
+            for workspace, token in tokens.items():
+                ids = installs[workspace]
+                profile = w.get(workspace, token, ids.connection)
+                w.post(workspace, token, ids.connection, {'name': 'Audited Bot', 'fingerprint': profile['fingerprint'],
+                                                          'confirmed': True, 'sharedServerConfirmed': True})
+                reasons[workspace] = w.hooks.guild_config[ids.guild].patch_headers[-1]['X-Audit-Log-Reason']
+        for workspace, reason in reasons.items():
+            self.assertRegex(reason, r'^Rafii shared bot nickname change \(ref [0-9a-f]{16}\)$')
+            for secret in (workspace, installs[workspace].connection, 'Audited Bot', user, other):
+                self.assertNotIn(secret, reason)
+        self.assertNotEqual(*reasons.values())
 
 
 if __name__ == '__main__':

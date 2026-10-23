@@ -165,7 +165,7 @@ class Hooks:
         if path == '/users/@me':
             return {'status': 200, 'body': {'id': BOT, 'bot': True}, 'headers': {}}
         if parts[0] == 'guilds' and parts[1] in self.guild_config:
-            return self._configured_guild(method, parts, body)
+            return self._configured_guild(method, parts, body, headers)
         if parts[0] == 'guilds' and parts[1] in self.tenants:
             guild = parts[1]
             if len(parts) == 2:
@@ -187,7 +187,7 @@ class Hooks:
     def _ok(value):
         return {'status': 200, 'body': value, 'headers': {}}
 
-    def _configured_guild(self, method, parts, body):
+    def _configured_guild(self, method, parts, body, headers=None):
         config = self.guild_config[parts[1]]
         guild = parts[1]
         if method == 'PATCH' and parts[2:] == ['members', '@me']:
@@ -195,6 +195,7 @@ class Hooks:
                 action, self.before_patch = self.before_patch, None
                 action()
             config.patches.append(copy.deepcopy(body))
+            config.patch_headers.append(dict(headers or {}))
             if config.reject_patch:
                 return {'status': 403, 'body': {'message': 'Missing Permissions', 'code': 50013}, 'headers': {}}
             config.nick = body['nick']
@@ -203,7 +204,7 @@ class Hooks:
             raise AssertionError('Unexpected synthetic guild route')
         if len(parts) == 2:
             answer = self._ok({'id': guild, 'name': 'Synthetic server', 'owner_id': config.owner_id, 'roles': [
-                {'id': guild, 'permissions': str((1 << 10) | (1 << 11)), 'position': 0},
+                {'id': guild, 'permissions': str(DiscordProvider.PERMISSIONS), 'position': 0},
                 {'id': '11223344', 'permissions': str(config.user_permissions), 'position': config.user_position},
                 {'id': '22334455', 'permissions': str(config.bot_permissions), 'position': config.bot_position}]})
         elif len(parts) == 4 and parts[2] == 'members' and parts[3] == USER:
@@ -211,6 +212,9 @@ class Hooks:
         elif len(parts) == 4 and parts[2] == 'members' and parts[3] == BOT:
             answer = self._ok({'user': {'id': BOT, 'username': 'Rafii'}, 'roles': ['22334455'], 'nick': config.nick,
                                'pending': False, 'communication_disabled_until': None})
+        elif len(parts) == 3 and parts[2] == 'channels' and guild in self.tenants:
+            answer = self._ok([{'id': self.tenants[guild].channel, 'guild_id': guild, 'name': 'synthetic', 'type': 0,
+                                'permission_overwrites': []}])
         else:
             raise AssertionError('Unexpected synthetic guild route: ' + '/'.join(parts))
         if self.after_read is not None:
@@ -279,5 +283,5 @@ class GuildConfig:
         self.user_position, self.bot_position = 5, 2
         self.owner_id = '1000001'
         self.nick = None
-        self.patches = []
+        self.patches, self.patch_headers = [], []
         self.reject_patch = False
