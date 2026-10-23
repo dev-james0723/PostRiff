@@ -239,6 +239,12 @@ class ParallelLaneOnPostgres(unittest.TestCase):
     # (c) fairness and the per-channel limit ---------------------------------------------------------------------
 
     def fairness_run(self, loops, order=None):
+        """One busy workspace (30 posts, first by id) and six small ones (two each). Returns the workspaces in id
+        order and every claim the run made, in order, as (workspace, job), read from the jobs' own audit events.
+
+        Claims, not creates, carry the property: which workspace a loop takes next is the selection's choice, while
+        whether that attempt sends now or is deferred (the busy channel's 5-per-5-s window, a create permit that
+        lapses at its one-second window end) depends on how fast the runner is."""
         tenants = sorted((F.Tenant(n) for n in range(7)), key=lambda tenant: tenant.id)
         big, small = tenants[0], tenants[1:]  # the busy tenant sorts first by id
         F.seed(self.cluster, [big], 30)
@@ -254,17 +260,38 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 F.run_lanes(worker, loops, seconds=90)
         else:
             F.run_lanes(worker, loops, seconds=90)
-        creates = sorted((at, channel) for times in self.wire.creates.values() for at, channel, _ in times)
-        last_small = max(index for index, (_, channel) in enumerate(creates) if channel != big.channel)
-        return sum(1 for _, channel in creates[:last_small] if channel == big.channel)
+        claims = sorted((event['at'], workspace, job_id) for (workspace, job_id), job in F.jobs(self.cluster).items()
+                        for event in job['events'] if event['state'] == 'claimed')
+        return tenants, [(workspace, job_id) for _, workspace, job_id in claims]
+
+    def assert_rotation(self, tenants, claims):
+        # Each claim moves its workspace to the back of the due order, also when the attempt is then deferred, and
+        # a workspace with a post never attempted is due. So one loop's first fourteen claims are two rounds over
+        # all seven workspaces in id order: every small tenant's two posts are attempted while the busy one's
+        # thirty have had two attempts. This is the selection's order, whatever the runner's speed.
+        ids = [tenant.id for tenant in tenants]
+        self.assertEqual([workspace for workspace, _ in claims[:14]], ids + ids, 'two full rounds come first')
+
+    def assert_busy_first(self, tenants, claims):
+        # Ordered by id alone, one loop takes the lowest-id workspace while it has a due post, and a post never
+        # attempted is due. So the busy workspace stays first until all thirty of its posts were attempted (some
+        # sent, the rest deferred to its channel's window): no other workspace is claimed before that.
+        big = tenants[0].id
+        first_other = next(index for index, (workspace, _) in enumerate(claims) if workspace != big)
+        busy = {job for workspace, job in claims if workspace == big}
+        self.assertEqual(len(busy), 30)
+        self.assertEqual({job for _, job in claims[:first_other]}, busy, 'every busy post was attempted first')
 
     def test_one_busy_workspace_cannot_starve_the_others(self):
-        before = self.fairness_run(1)
-        self.assertLessEqual(before, 8, 'every small tenant finished while the busy one sent only a few')
+        tenants, claims = self.fairness_run(1)
+        self.assert_rotation(tenants, claims)
         self.assertEqual(sorted({job['state'] for job in F.jobs(self.cluster).values()}), ['verified'])
+        self.assertEqual(self.wire.duplicates(), 0)
 
     def test_control_without_the_rotation_one_loop_serves_the_busy_workspace_first(self):
-        self.assertGreaterEqual(self.fairness_run(1, order='id'), 20)
+        # A real control: the same assertion fails with the rotation on, whose second claim is already a small
+        # tenant's (assert_rotation above).
+        self.assert_busy_first(*self.fairness_run(1, order='id'))
 
     def test_posts_to_one_channel_keep_to_its_create_limit(self):
         # Six workspaces connected to the same server channel: the limit is the channel's, across tenants.
