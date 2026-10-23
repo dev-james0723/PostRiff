@@ -635,7 +635,13 @@ class Harness:
                 raise RuntimeError('seeding could not connect the workspaces in time')
             time.sleep(0.5)
         connected = time.time()
-        estimate = 10 + posts * 0.006 / workers + (hot ** 2) * 5e-6 + hot * 0.02
+        # The approval estimate is calibrated on an idle 4-vCPU runner (about 0.4 s per connected workspace per
+        # process). A slower or busier machine connects more slowly in the same proportion; scale the estimate by it,
+        # so that a slow machine moves T later instead of overrunning it (S2's 3,000-post workspace overran at load 25).
+        per_workspace = (connected - started) / max(1.0, len(layout) / workers)
+        speed_factor = max(1.0, per_workspace / 0.4)
+        estimate = (10 + posts * 0.006 / workers + (hot ** 2) * 5e-6 + hot * 0.02) * speed_factor
+        self.config['seedSpeedFactor'] = round(speed_factor, 2)
         now = time.time()
         if expiry_seam:
             # Approvals expire `expiry_in_minutes` after the run's first cron: scheduled an hour earlier and approved
