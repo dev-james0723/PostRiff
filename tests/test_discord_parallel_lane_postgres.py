@@ -206,7 +206,8 @@ class ParallelLaneOnPostgres(unittest.TestCase):
 
     def rate_run(self, capacity):
         """Twelve loops for twelve seconds over 80 posts. Returns the loops' results and how often a loop found
-        the application window spent and waited for the next one (outlook or create-permit waits)."""
+        the application-wide rows spent before a step and waited for the next window (the lane's pre-claim
+        outlook; its create-permit waits also count permits that lapsed at a window's end, so they are left out)."""
         tenants = [F.Tenant(n) for n in range(40)]
         worker = self.start(tenants, 2, capacity=capacity, ceiling=2 * self.RATE)
         results, failures = F.run_lanes(worker, 12, seconds=12)
@@ -215,7 +216,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         # on a scripted clock in test_discord_parallel_lane.TheLoop; a wall-clock bound here measures the runner).
         self.assertEqual({r['budget']['maxSeconds'] for r in results}, {12.0})
         self.assertLessEqual({r['stoppedBy'] for r in results}, {'time_budget', 'rate_wait', 'idle'})
-        return results, sum(r['counters']['rateWaits'] + r['counters']['permitWaits'] for r in results)
+        return results, sum(r['counters']['rateWaits'] for r in results)
 
     def test_the_coordinator_caps_the_request_rate_across_all_loops(self):
         _, waits = self.rate_run(self.RATE)
