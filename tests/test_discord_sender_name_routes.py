@@ -5,6 +5,7 @@ discord_sender_name_settings_fixture.py). For every refusal the tests assert the
 any workspace, no Discord request, no audit event, and a response that does not tell "not yours" from "does not exist".
 The same properties against the real repository and PostgreSQL are in test_discord_sender_name_postgres.py.
 """
+import collections
 import io
 import json
 import os
@@ -23,9 +24,10 @@ BODY = {'confirmed': True, 'sharedServerConfirmed': True}
 
 class Base(unittest.TestCase):
     def setUp(self):
-        patcher = patch.dict(os.environ, FLAGS)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        for patcher in (patch.dict(os.environ, FLAGS),
+                        patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.w = Settings()
         self.ua, self.ub = self.w.user(1), self.w.user(2)
         self.A, self.B = self.w.workspace(1), self.w.workspace(2)
@@ -106,23 +108,28 @@ class CrossTenant(Base):
 
 
 class Roles(Base):
-    def test_only_connection_managers_may_open_it_and_only_the_authorizing_member_may_edit(self):
+    def test_any_connection_manager_edits_a_webhook_name_but_only_the_authorizer_edits_the_bot_nickname(self):
         admin, editor_with_flag = self.w.user(11), self.w.user(12)
-        tokens = {'admin': self.w.member(self.A, admin, 'admin'),
-                  'editor_flag': self.w.member(self.A, editor_with_flag, 'editor', can_manage_connections=True)}
-        for who, token in tokens.items():
-            before = self.w.snapshot()
+        tokens = {'admin': (admin, self.w.member(self.A, admin, 'admin')),
+                  'editor_flag': (editor_with_flag, self.w.member(self.A, editor_with_flag, 'editor', can_manage_connections=True))}
+        for who, (user, token) in tokens.items():
+            # webhook: a Rafii-side setting, frozen into later reviews like any other connection setting
             profile = self.w.get(self.A, token, self.wa.connection)
-            self.assertFalse(profile['editable'], who)
-            self.assertEqual([r['code'] for r in profile['unavailable']], ['not_authorizing_member'], who)
-            self.assertEqual(profile['savedName'], 'Alpha Weekly')
-            self.assertIsNone(profile['observedAt'])      # no Discord read on behalf of a refusal
-            outcome = self.w.attempt(self.w.post, self.A, token, self.wa.connection,
-                                     {'name': 'Takeover Weekly', 'fingerprint': profile['fingerprint'], **BODY})
+            self.assertTrue(profile['editable'], who)
+            saved = self.w.post(self.A, token, self.wa.connection, {'name': f'By {who} Weekly', 'fingerprint': profile['fingerprint'], **BODY})
+            self.assertEqual(saved['savedName'], f'By {who} Weekly')
+            self.assertEqual([e['actor'] for e in self.w.audit if e['kind'] == 'discord.sender_name_updated'][-1], user)
+            # bot nickname: a shared Discord object, so only the member whose Discord identity installed the bot
+            before = self.w.snapshot()
+            nick = self.w.get(self.A, token, self.ia.connection)
+            self.assertFalse(nick['editable'], who)
+            self.assertEqual([r['code'] for r in nick['unavailable']], ['not_authorizing_member'], who)
+            self.assertIsNone(nick['observedAt'])      # no Discord read on behalf of a refusal
+            outcome = self.w.attempt(self.w.post, self.A, token, self.ia.connection,
+                                     {'name': 'Takeover Bot', 'fingerprint': nick['fingerprint'], **BODY})
             self.assertEqual(outcome[:2], (403, 'discord_sender_name_unavailable'), who)
             self.assertEqual(outcome[3], {'reasons': [{'code': 'not_authorizing_member'}]})
-            self.assertEqual(self.w.channel(self.A, self.wa.connection)['discordSenderName'], 'Alpha Weekly')
-            # Only the throttle counters moved; no state, no audit, no Discord request.
+            self.assertEqual(self.w.hooks.guild_config[self.ia.guild].patches, [])
             self.assertEqual(self.w.snapshot(), before)
 
     def test_roles_without_connection_management_are_refused_before_anything_is_read(self):
@@ -262,6 +269,7 @@ class Bodies(Base):
         for bad, reason in [('', 'empty'), ('a' * 81, 'too_long'), ('Discord Weekly', 'reserved_word'), ('@everyone', 'forbidden_character'),
                             ('a  b', 'spacing'), (' lead', 'surrounding_space'), ('x\U0000202ey', 'control_or_format'), (7, 'not_text')]:
             with self.subTest(bad=repr(bad)):
+                self.w.now += 601        # a refused attempt still counts toward the write throttle: one window each
                 outcome = self.w.attempt(self.w.post, self.A, self.ta, self.wa.connection,
                                          {'name': bad, 'fingerprint': profile['fingerprint'], **BODY})
                 self.assertEqual(outcome[:2], (400, 'discord_sender_name_invalid'))
@@ -354,7 +362,7 @@ class GetShape(Base):
         self.assertEqual(profile['feature'], {'senderNames': True, 'botNickname': True})
         self.assertRegex(profile['fingerprint'], r'^[0-9a-f]{64}$')
         self.assertEqual(profile['preview'], {'currentDisplayName': 'Alpha Weekly', 'badge': 'APP', 'audience': 'this_connection',
-                                              'queuedPostsKeepApprovedName': True, 'queuedPostsFollowCurrentNickname': False})
+                                              'queuedPostsKeepApprovedName': True, 'queuedBotPostsHoldIfNicknameChanges': False})
         self.assertEqual(profile['rules']['forbiddenCharacters'], ['@', '#', ':', '```', '<', '>'])
         self.assertEqual(set(profile), {'contractVersion', 'connectionId', 'senderKind', 'scope', 'guildId', 'state', 'maxLength',
                                         'rules', 'name', 'effectiveName', 'nameSource', 'savedName', 'observedName', 'observedAt',
@@ -540,6 +548,46 @@ class AmbiguousWrites(Base):
         self.assertEqual(self.w.channel(self.A, self.ia.connection).get('discordSenderName'), None)
 
 
+class Fanout(Base):
+    """What one call costs: workspace transactions (each is one bearer verification and two database connections in
+    production) and Discord requests. These exact numbers are quoted in docs/sender-name/CAPACITY-NOTES.md."""
+    def measure(self, call):
+        counts = {'local': 0, 'bearer': 0}
+        inner = self.w.s.local
+
+        def local(workspace, token):
+            counts['local'] += 1
+            counts['bearer'] += token is not None
+            return inner(workspace, token)
+        self.w.s.local = local
+        before = len(self.w.hooks.calls)
+        try:
+            call()
+        finally:
+            self.w.s.local = inner
+        made = self.w.hooks.calls[before:]
+        return counts['bearer'], collections.Counter(method for method, _ in made)
+
+    def test_exact_cost_of_each_route(self):
+        w = self.w
+        webhook_get = self.measure(lambda: w.get(self.A, self.ta, self.wa.connection))
+        profile = w.get(self.A, self.ta, self.wa.connection)
+        webhook_post = self.measure(lambda: w.post(self.A, self.ta, self.wa.connection,
+                                                   {'name': 'Cost Weekly', 'fingerprint': profile['fingerprint'], **BODY}))
+        bot_get = self.measure(lambda: w.get(self.A, self.ta, self.ia.connection))
+        profile = w.get(self.A, self.ta, self.ia.connection)
+        bot_post = self.measure(lambda: w.post(self.A, self.ta, self.ia.connection,
+                                               {'name': 'Cost Bot', 'fingerprint': profile['fingerprint'], **BODY}))
+        refused = self.measure(lambda: w.attempt(w.post, self.A, self.ta, self.wa.connection,
+                                                 {'name': 'Discord X', 'fingerprint': 'f' * 64, **BODY}))
+        # (workspace transactions with a bearer check, Discord requests by method)
+        self.assertEqual(webhook_get, (2, collections.Counter({'GET': 1})))
+        self.assertEqual(webhook_post, (3, collections.Counter({'GET': 1})))
+        self.assertEqual(bot_get, (2, collections.Counter({'GET': 5})))      # bot identity x2 (cold), server, two members
+        self.assertEqual(bot_post, (7, collections.Counter({'GET': 6, 'PATCH': 1})))      # 5 reads (cold identity) + 1 read-back
+        self.assertEqual(refused, (1, collections.Counter()))                # a refused name: one transaction, no Discord request
+
+
 class OverHttp(Base):
     def call(self, method, workspace, connection, token, body=None, guarded=True, gate=None):
         from postriff_phase2.hosted_app import HostedApplication
@@ -600,9 +648,10 @@ class OverHttp(Base):
     def test_over_the_router_a_non_authorizing_member_and_a_switched_off_server_get_machine_codes(self):
         admin = self.w.user(51)
         token = self.w.member(self.A, admin, 'admin')
-        status, body = self.call('GET', self.A, self.wa.connection, token)
+        status, body = self.call('GET', self.A, self.ia.connection, token)
         self.assertEqual((status, [r['code'] for r in body['unavailable']]), (200, ['not_authorizing_member']))
-        status, body = self.call('POST', self.A, self.wa.connection, token, {'name': 'No Weekly', 'fingerprint': 'f' * 64, 'confirmed': True})
+        status, body = self.call('POST', self.A, self.ia.connection, token, {'name': 'No Bot', 'fingerprint': 'f' * 64, 'confirmed': True,
+                                                                          'sharedServerConfirmed': True})
         self.assertEqual((status, body['code'], body['reasons']), (403, 'discord_sender_name_unavailable', [{'code': 'not_authorizing_member'}]))
         with patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'false'}):
             status, body = self.call('GET', self.A, self.wa.connection, self.ta)

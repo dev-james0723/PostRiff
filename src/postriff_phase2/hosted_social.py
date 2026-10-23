@@ -376,6 +376,9 @@ class HostedSocial:
         if manifest.get('operation') == 'discord.reply' and not callable(read_authorize):
             raise AlphaError('Discord reply consent must be rechecked before provider reads.', 409)
         evidence = provider.authorize_destination(grant['accessToken'], manifest['discord']['target'], media=bool(wire['files']), read_authorize=read_authorize)
+        if manifest.get('senderKind') != 'webhook' and 'discordBotNickname' in manifest:
+            from .discord.sender_names import assert_nickname_unchanged
+            assert_nickname_unchanged(manifest, evidence)   # the nickname the person approved is still the server's
         if manifest.get('operation') == 'discord.reply':
             from .discord.engagement import validate_parent
             from .discord.message_content import verify as verify_content

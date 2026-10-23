@@ -58,6 +58,8 @@ class Cursor:
         elif text.startswith('SELECT m.role,m.can_manage_connections FROM public.pr_memberships'):
             member = world.active(params[0], params[1])
             self.result = None if member is None else (member.role, member.flags.get('can_manage_connections', False))
+        elif text.startswith('SELECT pg_advisory_xact_lock('):
+            world.locks.append(params[0])
         elif text.startswith('UPDATE public.pr_workspaces SET state='):
             self.states[params[1]] = json.loads(params[0])
         elif text.startswith('INSERT INTO public.pr_audit_events'):
@@ -96,7 +98,7 @@ class Settings:
         self.s.adapter.transport = self.hooks
         self.s.adapter.webhook_v1_enabled = True
         self.workspaces, self.credentials, self.tokens = {}, {}, {}
-        self.stale, self.audit, self.throttles = set(), [], {}
+        self.stale, self.audit, self.throttles, self.locks = set(), [], {}, []
         self.s.local = self._local
         self.s._fresh_identity = Mock()      # identity refresh has its own suite
         self.s.oauth.repository = SimpleNamespace(assert_fresh=self._assert_fresh)

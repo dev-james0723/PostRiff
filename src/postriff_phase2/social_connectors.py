@@ -479,7 +479,10 @@ class DiscordProvider(OAuthProvider):
                     try:
                         self.rate_limiter.abandon_unsent_nickname(permit)
                     except Exception:
-                        self.rate_coordinator_degraded = True
+                        # Nothing was sent, so no provider-side effect is unknown: at worst one reserved slot lingers
+                        # until it expires or the coordinator resolves it. That must not stop publishing for the whole
+                        # process (rate_coordinator_degraded is process-wide), so it is deliberately not flagged here.
+                        pass
                 raise
         try:
             response = self.transport(method, self.API + path, **kwargs)
@@ -635,7 +638,7 @@ class DiscordProvider(OAuthProvider):
             base = (base & ~int(member.get("deny") or 0)) | int(member.get("allow") or 0)
         return base
 
-    def _member_roles(self, guild_id, user_id, *, read_authorize=None):
+    def _member_roles(self, guild_id, user_id, *, read_authorize=None, member_out=None):
         response = self._bot("GET", f"/guilds/{guild_id}/members/{user_id}", read_authorize=read_authorize)
         if response.get("status") == 404:
             return None
@@ -646,6 +649,10 @@ class DiscordProvider(OAuthProvider):
             raise AlphaError('Discord did not confirm this server membership.', 409)
         if 'pending' in member and type(member['pending']) is not bool:
             raise AlphaError('Discord membership screening evidence is invalid.', 409)
+        if member_out is not None:
+            # The same response already carries the server nickname and the bot's own names; nothing extra is requested.
+            member_out.update(nick=member['nick'] if isinstance(member.get('nick'), str) else None,
+                              user=dict(member['user']) if isinstance(member.get('user'), dict) else {})
         if member.get('pending') is True:
             return None
         timeout = member.get('communication_disabled_until')
@@ -698,7 +705,8 @@ class DiscordProvider(OAuthProvider):
         if (guild.get('id') != session['guild'] or session.get('applicationId') != self.client_id
                 or session.get('botUserId') != bot_id):
             raise AlphaError('Reconnect this Discord installation before authorizing channels.', 409)
-        bot_roles = self._member_roles(session["guild"], bot_id, read_authorize=read_authorize)
+        bot_member = {}
+        bot_roles = self._member_roles(session["guild"], bot_id, read_authorize=read_authorize, member_out=bot_member)
         user_id = session.get("user")
         if not re.fullmatch(r'[0-9]{5,25}', str(user_id or '')):
             raise AlphaError('Reconnect to confirm the Discord user who authorizes this server.', 409)
@@ -720,7 +728,7 @@ class DiscordProvider(OAuthProvider):
         usable.sort(key=lambda c: (c.get("position") or 0, str(c.get("name"))))
         return [{"id": str(c["id"]), "name": "#" + str(c.get("name") or c["id"]), "kind": "announcement" if c.get("type") == 5 else "text",
                  "selected": str(c["id"]) == str(session.get("channel")), 'applicationId': self.client_id,
-                 'botUserId': bot_id, 'linkedUserId': user_id, 'guildId': session['guild'],
+                 'botUserId': bot_id, 'linkedUserId': user_id, 'guildId': session['guild'], 'botNickname': bot_member.get('nick'),
                  'guildName': str(guild.get('name') or session['guild']), 'channelId': str(c['id']),
                  'channelName': '#' + str(c.get('name') or c['id']), 'botPermissions': c['botPermissions'], 'userPermissions': c['userPermissions']} for c in usable]
 

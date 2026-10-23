@@ -262,9 +262,11 @@ class OAuthService:
         webhook_ready = bool(adapter and getattr(adapter, 'webhook_v1_enabled', False)
                              and getattr(adapter, 'authorization_v2_enabled', False) and getattr(adapter, 'connections_v2_enabled', False)
                              and getattr(adapter, 'production_reviewed', False) and getattr(adapter, 'execution_enabled', True))
+        from .discord.sender_names import names_available
         return {'identity': {'senderKind': 'none', 'canPublish': False},
-                'bot': {'senderKind': 'bot'},
+                'bot': {'senderKind': 'bot', 'nickname': {'enabled': names_available(adapter, 'bot')}},
                 'webhook': {'senderKind': 'webhook', 'enabled': webhook_ready, 'payloadTypes': ['text'],
+                            'senderName': {'enabled': names_available(adapter, 'webhook')},
                             'status': 'available' if webhook_ready else 'unavailable'},
                 'userInstall': {'senderKind': 'interaction', 'enabled': user_ready, 'canPublish': False, 'canSchedule': False,
                                 'status': 'available' if user_ready else 'unavailable',

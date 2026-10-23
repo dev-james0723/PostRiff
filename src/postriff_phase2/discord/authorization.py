@@ -199,6 +199,14 @@ def freeze_manifest(state, channel, manifest, selected_id):
         frozen_name = frozen_webhook_name(channel)
         if frozen_name is not None:
             manifest['discordSenderName'] = frozen_name
+    else:
+        # A bot post is displayed under the server's CURRENT nickname, which Rafii cannot freeze on Discord. Instead the
+        # nickname the person saw (the last one this connection observed) is frozen into the approval, and the dispatch
+        # preflight holds the post if Discord reports another one. Only while the nickname capability is on.
+        from .sender_names import frozen_bot_nickname
+        seen = frozen_bot_nickname(channel)
+        if seen is not None:
+            manifest['discordBotNickname'] = seen[0]
     wire = wire_content(manifest)
     delivery_digest = digest({'workspaceId': manifest['workspaceId'],
                               'applicationId': target['applicationId'],
@@ -292,6 +300,10 @@ def approved_campaign_channel(channel, decision):
         else:
             from .sender_names import validate_name
             frozen['discordSenderName'] = validate_name(decision['discordSenderName'], 'webhook')
+    elif 'discordBotNickname' in decision:
+        frozen['discordBotNickname'] = {'value': decision['discordBotNickname'], 'observedAt': decision.get('at', 0)}
+    else:
+        frozen.pop('discordBotNickname', None)
     return frozen
 
 

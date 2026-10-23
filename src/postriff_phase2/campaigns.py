@@ -784,11 +784,18 @@ def _decide(state: dict, root: dict, payload: dict, actor: str, now: float) -> d
                 # Compare with what a review would freeze now (nothing while the feature is off), not the raw setting.
                 if payload.get('discordSenderName') != frozen_webhook_name(channel):
                     raise AlphaError('The webhook sender name changed. Review it again.', 409)
+            else:
+                from .discord.sender_names import frozen_bot_nickname
+                seen = frozen_bot_nickname(channel)
+                if payload.get('discordBotNickname') != (seen[0] if seen else None):
+                    raise AlphaError('The Rafii bot\u2019s server nickname changed. Review it again.', 409)
             binding = campaign_binding(state, channel, variant, selected_id, item['publishAt'], task['schedule']['timeZone'], now)
             item['destinationId'] = selected_id
             item['decision'].update(discord=binding['discord'], timing=binding['timing'])
             if resource.get('senderKind') == 'webhook':
                 item['decision']['discordSenderName'] = binding.get('discordSenderName')
+            elif 'discordBotNickname' in binding:
+                item['decision']['discordBotNickname'] = binding['discordBotNickname']
         item["approvedVia"] = "human"
         lifecycle.move(item if item["state"] != "needs_revision" else lifecycle.move(item, "ready_for_review", at=now), "approved", at=now)
         _history(occurrence, now, "approved", f"{item['platform']} post approved; it publishes at its scheduled time." if item.get("publishAt") else f"{item['platform']} draft approved.", actor)

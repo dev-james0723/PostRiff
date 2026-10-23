@@ -126,10 +126,11 @@ def verify(provider, session, *, read_authorize=None):
 
 
 def message_matches(body, manifest, message_id):
+    from .sender_names import names_equivalent
     target = manifest['discord']['target']
     return (isinstance(body, dict) and body.get('id') == message_id and body.get('channel_id') == target['channelId']
             and body.get('webhook_id') == target['webhookId'] and (body.get('author') or {}).get('id') == target['webhookId']
             and (body.get('author') or {}).get('bot') is True and body.get('content') == manifest['payload']['text']
-            and ('discordSenderName' not in manifest or (body.get('author') or {}).get('username') == manifest['discordSenderName'])
+            and ('discordSenderName' not in manifest or names_equivalent((body.get('author') or {}).get('username'), manifest['discordSenderName']))
             and body.get('mentions') == [] and body.get('mention_roles') == [] and body.get('mention_everyone') is False
             and body.get('attachments') == [] and body.get('embeds') == [])
