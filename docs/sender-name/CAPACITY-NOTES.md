@@ -20,6 +20,9 @@ against the repository's disposable PostgreSQL (16 locally, CI uses 17) and an i
   asserts equal request counts with the capability on and off. The nickname is taken from the bot-member response the
   destination check already reads (`destinations()` reads `GET /guilds/{id}/members/{bot}` for its roles; the same payload carries
   `nick`), so nothing new is requested at dispatch.
+  The same holds on the W-02 lane against PostgreSQL: `LaneAndWorkerOnPostgres::test_a_frozen_bot_nickname_adds_no_request_to_a_bot_post` compares the request multiset of a bot post
+  with and without a frozen nickname. A bot post approved under a nickname that Discord no longer reports is held at dispatch before any create
+  (`::test_a_bot_post_approved_under_one_nickname_is_held_when_the_server_nickname_changed`): one request fewer, never more.
 * A frozen webhook name or bot nickname costs nothing at claim time: `job_authorized` and the digests only read the manifest.
 
 ### Request shape of one webhook post (measured, single thread, coordinator on, bot identity cache warm)

@@ -85,8 +85,9 @@ name: not the channel record, not an environment variable, not a module global. 
 | Editing every tenant's setting in a tight loop while their approved posts are created changes nothing on the wire | `::test_creates_race_with_settings_edits_and_still_carry_the_approved_names` |
 | Nothing mutable or process-global is consulted at execution (the settings reader, the freezer and the custody check are replaced by functions that fail if called) | `::test_nothing_mutable_or_process_global_is_consulted_when_executing` |
 | Real PostgreSQL, the W-02 lane with 4 concurrent loops: 6 named webhooks, 4 unnamed, 4 bot installations, 2 posts each; each execute carries its own name, none carries another's | `test_discord_sender_name_postgres.py::LaneAndWorkerOnPostgres::test_the_lane_sends_named_unnamed_and_bot_posts_each_under_exactly_its_own_name` |
-| Legacy single-scheduler worker path, same assertions | `::test_a_legacy_single_scheduler_worker_sends_the_same_exact_names` |
-| A lane loop and a legacy worker over the same data | `::test_two_lane_processes_and_a_legacy_worker_together_never_cross_names` |
+| The minute-tick worker (`PostgresWorker.step`, the path with the lane off), same assertions | `::test_the_minute_tick_worker_path_with_the_lane_off_sends_the_same_exact_names` |
+| A worker without the fenced lease protocol cannot dispatch Discord on a migrated database at all (so the frozen RC1 worker can only hold named posts) | `::test_a_worker_without_the_fenced_lease_protocol_cannot_dispatch_discord_at_all` |
+| Lane loops over mixed data (the second name of this row is the former "legacy worker" wording; both loops are fenced workers) | `::test_two_lane_processes_and_a_legacy_worker_together_never_cross_names` |
 
 ### 4.4 What happens when things change after approval
 
@@ -174,7 +175,7 @@ Only the member whose Discord account installed the bot may edit it (`authorizin
 Each write carries `X-Audit-Log-Reason: Rafii shared bot nickname change (ref <16 hex>)`, a one-way hash of application,
 server and workspace, so a server administrator reading the server's audit log can tell a Rafii change from a person's and
 quote the reference to Rafii; it names no workspace, person or customer text (`BotNicknameInTheApproval` audit-reason test and
-`ClaimFlowOnPostgres::test_a_successful_write...`).
+`ClaimFlowOnPostgres::test_a_successful_write_leaves_one_observed_admission_no_claim_and_an_audit_reason_for_the_server`).
 
 ### 5.5 What remains impossible
 
@@ -233,7 +234,7 @@ reserved word after folding.
 | mention syntax (`@everyone`, `<@id>`, `<@&id>`, `<#id>`), markdown links, URLs | the characters are refused, and independently every execute carries `allowed_mentions: {parse: []}`; Discord does not render markdown or links in an author line. A name cannot ping | `::test_a_name_cannot_ping_or_link`, `test_discord_sender_name_wire.py::test_content_that_mentions_everyone_still_cannot_ping` |
 | control, format, bidi override, zero-width, tag characters | refused | `::Refused` |
 | empty after normalization, blank-looking names | refused (`empty`, `invisible`) | `::Refused` |
-| a name Discord would collapse (double spaces, no-break and ideographic spaces) | refused at save, so the read-back of an approved post still equals the approved name; the read-back itself compares after Unicode NFC and whitespace canonicalisation (`names_equivalent`), not byte for byte | `::Refused`, `::test_the_readback_compares_normalised_names` |
+| a name Discord would collapse (double spaces, no-break and ideographic spaces) | refused at save, so the read-back of an approved post still equals the approved name; the read-back itself compares after Unicode NFC and whitespace canonicalisation (`names_equivalent`), not byte for byte | `::Refused`, `test_discord_sender_name_rules.py::ReadBack::test_equal_and_normalised_names_match` |
 | rules tightened later | queued posts whose frozen name no longer validates are held in the preflight, nothing sent | `::test_a_frozen_name_that_stops_validating_is_held_before_any_request` |
 
 Not covered, honestly: Discord applies further private anti-abuse rules to names ("rules and restrictions not shared"),
@@ -274,7 +275,7 @@ coordinator keeps an `invalid` row that debits one per such response and blocks 
 * A lost nickname write whose admission can never be matched again (bot token rotated) leaves one `uncertain` admission that
   the coordinator counts as pending without an age bound; the reviewer measured the application window going from 25 to 24.
   `REQUESTS-TO-RATE-LIMITER.md` R2/R3 ask for the token-independent reconcile and the age bound; until then it is one rate slot per
-  such event, characterised by `ClaimFlowOnPostgres::test_after_a_bot_token_rotation...`.
+  such event, characterised by `ClaimFlowOnPostgres::test_after_a_bot_token_rotation_the_admission_is_retired_by_id_if_offered_and_otherwise_stays_an_orphan`.
 
 ## 9. Information leaks
 

@@ -11,7 +11,8 @@ the upstream error code `discord_sender_edit_pending` keep their meaning. v2 onl
 
 **Wave 1 reality.** The webhook route (`POSTRIFF_DISCORD_WEBHOOK_V1_ENABLED` / `_QUALIFIED`) is off at opening, so no webhook
 connection can be created and the webhook name ships dark. The bot nickname capability is its own switch and is OFF by default
-(`POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED`): until it is turned on, neither kind is editable. Show the control only when the provider
+(`POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED`): until it is turned on a bot nickname is not editable. A webhook name additionally needs the master
+switch (`POSTRIFF_DISCORD_SENDER_NAMES_ENABLED`, off by default on hosted production) and the webhook route. Show the control only when the provider
 view says it is available (next section).
 
 ## Is the feature available at all? (provider view)
@@ -169,8 +170,8 @@ Request body (exactly these keys, nothing else):
 Every denial above leaves Rafii state (except the throttle counters), the Discord side and the audit log unchanged, and
 issues no Discord request, except that a refusal found only after Discord was read (`bot_missing_change_nickname`,
 `person_*`, `nickname_authority_other_workspace`) has made those reads (GETs only; never a write). Order of checks:
-session, workspace, role, switches and request coordinator and authorizer, body shape and fingerprint (Rafii-side half), name
-rules, then the Discord reads and their reasons. `discord_sender_name_required` is the only stale-settings code; do not infer
+body shape (400, independent of any workspace), session, workspace, role, throttle, switches and request coordinator and
+authorizer, the Rafii-side half of the fingerprint, name rules, then the Discord reads and their reasons. `discord_sender_name_required` is the only stale-settings code; do not infer
 staleness from any other.
 
 ## Behaviour the UI can rely on

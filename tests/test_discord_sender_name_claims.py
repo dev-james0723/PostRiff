@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 
 import discord_sender_name_fixture as F
 from discord_sender_name_settings_fixture import Settings
+from postriff_alpha.domain import AlphaError
 from postriff_phase2.discord import sender_names as names
 from postriff_phase2.discord.rate_limits import RateCoordinatorUnavailable, RateDelayed
 from postriff_phase2.hosted import HostedPhase2Commands
@@ -597,6 +598,41 @@ class Shapes(RouteBase):
         profile = self.w.get(self.A, self.ta, self.wa.connection)
         self.assertEqual((profile['editable'], profile['unavailable']), (True, []))
         self.assertEqual(self.save(self.ta, self.A, self.wa, 'Alpha Daily')['savedName'], 'Alpha Daily')
+
+    def test_the_channels_card_shows_a_webhook_name_and_never_a_bot_nickname_or_an_internal_claim(self):
+        from postriff_phase2.channels import customer_view, unsupported_matrix
+        bot = self.w.channel(self.A, self.ia.connection)
+        bot.update(discordSenderName='Our Bot', discordBotNickname={'value': 'Our Bot', 'observedAt': 1.0},
+                   discordSenderEdit={'id': 'claim-1', 'name': 'Our Bot', 'expiresAt': 2.0, 'rateAdmissionId': 'admission-1'})
+        webhook_view = customer_view(self.w.channel(self.A, self.wa.connection), unsupported_matrix(), self.w.now)
+        bot_view = customer_view(bot, unsupported_matrix(), self.w.now)
+        self.assertEqual(webhook_view['discordSenderName'], 'Alpha Weekly')
+        self.assertIsNone(bot_view['discordSenderName'])
+        for view in (webhook_view, bot_view):
+            text = json.dumps(view, default=str)
+            for internal in ('discordSenderEdit', 'discordBotNickname', 'rateAdmissionId', 'admission-1', 'claim-1'):
+                self.assertNotIn(internal, text)
+
+    def test_a_form_loaded_by_one_member_cannot_be_saved_by_another(self):
+        other = self.w.member(self.A, self.w.user(3), 'admin')
+        mine = self.w.get(self.A, self.ta, self.wa.connection)
+        theirs = self.w.get(self.A, other, self.wa.connection)
+        self.assertNotEqual(mine['fingerprint'][:32], theirs['fingerprint'][:32], 'the Rafii-state half names the acting member')
+        refused = self.w.attempt(self.w.post, self.A, other, self.wa.connection,
+                                 {'name': 'Alpha Daily', 'fingerprint': mine['fingerprint'], **BODY})
+        self.assertEqual(refused[:2], (409, 'discord_sender_name_required'))
+        self.assertEqual(self.w.channel(self.A, self.wa.connection)['discordSenderName'], 'Alpha Weekly')
+        saved = self.w.post(self.A, other, self.wa.connection, {'name': 'Alpha Daily', 'fingerprint': theirs['fingerprint'], **BODY})
+        self.assertEqual(saved['savedName'], 'Alpha Daily')
+
+    def test_a_nickname_write_that_asks_for_an_admission_callback_must_have_the_guard_too(self):
+        calls = len(self.w.hooks.calls)
+        with self.assertRaises(AlphaError) as raised:
+            self.w.s.adapter._bot('PATCH', f'/guilds/{self.ia.guild}/members/@me', body={'nick': 'Unguarded'},
+                                  write_admitted=lambda permit: None)
+        self.assertEqual((raised.exception.status, raised.exception.code), (409, 'discord_sender_name_required'))
+        self.assertEqual(len(self.w.hooks.calls), calls)
+        self.assertEqual(self.w.hooks.guild_config[self.ia.guild].patches, [])
 
     def test_the_installer_is_found_through_the_installations_own_identity_link_among_look_alikes(self):
         links = self.w.workspaces[self.A].state['phase2']['discordIdentityLinks']
