@@ -212,6 +212,10 @@ The `discord.lane.completed` log lines (12 a minute; sum `posted`, `verified`, `
 `leaseLost` per minute; any `stoppedBy` other than `idle`, `time_budget` or `rate_wait`), and `docs/w02/monitoring.sql`:
 M1 oldest due lag, M2 leases expired but still owned, M3 busiest second, M4 rate waits, M5 unanswered admissions (Q3),
 M6 holds on the four rows, M7 posts held for an expired approval. The launch monitors Q1 to Q13 still apply.
+The lines' `held` (like the minute cron's `discordWorker.counters.held`) misses a post held by a rate-wait release,
+one whose wait outlasts its approval: `discord_worker.release_unsent` sets the state before the event that counts it
+(unchanged worker code, the same in `2a5a523d`) [measured: 3 such holds counted 0]. M7's `held_total` and
+`discordWorker.queue.held` count every held post in their samples.
 
 The minute cron's lag warning, for the failures no lane line reports (a cron that never fires logs nothing): with the
 flag on, every tick reads the Discord report it already makes (`discordWorker.queue`) and logs one
