@@ -77,6 +77,9 @@ class Phase2Store(Store):
         p = result["state"].get("phase2")
         if p:
             p.pop('discordEngagement', None)
+            # Every member (a viewer too) receives this snapshot. The identity links are one person's own: their Discord
+            # user id, display name and Rafii member id belong to GET channels (own links only), never to a shared payload.
+            p.pop('discordIdentityLinks', None)
             # Some hosted workspaces never had the legacy embedded trial grant.
             # Present their saved content without inventing a trial or allowance;
             # hosted publishing entitlements are checked separately against SQL.
