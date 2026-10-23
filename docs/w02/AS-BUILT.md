@@ -16,7 +16,7 @@ read from the code.
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
 | `tests/test_discord_parallel_lane.py` (new) | 66 offline tests (run under the synthetic fence). |
-| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 29 real-PostgreSQL tests and their fixture; skipped under the fence. |
+| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 34 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
 | `docs/w02/*` (new) | This file, the corrected plan, open questions, monitors, simulation results. |
 
@@ -213,6 +213,16 @@ drains exactly once and fairly, and the warning stops. A policy that expires mid
 (`coordinator_unavailable`); nothing is claimed or created after it, and renewal resumes, leaving at most the step each
 loop had in flight for review (refused at the seal it is held, refused at the create it is uncertain with nothing
 sent; in two characterization runs every such step was released instead, and sent after renewal).
+
+Rollback, measured the same way (section (j)): turning the flag off on a new build while old lane invocations still
+run, with one post leased by a loop that died mid-step, lets the frozen minute cron and the old loops work side by
+side; the dead lease is recovered once, as provably unsent, after it expires, and every post is created exactly once.
+Rolling back to the frozen `2a5a523d` worker itself while a lane worker id holds a lease: that worker leaves the
+workspace alone while the lease lives, then recovers the post only as unsent (sent once), or, when the post has a
+sealed intent or Discord already accepted it, marks it uncertain and never creates it again. Turning the flag off
+and on again keeps every post exactly once (off: the shards answer disabled and the minute cron sends; on: the
+minute cron claims no Discord). The operator hold stops every loop within its iteration: no loop claims more than
+once after the hold, every create after it was claimed before it, and lifting the hold resumes exactly once.
 
 ## Health status
 

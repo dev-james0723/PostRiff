@@ -12,10 +12,12 @@ Runs where PostgreSQL server binaries are named by POSTRIFF_PG_BIN. It starts it
 reads application credentials or touches any other database. It does not run under the synthetic transport fence
 (RAFII_DISCORD_SYNTHETIC_FENCE), which by design refuses every database but the guarded runner's own.
 """
+import hashlib
 import importlib.util
 import json
 import logging
 import os
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -24,9 +26,22 @@ import discord_lane_fixture as F
 from postriff_phase2.discord import worker as discord_worker
 from postriff_phase2.discord.rate_limits import SharedPostgresBudget
 
+FROZEN_SOURCE = F.ROOT / 'tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt'
+FROZEN_SHA256 = '8fdfd6e3dc461a88a9d4784a587491e22ada54b27585480a41609fb8c64f76de'  # pragma: allowlist secret -- content hash of the pinned source
+
 
 class WorkerDied(BaseException):
     """A process that stops mid-step: nothing after this point runs; its open transaction rolls back."""
+
+
+def frozen_worker_class():
+    """The release candidate's own worker (2a5a523d), as a rollback would run it: the old file in today's package."""
+    source = FROZEN_SOURCE.read_bytes()
+    assert hashlib.sha256(source).hexdigest() == FROZEN_SHA256, 'the pinned base worker changed'
+    namespace = {'__name__': 'postriff_phase2.hosted_worker_2a5a523d', '__package__': 'postriff_phase2',
+                 '__builtins__': __builtins__}
+    exec(compile(source, str(FROZEN_SOURCE), 'exec'), namespace)
+    return namespace['PostgresWorker']
 
 
 def short_policy(now, seconds):
@@ -298,13 +313,22 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         def after(method, path, answer):
             if method == 'POST' and not held_at:
                 self.hold()
-                held_at.append(time.monotonic())
+                held_at.extend((time.monotonic(), time.time()))
         self.wire.after = after
         results, failures = F.run_lanes(worker, 4, seconds=60)
         self.assertEqual(failures, [])
         self.assertEqual({r['stoppedBy'] for r in results}, {'operator_hold'})
         late = [call for call in self.wire.calls if call[1] == 'POST' and call[0] > held_at[0]]
         self.assertLessEqual(len(late), 4, 'at most the one step each loop already had in flight')
+        by_nonce = {F.nonce(job): job for job in F.jobs(self.cluster).values()}
+        claimed = {nonce: [event['at'] for event in job['events'] if event['state'] == 'claimed']
+                   for nonce, job in by_nonce.items()}
+        self.assertLessEqual(sum(at > held_at[1] for times in claimed.values() for at in times), 4,
+                             'each loop claims at most once after the hold: the iteration it was in')
+        for nonce, times in self.wire.creates.items():
+            for _, _, wall in times:
+                if wall > held_at[1]:
+                    self.assertLess(min(claimed[nonce]), held_at[1], 'a create after the hold was claimed before it')
         found = F.jobs(self.cluster).values()
         self.assertFalse([job for job in found if job['state'] in ('failed', 'held')])
         untouched = [job for job in found if job['state'] == 'scheduled' and not job.get('attempts')]
@@ -676,6 +700,147 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual({(state, creates) for state, creates, _ in stuck} - {('held', 0), ('uncertain', 0)}, set(),
                          stuck)
         self.assertEqual(self.wire.duplicates(), 0)
+
+    # (j) rollback -------------------------------------------------------------------------------------------------
+
+    def leave_a_dead_lease(self, method, suffix, *, before, nth=2, within=''):
+        """One lane loop dies at the `nth` matching request (`before` Discord sees it, or after Discord answered),
+        so it stops mid-step holding a live lease. Returns that job. Only requests whose path contains `within`
+        count: the second one on a route is on a learned route, as almost every production request is (dying in
+        the first request of a route leaves that route waiting for review instead; Q3 and the cold-route test)."""
+        seen = []
+
+        def hook(m, path, answer=None):
+            if m == method and path.endswith(suffix) and within in path:
+                seen.append(path)
+                if len(seen) == nth:
+                    raise WorkerDied()
+        if before:
+            self.wire.fail = hook
+        else:
+            self.wire.after = hook
+        _, failures = F.run_lanes(self.worker, 1, seconds=30)
+        self.assertEqual([type(error) for _, error in failures], [WorkerDied])
+        self.wire.fail = self.wire.after = None
+        (dead,) = [job for job in F.jobs(self.cluster).values()
+                   if (job.get('leaseOwner') or '').startswith('discord-lane-')]
+        return dead
+
+    @staticmethod
+    def key(job):
+        return job['manifest']['workspaceId'], job['id']
+
+    def test_rollback_the_flag_turned_off_mid_run_lets_the_frozen_minute_cron_take_over(self):
+        tenants = [F.Tenant(n) for n in range(4)]
+        self.start(tenants, 4)
+        ticks, stop = [], threading.Event()
+
+        def minute_cron():  # the new build's cron, flag off: no patching here, the environment is set below
+            while not stop.is_set():
+                ticks.append(self.worker.tick(10, 20))
+                time.sleep(.2)
+        with patch.object(discord_worker, 'LEASE_SECONDS', 3):
+            dead = self.leave_a_dead_lease('GET', '/channels', before=True, within='/guilds/%s/' % tenants[0].guild)
+            # The flag goes off on a new build. The old build's lane invocations still run to the end of their
+            # budget while the new minute cron, on the frozen path, takes Discord back: both at once, then the cron.
+            cron = threading.Thread(target=minute_cron)
+            with F.no_billing(), patch.dict(os.environ, {F.discord_lane.ENV_ENABLED: 'false',
+                                                         'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}):
+                cron.start()
+                try:
+                    _, failures = F.run_lanes(self.worker, 2, seconds=6)
+                    self.assertEqual(failures, [])
+                    deadline = time.monotonic() + 60
+                    while (time.monotonic() < deadline
+                           and {job['state'] for job in F.jobs(self.cluster).values()} != {'verified'}):
+                        time.sleep(.5)
+                finally:
+                    stop.set()
+                    cron.join()
+        self.assertTrue(ticks and all('discordParallelLane' not in tick and 'discordLaneStatus' not in tick
+                                      for tick in ticks), "the new build's minute cron runs the frozen path")
+        self.assertGreater(sum(tick['processed'] for tick in ticks), 0, 'and took Discord work')
+        found = self.assert_each_created_once_and_verified(16)
+        recovered = found[self.key(dead)]
+        self.assertEqual(recovered['discordWorker']['recoveries'], 1)
+        self.assertIn('Expired Discord fence was provably unsent; bounded recovery recorded',
+                      [event['message'] for event in recovered['events']])
+
+    def frozen_rollback(self, method, suffix, *, before):
+        """A lane loop dies mid-step holding a lease; the deployment is rolled back to the frozen 2a5a523d worker
+        (no lane code at all), whose minute cron then runs alone. Returns the dead job and the final jobs."""
+        self.start([F.Tenant(0)], 3)
+        frozen = frozen_worker_class()(self.cluster.factory(), social=self.hosted, worker_id='frozen-minute',
+                                       discord_workers=True)
+        with patch.object(discord_worker, 'LEASE_SECONDS', 3):
+            dead = self.leave_a_dead_lease(method, suffix, before=before)
+            with F.no_billing(), patch.dict(os.environ, {'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}):
+                calls = len(self.wire.calls)
+                frozen.tick(10, 20)
+                self.assertEqual(F.jobs(self.cluster)[self.key(dead)]['leaseOwner'], dead['leaseOwner'],
+                                 'a live lane lease is left alone')
+                self.assertEqual(len(self.wire.calls), calls, 'and so is its workspace: one live lease each')
+                time.sleep(3.5)  # the dead loop's lease expires
+                deadline = time.monotonic() + 45
+                while time.monotonic() < deadline:
+                    frozen.tick(10, 20)
+                    found = F.jobs(self.cluster)
+                    others = [job for key, job in found.items() if key != self.key(dead)]
+                    if (all(job['state'] == 'verified' for job in others)
+                            and found[self.key(dead)]['state'] in ('verified', 'uncertain')):
+                        break
+                    time.sleep(.5)
+        return dead, F.jobs(self.cluster)
+
+    def assert_others_verified_once(self, found, dead):
+        for key, job in found.items():
+            if key != self.key(dead):
+                self.assertEqual((job['state'], len(self.wire.creates[F.nonce(job)])), ('verified', 1))
+        self.assertEqual(self.wire.duplicates(), 0)
+
+    def test_rollback_to_the_frozen_worker_recovers_a_lane_lease_only_as_unsent_after_expiry(self):
+        dead, found = self.frozen_rollback('GET', '/channels', before=True)
+        job = found[self.key(dead)]
+        self.assertEqual((job['state'], len(self.wire.creates[F.nonce(job)])), ('verified', 1))
+        self.assertEqual(job['discordWorker']['recoveries'], 1)
+        self.assertIn('Expired Discord fence was provably unsent; bounded recovery recorded',
+                      [event['message'] for event in job['events']])
+        self.assert_others_verified_once(found, dead)
+
+    def test_rollback_to_the_frozen_worker_never_recreates_a_sealed_post(self):
+        dead, found = self.frozen_rollback('POST', '/messages', before=True)
+        job = found[self.key(dead)]
+        self.assertEqual((job['state'], self.wire.creates.get(F.nonce(job), [])), ('uncertain', []))
+        self.assertEqual(len(job['discordDispatchIntents']), 1, 'its sealed intent stays for reconciliation')
+        self.assertIn('Expired Discord intent requires reconciliation; never repost',
+                      [event['message'] for event in job['events']])
+        self.assert_others_verified_once(found, dead)
+
+    def test_rollback_to_the_frozen_worker_never_recreates_a_post_discord_accepted(self):
+        dead, found = self.frozen_rollback('POST', '/messages', before=False)
+        job = found[self.key(dead)]
+        self.assertEqual((job['state'], len(self.wire.creates[F.nonce(job)])), ('uncertain', 1))
+        self.assert_others_verified_once(found, dead)
+
+    def test_rollback_the_flag_off_then_on_again_keeps_every_post_exactly_once(self):
+        worker = self.start([F.Tenant(n) for n in range(10)], 2)
+        first, failures = F.run_lanes(worker, 2, seconds=20, steps=3)  # on: some progress
+        self.assertEqual(failures, [])
+        self.assertGreater(sum(r['counters']['claimed'] for r in first), 0)
+        # Off (a build without the flag): every shard answers disabled, and the minute cron sends Discord.
+        off = F.discord_lane.run(worker, 0, {'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'})
+        self.assertEqual((off['enabled'], off['status']['blocker']), (False, 'disabled'))
+        ticks = [self.minute(worker, flag=False) for _ in range(2)]
+        self.assertGreater(sum(tick['processed'] for tick in ticks), 0)
+        self.assertTrue(all('discordParallelLane' not in tick and 'discordLaneStatus' not in tick for tick in ticks))
+        # On again (a build with the flag): the minute cron leaves Discord to the lane, which drains the rest.
+        calls = len(self.wire.calls)
+        on = self.minute(worker)
+        self.assertTrue(on['discordParallelLane'])
+        self.assertEqual((on['processed'], len(self.wire.calls)), (0, calls), 'the minute cron claims no Discord')
+        _, failures = F.run_lanes(worker, 3, seconds=60)
+        self.assertEqual(failures, [])
+        self.assert_each_created_once_and_verified(20)
 
 
 if __name__ == '__main__':
