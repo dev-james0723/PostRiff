@@ -119,6 +119,7 @@ def main(argv=None):
     policy = json.dumps(tool.build(time.time(), days=1, revision='cap-lockbench', app_capacity=capacity))
     out = Path(args.out or '.')
     out.mkdir(parents=True, exist_ok=True)
+    load_start = open('/proc/loadavg').read().strip()
     cluster = cluster_tools.LocalCluster(args.pg_bin, max_connections=150, log=lambda *a: None)
     rows = []
     try:
@@ -170,9 +171,30 @@ def main(argv=None):
                 pooler.wait(30)
     finally:
         cluster.close()
-    (out / 'lockbench.json').write_text(json.dumps({'sourceTree': str(tree), 'rows': rows}, indent=1))
-    lines = ['| processes | DB round trip ms | routes | think ms | policy | admissions/s | reserve p50/p95 ms | observe p50/p95 ms | delayed | errors |',
-             '|---|---|---|---|---|---|---|---|---|---|']
+    # Several invocations (configurations) accumulate in one lockbench.json and one LOCKBENCH.md.
+    try:
+        sha = subprocess.run(['git', '-C', str(tree), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        sha = ''
+    import discord_lane_capacity_run as runner_tools
+    machine = runner_tools.machine_description()
+    load_end = open('/proc/loadavg').read().strip()
+    record = {'sourceTree': str(tree), 'sourceSha': sha, 'machine': machine, 'loadAtStart': load_start,
+              'loadAtEnd': load_end, 'arguments': {k: getattr(args, k) for k in (
+                  'processes', 'latency_ms', 'routes', 'think_ms', 'policy', 'seconds', 'pool_size')}, 'rows': rows}
+    store = out / 'lockbench.json'
+    previous = json.loads(store.read_text()) if store.exists() else {'runs': []}
+    previous.setdefault('runs', []).append(record)
+    store.write_text(json.dumps(previous, indent=1))
+    where = ('GitHub Actions runner %s (%s, image %s %s)' % (machine.get('runnerName'), machine.get('runnerEnvironment'),
+                                                            machine.get('image'), machine.get('imageVersion'))
+             if machine.get('kind') == 'github-actions' else 'local machine (the development sandbox is shared: not evidence)')
+    header = ['### Lock benchmark: routes %s, policy %s, think %s ms, %s s per configuration, pool %d' % (
+                  args.routes, args.policy, args.think_ms, args.seconds, args.pool_size), '',
+              'Tree `%s`; %s, %s vCPU, %s GB; load %s at start, %s at end.' % (
+                  sha, where, machine.get('cpus'), machine.get('memGb'), load_start.split()[0], load_end.split()[0]), '']
+    lines = header + ['| processes | DB round trip ms | routes | think ms | policy | admissions/s | reserve p50/p95 ms | observe p50/p95 ms | delayed | errors |',
+                      '|---|---|---|---|---|---|---|---|---|---|']
     for r in rows:
         lines.append('| %d | %s | %s | %s | %s | %s | %s / %s | %s / %s | %d | %d |' % (
             r['processes'], r['latencyMs'], r['routes'], r['thinkMs'], r['policy'], r['admissionsPerSecond'],

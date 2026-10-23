@@ -41,7 +41,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          [[ "$REF_NAME" =~ ^claude/discord-capacity-run-(smoke|s0|s1|s2|faults|release)-[a-z0-9]{1,12}$ ]] || { echo 'unexpected branch name'; exit 1; }
+          [[ "$REF_NAME" =~ ^claude/discord-capacity-run-(smoke|s0|s1|s2|faults|release|lockbench)-[a-z0-9]{1,12}$ ]] || { echo 'unexpected branch name'; exit 1; }
           branch_profile="${BASH_REMATCH[1]}"
           age=$(( $(date +%s) - $(git -C request log -1 --format=%ct) ))
           { [ "$age" -ge -60 ] && [ "$age" -le 43200 ]; } || { echo "the request commit is not from the last twelve hours (age ${age}s); push a new request"; exit 1; }
@@ -64,6 +64,7 @@ jobs:
             s2) scenarios='S2' ;;
             faults) scenarios='F429 F5xx Fcrash Fdb Fexpiry Fstall Fflip Nmisroute Ndup Nceiling' ;;
             release) scenarios='smoke S1 S2 S0-100 S0-250 baseline F429 F5xx Fcrash Fdb Fexpiry Fstall Fflip Nmisroute Ndup Nceiling' ;;
+            lockbench) scenarios='lockbench' ;;
           esac
           matrix="$(python3 -I -c 'import json,sys; print(json.dumps([{"scenario": s, "pool": int(p)} for s in sys.argv[1].split() for p in sys.argv[2].split(",")]))' "$scenarios" "$pools")"
           # The harness commit must be on the harness branch: the run uses the harness as it was pushed, unchanged.
@@ -121,6 +122,7 @@ jobs:
           "$POSTRIFF_PG_BIN/postgres" --version
           /usr/sbin/pgbouncer --version
       - name: Run the scenario (real time, separate processes, synthetic data, nothing beyond 127.0.0.1)
+        if: matrix.scenario != 'lockbench'
         env:
           LATENCY: ${{ needs.plan.outputs.latency }}
         run: |
@@ -130,14 +132,33 @@ jobs:
             --source-tree "$GITHUB_WORKSPACE/tree" --out "$RUNNER_TEMP/capacity" --label "gha-pool${POOL}" \
             --pooler pgbouncer --pgbouncer-bin /usr/sbin/pgbouncer --max-db-connections "$POOL" --db-latency-ms "$LATENCY"
           uptime
+      - name: Run the coordinator lock benchmark (only the shared request coordinator, K processes, synthetic data)
+        if: matrix.scenario == 'lockbench'
+        run: |
+          set -euo pipefail
+          uptime
+          out="$RUNNER_TEMP/capacity/lockbench"
+          bench() { nice -n 10 python -B harness/scripts/discord_lane_cap_lockbench.py --source-tree "$GITHUB_WORKSPACE/tree" --out "$out" --pool-size "$POOL" --seconds 20 "$@"; }
+          # 1. The ceiling of the coordinator alone: locks and round trips, no policy limit.
+          bench --routes learned --policy unbounded --processes 1,4,12,24 --latency-ms 0,2,5
+          # 2. The same with a Discord answer time between admission and observation (the HTTP request).
+          bench --routes learned --policy unbounded --processes 12,24 --latency-ms 2 --think-ms 120
+          # 3. Cold routes: discovery probe and exclusive observation.
+          bench --routes cold --policy unbounded --processes 1,4,12 --latency-ms 2
+          # 4. The reviewed policy, 25 per second: it should bind before the lock does.
+          bench --routes learned --policy 25 --processes 12,24 --latency-ms 2
+          uptime
       - name: The receipt in the step summary
         if: always()
         run: |
           set -uo pipefail
-          for receipt in "$RUNNER_TEMP"/capacity/*/RECEIPT.md; do
-            [ -f "$receipt" ] || { echo "no receipt: the run did not get far enough to write one" >> "$GITHUB_STEP_SUMMARY"; continue; }
+          for receipt in "$RUNNER_TEMP"/capacity/*/RECEIPT.md "$RUNNER_TEMP"/capacity/*/LOCKBENCH.md; do
+            [ -f "$receipt" ] || continue
             head -c 900000 "$receipt" >> "$GITHUB_STEP_SUMMARY"
           done
+          if ! compgen -G "$RUNNER_TEMP/capacity/*/RECEIPT.md" > /dev/null && ! compgen -G "$RUNNER_TEMP/capacity/*/LOCKBENCH.md" > /dev/null; then
+            echo "no receipt: the run did not get far enough to write one" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Keep the receipt and the raw evidence (synthetic; the per-run environment files are not uploaded)
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -155,6 +176,9 @@ jobs:
             ${{ runner.temp }}/capacity/*/pgbouncer.out
             ${{ runner.temp }}/capacity/*/mock.out
             ${{ runner.temp }}/capacity/*/mock/mock-live.json
+            ${{ runner.temp }}/capacity/*/lockbench.json
+            ${{ runner.temp }}/capacity/*/LOCKBENCH.md
+            ${{ runner.temp }}/capacity/*/lockbench-pooler-*.json
             ${{ runner.temp }}/capacity/*/seed-manifest.jsonl
             ${{ runner.temp }}/capacity/*/samples.jsonl
             ${{ runner.temp }}/capacity/*/invocations.jsonl

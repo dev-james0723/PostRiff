@@ -85,6 +85,19 @@ def shape():
         check('the artifact keeps %s' % name, '${{ runner.temp }}/capacity/*/' + name in paths)
     check('every artifact path is under the run directories', all(
         line.strip().startswith('${{ runner.temp }}/capacity/*/') for line in paths.splitlines() if line.strip()))
+    # The lock benchmark profile: its own step, only for its own matrix entry; the scenario step never runs for it.
+    scenario_step = step('capacity', 'Run the scenario')
+    bench_step = step('capacity', 'Run the coordinator lock benchmark')
+    check('the scenario step does not run for the lock benchmark', scenario_step.get('if') == "matrix.scenario != 'lockbench'")
+    check('the lock benchmark step runs only for the lock benchmark', bench_step.get('if') == "matrix.scenario == 'lockbench'")
+    check('the lock benchmark runs the harness script on the tree under test with the pool size',
+          'python -B harness/scripts/discord_lane_cap_lockbench.py --source-tree "$GITHUB_WORKSPACE/tree"' in bench_step['run']
+          and '--pool-size "$POOL"' in bench_step['run'])
+    check('the lock benchmark includes the reviewed 25/s policy and a Discord answer time',
+          '--policy 25' in bench_step['run'] and '--think-ms' in bench_step['run'])
+    for name in ('lockbench.json', 'LOCKBENCH.md'):
+        check('the artifact keeps %s' % name, '${{ runner.temp }}/capacity/*/' + name in paths)
+    check('the step summary carries the lock benchmark table', 'LOCKBENCH.md' in step('capacity', 'The receipt')['run'])
     check('the receipt goes to the step summary', 'GITHUB_STEP_SUMMARY' in step('capacity', 'The receipt')['run'])
     fetch = step('capacity', 'Fetch the harness')['run']
     check('each fetched tree is verified at its exact SHA and clean', 'test "$(git -C "$dir" rev-parse HEAD)" = "$want"' in fetch
@@ -182,6 +195,9 @@ def request_reader(fix):
           and {'S1', 'S2', 'S0-100', 'S0-250', 'baseline', 'Fcrash', 'Nceiling'} <= set(names), repr(names))
     code, _, values = fix.read_request({**good, 'harness_sha': fix.harness[0], 'pools': '20'}, 'claude/discord-capacity-run-s1-old')
     check('an older harness commit on the branch is accepted', code == 0)
+    code, out, values = fix.read_request({**good, 'profile': 'lockbench', 'pools': '30'}, 'claude/discord-capacity-run-lockbench-l1')
+    check('a lock benchmark request is one job per pool', code == 0 and json.loads(values.get('matrix', '[]')) == [
+        {'scenario': 'lockbench', 'pool': 30}], out[-400:])
     bad = [
         ('a short tree SHA', {**good, 'sha': 'abc'}, 'claude/discord-capacity-run-s1-t'),
         ('an upper-case tree SHA', {**good, 'sha': 'A' * 40}, 'claude/discord-capacity-run-s1-t'),
@@ -249,6 +265,12 @@ def maker(fix):
         check('the commit message carries the trailers', 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>' in message
               and 'Claude-Session: https://claude.ai/code/session_01E9guaNuzCqsXR8cbB5CRhv' in message)
         check('the commit is an orphan (no history)', git('rev-list', '--count', 'HEAD', cwd=work, env=fix.env) == '1')
+    done = subprocess.run(['bash', MAKER, 'lockbench', 'lb1', tree, harness, '--pools', '30'], capture_output=True, text=True, env=env)
+    work = re.search(r'work tree:\s+(\S+)', done.stdout).group(1) if done.returncode == 0 else None
+    check('make_request_branch.sh builds a lock benchmark request', work is not None and json.loads(
+        open(os.path.join(work, 'capacity/REQUEST.json')).read())['profile'] == 'lockbench'
+        and git('rev-parse', '--abbrev-ref', 'HEAD', cwd=work, env=fix.env) == 'claude/discord-capacity-run-lockbench-lb1',
+        done.stdout + done.stderr)
     for name, args in (('an unknown profile', ['all', 'x', tree, harness]), ('a bad suffix', ['s1', 'A_B', tree, harness]),
                        ('a short SHA', ['s1', 'x', 'abc', harness]), ('a bad pool', ['s1', 'x', tree, harness, '--pools', '200']),
                        ('a bad latency', ['s1', 'x', tree, harness, '--latency', 'fast']),
@@ -304,6 +326,24 @@ def seeding():
     check("the error names the slice and quotes the end of its output",
           'seed-2 exit 1' in done.stderr and 'seed-2.out ends with' in done.stderr
           and 'fails on purpose' in done.stderr, done.stderr[-1200:])
+    # The lock benchmark at the smallest size: it runs, accumulates configurations, writes its table.
+    out = tempfile.mkdtemp(prefix='cap-ci-bench-')
+    try:
+        bench = [sys.executable, '-B', os.path.join(root, 'scripts', 'discord_lane_cap_lockbench.py'), '--source-tree', root,
+                 '--out', out, '--processes', '1,2', '--latency-ms', '0', '--seconds', '2']
+        first = subprocess.run(bench, capture_output=True, text=True, timeout=600, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        second = subprocess.run(bench + ['--policy', '25'], capture_output=True, text=True, timeout=600,
+                                env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        store = os.path.join(out, 'lockbench.json')
+        runs = json.loads(open(store).read())['runs'] if os.path.exists(store) else []
+        check('the lock benchmark runs and keeps every configuration', first.returncode == 0 and second.returncode == 0
+              and len(runs) == 2 and all(len(r['rows']) == 2 and all(row['admissionsPerSecond'] > 0 for row in r['rows'])
+                                         for r in runs), (first.stderr + second.stderr)[-1200:])
+        table = open(os.path.join(out, 'LOCKBENCH.md')).read() if os.path.exists(os.path.join(out, 'LOCKBENCH.md')) else ''
+        check('the lock benchmark table names the tree and the machine', table.count('### Lock benchmark') == 2
+              and 'Tree `' in table and 'vCPU' in table, table[-600:])
+    finally:
+        shutil.rmtree(out, ignore_errors=True)
 
 
 # --- external validators -------------------------------------------------------------------------------------------------
