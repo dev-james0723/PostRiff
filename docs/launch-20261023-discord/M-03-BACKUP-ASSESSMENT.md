@@ -1,61 +1,64 @@
 # M-03: backups, restore points, RPO and RTO of the Production database
 
-Written 2026-10-23 about 04:45Z under owner reply 13 (decision 3: read what the authorized tools can read; if something cannot be read, give the owner the simplest dashboard steps; **do not change the Production database and do not run a destructive restore**; if there is no point-in-time recovery, assess the risk and the alternatives). **Nothing was changed and no restore was attempted.** No project id, key or customer value is in this file.
+First written 2026-10-23 about 04:45Z under owner reply 13; **rewritten about 05:05Z under reply 14** (autonomous audit: establish credible, repeatable evidence by the safest read-only methods, without asking for screenshots first, and never record an inference as verified). **Nothing was changed and no restore was attempted.** No project id, key or customer value is in this file.
 
-## 1. What was read (read-only, 2026-10-23 04:23Z)
+**Correction to what I told the owner earlier today:** I wrote that the archiving cadence made point-in-time recovery "probable". Supabase's own documentation says the opposite once the project's compute size is taken into account (section 3). The current best reading is that PITR is **not** enabled and the project has the platform's daily backups.
 
-| Fact | Value | How known |
+## 1. Methods compared
+
+| Method | Available here? | What it can tell | Verdict |
+|---|---|---|---|
+| Supabase Management API `GET /v1/projects/{ref}/database/backups` (the call that returns the backup list, `pitr_enabled`, and the earliest and latest physical backup dates) | **No**: it needs a personal access token for the owner's account. Those tokens are not scoped (a token that can list backups can also delete a project), so the agent will not ask for one | definitive | not usable without a credential the agent should not hold |
+| Supabase MCP tools (project, organization, SQL, logs, docs) | Yes, read-only | project facts, database settings and statistics, official documentation; **no tool lists backups or add-ons** | used |
+| Supabase CLI | No login, no token | would need the same token | not usable |
+| Authorized browser on the owner's Mac (dashboard Backups page) | **No: the paired MacBook has been offline since 2026-10-22 14:52Z** | would be definitive | unavailable now; usable if the Mac comes online (read-only, no clicks that change anything) |
+| Read-only SQL on the database itself (`pg_settings`, `pg_stat_archiver`, the archive status directory) | Yes | whether continuous archiving is configured and current; **not** whether the PITR add-on is bought | used |
+| Official documentation (Supabase docs search tool) | Yes | what the observed settings imply | used |
+
+## 2. What was read from the database (2026-10-23, 04:23Z and 04:53Z)
+
+| Fact | Value |
+|---|---|
+| Project | `postriff-phase2-private`, us-east-1, healthy, PostgreSQL 17.6.1.166, 237 MB, created 2026-09-15 |
+| Organization plan | Pro |
+| Archiving | `archive_mode` on; **`archive_command` = Supabase's `admin-mgr wal-push` writing to the WAL-G log directory** (so the archive goes through Supabase's WAL-G tooling, not a no-op); `archive_timeout` 120 s; 16 MB segments; `wal_compression` zstd; `data_checksums` on |
+| Archiver state | **26,579 segments archived, 0 failed**, last archived segment at 04:53:06Z, **0 segments waiting** (`.ready` files), the current segment is the one after the last archived [certain] |
+| Compute class | `max_connections` 60, `shared_buffers` about 224 MB, `effective_cache_size` about 384 MB, `work_mem` about 2 MB |
+| Application path | through Supavisor (Supabase's transaction pooler); the role's default `statement_timeout` is 120 s |
+
+## 3. What the documentation says (Supabase documentation, read through the docs search tool on 2026-10-23)
+
+- Pro projects get **daily backups**, kept **7 days**; all projects on Postgres 15.8.1.079 and newer use the **physical backup** process (this project is on 17.6).
+- **PITR is a paid add-on and "projects that want to use PITR must also use at least a Small compute add-on".** With PITR the daily backups stop ("if you enable PITR, we will no longer take daily backups"); WAL files are archived by WAL-G every two minutes, so the worst-case RPO is two minutes. Prices in the documentation: about US$100 a month for a 7-day window (US$200 for 14, US$400 for 28), not covered by the spend cap; the documentation's own example adds a Small compute at about US$15 a month, with US$10 of compute credits.
+- Compute sizes: **Nano and Micro have 60 direct connections and 200 pooler connections; Small has 90 and 400.**
+- A restore makes the project **inaccessible**; the downtime grows with database size; the restore replaces the database in place. Restoring to a new project is a separate feature (a new, billable project).
+
+## 4. Reading of the evidence
+
+1. **Compute is Nano or Micro class** [documented table vs the observed 60 connections; likely Micro because it is a Pro project]. The connection limit can be hard-coded by a custom setting, so this is strong but not absolute.
+2. **PITR is therefore very probably not enabled** [Likely]: it requires at least Small compute. The WAL archiving seen above is **not evidence of PITR**: all physical-backup projects archive WAL through WAL-G, and the two-minute `archive_timeout` is the platform's setting. (This reverses my earlier reading.)
+3. **Daily physical backups probably exist** [platform default for a Pro project; documented, not observed]: the archive pipeline feeding them is demonstrably healthy [certain], but no tool shows a backup entry.
+4. **Not verified by any available method:** that the PITR add-on is off; the list and dates of the daily backups; the time of the latest backup; that a restore would work. These stay **UNVERIFIED**.
+
+## 5. RPO and RTO under the probable state, and the other state
+
+| | Daily backups only (probable) | PITR on (improbable) |
 |---|---|---|
-| Project | `postriff-phase2-private`, us-east-1, healthy, PostgreSQL 17.6, created 2026-09-15 | Supabase project read |
-| Organization plan | Pro | Supabase organization read (earlier today) |
-| Database size | 237 MB | catalog |
-| Compute | the smallest tier: `max_connections` 60, `shared_buffers` 224 MB, `work_mem` about 2 MB [likely: Micro] | settings |
-| WAL archiving | `archive_mode` on, **`archive_timeout` 120 seconds**, `wal_level` logical, 16 MB segments; **26,564 segments archived, 0 failed, the last one 04:23:04Z when the clock read 04:23:54Z** | `pg_settings`, `pg_stat_archiver` [certain] |
-| Application path | through Supavisor (Supabase's transaction pooler); `statement_timeout` for the application role 120 s | connection list, settings |
-| Replication slots | none; not in recovery (this is the primary) | catalog |
+| RPO | up to about 24 hours: every connection, consent, schedule and approval made since the last daily backup | about 2 minutes (documented) |
+| Restore points | the 7 daily backups | any minute within the chosen window |
+| RTO | the project is down while a physical backup is restored; for a 237 MB database [guessing] about 10 to 30 minutes including platform overhead; the documentation gives no figure | similar plus WAL replay |
+| Who acts | the owner presses Restore in the dashboard (the agent never restores; Production restores need a separate approval) | same |
 
-What the archiving numbers mean: a segment is cut and archived every two minutes whether or not it is full, and the newest archived segment is under a minute old. That is exactly the cadence Supabase describes for point-in-time recovery (an archive interval of two minutes, so a recovery point objective of about two minutes) [likely]. It is **not proof** that the PITR add-on is bought: archiving can be on for other reasons, and no available tool shows the add-on, the restore-point list, or the earliest and latest recoverable time.
+Assessment [advice]: for a controlled start, daily-only is survivable (customers can reconnect and re-schedule); for a public opening to thousands of workspaces a 24-hour RPO is weak, and it interacts badly with the duplicate-send hazard below. Decision for the owner, with no action now: enable PITR (needs at least Small compute: about US$100 plus about US$5 net a month per the documentation, to be confirmed on the billing page), or accept daily backups and add a second copy the agent cannot create (a scheduled logical export needs a database credential the owner would create). Nothing is bought.
 
-## 2. What cannot be read, and the four screenshots that settle it
+## 6. The restore hazard that is specific to this product: duplicate sends
 
-No tool in this session lists backups, add-ons or restore points. The owner can settle it in about three minutes on a phone; four screenshots, no changes, nothing to click except to open pages:
+A restore rewinds the database. A Discord post **sent after the restore point** then looks unsent, and while its approval is still valid the worker would send it again. The duplicate protection lives in the database (intents, leases, the coordinator's admissions), so a rewind removes it for the rewound interval. For any restore: (1) before it, set the operator hold and, if possible, turn the Discord lane flag off; (2) the hold lives in the database too, so set it again immediately after the restore, before the application can run the worker; (3) reconcile the rewound interval against the destination channels; (4) lift the hold only on the Release Captain's word. **This is being drilled in isolation** (a real point-in-time recovery of a throwaway PostgreSQL with the mock Discord), see `RC2-EVIDENCE-PACKET.md`; until the drill has a receipt the hazard is documented, not proven.
 
-1. Supabase dashboard, project `postriff-phase2-private`, **Database, Backups, "Scheduled backups"**: the list of daily backups with dates (and whether the page says the retention is 7 days).
-2. The same page, **"Point in time"** tab: either a window ("earliest" and "latest" restore point, in UTC) or an offer to enable it. Please do **not** press Restore or Enable.
-3. **Project Settings, Compute and Disk**: the compute size shown (Micro, Small, and so on) and the disk size.
-4. **Organization (the account name at the top left), Billing**: the subscription page with the line items (Pro plan, compute, and any "Point in Time Recovery" add-on).
+## 7. What the owner would have to do, if the agent cannot get the evidence itself
 
-## 3. Assessment, in the two possible worlds
+Smallest possible ask, **no screenshot**: one sentence back, read from Supabase, Database, Backups: "the Point in Time tab says X" (it either offers to enable PITR or shows a recovery window) and "Scheduled backups lists N entries, the newest dated D". If the paired Mac comes online, the agent reads that page itself (read-only) and asks nothing.
 
-| | PITR on [probable] | Daily backups only |
-|---|---|---|
-| Recovery point objective (data lost in the worst case) | about 2 minutes (the archive interval) | up to 24 hours: every connection, consent, schedule and approval made since the last daily backup |
-| Latest restorable time | within about 2 minutes of "now" | the time of the last daily backup |
-| Recovery time objective (project offline while restoring) | [guessing] 10 to 45 minutes for 237 MB: a base backup restore plus replay of up to a day of quiet WAL; the dashboard shows progress | [guessing] similar, shorter replay |
-| Restore procedure | Dashboard, Database, Backups, Point in time, choose a UTC time, start; the project is unavailable until it finishes; the restore replaces the database in place | Dashboard, Database, Backups, Scheduled backups, Restore; in place, same outage |
-| Who decides | the owner presses it; the agent never restores | same |
+## 8. Status
 
-Honest reading for launch: with PITR a bad deployment, a bad migration or a mistaken bulk change can be rewound to minutes before it; with daily backups only, the same event can erase a day of customer consents and schedules. Customers can reconnect and re-schedule, so daily-only is survivable for a controlled start, but it is **weak for a public opening to thousands of workspaces**. Recommendation [advice, not a fact]: if the screenshots show no PITR, enabling it before stage 5c is worth its monthly cost (the owner's purchase decision; confirm the price on the billing page, I do not state one); nothing is bought automatically.
-
-## 4. The restore hazard that is specific to this product: duplicate sends
-
-A restore rewinds the database to an earlier moment. A Discord post that was **sent after that moment** then looks unsent in the restored database, and while its approval is still valid the worker would send it **again**. The product's duplicate protection lives in the database (intents, leases, the coordinator's admissions), so a rewind removes it for the rewound interval. Therefore, for any restore:
-
-1. **Before the restore:** set the operator hold on the shared request coordinator (`RELEASE-DEFINITION-v2.md` section 7) and, if the build allows, turn the Discord lane flag off. The hold is itself in the database, so it must be set again **immediately after** the restore, before the application is allowed to run the worker (the restored database may not contain it).
-2. **After the restore, with the hold on:** reconcile Discord work in the rewound interval (jobs that the old timeline sent are visible in the destination channels; the worker must not run until each is marked sent or held), then lift the hold only on the Release Captain's word.
-3. The restore is a last resort; most incidents are repaired forward (re-approve, re-schedule, fix the cause).
-
-This is the reason the stop method must work with the Mac offline and why the hold is checked first in every ladder.
-
-## 5. Alternatives if there is no PITR (each is a decision for the owner, none is done)
-
-| Option | What it gives | Cost and catch |
-|---|---|---|
-| Enable PITR (7-day window) | RPO about 2 minutes, restore to any minute in the window | monthly add-on price; a project restart is not required [verify on the billing page] |
-| Keep daily backups, add a scheduled logical export of the few critical tables (connections, consent and approval records, jobs) to storage the owner controls | a second copy outside the project, independent of Supabase | needs a database credential and a storage credential: new credentials are the owner's to create, so the agent will not make them |
-| Use a separate database branch for risky changes (Supabase branching) | protects migrations, not data | not a backup |
-| Do nothing | nothing | the 24-hour exposure above |
-
-## 6. Status
-
-M-03 stays **BLOCKED_EXTERNAL** until the four screenshots exist. The probable state (PITR on) is **not recorded as fact**. RPO and RTO above are estimates; the RTO figures are [guessing] until a restore is rehearsed on a disposable copy by the owner, which is not asked for now.
+M-03 stays **BLOCKED_EXTERNAL** (the facts that matter are not visible to any permitted tool), with a narrowed question and a probable answer (no PITR, daily backups). Nothing here is recorded as verified beyond section 2 and the documentation quotes in section 3.

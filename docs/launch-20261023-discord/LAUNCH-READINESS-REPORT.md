@@ -1,6 +1,6 @@
 # LAUNCH-READINESS-REPORT (Discord capped Wave 1)
 
-Generated 2026-10-23T04:21:28Z. Candidate: `claude/discord-launch-rc-20261023` at `2a5a523d` (draft PR #222, frozen, CI green on the exact SHA). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
+Generated 2026-10-23T04:55:32Z. Candidate: `claude/discord-launch-rc-20261023` at `2a5a523d` (draft PR #222, frozen, CI green on the exact SHA). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
 
 ## Recommendation: **NO-GO today**
 
@@ -55,7 +55,7 @@ A false GO is the worst outcome. The candidate is frozen and green; what is miss
 | C-04 | Cron lanes | AGENT | **NOT_RUN** | the candidate keeps the only live cron (/api/cron/worker every minute), proven by the superset proof; the post-promotion check is not done | scripts/rc_superset_proof.py crons check |
 | C-05 | OAuth start URL audit (read-only) | AGENT | **NOT_RUN** | needs the staged build |  |
 | M-02 | RLS, FORCE RLS and grants on Discord tables | AGENT | **VERIFIED** | RLS and FORCE RLS on, anon has no grants, authenticated has no access to the Discord, credential or OAuth tables, service_role grants as migrations 124 to 131 give | private audit (not in the repository); monitoring.sql planned against the schema |
-| M-03 | Backup and restore point | AGENT | **BLOCKED_EXTERNAL** | owner replies 12 and 13: read PITR, backup status, latest restorable time, RPO, RTO and the restore procedure with read-only tools; otherwise give the dashboard steps; no change to Production, no destructive re… | AUTHORIZATION-RECORD.md reply 13; RELEASE-DEFINITION-v2.md section 6 |
+| M-03 | Backup and restore point | AGENT | **BLOCKED_EXTERNAL** | owner replies 13 and 14: establish credible, repeatable backup and PITR evidence by safe read-only methods (no screenshots first); never record an inference as verified; Production untouched, no restore. Done 2… | M-03-BACKUP-ASSESSMENT.md; AUTHORIZATION-RECORD.md replies 13 and 14 |
 | Q-01 | Pre-flight for the build | AGENT | **VERIFIED** | project postriff-phase2-private (prj_6ufJ...) in the Rafii team confirmed, not rafii-consumer-staging; no other build in flight before D1; rafii.io named dpl_47SGx before and after D1; the cost note was posted … | RC-RECEIPT.md section 4 |
 | Q-02 | Build ONE staged RC | AGENT+APPROVAL | **VERIFIED** | D1 built and READY: dpl_25ihHyiZCzZXAjVsJqJiYcCWA51n, run 39883169905, 4 min 3 s, source 2a5a523d. The GitHub job shows red only because the agent's own domain alarm fired on the project's internal login-protec… | RC-RECEIPT.md section 4; BUILD-VIA-GITHUB-ACTIONS.md |
 | Q-03 | Provenance of the deployed RC | AGENT | **VERIFIED** | 257 of 257 visible source files equal the frozen tree; 7 of 7 deeper files probed by content hash are present (3 exist only in the RC); the 2 RC-only files probed are absent from the live dpl_47SG; /api/health … | RC-RECEIPT.md section 4 |
