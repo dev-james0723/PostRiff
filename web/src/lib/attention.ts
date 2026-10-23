@@ -169,7 +169,7 @@ export function deriveAttention({ snapshot, channels, usage, now }: AttentionInp
   // The writing allowance is no longer an Overview headline number (Time back took that place); running low or out
   // is actionable, so it is a reminder here. The full meters stay under Billing.
   const writing = usageData?.entitlement;
-  if (writing && typeof writing.writingBatchesRemaining === 'number' && writing.writingBatchesRemaining <= WRITING_LOW) {
+  if (writing && !writing.unlimited && typeof writing.writingBatchesRemaining === 'number' && writing.writingBatchesRemaining <= WRITING_LOW) {
     const left = Math.max(0, writing.writingBatchesRemaining);
     const resets = writing.resetsAt ? ` It resets ${relativeTime(writing.resetsAt, now)}.` : '';
     items.push({

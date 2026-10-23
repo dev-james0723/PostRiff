@@ -230,7 +230,7 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
     }
   }
 
-  const batches = usage.isLoading ? '…' : usage.isError || !usage.data ? 'Unavailable' : String(usage.data.entitlement.writingBatchesRemaining);
+  const batches = usage.isLoading ? '…' : usage.isError || !usage.data ? 'Unavailable' : usage.data.entitlement.unlimited ? 'Unlimited' : String(usage.data.entitlement.writingBatchesRemaining);
 
   return (
     // The page's work surface (DNA §5.2, §21.10): one glass panel, its WHAT control, the entry field and one commitment.

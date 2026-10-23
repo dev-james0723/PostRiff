@@ -253,7 +253,7 @@ export function OverviewView() {
     : {
         value: counts.connected,
         hint: counts.connected ? `${counts.direct} Direct · ${counts.assisted} Assisted · ${counts.local} Local` : undefined,
-        footer: entitlement ? <span className='text-muted-foreground'>Plan allows {entitlement.connectedAccounts}</span> : undefined
+        footer: entitlement ? <span className='text-muted-foreground'>{entitlement.unlimited ? 'Founder · Unlimited' : `Plan allows ${entitlement.connectedAccounts}`}</span> : undefined
       };
 
   const newIdea = !canEdit ? undefined : sample ? (
