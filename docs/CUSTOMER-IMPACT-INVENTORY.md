@@ -14,6 +14,24 @@ Owner's condition (reply 13, `AUTHORIZATION-RECORD.md`): before any Production p
 
 Verdicts: **OBSERVABLE-INTENDED** (a customer can notice it and an approved decision covers it: the gate design, packet rows 1-15, H-08 wording), **OBSERVABLE-UNINTENDED** (a customer can notice it, or it is a side effect, and no approval covers it; not necessarily harmful: several are fixes that rode in from other lines), **NOT-OBSERVABLE** (no customer of a non-Discord workspace can notice it; evidence named), **UNKNOWN** (could not be decided here; fastest verification named).
 
+## 0. Status of the findings on `claude/discord-rc2-fixes-20261023` (added there; the findings below are unchanged)
+
+Fixes are on the RC2 fixes branch, which is RC1 + the W-02 lane (`4a776000`) + the commits named here; details,
+failing-before tests and live-versus-candidate results in `docs/RC2-SHARED-PATH-FIXES.md`.
+
+| Finding | Status | Commit | Guard |
+|---|---|---|---|
+| FB-1 | **fixed**: the two Facebook hunks removed; Facebook behaves exactly as live (diffed against `c5fc1fd1`) | `9c044aa7` | `test_rc2_shared_path_fixes.FacebookApprovalUnchanged`, `FacebookMatchesLive`, `test_rc2_shared_paths_postgres`; `test_a_facebook_page_post_is_approvable_as_on_live` here (expectedFailure removed) |
+| CH-1 | **fixed**: the identity read runs only for a workspace whose state holds Discord identity links; a Channels read of any other workspace costs what live costs (measured 2/2/2/7 verifications, connections, transactions, statements) | `4d41a86a` | `ChannelsReadAddsNoTransaction`, `test_a_channels_read_without_discord_data_costs_what_live_costs`; `test_channels_read_opens_no_more_database_transactions_than_live` (expectedFailure removed) and `test_channels_read_runs_exactly_the_statements_live_runs` (replaces the pin of the extra transaction) |
+| PR-1 | **fixed** as recommended here: 404 for every method, scheme and body while the user-install feature is off, at INFO, without the runtime; on, unchanged | `741daa4b` (supersedes the 401 of `651e1899`) | `DiscordInteractionsOffIsQuiet`, `DiscordInteractionsOffMatchesLiveLogging` |
+| UI-1 | **fixed**: the section renders only when the gate is open for the workspace or it has linked identities; UI-2 unchanged | `3d331c41` | `web/tests/discord-personal-accounts-visibility.test.cjs` |
+| ENV-1 | **fixed**: a pool limit that is not a whole number in range keeps the pool off and logs one WARNING without the value | `ad6f26ad` | `PoolSettingsNeverTakeTheApiDown` |
+| BG-1 | **accepted, LOW** (coordinator, 2026-10-23): the idle minute tick stays at 4 connections / 11 statements a minute; changing the flag-off path that W-02's frozen-base test pins is not worth the risk | none | `test_pins_the_minute_workers_extra_reads_with_no_discord_work` (pin) |
+| RC2-1 | proposal routed to the W-02 fix agent: an idle shard stops after one pure readiness check and one projection read (1 connection, 1 statement instead of 4 and 7); options (d) fewer crons until the flag is on and (e) fewer shards when idle were rejected | none here | to be added with the `lane.py` change |
+| WB-1, SC-1 | analysis and recommendations only (`docs/RC2-SHARED-PATH-FIXES.md`); no code | none | |
+| UI-21 | correction: the LinkedIn receipt *status text* ("Accepted by LinkedIn. Publication is not API verified; confirm it on LinkedIn. Do not resubmit.") is observable for a LinkedIn post while it is `provider_accepted` (live writes that state at submit, "verification pending", until the next worker step reconciles it, usually to `uncertain` without `r_member_social`); only the link needs a feed URL that no code writes. Origin: the web half of `4e69d899`; its server half was never carried | none | |
+| (review) | pre-existing on live, LOW: `/api/cron/agent-tasks` and `/api/cron/worker` answered a non-ASCII Authorization header with 500 and an ERROR line; now 401 like the W-02 shards. `/api/cron/worker` still starts the runtime before it authenticates (reported, not reordered) | `2ca119ad` | `CronAuthorizationRefusesNonAsciiHeaders` |
+
 ## 1. Findings, ranked (each with the smallest fix or test)
 
 1. **FB-1, HIGH, OBSERVABLE-UNINTENDED, a regression against live `c5fc1fd1` (confirmed): Facebook Page posts can no longer be approved, and Facebook posts approved on the live build are held instead of published.**
