@@ -872,7 +872,10 @@ class HostedApplication:
             if path == "/api/cron/agent-tasks" and method == "GET":
                 expected = self.cron_secret if self.cron_secret is not None else os.environ.get("CRON_SECRET", "")
                 supplied = environ.get("HTTP_AUTHORIZATION", "")
-                if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
+                # compare_digest raises TypeError on non-ASCII str: such a header is refused, never a 500 (as the shards).
+                if (not isinstance(expected, str) or len(expected) < 16 or not expected.isascii()
+                        or not isinstance(supplied, str) or not supplied.isascii()
+                        or not hmac.compare_digest(supplied, "Bearer " + expected)):
                     raise AlphaError("Cron authorization failed.", 401)
                 from .agent_runtime_v2.task_engine import cron as task_cron
                 return self._json(start_response, 200, task_cron.tick(self._runtime()))
@@ -880,7 +883,10 @@ class HostedApplication:
                 service = self._runtime()
                 expected = self.cron_secret or ""
                 supplied = environ.get("HTTP_AUTHORIZATION", "")
-                if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
+                # compare_digest raises TypeError on non-ASCII str: such a header is refused, never a 500 (as the shards).
+                if (not isinstance(expected, str) or len(expected) < 16 or not expected.isascii()
+                        or not isinstance(supplied, str) or not supplied.isascii()
+                        or not hmac.compare_digest(supplied, "Bearer " + expected)):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
                 sign_in_alerts = getattr(service, 'deliver_sign_in_alerts', None)

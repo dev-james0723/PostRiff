@@ -404,5 +404,59 @@ class PoolSettingsNeverTakeTheApiDown(unittest.TestCase):
         self.assertEqual((pooled, factory._max_size, factory._max_waiting), (True, 20, 64))
 
 
+# --- Independent review (pre-existing, LOW): cron authorization on non-ASCII headers ---------------------------------
+class CronAuthorizationRefusesNonAsciiHeaders(unittest.TestCase):
+    """/api/cron/agent-tasks and /api/cron/worker compared the Authorization header with hmac.compare_digest on str
+    values, which raises TypeError for non-ASCII text (a WSGI header carries raw bytes as latin-1): an unauthenticated
+    request answered 500 with an ERROR line. Like the W-02 shard route, a non-ASCII header or secret is now refused 401.
+    Pre-existing on live; found by the independent review."""
+    SECRET = 'c' * 32
+
+    def call(self, app, path, authorization):
+        import io
+        statuses = []
+        environ = {'REQUEST_METHOD': 'GET', 'PATH_INFO': path, 'wsgi.url_scheme': 'https', 'wsgi.input': io.BytesIO(b''),
+                   'HTTP_HOST': 'rafii.invalid', 'REMOTE_ADDR': '203.0.113.9', 'HTTP_AUTHORIZATION': authorization}
+        with self.assertLogs('postriff.request', 'INFO') as logged:
+            body = b''.join(app(environ, lambda status, headers, exc_info=None: statuses.append(int(status.split()[0]))))
+        return statuses[-1], json.loads(body).get('code'), [r.levelname for r in logged.records]
+
+    def apps(self):
+        from types import SimpleNamespace
+        from postriff_phase2.hosted_app import HostedApplication
+        reached = []
+
+        def tick():
+            reached.append('worker')
+            raise __import__('postriff_alpha.domain', fromlist=['AlphaError']).AlphaError('worker reached', 409)
+        return HostedApplication(cron_secret=self.SECRET), HostedApplication(service=SimpleNamespace(), worker=SimpleNamespace(tick=tick),
+                                                                             cron_secret=self.SECRET), reached
+
+    def test_a_non_ascii_header_is_refused_401_at_info_on_both_routes(self):
+        agent_tasks, worker, reached = self.apps()
+        for header in ('Bearer \u00e9' + 'c' * 31, 'Bearer \xff\xfe', '\u20ac'):
+            for app, path in ((agent_tasks, '/api/cron/agent-tasks'), (worker, '/api/cron/worker')):
+                with self.subTest(path=path, header=header.encode('unicode_escape')):
+                    self.assertEqual(self.call(app, path, header), (401, 'unauthenticated', ['INFO']))
+        self.assertEqual(reached, [])
+
+    def test_a_non_ascii_secret_is_refused_401(self):
+        from postriff_phase2.hosted_app import HostedApplication
+        app = HostedApplication(cron_secret='\u00e9' * 20)
+        self.assertEqual(self.call(app, '/api/cron/agent-tasks', 'Bearer ' + '\u00e9' * 20), (401, 'unauthenticated', ['INFO']))
+
+    def test_ascii_headers_are_judged_as_before(self):
+        from unittest.mock import patch
+        agent_tasks, worker, reached = self.apps()
+        for app, path in ((agent_tasks, '/api/cron/agent-tasks'), (worker, '/api/cron/worker')):
+            with self.subTest(path=path):
+                self.assertEqual(self.call(app, path, 'Bearer wrong-secret-0123456789abcdef')[0], 401)
+        self.assertEqual(self.call(worker, '/api/cron/worker', 'Bearer ' + self.SECRET)[0], 409, 'the right secret reaches the tick')
+        self.assertEqual(reached, ['worker'])
+        with patch('postriff_phase2.agent_runtime_v2.task_engine.cron.tick', return_value={'status': 'ok'}), \
+                patch.object(type(agent_tasks), '_runtime', lambda self: object()):
+            self.assertEqual(self.call(agent_tasks, '/api/cron/agent-tasks', 'Bearer ' + self.SECRET)[0], 200)
+
+
 if __name__ == '__main__':
     unittest.main()
