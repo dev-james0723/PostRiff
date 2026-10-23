@@ -475,10 +475,11 @@ def guarded(result, name, function, *args, **kwargs):
 
 
 def phase_core(work, args, result):
-    timeline = Timeline(work / 'core', tenants=args.tenants, posts=args.posts, edges=True, loops=args.loops)
+    timeline = Timeline(work / 'core', tenants=args.tenants, posts=args.posts, edges=not args.no_edges, loops=args.loops)
     result['firstTimeline'] = timeline.run()
     guarded(result, 'A', scenario_hazard, timeline, 'core-A', timeline.t_restore)
-    guarded(result, 'A2', scenario_hazard, timeline, 'core-A2', timeline.t_restore, nonce_window=900)
+    if not args.skip_a2:
+        guarded(result, 'A2', scenario_hazard, timeline, 'core-A2', timeline.t_restore, nonce_window=900)
     guarded(result, 'B', scenario_procedure, timeline, 'core-B', timeline.t_restore)
     return timeline
 
@@ -921,6 +922,8 @@ def main(argv=None):
     parser.add_argument('--wal-updates', type=int, default=20)
     parser.add_argument('--wal-segsize', type=int, default=16)
     parser.add_argument('--scale-posts', type=int, default=1000)
+    parser.add_argument('--no-edges', action='store_true', help='main tenants only (the scale run)')
+    parser.add_argument('--skip-a2', action='store_true', help='skip the nonce-window variant of scenario A')
     parser.add_argument('--keep', action='store_true')
     parser.add_argument('--summary', help='print the summary of an earlier results file and exit')
     args = parser.parse_args(argv)
