@@ -4,6 +4,8 @@ Written 23:17Z, 2026-10-22, after the owner asked how 5,000 customers who schedu
 
 Tags: [certain] arithmetic from numbers in this repository; [likely] a figure I read in Discord's documents earlier in this session and could not re-read today (docs hosts do not resolve from this sandbox); [guess] my reasoning, untested.
 
+> **Correction, 2026-10-23, from the W-02 build (branch `claude/discord-w02-parallel-20261023`, `docs/w02/` there):** a post costs **six** Discord requests today, not two: four permission reads before every create (the server, the bot's membership, the authorizing person's membership, the channel list; `social_connectors.py`, `destinations()`), the create, and the read-back. The "5,000 posts" and "100,000 posts" times in section 1 assumed two, so multiply every drain time below by three: at 25 requests a second 5,000 posts take about 23 minutes (simulated) and 100,000 posts about 6.7 hours; at 50 a second about 12 minutes and 3.3 hours. The single-worker figure of 6 to 12 posts a minute is a limit on worker STEPS (about 25 a minute, two steps per post) and is unchanged. Reducing the six (caching the permission evidence for a short time, or one request per post) changes the security and evidence design and needs its own qualification; see `OPEN-QUESTIONS.md` Q2 on the branch.
+
 ## 1. What is being sent, and the real ceiling
 
 - A scheduled post goes into the customer's own server channel through Rafii's one shared bot. It is not a message to a person's account.
