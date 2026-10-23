@@ -56,15 +56,26 @@ class FlagAndBudget(unittest.TestCase):
         config = json.loads((ROOT / 'vercel.json').read_text())
         duration = config['services']['postriff_api']['functions']['api/index.py']['maxDuration']
         self.assertEqual(lane.FUNCTION_SECONDS, duration)
-        self.assertEqual(lane.MAX_SECONDS + lane.STEP_RESERVE_SECONDS + lane.COLD_START_SECONDS, duration)
+        self.assertEqual(lane.MAX_SECONDS + lane.STEP_RESERVE_SECONDS + lane.COLD_START_SECONDS + lane.MARGIN_SECONDS,
+                         duration)
+        self.assertEqual(lane.MAX_SECONDS, 90)
+        self.assertGreaterEqual(lane.MARGIN_SECONDS, 30, 'room for database time nothing else bounds')
         # Seven Discord requests at the 20-second transport timeout, and room for their transactions.
         self.assertGreaterEqual(lane.STEP_RESERVE_SECONDS, 7 * 20 + 20)
         self.assertEqual(lane.limits({lane.ENV_SECONDS: str(lane.MAX_SECONDS)})[0], lane.MAX_SECONDS)
-        for seconds, steps in ((lane.MAX_SECONDS + 1, 10), (290, 10), (4, 10), ('nan', 10), ('inf', 10), ('x', 10),
+        for seconds in (lane.MAX_SECONDS + 1, 290, '1e9'):
+            with self.subTest(seconds=seconds):
+                self.assertEqual(lane.limits({lane.ENV_SECONDS: str(seconds)})[0], lane.MAX_SECONDS)
+        for seconds, steps in ((4, 10), ('nan', 10), ('inf', 10), ('-inf', 10), ('x', 10), ('', 10),
                                (50, 0), (50, lane.MAX_STEPS + 1), (50, 'x')):
             with self.subTest(seconds=seconds, steps=steps), self.assertRaises(AlphaError) as refused:
                 lane.limits({lane.ENV_SECONDS: str(seconds), lane.ENV_STEPS: str(steps)})
             self.assertEqual(refused.exception.code, 'discord_lane_configuration')
+
+    def test_a_budget_above_ninety_seconds_is_clamped_to_ninety(self):
+        self.assertEqual(lane.limits({lane.ENV_SECONDS: '120'}), (90.0, 600))
+        self.assertEqual(lane.limits({lane.ENV_SECONDS: '90'}), (90.0, 600))
+        self.assertEqual(lane.limits({lane.ENV_SECONDS: '89.5'}), (89.5, 600))
 
     def test_shards_are_small_decimal_numbers_only(self):
         self.assertEqual([lane.shard(text) for text in ('0', '7', '11', '31')], [0, 7, 11, 31])
@@ -543,6 +554,14 @@ class TheLoop(unittest.TestCase):
         self.assertTrue(all(at < 50 for at in fake.started))
         self.assertLessEqual(result['elapsedSeconds'], 50 + 7)
         self.assertEqual(len(fake.started), 8)
+
+    def test_a_configured_120_seconds_runs_for_90(self):
+        fake = FakeLane(step_seconds=7.0)
+        result = fake.run({lane.ENV_SECONDS: '120'})
+        self.assertEqual((result['stoppedBy'], result['budget']['maxSeconds']), ('time_budget', 90.0))
+        self.assertTrue(all(at < 90 for at in fake.started))
+        self.assertGreaterEqual(fake.started[-1], 90 - 7)
+        self.assertLessEqual(result['elapsedSeconds'], 90 + 7)
 
     def test_the_step_budget_bounds_a_fast_loop(self):
         fake = FakeLane(step_seconds=.001)

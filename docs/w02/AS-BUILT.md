@@ -28,16 +28,20 @@ checks, the sender or the launch gate.
 | Name | Meaning | Default |
 |---|---|---|
 | `POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED` | Lane on. Exact string `true` (like the other Discord flags); also needs `POSTRIFF_DISCORD_WORKER_V1_ENABLED` on (`1` or `true`), whose lease protocol the lane uses. | off |
-| `POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS` | How long one invocation admits new steps, 5 to 120. | 50 |
+| `POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS` | How long one invocation admits new steps: at least 5; a value above 90 is clamped to 90. | 50 |
 | `POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_STEPS` | Steps per invocation, 1 to 5,000 (a backstop). | 600 |
 
-A misconfigured budget answers 503 `discord_lane_configuration` and claims nothing.
+A misconfigured budget (under 5 seconds, not a number, or steps out of range) answers 503 `discord_lane_configuration`
+and claims nothing; the minute cron then keeps Discord (`configuration`).
 
 Time limit [reasoned, tested offline]: `api/index.py` may run 300 s (`vercel.json`). One step admitted just before the
 deadline may still make seven Discord requests at the transport's 20-second timeout plus its transactions (160 s
-reserved), and a cold start's imports run before the budget starts (20 s reserved), so the budget is capped at
-300 − 160 − 20 = 120 s. The loop checks the deadline before every claim and never interrupts a step. Default 50 s keeps
-each shard to about one loop at a time under the one-minute cron.
+reserved), a cold start's imports run before the budget starts (20 s reserved), and 30 s are left as a margin, so the
+budget is capped at 300 − 160 − 20 − 30 = 90 s. The margin is room, not a bound: the default database factory
+(`hosted_app.postgres_factory`) opens a connection per transaction with an 8-second connect timeout and sets no
+`statement_timeout` (only the coordinator's own transactions set one), so nothing caps a step's database time by
+itself. The loop checks the deadline before every claim and never interrupts a step. Default 50 s keeps each shard to
+about one loop at a time under the one-minute cron.
 
 ## The fan-out: 12 cron shards (chosen) versus a self-chaining dispatcher
 
@@ -132,7 +136,7 @@ lane loops in healthy processes send the rest [reasoned].
 | A global 429 pauses every loop without a retry storm, and the denied post is not failed | embargo read before each claim; rate waits never count as attempts | `test_a_global_429_pauses_every_loop_without_a_retry_storm`, `test_a_global_429_makes_each_loop_sleep_instead_of_claiming`, with a control that the old loop claims and releases every post |
 | A spent invalid-request budget pauses every loop without claiming, and nothing is held early | pre-claim read applies the coordinator's rule to every capped row; when the coordinator spends that budget itself it also sets `blocked_until` to the reset, which the read already honoured | `test_a_spent_invalid_request_budget_is_waited_out_without_claiming`, with a control that the old loop claims, releases and holds every due post; `test_the_coordinator_embargoes_an_invalid_budget_it_spends_itself_and_the_lane_waits` |
 | One database connection per loop at a time | sequential transactions, none held across HTTP | `test_each_loop_holds_one_database_connection_at_a_time` |
-| The last step ends inside the function limit | admission deadline, capped budget | offline `test_no_budget_can_outlast_the_function_limit_with_one_step_in_flight`, `test_no_step_starts_after_the_budget_...` |
+| The last step ends inside the function limit | admission deadline, budget capped at 90 s (a larger setting is clamped) | offline `test_no_budget_can_outlast_the_function_limit_with_one_step_in_flight`, `test_a_budget_above_ninety_seconds_is_clamped_to_ninety`, `test_a_configured_120_seconds_runs_for_90`, `test_no_step_starts_after_the_budget_...` |
 | Flag off, or on with the lane unable to run, is the frozen behaviour | flag read as the exact string; one readiness test (`lane.blocker`) for the tick and the lane; equivalence with `2a5a523d` | offline `FlagOffIsTheFrozenBase`, `LaneReadiness`, `ExistingTick` |
 
 ## Database connections

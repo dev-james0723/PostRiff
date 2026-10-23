@@ -15,6 +15,7 @@ create, and stops admitting steps early enough that the last one ends inside the
 """
 import json
 import logging
+import math
 import os
 import random
 import re
@@ -36,12 +37,16 @@ SHARDS = 12
 MAX_SHARDS = 32
 # vercel.json maxDuration of api/index.py (a test keeps them equal). A step admitted just before the deadline may
 # still make seven Discord requests (the bot identity twice when its 60-second cache is cold, the guild, two members,
-# the channel list, the create) at the transport's 20-second timeout, plus its database transactions. The budget
-# starts when the route runs, so a cold start's imports before it get their own allowance.
+# the channel list, the create) at the transport's 20-second timeout, plus its database transactions: the step
+# reserve. The budget starts when the route runs, so a cold start's imports before it get their own allowance. The
+# margin is room, not a bound: the default database factory (hosted_app.postgres_factory) opens a connection per
+# transaction with an 8-second connect timeout and sets no statement_timeout, so nothing caps a step's database time.
 FUNCTION_SECONDS = 300
 STEP_RESERVE_SECONDS = 160
 COLD_START_SECONDS = 20
-MAX_SECONDS = FUNCTION_SECONDS - STEP_RESERVE_SECONDS - COLD_START_SECONDS
+MARGIN_SECONDS = 30
+# 300 - 160 - 20 - 30 = 90. A larger configured budget is clamped to it, never refused (limits()).
+MAX_SECONDS = FUNCTION_SECONDS - STEP_RESERVE_SECONDS - COLD_START_SECONDS - MARGIN_SECONDS
 # Under the one-minute cron period, so a shard normally has one loop at a time.
 DEFAULT_SECONDS = 50
 DEFAULT_STEPS = 600
@@ -74,16 +79,18 @@ def enabled(values=None):
 
 
 def limits(values=None):
+    """(seconds, steps) of one invocation. A time budget above MAX_SECONDS is clamped to it, so tightening the cap never
+    turns an existing setting into a refusal; anything else out of range refuses (503, nothing claimed)."""
     values = os.environ if values is None else values
     try:
         seconds = float(values.get(ENV_SECONDS, DEFAULT_SECONDS))
         steps = int(values.get(ENV_STEPS, DEFAULT_STEPS))
     except (ValueError, TypeError, OverflowError):
         seconds = steps = None
-    if seconds is None or not 5 <= seconds <= MAX_SECONDS or not 1 <= steps <= MAX_STEPS:
-        raise AlphaError('The Discord lane needs 5 to %d seconds and 1 to %d steps.' % (MAX_SECONDS, MAX_STEPS), 503,
-                         code='discord_lane_configuration')
-    return seconds, steps
+    if seconds is None or not math.isfinite(seconds) or seconds < 5 or not 1 <= steps <= MAX_STEPS:
+        raise AlphaError('The Discord lane needs at least 5 seconds (it uses at most %d) and 1 to %d steps.'
+                         % (MAX_SECONDS, MAX_STEPS), 503, code='discord_lane_configuration')
+    return min(seconds, float(MAX_SECONDS)), steps
 
 
 def shard(text):
