@@ -329,6 +329,14 @@ class Timeline:
         wire.fail, wire.after = fail, after
 
     def run(self):
+        try:
+            return self._run()
+        except BaseException:
+            if getattr(self, 'c0', None) is not None:
+                self.c0.destroy()  # never leave a server running after a failed first timeline
+            raise
+
+    def _run(self):
         work = self.work
         t0 = time.monotonic()
         self.c0 = R.ArchivedCluster(work / 'c0', archive=self.archive).start()
