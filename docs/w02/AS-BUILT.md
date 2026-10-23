@@ -204,6 +204,10 @@ of the 20 busy creates it counted; a faster runner gives the small tenants more 
   still waits to be sent or verified (at most four runs); fast runners use one.
 - The coordinator-cap pair runs at 3 requests per second (ceiling 6), a cap twelve loops meet on a slow runner too, and
   counts the loops' own application-window waits as the sign the cap was met.
+- The global-429 tests count from the coordinator's record of the 429 (its admission's outcome) to the embargo's end,
+  both on the database clock: nothing is admitted in that window, at most one request per other loop still arrives,
+  and each loop claims at most once in it. Counting from the 429's arrival at the mock widened both bounds on a slow
+  runner by however long the record took.
 
 ## Database connections
 
