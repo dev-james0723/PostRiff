@@ -646,7 +646,8 @@ def o1_hold(lab):
              returned == [] and lab.sql(statements['HOLD_READBACK'])[0][0] == 0, [returned, lab.sql(statements['HOLD_READBACK'])[0][:2]])
     lab.sql(statements['HOLD_INSERT'].replace('DISCORD_APPLICATION_ID', F.APP))
     keycheck = lab.named(statements['HOLD_KEYCHECK'].replace('DISCORD_APPLICATION_ID', F.APP))
-    d.expect('HOLD_KEYCHECK: the typed id names the only policy row', keycheck.get('typed_key_rows') == 1 == keycheck.get('policy_rows'),
+    d.expect('HOLD_KEYCHECK: the typed id names the only policy row (no request admitted yet)',
+             keycheck.get('typed_key_rows') == 1 == keycheck.get('policy_rows') and keycheck.get('latest_request_on_typed_key') is None,
              keycheck)
     rows = lab.sql(statements['HOLD_READBACK'])
     results, _ = F.run_lanes(lab.worker, 2, seconds=5)
@@ -661,6 +662,9 @@ def o1_hold(lab):
     lab.sql(statements['HOLD_OFF'])
     lab.drain()
     _, alerts = lab.look()
+    proven = lab.named(statements['HOLD_KEYCHECK'].replace('DISCORD_APPLICATION_ID', F.APP))
+    d.expect('after traffic HOLD_KEYCHECK proves the typed id: the newest request used that key, still one policy row',
+             proven.get('latest_request_on_typed_key') is True and proven.get('policy_rows') == 1, proven)
     d.expect('after HOLD_OFF the coordinator works with that row and every post is verified once',
              lab.states() == Counter(verified=4) and lab.wire.duplicates() == 0, dict(lab.states()))
     d.silent(alerts, 'after the inserted hold was lifted')
@@ -672,9 +676,9 @@ def o1_hold(lab):
     keycheck = lab.named(statements['HOLD_KEYCHECK'].replace('DISCORD_APPLICATION_ID', F.APP + '0'))
     d.step('injected: HOLD_INSERT with a mistyped application id, then one shard', [], readback=readback, keycheck=keycheck,
            posts=len(lab.wire.requests(method='POST')))
-    d.expect('a mistyped id is caught: policy_rows 2 with held 1, and the typed key has no admission',
-             readback.get('policy_rows') == 2 and readback.get('held') == 1 and keycheck.get('admissions_on_typed_key') == 0
-             and keycheck.get('admissions', 0) > 0, [readback, keycheck])
+    d.expect('a mistyped id is caught: policy_rows 2 with held 1, and the newest request is not on the typed key',
+             readback.get('policy_rows') == 2 and readback.get('held') == 1 and keycheck.get('latest_request_on_typed_key') is False,
+             [readback, keycheck])
     returned = lab.sql(statements['HOLD_ON'])
     d.expect('HOLD_ON then holds every policy row and returns them', len(returned) == 2 and all(r[1] for r in returned), returned)
     # (b) the incident shape: a hold set by the operator while four shards are sending
@@ -719,7 +723,7 @@ def o1_hold(lab):
     snapshot, alerts = lab.look()
     d.step('HOLD_OFF and resume', alerts, readback=list(off[:2]), jobs=dict(states), duplicates=lab.wire.duplicates())
     d.expect('read-back after HOLD_OFF: held 0', off[:2] == (1, 0), list(off[:2]))
-    d.expect('resumed: every post sent at most once; the rest verified, a post sealed when the hold landed is uncertain',
+    d.expect('resumed: every post sent at most once and verified (at most one per loop may be left uncertain)',
              lab.wire.duplicates() == 0 and set(states) <= {'verified', 'uncertain'} and states.get('uncertain', 0) <= 4,
              dict(states))
     d.silent(alerts, 'after resuming', allowed=('DELIVERY_UNCERTAIN', 'DELIVERY_SYSTEM_FAILURES'))

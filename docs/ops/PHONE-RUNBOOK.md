@@ -1,6 +1,6 @@
 # PHONE RUNBOOK: stop, close and roll back Discord with the Mac offline (H-07)
 
-Everything here needs only a phone browser: the **Supabase dashboard SQL editor** (project `postriff-phase2-private`) and the **Vercel dashboard** (team `team_PgXY5VdAYKcsv0RLoDPHscNq`, project `prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L`), or an agent using the same through its connectors. Alert ids (36) come from `scripts/discord_ops_check.py`; severities and thresholds from `docs/ops/discord-alert-thresholds.json`. Rules that never bend: stop first, investigate second; never resend an uncertain post; holds are set and lifted only with the Release Captain's authority; every action is written in the ledger with the time (UTC). Whoever acts tells the owner (James, Release Captain) at once. **This does not make H-07 VERIFIED**: who is on call and how alerts reach them is the owner's (`ALERT-CHANNELS.md`, `H07-EVIDENCE.md`).
+Everything here needs only a phone browser: the **Supabase dashboard SQL editor** (project `postriff-phase2-private`) and the **Vercel dashboard** (team `team_PgXY5VdAYKcsv0RLoDPHscNq`, project `prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L`), or an agent using the same through its connectors. Alert ids (40) come from `scripts/discord_ops_check.py`; severities and thresholds from `docs/ops/discord-alert-thresholds.json`. Rules that never bend: stop first, investigate second; never resend an uncertain post; holds are set and lifted only with the Release Captain's authority; every action is written in the ledger with the time (UTC). Whoever acts tells the owner (James, Release Captain) at once. **This does not make H-07 VERIFIED**: who is on call and how alerts reach them is the owner's (`ALERT-CHANNELS.md`, `H07-EVIDENCE.md`).
 
 Measurements quoted below are from disposable PostgreSQL 16 clusters with the real worker and coordinator and a mock Discord, on the merged head `d864f25f` (W-02 `5fc6cb21`); the probe outputs are listed in `H07-EVIDENCE.md`. They are not Production observations.
 
@@ -82,13 +82,12 @@ ON CONFLICT (scope_key) DO UPDATE SET manual_hold = true;
 -- H07:HOLD_KEYCHECK  after HOLD_INSERT: does the typed application id name the coordinator's own row? same id as above
 SELECT count(*) FILTER (WHERE scope_key = '00:' || encode(sha256(convert_to('DISCORD_APPLICATION_ID', 'UTF8')), 'hex')) AS typed_key_rows,
        count(*) AS policy_rows,
-       (SELECT count(*) FROM public.pr_discord_request_admissions
-         WHERE scope_keys @> ARRAY['00:' || encode(sha256(convert_to('DISCORD_APPLICATION_ID', 'UTF8')), 'hex')]) AS admissions_on_typed_key,
-       (SELECT count(*) FROM public.pr_discord_request_admissions) AS admissions
+       (SELECT application_key = encode(sha256(convert_to('DISCORD_APPLICATION_ID', 'UTF8')), 'hex')
+          FROM public.pr_discord_request_admissions ORDER BY request_seq DESC LIMIT 1) AS latest_request_on_typed_key
 FROM public.pr_discord_rate_state WHERE kind = 'policy';
 ```
 
-The id is proven when `typed_key_rows = policy_rows = 1` and either `admissions_on_typed_key = admissions` (the coordinator has admitted requests on this database, all on that key) or, on a database with no admissions yet, `policy_rows` is still 1 two minutes after the cron ran. Anything else: the id is wrong; find it in the Developer Portal (General Information; it is public) and repeat.
+The id is proven when `typed_key_rows = policy_rows = 1` and `latest_request_on_typed_key` is true (the coordinator's newest request used the same application key; one index read). Empty (no request ever admitted on this database): the proof is `policy_rows` still 1 two minutes after the cron ran. False, or `policy_rows 2`: the id is wrong; find it in the Developer Portal (General Information; it is public) and repeat.
 
 ```sql
 -- H07:DRAIN_CHECK  before switching to an older worker. Complete, not sampled: due-work projection and admissions index
