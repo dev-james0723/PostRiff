@@ -388,6 +388,12 @@ platform before any claim is made to customers.
   minute cron still leaves Discord to the lane, so due posts wait unsent. Nothing could be sent in that state either
   way; the signals are the shard lines (`coordinator_degraded`, at WARNING) and, after five minutes, the lag warning
   with `laneOwnsDiscord` true, which does not name the cause.
+- Seen once, under heavy CPU contention, cause not confirmed: in the cron-gap recovery test (one loop, 20 posts to
+  one channel) ten of the busy channel's posts ended held, nothing sent, released for a rate wait longer than their
+  approval ("Discord rate wait outlasts approval") [measured: 1 of about 8 contended runs; 0 of many uncontended].
+  A wait that long fits a learned route left with no remaining requests and its policy-expiry placeholder reset,
+  which a stale response (one reserved before the route's refill) can produce in `observe()` [reasoned, not
+  reproduced]. Coordinator code; left to the coordinator's reviewer.
 
 ## Not done
 

@@ -49,7 +49,7 @@ rate wait instead of a hold; a process that dies between sealing and sending sti
 **Q5. How many shards, and their cost.** The branch adds 12 cron entries (`/api/cron/discord-worker/0` to `/11`), so
 Vercel starts 12 invocations every minute whether or not there is work: about 17,000 a day, 520,000 a month. With the flag
 off each answers after the cron-secret check, without the runtime or the database. With the flag on and nothing due each
-runs about three short queries and stops. With work due, each runs up to 50 seconds. 12 loops keep 25 requests per second
+opens one connection for one statement and stops (none when the lane cannot run). With work due, each runs up to 50 seconds. 12 loops keep 25 requests per second
 busy at a per-request latency up to about 0.3 seconds [simulated]; 16 for 50 per second. Choose K, and whether the cron
 entries ship in the build before the flag is turned on (they cost invocations from the first minute).
 
