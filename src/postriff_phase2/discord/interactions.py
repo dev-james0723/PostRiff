@@ -157,8 +157,14 @@ class DiscordInteractions:
 
     def receive(self, raw, timestamp, signature):
         started = self.monotonic()
+        # Off (Discord not mounted, the user-install flag unset, or the Discord kill switch on): nothing here vouches
+        # for a signature, so every request is answered as unverified, 401, before any key, body or database is read
+        # (PR-1). 401 is what Discord's endpoint verification and its routine invalid-signature checks expect, so a URL
+        # left registered is not removed, and a valid PING cannot make the endpoint verify. It is an ordinary 4xx for
+        # the request log and metrics; the former 503 wrote ERROR lines and 5xx counts for any scanner. With the
+        # feature on, a missing or wrong interaction configuration still answers 503 for the operator.
         if (not self.provider or not getattr(self.provider, 'user_install_v1_enabled', False)
-                or not getattr(self.provider, 'execution_enabled', True)): deny(status=503)
+                or not getattr(self.provider, 'execution_enabled', True)): deny()
         config = configuration(self.provider, verification_only=True)
         if config['endpoint'] != self.web_base_url + '/api/discord/interactions': deny(status=503)
         if (not isinstance(raw, bytes) or not 1 <= len(raw) <= 65536

@@ -41,7 +41,8 @@ def _probe(script, tree, *args):
                           env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     if done.returncode:
         raise AssertionError('%s failed on %s: %s' % (script, tree, done.stderr[-3000:]))
-    return json.loads(done.stdout)
+    # The probe prints one JSON line first; under the synthetic transport fence its receipt line follows.
+    return json.loads(done.stdout.splitlines()[0])
 
 
 class LiveTree:
@@ -248,6 +249,83 @@ class ChannelsReadAddsNoTransaction(unittest.TestCase):
     def test_connections_v2_off_reads_nothing_more(self):
         listing, transactions = self.read([self.link()], connections_v2=False)
         self.assertEqual((listing['discordIdentities'], transactions), ([], 2))
+
+
+# --- PR-1: the public Discord interactions route while the feature is off ---------------------------------------------
+QUIET_OFF = {'status': 401, 'code': 'discord_interaction_unavailable', 'logLevels': ['INFO'], 'unsigned': 401, 'runtimeStarted': False}
+
+
+class DiscordInteractionsOffIsQuiet(unittest.TestCase):
+    """PR-1 (LOW). POST /api/discord/interactions is answered before the bearer and origin checks. With the user-install
+    flag unset RC1 answered 503 discord_interaction_unavailable, which the request logger writes at ERROR, after starting
+    the hosted runtime in a cold process: any scanner could create ERROR lines and 5xx counts. Live answers the same
+    request 403 (application guard) at INFO without the runtime. Off now answers 401 at INFO without the runtime."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.record = _probe('rc2_interactions_probe.py', ROOT)
+
+    def test_every_off_state_is_a_quiet_401_without_the_runtime(self):
+        for case in ('cold', 'warm', 'killed', 'absent'):
+            with self.subTest(case=case):
+                self.assertEqual(self.record[case], QUIET_OFF)
+
+    def test_on_keeps_signature_verification_and_reports_misconfiguration(self):
+        import io
+        import logging
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        from postriff_phase2.hosted_app import HostedApplication
+        app_id, now = '1234567', 1800000000
+        key = Ed25519PrivateKey.generate()
+        config = {'applicationId': app_id, 'publicKey': key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex(),
+                  'endpoint': 'https://rafii.example.invalid/api/discord/interactions'}
+        provider = SimpleNamespace(client_id=app_id, user_install_v1_enabled=True, interaction_config_raw=config, execution_enabled=True)
+        oauth = SimpleNamespace(providers={'discord': provider}, repository=SimpleNamespace(connection_factory=None),
+                                public_base_url='https://rafii.example.invalid')
+        app = HostedApplication(service=SimpleNamespace(oauth=oauth))
+        raw = json.dumps({'type': 1, 'application_id': app_id}).encode()
+
+        def send(signature):
+            environ = {'REQUEST_METHOD': 'POST', 'PATH_INFO': '/api/discord/interactions', 'wsgi.url_scheme': 'https',
+                       'CONTENT_LENGTH': str(len(raw)), 'CONTENT_TYPE': 'application/json', 'wsgi.input': io.BytesIO(raw),
+                       'HTTP_X_SIGNATURE_TIMESTAMP': str(now), 'HTTP_X_SIGNATURE_ED25519': signature,
+                       'HTTP_HOST': 'rafii.example.invalid', 'REMOTE_ADDR': '203.0.113.9'}
+            statuses = []
+            with patch('postriff_phase2.discord.interactions.time.time', return_value=now), \
+                    self.assertLogs('postriff.request', 'INFO') as logged:
+                body = b''.join(app(environ, lambda status, headers, exc_info=None: statuses.append(int(status.split()[0]))))
+            return statuses[-1], json.loads(body), [r.levelname for r in logged.records]
+
+        self.assertEqual(send(key.sign(str(now).encode() + raw).hex()), (200, {'type': 1}, ['INFO']))
+        status, body, levels = send('00' * 64)
+        self.assertEqual((status, body.get('code'), levels), (401, 'discord_interaction_unavailable', ['INFO']))
+        provider.interaction_config_raw = None  # on, but not configured: the operator must see it
+        status, body, levels = send(key.sign(str(now).encode() + raw).hex())
+        self.assertEqual((status, body.get('code'), levels), (503, 'discord_interaction_unavailable', ['ERROR']))
+
+    def test_the_route_reads_the_flag_exactly_as_the_adapter_does(self):
+        """The cold-process shortcut reads the variable the provider registry reads, with the same exact-string rule."""
+        source = inspect.getsource(__import__('postriff_phase2.social_connectors', fromlist=['x']).DiscordProvider.mount)
+        self.assertIn("values.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') == 'true'", source)
+        from postriff_phase2 import hosted_app
+        self.assertIn("os.environ.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') != 'true'", inspect.getsource(hosted_app.HostedApplication._handle))
+
+
+@unittest.skipUnless(_rev(LIVE_REV), 'the live revision is not in this clone (shallow checkout)')
+class DiscordInteractionsOffMatchesLiveLogging(unittest.TestCase):
+    """PR-1, differential: live has no such route and answers the application guard's 403. Both builds answer with a
+    4xx at INFO without starting the runtime, in every off state; the status differs on purpose (401, see receive())."""
+
+    def test_same_log_level_status_class_and_no_runtime_as_live(self):
+        live, mine = _probe('rc2_interactions_probe.py', LiveTree.get()), _probe('rc2_interactions_probe.py', ROOT)
+        for case in ('cold', 'warm', 'killed', 'absent'):
+            with self.subTest(case=case):
+                self.assertEqual((live[case]['status'], live[case]['logLevels'], live[case]['runtimeStarted']), (403, ['INFO'], False))
+                self.assertEqual((mine[case]['logLevels'], mine[case]['runtimeStarted'], mine[case]['status'] // 100),
+                                 (live[case]['logLevels'], live[case]['runtimeStarted'], live[case]['status'] // 100))
 
 
 if __name__ == '__main__':

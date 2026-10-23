@@ -701,6 +701,11 @@ class HostedApplication:
                     raise AlphaError('Discord interaction body size invalid.', 413) from None
                 if not 0 < length <= 65536:
                     raise AlphaError('Discord interaction body size invalid.', 413)
+                if self.service is None and os.environ.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') != 'true':
+                    # Feature off (PR-1): refuse as unverified without starting the runtime for this public,
+                    # unauthenticated route. DiscordInteractions.receive gives the same answer once the runtime runs.
+                    from .discord.interactions import deny
+                    deny()
                 service = self._runtime()
                 from .discord.interactions import DiscordInteractions
                 oauth = service.oauth
