@@ -200,7 +200,10 @@
     "senderStateHeldNote": "A post that was already approved with a custom name is held, not sent under another name, until the feature is on.",
     "previewWebhookQueuedNote": "A post you approve keeps the name it was approved with, even if you change the name later.",
     "previewBotQueuedNote": "Posts that are already approved and waiting show whatever nickname the bot has when they are sent.",
-    "senderCardOff": "Changing the sender name is switched off for now. Open Edit sender name to see why."
+    "senderCardOff": "Changing the sender name is switched off for now. Open Edit sender name to see why.",
+    "senderStateWriteUnconfirmedTitle": "Discord did not confirm the change",
+    "senderStateWriteUnconfirmedBody": "Discord refused the nickname change, or answered with a nickname other than the one you chose. The nickname may be unchanged, and Rafii did not try again.",
+    "senderStateWriteUnconfirmedNext": "Choose Check again to see the nickname Discord has now and any permission that is missing, then try again if you still want the change."
   },
   "zh-Hant": {
     "personalTitle": "個人 Discord 帳戶",
@@ -403,7 +406,10 @@
     "senderStateHeldNote": "已用自訂名稱批准的貼文會被暫緩，在功能開啟前不會以其他名稱發送。",
     "previewWebhookQueuedNote": "已批准的貼文會保留批准時的名稱，之後改名也不受影響。",
     "previewBotQueuedNote": "已批准而等待發送的貼文，會顯示發送時機械人的暱稱。",
-    "senderCardOff": "更改發送者名稱目前已關閉。開啟「更改發送者名稱」可查看原因。"
+    "senderCardOff": "更改發送者名稱目前已關閉。開啟「更改發送者名稱」可查看原因。",
+    "senderStateWriteUnconfirmedTitle": "Discord 未有確認這項更改",
+    "senderStateWriteUnconfirmedBody": "Discord 拒絕了這項暱稱更改，或回覆了與你所選不同的暱稱。暱稱可能沒有改變，Rafii 亦沒有再次嘗試。",
+    "senderStateWriteUnconfirmedNext": "請選擇「重新檢查」查看 Discord 現時的暱稱及欠缺的權限，如仍想更改，請再試一次。"
   },
   "zh-Hans": {
     "personalTitle": "个人 Discord 账户",
@@ -606,6 +612,9 @@
     "senderStateHeldNote": "已用自定义名称批准的帖子会被暂缓，在功能开启前不会以其他名称发送。",
     "previewWebhookQueuedNote": "已批准的帖子会保留批准时的名称，之后改名也不受影响。",
     "previewBotQueuedNote": "已批准而等待发送的帖子，会显示发送时机器人的昵称。",
-    "senderCardOff": "更改发送者名称目前已关闭。打开“更改发送者名称”可查看原因。"
+    "senderCardOff": "更改发送者名称目前已关闭。打开“更改发送者名称”可查看原因。",
+    "senderStateWriteUnconfirmedTitle": "Discord 没有确认这项更改",
+    "senderStateWriteUnconfirmedBody": "Discord 拒绝了这项昵称更改，或返回了与你所选不同的昵称。昵称可能没有改变，Rafii 也没有再次尝试。",
+    "senderStateWriteUnconfirmedNext": "请选择“重新检查”查看 Discord 当前的昵称及缺少的权限，如仍想更改，请再试一次。"
   }
 }

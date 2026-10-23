@@ -132,6 +132,7 @@ test('a refused request maps to the state the contract names, never to a guessed
   assert.deepEqual(first({ status: 409, code: 'discord_sender_edit_pending' }), { key: 'edit_pending', retryAfterSeconds: null, retryAtMs: null, signInAgain: false });
   assert.equal(first({ status: 409, code: 'discord_sender_name_required' }).key, 'stale');
   assert.equal(first({ status: 409, code: 'discord_connection_required' }).key, 'reconnect_required');
+  assert.equal(first({ status: 409, code: 'discord_sender_write_unconfirmed' }).key, 'write_unconfirmed');
   assert.equal(first({ status: 404, code: 'not_found' }).key, 'reconnect_required');
   assert.equal(first({ status: 403, code: 'permission_denied' }).key, 'workspace_permission');
   assert.deepEqual(first({ status: 429, code: 'rate_limited', retryAfterSeconds: 60 }), { key: 'rate_limited', retryAfterSeconds: 60, retryAtMs: NOW + 60_000, signInAgain: false });
@@ -151,14 +152,14 @@ test('a refused request maps to the state the contract names, never to a guessed
 
 test('only the states that can change offer a check, and a check is a read', () => {
   const offered = logic.SENDER_STATES.filter((key) => logic.canCheckAgain(key));
-  assert.deepEqual(offered.sort(), ['bot_missing_change_nickname', 'edit_pending', 'failed', 'nickname_authority_other_workspace', 'person_missing_manage_nicknames', 'person_role_below_bot', 'rate_limited', 'reconnect_required', 'stale', 'upstream_unavailable'].sort());
+  assert.deepEqual(offered.sort(), ['bot_missing_change_nickname', 'edit_pending', 'failed', 'nickname_authority_other_workspace', 'person_missing_manage_nicknames', 'person_role_below_bot', 'rate_limited', 'reconnect_required', 'stale', 'upstream_unavailable', 'write_unconfirmed'].sort());
   // The contract: these three are answered without Discord and must not be retried.
   for (const key of ['sender_names_disabled', 'bot_nickname_disabled', 'not_authorizing_member']) assert.equal(logic.canCheckAgain(key), false, key);
   assert.equal(logic.canCheckAgain('ready'), false);
 });
 
-test('the sixteen states are the fifteen the copy explains plus ready', () => {
-  assert.equal(logic.SENDER_STATES.length, 16);
+test('the seventeen states are the sixteen the copy explains plus ready', () => {
+  assert.equal(logic.SENDER_STATES.length, 17);
   assert.equal(logic.SENDER_STATES[0], 'ready');
   assert.deepEqual([...stateCopy.BLOCKED_STATES].sort(), logic.SENDER_STATES.filter((key) => key !== 'ready').sort());
   for (const code of logic.UNAVAILABLE_CODES) assert.ok(logic.SENDER_STATES.includes(code), code);
@@ -267,6 +268,8 @@ test('the messages never name another workspace and say what the person can do',
   assert.match(english('stale').body, /another member|another Rafii workspace/);
   assert.match(english('session_reverification_required').next, /Sign out and sign in again/);
   assert.match(english('reconnect_required').next, /Channels page/);
+  assert.match(english('write_unconfirmed').body, /may be unchanged, and Rafii did not try again/);
+  assert.match(english('write_unconfirmed').next, /Check again/);
   assert.match(english('rate_limited').body, /Nothing was changed/);
   assert.match(english('upstream_unavailable').body, /Nothing was changed/);
   assert.match(english('workspace_permission').next, /workspace owner or administrator/);

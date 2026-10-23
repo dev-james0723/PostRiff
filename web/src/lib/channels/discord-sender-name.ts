@@ -147,9 +147,8 @@ export const senderNameAcceptable = (check: SenderNameCheck) => check.issues.len
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
- * Every state the editor can show. `ready` is the editable form; the rest explain why it is not. Fourteen are the
- * contract's own codes (`unavailable[].code` and the refusals), the others are the honest answers to a refused or
- * unreadable request. A code the UI does not know renders as `failed`: it never invents a cause.
+ * Every state the editor can show. `ready` is the editable form; the rest explain why it is not. Nine are the
+ * contract's `unavailable[].code` values, the others are the honest answers to a refused or unreadable request. A code the UI does not know renders as `failed`: it never invents a cause.
  */
 export const SENDER_STATES = [
   'ready',
@@ -164,6 +163,7 @@ export const SENDER_STATES = [
   'edit_pending',
   'stale',
   'reconnect_required',
+  'write_unconfirmed',
   'rate_limited',
   'upstream_unavailable',
   'workspace_permission',
@@ -258,6 +258,7 @@ export function classifySenderRefusal(error: SenderRefusal, nowMs: number = Date
   if (error.code === 'discord_sender_edit_pending') return [blocked('edit_pending', nowMs, { wait: error.retryAfterSeconds })];
   if (error.code === 'rate_limited' || error.status === 429) return [blocked('rate_limited', nowMs, { wait: error.retryAfterSeconds })];
   if (error.code === 'discord_sender_name_required' && error.status === 409) return [blocked('stale', nowMs)];
+  if (error.code === 'discord_sender_write_unconfirmed') return [blocked('write_unconfirmed', nowMs)];
   if (error.code === 'discord_connection_required') return [blocked('reconnect_required', nowMs)];
   if (error.code === 'permission_denied') return [blocked('workspace_permission', nowMs)];
   if (error.code === 'unauthenticated' || error.status === 401) return [blocked('session_reverification_required', nowMs, { signInAgain: true })];

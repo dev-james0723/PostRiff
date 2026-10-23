@@ -28,6 +28,7 @@ export const SENDER_STATE_COPY: Record<BlockedSenderState, { title: CopyKey; bod
   edit_pending: { title: 'senderStateEditPendingTitle', body: 'senderChangePending', next: 'senderStateEditPendingNext' },
   stale: { title: 'senderStateStaleTitle', body: 'senderStateStaleBody', next: 'senderStateStaleNext' },
   reconnect_required: { title: 'senderStateReconnectRequiredTitle', body: 'senderStateReconnectRequiredBody', next: 'senderStateReconnectRequiredNext' },
+  write_unconfirmed: { title: 'senderStateWriteUnconfirmedTitle', body: 'senderStateWriteUnconfirmedBody', next: 'senderStateWriteUnconfirmedNext' },
   rate_limited: { title: 'senderStateRateLimitedTitle', body: 'senderStateRateLimitedBody', next: 'senderStateRateLimitedNext' },
   upstream_unavailable: { title: 'senderStateUpstreamUnavailableTitle', body: 'senderStateUpstreamUnavailableBody', next: 'senderStateUpstreamUnavailableNext' },
   workspace_permission: { title: 'senderStateWorkspacePermissionTitle', body: 'senderStateWorkspacePermissionBody', next: 'senderStateWorkspacePermissionNext' },

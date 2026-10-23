@@ -4,7 +4,8 @@
  *
  * Each locale and width runs every case group; the receipt lists the cases that really ran and the run fails when one
  * is missing (REQUIRED_CASES / ONCE_CASES), so a skipped block cannot pass silently. In CI nothing narrows the run.
- * While developing, RAFII_SENDER_CASES=core,states runs only those groups and says so (that run is not evidence).
+ * While developing, RAFII_SENDER_CASES=core,states (groups) and RAFII_SENDER_COMBOS=en-1280 (locale-width) narrow the run
+ * and the receipt says so (such a run is not evidence).
  */
 const assert = require('node:assert/strict');
 const {spawn} = require('node:child_process');
@@ -34,7 +35,7 @@ const REQUIRED_CASES = [
   'preview-webhook', 'preview-bot', 'preview-live-update', 'preview-theme-toggle', 'preview-contrast',
   'state-sender_names_disabled', 'state-bot_nickname_disabled', 'state-not_authorizing_member', 'state-session_reverification_required', 'state-person_missing_manage_nicknames',
   'state-person_role_below_bot', 'state-bot_missing_change_nickname', 'state-nickname_authority_other_workspace', 'state-edit_pending', 'state-reconnect_required',
-  'state-rate_limited', 'state-upstream_unavailable', 'state-workspace_permission', 'state-stale', 'state-failed', 'state-several-reasons', 'state-check-again-is-a-read',
+  'state-rate_limited', 'state-upstream_unavailable', 'state-workspace_permission', 'state-stale', 'state-failed', 'state-write_unconfirmed', 'state-several-reasons', 'state-check-again-is-a-read',
   'state-pending-countdown', 'state-blocked-controls-explain', 'default-off-is-read-only-view', 'card-hint-from-provider', 'card-hint-learned-from-read',
   'failure-stale-reload-no-retry', 'failure-fresh-session', 'failure-post-unavailable', 'failure-server-rule-keeps-form', 'failure-reload-uses-new-fingerprint',
   'protect-double-click', 'protect-enter-twice', 'protect-pending-close', 'protect-escape-while-saving',
@@ -46,6 +47,7 @@ const REQUIRED_CASES = [
 // Recorded once per run (English at 1280 px), because they do not depend on locale or width.
 const ONCE_CASES = ['dark-scheme-follows-app', 'axe-editor-light', 'axe-editor-dark', 'axe-blocked-state', 'evidence-screenshots'];
 const WANT = process.env.RAFII_SENDER_CASES ? new Set(process.env.RAFII_SENDER_CASES.split(',')) : null;
+const ONLY = process.env.RAFII_SENDER_COMBOS ? new Set(process.env.RAFII_SENDER_COMBOS.split(',')) : null;
 const run = (group) => !WANT || WANT.has(group);
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -96,13 +98,14 @@ const STATE_TEXT = {
   nickname_authority_other_workspace: ['senderStateNicknameAuthorityOtherWorkspaceTitle', 'senderStateNicknameAuthorityOtherWorkspaceBody', 'senderStateNicknameAuthorityOtherWorkspaceNext'],
   edit_pending: ['senderStateEditPendingTitle', 'senderChangePending', 'senderStateEditPendingNext'],
   stale: ['senderStateStaleTitle', 'senderStateStaleBody', 'senderStateStaleNext'],
+  write_unconfirmed: ['senderStateWriteUnconfirmedTitle', 'senderStateWriteUnconfirmedBody', 'senderStateWriteUnconfirmedNext'],
   reconnect_required: ['senderStateReconnectRequiredTitle', 'senderStateReconnectRequiredBody', 'senderStateReconnectRequiredNext'],
   rate_limited: ['senderStateRateLimitedTitle', 'senderStateRateLimitedBody', 'senderStateRateLimitedNext'],
   upstream_unavailable: ['senderStateUpstreamUnavailableTitle', 'senderStateUpstreamUnavailableBody', 'senderStateUpstreamUnavailableNext'],
   workspace_permission: ['senderStateWorkspacePermissionTitle', 'senderStateWorkspacePermissionBody', 'senderStateWorkspacePermissionNext'],
   failed: ['senderStateFailedTitle', 'senderSaveFailed', 'senderStateFailedNext']
 };
-assert.equal(Object.keys(STATE_TEXT).length, 15);
+assert.equal(Object.keys(STATE_TEXT).length, 16);
 const fill = (text, values) => text.replace(/\{(\w+)\}/g, (whole, name) => String(values[name] ?? whole));
 const squash = value => value.replace(/\s+/g, ' ').trim();
 const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -143,7 +146,7 @@ const STATE_SCENARIOS = [
   let browser, browserVersion, stage = 'startup';
   const ran = {};
   const once = new Set();
-  const combos = [['en', 1280], ['en', 390], ['zh-Hant', 390], ['zh-Hans', 1280]];
+  const combos = [['en', 1280], ['en', 390], ['zh-Hant', 390], ['zh-Hans', 1280]].filter(([locale, width]) => !ONLY || ONLY.has(`${locale}-${width}`));
   try {
     stage = 'warm';
     await warm('/app/channels'); await warm('/app/queue');
@@ -677,6 +680,22 @@ const STATE_SCENARIOS = [
         pass('state-failed');
         await resetPage();
 
+        // Discord refused the write or answered with another nickname: unconfirmed. Check again is a read; nothing is resent.
+        stage = combo + ':failure-write-unconfirmed';
+        await openLoaded('bot');
+        world.postAnswer = () => ({status: 409, body: {error: 'Discord refused the nickname change.', code: 'discord_sender_write_unconfirmed'}});
+        await edit('Another name', true); await saveButton.click();
+        const unconfirmed = dialog.getByTestId('discord-sender-state-write_unconfirmed'); await unconfirmed.waitFor();
+        assert.equal(await unconfirmed.getAttribute('role'), 'alert');
+        assert.ok(squash(await unconfirmed.innerText()).includes(squash(copy.senderStateWriteUnconfirmedBody)));
+        assert.equal(world.posts.length, 1);
+        world.postAnswer = null;
+        await dialog.getByRole('button', {name: copy.senderCheckAgain, exact: true}).click();
+        await loaded('Acme Weekly');
+        assert.equal(world.posts.length, 1, 'checking again never resends the change');
+        pass('state-write_unconfirmed');
+        await resetPage();
+
         // A fresh sign-in is needed: the buttons and words of the long-standing flow.
         stage = combo + ':failure-session';
         await openLoaded('bot');
@@ -934,8 +953,8 @@ const STATE_SCENARIOS = [
 
     stage = 'receipt';
     let receipt;
-    if (WANT) {
-      receipt = {status: 'subset', note: 'RAFII_SENDER_CASES narrowed this run; it is not evidence', groups: [...WANT], browserVersion, cases: Object.fromEntries(Object.entries(ran).map(([combo, names]) => [combo, [...names].sort()]))};
+    if (WANT || ONLY) {
+      receipt = {status: 'subset', note: 'RAFII_SENDER_CASES or RAFII_SENDER_COMBOS narrowed this run; it is not evidence', groups: WANT ? [...WANT] : 'all', combos: ONLY ? [...ONLY] : 'all', browserVersion, cases: Object.fromEntries(Object.entries(ran).map(([combo, names]) => [combo, [...names].sort()]))};
     } else {
       for (const [locale, width] of combos) {
         const combo = `${locale}-${width}`;
