@@ -195,20 +195,16 @@ class SharedPathsLiveVersusCandidate(unittest.TestCase):
         for key in ('jobStatesAfterInvalidate', 'current', 'channelState'):
             self.assertEqual(self.probes['live'][key], self.probes['rc'][key], key)
 
-    @unittest.expectedFailure
     def test_channels_read_opens_no_more_database_transactions_than_live(self):
-        """FINDING CH-1: oauth.channels() calls discord_connections.public_identities() for every workspace when
-        POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED=true, a second repository transaction (in Production also a Supabase
-        getUser call and a session-flag query) with a FOR UPDATE lock on the workspace row, to return []."""
+        """Guard for CH-1 (fixed on claude/discord-rc2-fixes-20261023, 4d41a86a): oauth.channels() called
+        discord_connections.public_identities() for every workspace when POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED=true,
+        a second repository transaction (in Production also a Supabase getUser call and a session-flag query) with a FOR
+        UPDATE lock on the workspace row, to return []. It now reads identities only for a workspace that has links."""
         self.assertEqual(self.live['phases']['read']['connections'], self.rc['phases']['read']['connections'])
 
-    def test_pins_the_size_of_the_extra_channels_read_transaction(self):
-        delta = _delta(self.live, self.rc, 'read')
-        self.assertEqual(list(delta.values()), [WORKSPACES], delta)
-        statement = next(iter(delta))
-        self.assertTrue(statement.startswith('SELECT w.revision,w.state') and 'pr_memberships' in statement, statement)
-        self.assertIn('FOR UPDATE OF w', statement, 'the extra read locks the workspace row')
-        self.assertEqual(self.rc['phases']['read']['connections'] - self.live['phases']['read']['connections'], WORKSPACES)
+    def test_channels_read_runs_exactly_the_statements_live_runs(self):
+        """Guard for CH-1; replaced the pin of the extra transaction (one SELECT ... FOR UPDATE OF w per workspace)."""
+        self.assertEqual(_delta(self.live, self.rc, 'read'), {})
 
     def test_channels_listing_keeps_discord_closed_for_ordinary_workspaces(self):
         """OBSERVABLE-INTENDED: live offers the original Discord connect flow; the candidate's gate is closed (unset on
@@ -312,11 +308,11 @@ class SharedPathsLiveVersusCandidate(unittest.TestCase):
         self.assertEqual(self.probes['rc']['approvals']['LinkedIn'], self.probes['live']['approvals']['LinkedIn'])
         self.assertEqual(self.probes['live']['approvals']['LinkedIn']['job'], 'scheduled')
 
-    @unittest.expectedFailure
     def test_a_facebook_page_post_is_approvable_as_on_live(self):
-        """FINDING FB-1: Phase2Store.current() demands manifest.destinationId == channel.destinationId for Facebook and no
-        code writes manifest.destinationId, so the review is born stale, approval is refused, and a post approved on the
-        live build is held by the next invalidate() (every command, every worker claim)."""
+        """Guard for FB-1 (fixed on claude/discord-rc2-fixes-20261023, 9c044aa7): Phase2Store.current() demanded
+        manifest.destinationId == channel.destinationId for Facebook and no code writes manifest.destinationId, so the
+        review was born stale, approval was refused, and a post approved on the live build was held by the next
+        invalidate() (every command, every worker claim)."""
         self.assertEqual(self.probes['live']['approvals']['Facebook']['job'], 'scheduled')
         self.assertEqual(self.probes['rc']['approvals']['Facebook'], self.probes['live']['approvals']['Facebook'])
 
