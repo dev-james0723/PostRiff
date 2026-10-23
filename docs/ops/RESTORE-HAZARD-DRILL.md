@@ -98,7 +98,8 @@ already saw. "First sends" = posts never sent before. Counts from the canonical 
 | **liveswap in place**: database replaced at the same address under the running cron, hold 3 s after it is back | 12 + 30 trickle | see section 5 | | | **FAILS** (race) |
 | **liveswap hold first**: restored elsewhere, held, then given the address | | 0 | | | **PASS** |
 | **liveswap paused build**: build whose rate policy does not parse promoted before the restore, hold 3 s after | | 0 | | | **PASS** |
-| **scale**: as A and B with 150 tenants x 2 posts plus the edge cases (8 loops) | see section 7 | | | | |
+| **scale A**: 100 tenants x 2 posts, main tenants only, 6 loops, no precaution | 200 (200) | **200** (every tenant 2) | 0 | 0 | hazard confirmed at scale |
+| **scale B**: same, procedure | 200 (200) | **0** (200 matched, verified by read-back, 0 creates) | 0 | 200 | **PASS** |
 
 Scenario B in detail [measured]:
 
@@ -194,6 +195,15 @@ writes (learning signal, publish outcome event) that the restore rewound. Consid
 `PostgresWorker.complete()` with a synthetic claim so that `record_receipt` appends the receipt and the next claim adopts
 it. That uses more product code, but it is not atomic with the tool's unchanged-job check, cannot reach a held job, and
 leaves the job `scheduled` (so `assert_no_unresolved_repeat` would not yet block a re-approval) until a worker claims it.
+
+**A bug the drill caught in the first version of the tool** [measured]. In one mid-run restore (run 6), a worker held a
+post's lease at the restore point; it sent the post, a moderator then deleted the message, and the lease ran past the
+interval end. The first rule took `max(nextAt, leaseUntil)` as the earliest moment the post could have been sent, so
+it judged the post "not sent", and after the lift the product posted it again: **1 duplicate**. The lease holder may
+send at any moment of its lease; the earliest moment is `nextAt`. Fixed in commit `015d6f7a` with a regression test
+(`test_regression_a_post_leased_past_the_interval_end_and_then_deleted_is_held_not_resent`); the canonical counts in
+this record are from the run after the fix. The scale run predates the fix but cannot be affected: its restore point is
+before any claim, so no job had a lease.
 
 **Failure modes** [inference from the rules, the unit tests and the drill]:
 
