@@ -209,6 +209,16 @@ class RequestLedger(unittest.TestCase):
         self.assertEqual(analysis.peak_trailing([0.0, 1.0], 1.0), 1, 'the span is half open, as the mock counts')
 
 
+class ScenarioSettings(unittest.TestCase):
+    def test_a_pinned_scenario_setting_survives_a_profile_wide_override(self):
+        import discord_lane_capacity_run as runner
+        fdb = runner.settings_for('Fdb', {'max_db_connections': 20, 'db_latency_ms': 2.0})
+        self.assertEqual((fdb['max_db_connections'], fdb['db_latency_ms']), (6, 8.0))
+        self.assertEqual(fdb['pinnedOverridesIgnored'], {'max_db_connections': 20, 'db_latency_ms': 2.0})
+        s1 = runner.settings_for('S1', {'max_db_connections': 20, 'db_latency_ms': 2.0})
+        self.assertEqual((s1['max_db_connections'], s1['db_latency_ms'], s1['pinnedOverridesIgnored']), (20, 2.0, None))
+
+
 @unittest.skipIf(FENCED, 'the synthetic transport fence refuses any database but the guarded runner\'s')
 @unittest.skipUnless(LIVE, 'needs PostgreSQL server binaries (POSTRIFF_PG_BIN) and psycopg')
 class LiveSmoke(unittest.TestCase):

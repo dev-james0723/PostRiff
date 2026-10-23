@@ -66,7 +66,7 @@ BASE = dict(workspaces=2000, posts=5000, hot_posts=0, per_minute=0, minutes=0, d
             cron_period=60, cron_jitter=(0.0, 1.0), max_duration=300, invocation_mode='cold',
             lead_seconds=90, max_run_minutes=75, fixed_run_minutes=None, stall_detect_minutes=10,
             stall=None, flag_off=None, kills=None, kill_at_create=0, lock_injection=None, misroute_every=0,
-            expiry_in_minutes=None, injections=None, seed_processes=4, judge_as=None, expect=())
+            expiry_in_minutes=None, injections=None, seed_processes=4, judge_as=None, pinned=(), expect=())
 
 SCENARIOS = {
     'smoke': dict(workspaces=10, posts=30, cron_period=20, lane_max_seconds=15, shards=4, lead_seconds=10,
@@ -133,6 +133,7 @@ SCENARIOS = {
                                'four SIGKILLs of the shard whose create the mock holds in flight.',
                    expect=('fcrash', 'no_duplicates', 'no_late_sends', 'isolation')),
     'Fdb': dict(workspaces=1000, posts=1500, max_db_connections=6, db_latency_ms=8.0, db_statement_timeout_ms=1500,
+                pinned=('max_db_connections', 'db_latency_ms', 'db_statement_timeout_ms'),
                 lock_injection={'start': 1.0, 'every': 20.0, 'hold': 2.5, 'workspaceRows': 3}, max_run_minutes=40,
                 description='Database contention: a 6-connection pool, 8 ms per round trip, a 1.5 s statement '
                             'timeout, and every 20 s the coordinator\'s application row and three workspace rows '
@@ -1250,6 +1251,10 @@ def differences(result, config):
     ]
     if config.get('sourceDirty'):
         items.insert(0, 'The source tree had uncommitted changes: this receipt does not describe a commit.')
+    if s.get('pinnedOverridesIgnored'):
+        items.append('This scenario pins %s; the command line asked for %s, which was ignored.' % (
+            ', '.join('%s=%s' % (k, s.get(k)) for k in sorted(s['pinnedOverridesIgnored'])),
+            ', '.join('%s=%s' % item for item in sorted(s['pinnedOverridesIgnored'].items()))))
     if (result.get('judgeAs') or result['scenario']) not in ('S1', 'S2', 'S3'):
         items.append('Scenario %s is not the section 4 stress scenario; section 4 PASS/FAIL lines are NOT APPLICABLE '
                      'unless listed.' % result['scenario'])
@@ -1323,9 +1328,19 @@ def settings_for(name, overrides):
         raise SystemExit('unknown scenario %s; choose from %s' % (name, ', '.join(SCENARIOS)))
     settings = copy.deepcopy(BASE)
     settings.update(copy.deepcopy(SCENARIOS[name]))
+    # A scenario can pin settings that define it (Fdb's 6-connection pool and 8 ms round trip): a profile-wide
+    # command-line value (the CI matrix passes --max-db-connections and --db-latency-ms to every job) must not
+    # silently replace them. The ignored values are kept in the settings, so the receipt shows them.
+    pinned = set(settings.get('pinned') or ())
+    ignored = {}
     for key, value in overrides.items():
-        if value is not None:
-            settings[key] = value
+        if value is None:
+            continue
+        if key in pinned and value != settings.get(key):
+            ignored[key] = value
+            continue
+        settings[key] = value
+    settings['pinnedOverridesIgnored'] = ignored or None
     return settings
 
 
