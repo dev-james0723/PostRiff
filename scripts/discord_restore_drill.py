@@ -254,7 +254,7 @@ class Timeline:
         self.later_seconds, self.expiring_seconds = later_seconds, expiring_seconds
         self.edge = {name: F.Tenant(900 + i) for i, name in enumerate(
             ('deleted', 'uncertain_accepted', 'uncertain_lost', 'twins', 'expiring_sent', 'expiring_unsent', 'edited',
-             'later_0', 'later_1', 'later_2', 'later_3'))} if edges else {}
+             'later_0', 'later_1', 'later_2', 'later_3', 'canceled', 'orphan'))} if edges else {}
         self.tenants = self.main + list(self.edge.values())
         self.groups = {t.id: 'main' for t in self.main}
         self.groups.update({t.id: name.split('_')[0] if name.startswith('later') else name for name, t in self.edge.items()})
@@ -276,7 +276,29 @@ class Timeline:
                      (e['expiring_unsent'], [('Synthetic expiring unsent post, %s' % e['expiring_unsent'].guild, self.expiring_at)]),
                      (e['edited'], [('Synthetic post someone edits, %s' % e['edited'].guild, soon)])]
             plan += [(e['later_%d' % n], [('Synthetic later post, %s' % e['later_%d' % n].guild, self.later_at)]) for n in range(4)]
+            plan += [(e['canceled'], [('Synthetic post the customer cancels, %s' % e['canceled'].guild, self.later_at)])]
         return plan
+
+    def approve_after_restore_point(self, now):
+        """A workspace (and its approved post) created after the restore point: the restored database never knew it."""
+        if self.edges:
+            orphan = self.edge['orphan']
+            seed(self.c0, [(orphan, [('Synthetic post approved after the restore point, %s' % orphan.guild, now - 60)])])
+
+    def cancel_in_first_timeline(self):
+        """The customer cancels a queued post after the restore point, with the product's own cancel command."""
+        if not self.edges:
+            return
+        tenant = self.edge['canceled']
+        from postriff_phase2.hosted import HostedPhase2Commands
+        engine = HostedPhase2Commands(clock=time.time).engine
+        with self.c0.connect() as db:
+            revision, state = db.execute('SELECT revision, state FROM public.pr_workspaces WHERE id=%s FOR UPDATE',
+                                         (tenant.id,)).fetchone()
+            job = state['phase2']['jobs'][0]
+            engine.apply_phase2(None, state, 'cancel', {'jobId': job['id']}, {'user_id': F.ACTOR})
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb, revision=revision+1 WHERE id=%s AND revision=%s',
+                       (json.dumps(state), tenant.id, revision))
 
     def hooks(self, wire):
         """The first timeline's Discord trouble: a lost create answer, a create lost on the way, a refused server."""
@@ -315,16 +337,18 @@ class Timeline:
         time.sleep(1.5)
         self.t_restore = self.c0.now()  # after every seed commit, before the first send
         time.sleep(1.5)
+        self.approve_after_restore_point(self.c0.now())
         self.hooks(wire)
         app = App(self.c0, self.tenants, wire)
         log('first timeline: lane sending', tenants=len(self.tenants))
         sending = time.monotonic()
         drained = app.drain(self.loops)
         wire.fail = wire.after = None
+        self.cancel_in_first_timeline()
         self.send_seconds = time.monotonic() - sending
         self.first_send = min(entry['at'] for entry in wire.log)
         jobs = job_index(self.c0)
-        later = [k for k, j in jobs.items() if self.groups.get(k[0]) in ('later',)] + \
+        later = [k for k, j in jobs.items() if self.groups.get(k[0]) in ('later', 'canceled')] + \
                 [k for k, j in jobs.items() if self.groups.get(k[0]) == 'twins' and j['nextAt'] > self.t_restore + 30]
         sent_late = [k for k in later if creates(wire).get(F.nonce(jobs[k]))]
         if sent_late:
