@@ -534,24 +534,47 @@ class ParallelLaneOnPostgres(unittest.TestCase):
 
     # (f) a global 429 ---------------------------------------------------------------------------------------------
 
+    EMBARGO = 10  # seconds of the injected global 429: long enough that a loop's next pre-claim read lands inside it
+
     def embargo_run(self, loop):
         tenants = [F.Tenant(n) for n in range(30)]
         worker = self.start(tenants, 1)
-        seen = []
+        self.wire.clock = time.time  # request times on the database's clock, to compare with its records
+        seen, retry = [], self.EMBARGO
 
         def fail(method, path):
             if not seen and method == 'GET' and path.endswith('/channels'):
-                seen.append(time.monotonic())
-                return {'status': 429, 'headers': {'retry-after': '4', 'x-ratelimit-global': 'true',
+                seen.append(time.time())
+                return {'status': 429, 'headers': {'retry-after': str(retry), 'x-ratelimit-global': 'true',
                                                    'x-ratelimit-scope': 'global'},
-                        'body': {'message': 'You are being rate limited.', 'retry_after': 4, 'global': True}}
+                        'body': {'message': 'You are being rate limited.', 'retry_after': retry, 'global': True}}
         self.wire.fail = fail
         loop(worker)
         return seen[0]
 
+    def embargo_window(self):
+        """When the coordinator recorded the global 429 (its admission's outcome) and when the embargo it set ends."""
+        with self.cluster.connect(autocommit=True) as db:
+            (recorded,), = db.execute("SELECT extract(epoch from outcome_at)::double precision FROM "
+                                      "public.pr_discord_request_admissions WHERE status_code=429").fetchall()
+            until = db.execute("SELECT extract(epoch from blocked_until)::double precision FROM public.pr_discord_rate_state "
+                               "WHERE kind='global'").fetchone()[0]
+        return recorded, until
+
+    def claims_between(self, start, end):
+        return [event['at'] for job in F.jobs(self.cluster).values() for event in job['events']
+                if event['state'] == 'claimed' and start <= event['at'] < end]
+
     def test_a_global_429_pauses_every_loop_without_a_retry_storm(self):
-        started = self.embargo_run(lambda worker: self.drain(worker, 4, seconds=40))
-        during = [call for call in self.wire.calls if started < call[0] < started + 3.9]
+        self.embargo_run(lambda worker: self.drain(worker, 4, seconds=40))
+        recorded, until = self.embargo_window()
+        with self.cluster.connect(autocommit=True) as db:
+            admitted = db.execute("SELECT count(*) FROM public.pr_discord_request_admissions WHERE reserved_at>=to_timestamp(%s) "
+                                  "AND reserved_at<to_timestamp(%s)", (recorded, until)).fetchone()[0]
+        self.assertEqual(admitted, 0, 'from its record to its end, the embargo admits nothing')
+        # So only a request admitted before the record can still arrive: at most one per other loop (a loop sends one
+        # request at a time, and the loop that got the 429 is recording it).
+        during = [call for call in self.wire.calls if recorded <= call[0] < until]
         self.assertLessEqual(len(during), 3, 'inside the embargo only requests already admitted may still arrive')
         found = F.jobs(self.cluster).values()
         self.assertEqual(sorted({job['state'] for job in found}), ['verified'], 'the denied post was not failed or held')
@@ -559,17 +582,18 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertFalse([job for job in found if job.get('discordWorker', {}).get('unsentFailures')])
 
     def test_a_global_429_makes_each_loop_sleep_instead_of_claiming(self):
-        claims = {}
+        waits = []
 
         def lanes(worker):
             results, _ = F.run_lanes(worker, 4, seconds=40)
-            claims['lane'] = sum(r['counters']['rateDelayed'] for r in results)
-            claims['waits'] = sum(r['counters']['rateWaits'] for r in results)
+            waits.append(sum(r['counters']['rateWaits'] for r in results))
         self.embargo_run(lanes)
-        self.assertGreater(claims['waits'], 0)
-        # At most the step each loop had in flight when the 429 landed, one claimed while its observation was being
-        # recorded, and a cold-start identity read four loops raced for; the old loop releases nearly every due post.
-        self.assertLessEqual(claims['lane'], 4 * 3)
+        recorded, until = self.embargo_window()
+        self.assertGreater(waits[0], 0, 'the loops waited the embargo out')
+        # Every iteration reads the coordinator's rows before it claims, so once the embargo is recorded a loop
+        # claims at most once more (the iteration whose read came first) and then sleeps until it ends. The old
+        # loop claims and releases nearly every due post in the same window (the control below).
+        self.assertLessEqual(len(self.claims_between(recorded, until)), 4)
 
     def test_control_the_existing_loop_keeps_claiming_through_the_same_embargo(self):
         claims = {}
@@ -586,6 +610,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 claims['tick'] = sum(w.discord_stats['rateDelays'] for w in parallel)
         self.embargo_run(tick)
         self.assertGreaterEqual(claims['tick'], 20, 'without the lane\'s wait, the loops claim and release nearly every due post')
+        self.assertGreater(len(self.claims_between(*self.embargo_window())), 4, 'more than the lane\'s one per loop')
 
     # (h) the invalid-request budget --------------------------------------------------------------------------------
 
@@ -1080,6 +1105,41 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                                "WHERE kind='global'").fetchone()[0]
         return seen, until
 
+    def at_the_429(self, real, permit_of, parties=3):
+        """Wrap a coordinator step (consume or seal) so that the first `parties` publish permits to reach it wait for
+        each other (at most 30 s, well inside a lease), then one global 429 is observed while they all wait. Returns
+        the wrapper, the embargo [(observed, until)] and the permit ids that were waiting at that moment."""
+        lock, gate, embargo, first, blocked = threading.Lock(), threading.Barrier(parties), [], [], []
+
+        def wrapper(*args, **kwargs):
+            permit = permit_of(*args, **kwargs)
+            if permit.binding_hash:
+                with lock:
+                    waits = len(first) < parties
+                    if waits:
+                        first.append(permit.id)
+                if waits:
+                    try:
+                        gate.wait(timeout=30)
+                    except threading.BrokenBarrierError:
+                        pass  # a slow loop: the 429 still lands while the others wait
+                    with lock:
+                        if not embargo:
+                            embargo.append(self.global_429(retry=3))
+                            blocked.extend(first)
+            return real(*args, **kwargs)
+        return wrapper, embargo, blocked
+
+    def publications(self, permits):
+        """(workspace, publication) of each publish admission among `permits`; at least the one that observed the 429."""
+        with self.cluster.connect(autocommit=True) as db:
+            keys = {tuple(row) for row in db.execute("SELECT workspace_id::text, publication_id FROM "
+                                                      "public.pr_discord_request_admissions WHERE id=ANY(%s::uuid[])",
+                                                      (permits,)).fetchall()}
+        self.assertEqual(len(keys), len(permits))
+        self.assertGreaterEqual(len(keys), 1)
+        return keys
+
     def test_a_global_429_seen_while_posts_are_sealed_sends_each_once_after_the_embargo(self):
         """Three loops each hold a sealed post when a global 429 is observed. consume() refuses each blocked permit
         before any transport, the worker proves the intent unsent from the admission row and releases the post for
@@ -1087,35 +1147,18 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         tenants = [F.Tenant(n) for n in range(3)]
         worker = self.start(tenants, 1)
         limiter = self.hosted.providers['discord'].rate_limiter
-        real, lock, sealed, embargo, first = limiter.consume, threading.Lock(), threading.Barrier(3), [], []
-
-        def consume(permit, method, path, **kwargs):
-            if permit.binding_hash:
-                with lock:
-                    waits = len(first) < 3
-                    first.append(permit.id)
-                if waits:  # the first three creates: every loop has sealed its post
-                    try:
-                        sealed.wait(timeout=30)
-                    except threading.BrokenBarrierError:
-                        pass
-                    with lock:
-                        if not embargo:
-                            embargo.append(self.global_429(retry=3))
-            return real(permit, method, path, **kwargs)
+        consume, embargo, blocked = self.at_the_429(limiter.consume, lambda permit, *rest, **kw: permit)
         with patch.object(limiter, 'consume', consume):
             self.drain(worker, 3, seconds=40)
         found = self.assert_each_created_once_and_verified(3)
         (seen, until), = embargo
         during = [wall for times in self.wire.creates.values() for _, _, wall in times if seen <= wall < until]
         self.assertEqual(during, [], 'no create reached Discord during the embargo')
-        proofs = [[entry['unsentProof'] for entry in job.get('discordUnsentDispatches', [])] for job in found.values()]
-        released = [job for job in found.values()
-                    if 'embargo_blocked_admission' in [entry['unsentProof'] for entry in job.get('discordUnsentDispatches', [])]]
-        self.assertEqual(len(released), 3, proofs)
-        for job in released:
+        for key in self.publications(blocked):  # every post whose sealed permit the 429 blocked (three, unless slow)
+            self.assertIn('embargo_blocked_admission',
+                          [entry['unsentProof'] for entry in found[key].get('discordUnsentDispatches', [])])
             self.assertIn('A Discord embargo blocked the sealed permit before it was consumed; no POST was started; '
-                          'intent archived before safe rate wait', [event['message'] for event in job['events']])
+                          'intent archived before safe rate wait', [event['message'] for event in found[key]['events']])
 
     def test_a_global_429_seen_while_permits_are_reserved_but_not_sealed_sends_each_once_after_it(self):
         """The sibling: three loops each hold a reserved create permit, no intent sealed yet, when a global 429 is
@@ -1124,32 +1167,18 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         tenants = [F.Tenant(n) for n in range(3)]
         worker = self.start(tenants, 1)
         limiter = self.hosted.providers['discord'].rate_limiter
-        real, lock, reserved, embargo, first = limiter.seal, threading.Lock(), threading.Barrier(3), [], []
-
-        def seal(cur, permit, binding, intent_id, valid_until):
-            with lock:
-                waits = len(first) < 3
-                first.append(permit.id)
-            if waits:  # the first three seals: every loop holds a reserved permit
-                try:
-                    reserved.wait(timeout=30)
-                except threading.BrokenBarrierError:
-                    pass
-                with lock:
-                    if not embargo:
-                        embargo.append(self.global_429(retry=3))
-            return real(cur, permit, binding, intent_id, valid_until)
+        seal, embargo, blocked = self.at_the_429(limiter.seal, lambda cur, permit, *rest, **kw: permit)
         with patch.object(limiter, 'seal', seal):
             self.drain(worker, 3, seconds=40)
         found = self.assert_each_created_once_and_verified(3)
         (seen, until), = embargo
         during = [wall for times in self.wire.creates.values() for _, _, wall in times if seen <= wall < until]
         self.assertEqual(during, [], 'no create reached Discord during the embargo')
-        for job in found.values():
+        for key in self.publications(blocked):  # every post whose reserved permit the 429 blocked (three, unless slow)
             self.assertIn('A Discord embargo blocked the rate permit before its intent was sealed; frozen approval waits '
-                          'without a POST', [event['message'] for event in job['events']])
+                          'without a POST', [event['message'] for event in found[key]['events']])
             self.assertNotIn('embargo_blocked_admission',
-                             [entry['unsentProof'] for entry in job.get('discordUnsentDispatches', [])],
+                             [entry['unsentProof'] for entry in found[key].get('discordUnsentDispatches', [])],
                              'no intent had been sealed under the blocked permit')
 
     def test_control_a_create_whose_transport_ran_and_failed_stays_uncertain(self):
