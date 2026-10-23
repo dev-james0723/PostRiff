@@ -118,3 +118,47 @@ Question put to the owner (one line to answer):
 > 做
 
 **Reading, by the agent:** the owner's answer to "W-02 yes or no" (parallel Discord sending, `W-02-parallel-sending-plan.md`). It starts **engineering only**: a new branch `claude/discord-w02-parallel-20261023` from the frozen head, in its own worktree, behind a flag that is off by default, with tests and an in-process capacity simulation. It does **not** approve any build, deployment, environment change, promotion, merge or pull request. The frozen release candidate and its approvals are untouched. Everything the work needs afterwards is a separate yes: a new freeze and exact-SHA CI, an independent review, the owner-run Depot capacity run (packet row 9), a new approval packet and new builds (the current approvals cover D1 and D2 of `2a5a523d` only). It does **not** answer decisions 1 to 6 of `APPROVAL-PACKET-2.md` (H-05, the Q-05 waiver, H-07, M-03, the tester assets, T0 and GO_TIME), and those remain open; the expected first-week volume was not given.
+
+## Reply 12, received 2026-10-23 about 03:00Z ("芝麻開門": the release is redefined as open to every new customer)
+
+> 芝麻開門。更新 Rafii Discord 今次發佈要求：正式部署完成後，要向所有新客戶開放，唔採用 D1 暗版、邀請制或指定 workspace 白名單作為交付。
+> 請接續現有 release ledger、最新凍結版本及發佈流程，保留所有活躍 Agents，完成以下工作：
+> 1. 全面開放入口：核實 Production 使用 POSTRIFF_DISCORD_CONNECT_WORKSPACES=* 或等效設定。全新、從未連接 Discord 嘅普通客戶 workspace，亦必須可以開始連接及完成 OAuth。
+> 2. 驗收實際功能：使用新客戶身份，驗證連接、目的地授權、立即發佈、排程、暫停／取消、重連及斷開。真實發送測試沿用已明確批准嘅帳戶及內容。
+> 3. 處理容量限制：核實 Discord Bot verification、server cap 同速率限制。如果會阻止新客戶使用，先處理並交代實際容量；保留權限隔離、防重複發送及停發保護。
+> 4. 維持發佈範圍：使用既有正式 Production postriff-phase2-private 及其正式資料庫。W-02 等尚未驗收工程維持獨立，唔混入今次發佈。
+> 5. 交付可核實證據：提供 Production URL、commit SHA、部署 ID、全面開放設定及全新客戶實測收據。CI 通過、build READY 或程式已部署，都唔等於完成。
+>
+> 完成標準係：新客戶毋須人工加入白名單，就可以自行連接並使用今次正式發佈嘅 Discord 功能。 如仍有阻塞，繼續完成可做嘅修復，再具體列出餘下問題，唔好以暗版取代目標。
+>
+> 1. H-05：誰放行？ James 作 Release Captain。獨立 AI review 必須對應最終發佈 SHA，附安全修復證據；真實流程、隔離及容量驗收通過後，批准全面開放。刪除「只批准 D1 受控驗收」嘅定位。
+> 2. Q-05：跨租戶豁免？ 不豁免，亦不延至公開後。 全面開放前，完成 A／B 帳戶雙向讀寫拒絕及無副作用驗證，補齊原腳本缺少嘅寫入測試。
+> 3. H-07：誰值班？ 要求維持：填實際操作者、覆蓋時段、警報入口，以及 Mac 離線時可執行嘅停發／回退方法。未確認就保持未完成。
+> 4. M-03：備份／PITR？ 要求維持：核實正式資料庫嘅可用備份、還原點及 compute。PITR 按實際狀態填寫，再評估備份是否足夠，毋須為填表自動購買。
+> 5. H-03：測試資料？ 重用既有 tester workspace，補齊 IDs 及時段；另加入全新、無 Discord 連接紀錄嘅普通客戶 workspace，驗證毋須白名單亦能完成連接及使用功能。
+> 6. T0／GO_TIME？ 改為全面開放嘅目標時間。必要驗收、容量及值班未完成就順延；D1 READY 不算交付完成。
+>
+> 另外要補一項容量放行標準：按既定 5,000 條同分鐘到期情景，在與正式部署一致嘅架構量度遲到時間、排空時間、公平性及重複發送，並先寫清楚可接受延遲。
+> 我頭先個 prompt 亦要補返：W-02 可以獨立開發；如果全面開放所需容量依賴 W-02，就要等佢驗收、整合並重新凍結版本後，先正式全開。
+
+**Reading, by the agent** (the working definition is `RELEASE-DEFINITION-v2.md`):
+
+1. **The deliverable changes.** The release is done when a new customer, with no manual allowlisting, can connect and use the Discord features of this release on the formal Production deployment. The dark build D1, invitations, workspace allowlists, a green CI, a READY build and deployed code are verification steps or evidence, never the delivery. The earlier framing of D1 as the thing being accepted ("controlled acceptance", `APPROVAL-PACKET-2.md` sections 4 and 5) is withdrawn.
+2. **Scope.** Existing Production project `postriff-phase2-private` and its production database. W-02 and other unaccepted work stay separate. Because the capacity standard in the last paragraph cannot be met by the frozen head (see the facts below), the formal full opening waits for W-02 to be accepted, integrated and the version re-frozen, as the owner wrote.
+3. **H-05.** The owner (James) is the Release Captain. The independent AI review must be of the final release SHA with the security-fix evidence. Real flow, isolation and capacity acceptance come first; then the full opening is approved. The agent reads "批准全面開放" as the Release Captain's intent to approve once those three pass, **not** as a signed approval of any build, SHA, deployment or setting today.
+4. **Q-05.** No waiver and no deferral past opening. A/B accounts, both directions, reads **and writes**, denied, with no side effects, before the full opening. The agent adds the write tests the original step 8 of `TESTER-SESSION-SCRIPT.md` lacked.
+5. **H-07, M-03.** Kept as requirements; unconfirmed items stay open. M-03 is filled from what the tools can read; PITR is recorded as it really is, sufficiency is assessed, nothing is purchased.
+6. **H-03.** Reuse the tester workspace; add a brand-new ordinary workspace with no Discord history. The ids and the time slot are still the owner's to give.
+7. **T0 and GO_TIME** are now the target time of the full opening and move back whenever acceptance, capacity or on-call is incomplete.
+8. **Capacity release standard.** 5,000 posts due in the same minute, measured on an architecture consistent with the formal deployment: lateness, drain time, fairness, duplicates; the acceptable latency is written first (`RELEASE-DEFINITION-v2.md` section 4, a proposal for the owner to accept or tighten).
+9. **Real sends** in the new-customer test reuse the account the owner explicitly approved earlier and content the owner approves at that moment; the cap of three messages in `TESTER-SESSION-SCRIPT.md` is unchanged.
+10. "保留所有活躍 Agents": the independent W-02 reviewer keeps running; no agent is stopped to save a build.
+
+**Not approved or changed by this reply:** any build, deployment, promotion, environment-variable change, merge or publication beyond the rows already approved (those name D1 and D2 of `2a5a523d` only; a new frozen SHA, W-02 integrated, needs its own packet and its own approval taps); creating accounts or rows in the production database; reading Discord or Supabase dashboard values only the owner can see; buying point-in-time recovery or more compute; making the open setting durable as a project variable. T0 is not set.
+
+**Facts the agent found while reading it (code read on `2a5a523d`, not run against a real fresh account) [Likely]:**
+
+- Production today does not satisfy item 1: `rafii.io` still serves `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg`, which has no Discord v2 code and no gate variable; D1 (`dpl_25ihHyiZCzZXAjVsJqJiYcCWA51n`, not promoted) has the gate set to the tester workspace only. Nothing is open to anyone.
+- With `POSTRIFF_DISCORD_CONNECT_WORKSPACES=*` the gate returns "open to all" for every workspace (`launch_gate.py`). After it, the start path asks only for: a signed-in member with the connections permission in their own workspace, a linked Discord identity that manages the chosen server, at most three starts in flight per person, the server cap, 20 starts per ten minutes per workspace, and the Discord switches (connections v2 and authorization v2 on, provider not paused). The identity admission at the callback applies to YouTube only. No other allowlist was found on the Discord connect path.
+- The open setting lives on the build command (the gate and the cap). A later production build that omits it would silently close Discord again, and a build without the cap line falls back to the code default of 90 servers. Making it a project variable is a separate step and needs the owner's yes.
+- Capacity: on the frozen head one Discord post costs six requests and the worker budget is about 6 to 12 posts a minute, so 5,000 same-minute posts take roughly 7 to 14 hours; the standard cannot be met without W-02 (simulated about 23 minutes at the reviewed 25 requests a second).
