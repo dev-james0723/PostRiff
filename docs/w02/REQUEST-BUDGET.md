@@ -61,10 +61,15 @@ Requests 1-5 are the preflight (`prepare_discord_dispatch`, `hosted_social.py:36
 | `GET /oauth2/applications/@me` and `GET /users/@me` | bot | `_bot_identity` (`social_connectors.py:638-660`), cached 60 s per process | each lane invocation is a fresh process of at most 50 s, so each makes the pair once: 12 shards × 2 = 24 requests a minute (F429 measured 156 pairs, about 12 a minute), about 0.11 per post at 3.5 posts/s |
 
 The step order is in `hosted_worker.py:1196-1232`: claim → preflight (1-5) → renew lease → **reserve the create**
-(`reserve_discord_send`, `hosted_social.py:393-415`) → seal the intent → create. If the create's admission is denied
-(`RateDelayed`), or any preflight read is denied for more than 1 s (`social_connectors.py:415-444`), the step releases
-the job unsent (`discord/worker.py:100-130`, `nextAt = now + cooldown`). The **next claim runs the whole preflight
-again.**
+(`reserve_discord_send`, `hosted_social.py:393-415`) → seal the intent → renew lease → create. The step releases the
+job unsent (`discord/worker.py:100-130`, `nextAt = now + cooldown`) in three cases:
+
+- the create's admission is denied (`RateDelayed`);
+- a preflight read is denied for more than 1 s (`social_connectors.py:415-444`);
+- the create permit expires before the seal or before the consume. A permit lives at most until the end of the current
+  application window. In S1 this was the only cause (section 4.1).
+
+The **next claim runs the whole preflight again.**
 
 **Measured:**
 
@@ -92,90 +97,89 @@ receipt would say so.
 
 ## 4. Candidates
 
-### 4.1 One preflight per sent post: admit the post before its preflight (first)
+### 4.1 One preflight per sent post: keep the create permit alive until it is used (first; corrected)
 
-**What happens today.** Twelve loops compete for the application window. A loop sees room, starts a preflight of 5
-requests, and by the time it asks for the create permit other loops have used the window. The step is released unsent
-and its 5 requests are spent. The re-claim does them again. In the GitHub smoke, half of the posts paid twice: 2.5
-extra requests per post, 24% of all requests.
+**Correction (after the independent review, `scratchpad/review-budget/NOTES.md`, addendum A.1 and A.4).** The first
+version of this section said a step was released because its create's admission was **refused**, and proposed a post
+gate (A1') or a bundle (A1). The S1 receipt shows the mechanism is different. The reviewer derived it, and I have
+checked it against the same files:
 
-**What the preflight defends against.** It defends against sending a post when the grant was revoked (1), when the bot
-or the person lost access (2-5), when the channel is gone, or when the person is no longer a server manager. It must
-hold **at send time**, so it runs immediately before the create.
+- **No reservation was refused in S1.** The coordinator's table has 39,902 admissions against 39,249 requests at the
+  mock. The 653 extra are the create permits of the 653 wasted passes: 114 ended `reserved` (lane counter
+  `rateDelayed` 114) and 539 ended `blocked`. 39,902 = 5,653 passes × 6 + 5,000 read-backs + 984 identity requests,
+  exactly.
+- **Every wasted pass ran all five preflight reads** and then lost its create permit to **expiry**. A permit expires at
+  the end of the current application window (`_reserve`, `rate_limits.py:631-633`: the expiry is the minimum of the
+  permit time-to-live, every capped row's reset, and the lease), so it lives at most about 1 s.
+  - 17% of the waste died before the seal: the seal found the permit expired, and the post was released unsent.
+  - 83% died between the seal and the consume: `abandon_expired_publish` marked them `blocked`, and the post was
+    released unsent.
+- So a post gate does nothing, because there are no refused reservations to avoid. A bundle reserved before the
+  preflight (p50 1.94 s) would expire almost every time, which is worse.
 
-**Forms, and whether each is equivalent:**
+**What the preflight defends against** is unchanged: sending when the grant was revoked, the bot or the person lost
+access, the channel is gone, or the person is no longer a server manager. It must hold **at send time**.
 
-- **A1. Reserve the post's admissions before the preflight (a bundle).** Reserve the 5 read admissions and the
-  publish permit in one coordinator transaction, then run the preflight and the create on those permits. The checks do
-  not change at all: the same 5 reads, in the same order, still immediately before the create. Only the admission
-  moves earlier, so the witness ends even closer to the create than today. **Equivalent for the witness and the grant
-  check.** One cost from the code: a reserved, unsent permit is pending (`_pending`), so it is charged again at every
-  window restart until it is used. A bundle held for about 1 s (6 sequential requests at about 150 ms) would often be
-  charged in two windows. A permit would be pending for about 0.4 s + d on average instead of d, so by the section 1
-  model the usable budget would fall to about 25/(1 + 0.6) ≈ 16 requests/s. That costs more than the repeats it
-  removes (inference). A1 therefore needs the
-  bundle to be charged once, for example consumed into the window in which each request is sent. That is a
-  coordinator change for the reviewer, together with the sliding-window work.
-- **A1'. A post gate in front of the claim, with no new admission semantics.** Before the preflight, a step takes a
-  post token from a shared token bucket whose rate is the request budget divided by the measured requests per post
-  (25/7.1 ≈ 3.5 posts/s, with headroom). Every request is still admitted one by one, at send time, exactly as today.
-  The gate only keeps the steps that start from asking for more than the window can give, so a started preflight
-  almost always gets its create permit. **Equivalent:** no check changes, and no request can be admitted that today's
-  coordinator would refuse. The cost is the gate's own small transaction per post, a database round trip and no
-  Discord request.
-- **A2. Keep the preflight evidence for a re-claim within a freshness window** (for example 10 s). This saves the
-  repeat, but the witness may then be up to 10 s older than the create. **Not equivalent:** it changes "at send time"
-  to "within 10 s of send time". It is the reviewer's decision, and not needed if A1 or A1' is taken.
+**Candidates that address the measured mechanism (the reviewer's F1, F5 and F2; all three equivalent):**
 
-**Effect.** Requests per post go to about 7.1 (7 plus 0.11 bot identity). It also removes the
-`RateDelayed`-after-preflight releases, whose cooldown can push a post's create behind later posts.
+- **F1. Permit lifetime independent of the window end.** For the application scope, a create permit lives
+  min(permit TTL, lease or approval deadline) instead of until the end of the current window. **Equivalent:**
+  - it is accounting only;
+  - the live guard at consume still re-checks the lease, the approval, the grant and the destination;
+  - an unexpired reserved or sealed permit is still counted as pending at the next window restart, so a late consume
+    cannot exceed the cap.
+  - The reviewer prefers 2-3 s. A 1 s window-length lifetime would still lose 1-3% (inference).
+- **F5. Drop the second lease renewal before the POST** (`hosted_worker.py:1274`). The seal has just extended the lease
+  to 45 s, and consume's live guard repeats every check of the renewal later, with the lock held. The extra
+  whole-document transaction adds no authorization. **Equivalent.** It removes one read-modify-write of the workspace
+  document per post, and it shortens the seal-to-consume interval in which 83% of the permits died. For a 15 MB
+  workspace document (section 7.6) that interval is seconds.
+- **F2. Keep the queue position on a system-caused release.** This is 4.1b below.
 
-**Predicted for 5,000 posts** (section 5): P50 12.0 / P95 22.6 / max 23.8 min at 25 requests/s. That meets the
-standard with almost no margin. At the effective 20.8 requests/s it is 14.3 / 27.2 / 28.6, which **fails P50 and
-P95**. With A1/A1' alone, the outcome depends on how in-flight requests are charged (section 1).
+**Effect (the reviewer's calibrated model, S1 layout, today's rate):** removing the waste is worth P50 −2.0 min, P95
+−6.2 and max −8.2. The median part is the 653 repeated passes (3,918 admissions, 9.8% of all); the tail part is the
+requeue. **A2** (reuse the evidence on a re-claim) is not useful today: the re-claim comes a median 729 s later, so a
+10 s freshness window never applies.
 
-The GitHub-hosted S1 showed that a release costs more than its wasted preflight: the released post also loses its
-place in its workspace (section 7.2). That makes 4.1 worth more than its 0.65 requests per post, and leads to 4.1b.
-
-### 4.1b A released-unsent job keeps its place in its workspace (no request saved; the tail)
+### 4.1b A released-unsent job keeps its place (the reviewer's F2; no request saved; the tail)
 
 **What happens today.**
 
-- A claim stamps `lastDispatchedAt = now` on the job it takes (`hosted_worker.py:688`), before the preflight.
-- When the step is then released unsent, the stamp stays. That happens when the create's admission is refused
-  (`rate_delayed`), or the preflight hits a transient error (`preflight_transient`, `discord/worker.py:100-130`).
-- Inside a workspace, jobs are taken by `lastDispatchedAt` ascending (`hosted_worker.py:552`; nothing else reads the
-  field), so a released post sorts behind every never-claimed post of its workspace.
-- A workspace gets one job per claim and one claim per round, so the post loses a round per position. That is 12 to 14
-  minutes per round at S1's pace.
+- A claim stamps `lastDispatchedAt = now` on the job (`hosted_worker.py:688`) and moves the workspace cursor
+  (`:722-723`), both before the preflight.
+- When the step is then released unsent, both stamps stay. In S1 the cause was a permit that expired (4.1).
+- Inside a workspace, jobs are taken by `lastDispatchedAt` ascending (`:552`; nothing else in `src/` reads the field),
+  and workspaces are taken by their cursor. So the released post sorts behind its workspace's never-claimed posts, and
+  the workspace has used its turn.
 
 Measured on S1 (section 7.2): the 1,304 posts of the 503 workspaces with a release had a median lateness of 26.6 min,
 p95 39.8 and max 40.7, against 15.3 / 30.6 / 32.6 for the others. Every post later than 32.6 min was among them.
 
-**Candidate.** On a release with reason `rate_delayed` (and `shutdown`), restore the job's `lastDispatchedAt` to its
-value before the claim: 0 for a post never claimed before. For example, `discord_worker.begin` keeps the prior value
-next to the lease, and `release_unsent` puts it back. The job keeps its place; its cooldown (`nextAt = now +
-retry_after`) is unchanged. An equivalent form stamps `lastDispatchedAt` when the job's provider request is actually
-sent (create or read-back) rather than at claim.
+**Candidate (with the reviewer's scoping).** On a release whose cause is system-wide (`rate_scope_kind` application or
+permit), restore both the job's `lastDispatchedAt` and the workspace cursor, and make the retry eligible at once. Keep
+today's penalty in three cases:
+- releases caused by one tenant's own resource: a learned or unknown route or channel window, or an embargo scoped to
+  one server;
+- `preflight_transient`;
+- any job after a per-job cap of 3 restorations.
 
-**What the stamp defends, and why the candidate still defends it.**
+**Restoring only the job's stamp does almost nothing** (model: max 40.4 instead of 40.5). The workspace's next claim
+then takes a due read-back and uses up the turn.
 
-1. **Fairness between tenants is untouched.** The tenant order is the workspace cursor (`hint.last_claimed_at`,
-   `pr_worker_tenants.last_claimed_at` and `discordWorkerCursor`, written at claim, `hosted_worker.py:722-723`), not
-   `lastDispatchedAt`. A released job's workspace still goes to the back of the tenant rotation at its claim, so a busy
-   tenant cannot take more turns than today.
-2. **Rotation inside a workspace is kept where it matters.** The stamp stops one job from being taken again and again
-   while its siblings wait. A `rate_delayed` job cannot do that: it is not due again before its cooldown (the claim
-   skips a job whose `nextAt` is in the future, `hosted_worker.py:568`), and the shared budget, not the job, refused it.
-   A job released for its own transient error keeps today's stamp, so a failing job still rotates behind its siblings.
-   It also still spends one of its `MAX_UNSENT_ATTEMPTS`.
-3. **No request, admission or check changes.** The witness and the grant check run exactly as today when the job is
-   taken again. **Equivalent**, with no saving in requests.
+**Fairness argument (from the review, which I agree with):**
 
-**Effect (inference).** A post released at its first claim is taken at its workspace's next claim, one round later,
-not after all its siblings. In S1 that would bring the 503 workspaces' posts close to the others' figures, so P95 and
-max would approach about 30.6 / 32.6 min instead of 36.8 / 40.7. With 4.1 most releases disappear. 4.1b removes the
-penalty for the ones that remain: a Discord route limit, a coordinator hold, or a lease renewal that fails.
+1. The round robin (`hosted_worker.py:471-473`) bounds each tenant's completed work per round. A claim released
+   unsent completed no work. Counting it as the tenant's turn charges the tenant for a system event.
+2. Today 25% of the S1 tenants (503 of 2,000), chosen at random by permit timing, saw their median lateness doubled.
+   That is itself unfair.
+3. A restored turn cannot let a tenant exceed its share. It still gets at most one successful create claim per
+   round, and the extra claim retries the same job. That retry is bounded by `ratePermitRetries` (at most 8, then
+   held), `rateReadRetries` and the cooldown.
+4. Only ordering metadata changes. **Equivalent**, with no request saved.
+
+**Effect (the reviewer's model, today's rate):** P95 36.7 → 34.5 and max 40.5 → 36.5, with P50 unchanged. It
+recovers about two thirds of the requeue tail. With F1 and F5 most releases disappear; F2 keeps the remaining ones from
+costing rounds.
 
 ### 4.2 Claim order: the read-back waits for a full pass over the backlog (customer-visible)
 
@@ -514,6 +518,57 @@ P50 ≈ 2,500 × r / (25 × duty × packing):
 | plus one preflight per sent post (4.1) | 0.98 | 0.84 | about 6.1 | about 12.4 |
 | plus charge-once accounting (4.9) | 0.98 | about 0.95 | about 6.1 | about 10.9 |
 
-P95 and max depend mostly on the release requeue (7.2). 4.1 removes most releases; 4.1b removes the requeue for the
-rest. The `s1levers` profile (S1 as control, S1-lane58, S1-lane70, S1-warm) measures the duty-cycle rows alone. No
-code changes.
+P95 and max depend mostly on the release requeue (7.2). 4.1 (F1 and F5) removes most releases; 4.1b (F2) removes
+the requeue for the rest. The `s1levers` profile (S1 as control, S1-lane58, S1-lane70, S1-warm) measures the
+duty-cycle rows alone. No code changes. The reviewer's calibrated ladder predicts duty about 0.97 for a loop budget of
+58 or 70 s, and P50 about 14.0 / P95 29.0 / max 32.0 with today's waste.
+
+### 7.6 S2: a workspace with 3,000 due posts sends nothing (lane defect D3)
+
+On the runner the 3,000-post workspace sent **0** posts in 50 minutes. Its 3,000 posts ended as follows:
+
+- 2,998 held at approval expiry. Of these, 134 had been released "Await Discord shared rate budget; no POST occurred".
+- 2 uncertain with a sealed intent and no create at the mock (w0-p24, w0-p132).
+
+The 1,999 small workspaces were all served by 17.18 min, against at most 15 min.
+
+**Measured (sandbox reproduction with the same seeding code):**
+
+- The hot workspace's document is **15.7 MB of JSON text** (5.9 MB stored). A 1-post workspace is about 14.5 KB.
+- One read-modify-write of the hot document took 2.7-3.0 s at load 30: SELECT and decode 0.4-0.6 s, dumps 0.2 s,
+  UPDATE 2.1 s. A small workspace takes 12-55 ms.
+- On the runner, the state UPDATE peaked at 4.57 s (`pg_stat_statements`).
+
+**Mechanism (code):**
+
+- The create permit lives at most to the end of the current application window (4.1).
+- The seal and the second lease renewal each read and rewrite the whole document (`authorize_dispatch`,
+  `hosted_worker.py:906-940`; `renew_discord_lease` at `:1274`), and each takes longer than any window remainder.
+- So every attempt died: 134 before the seal and 2 after it.
+- The workspace is served one leased job at a time (`in_flight`, `discord/worker.py:75-78`), so the other 11 loops
+  idled: claimMisses 3,158, idleWaits 2,516.
+- Each claim also sorts and scans all 3,000 jobs (`:552`, `:574`).
+
+F1 and F5 (4.1) remove the window-end death. The document size remains: one post per step at seconds per transaction,
+so the profile `s2sizes` (hot workspace of 100, 300 and 1,000 posts) measures where this design stops keeping up. A
+single channel physically allows about one create per second, so 3,000 posts in one channel need at least 50 minutes
+at any ceiling; how S2 is judged for the hot workspace is a question for the owner.
+
+### 7.7 Admissions that are never observed hold budget forever (lane defects D1 and D2)
+
+- **Mechanism.** `consume()` marks a create `sent` before the POST (`rate_limits.py:700-704`), and a read is inserted
+  `sent`. If `observe()` then fails, the row stays `sent`; a lock timeout of 2 s is enough. `_pending` counts `sent`
+  and `uncertain` admissions with no age bound (`:507-511`), and every window restart gives cap minus pending. Each
+  such admission therefore takes one slot of the 25 and one slot of its route, permanently.
+- **Fdb on the runner.**
+  - The run ended with exactly **25** `sent` admissions.
+  - Creates went 152, 101, 50 and 1 per minute, then 0 for 37 minutes, and 1,195 posts waited "Await Discord shared
+    rate budget".
+  - The database log shows 689 + 119 lock timeouts in the coordinator's statements.
+- **Fcrash.**
+  - 4 kills during a landed create left 4 `sent` admissions.
+  - Each was its channel's first create, on a route still unknown and so capped at 1, which locked those channels.
+  - 5 sibling posts were held at approval expiry.
+- **Elsewhere.** F5xx left 6 `uncertain` and S2 1 `sent`. Every receipt now states these by state, as the launch gate
+  requires. An age bound must make them self-healing (the limiter work).
+
