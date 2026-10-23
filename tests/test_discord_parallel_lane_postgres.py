@@ -1117,6 +1117,41 @@ class ParallelLaneOnPostgres(unittest.TestCase):
             self.assertIn('A Discord embargo blocked the sealed permit before it was consumed; no POST was started; '
                           'intent archived before safe rate wait', [event['message'] for event in job['events']])
 
+    def test_a_global_429_seen_while_permits_are_reserved_but_not_sealed_sends_each_once_after_it(self):
+        """The sibling: three loops each hold a reserved create permit, no intent sealed yet, when a global 429 is
+        observed. seal() refuses each blocked permit as a rate wait for the embargo's remaining time: no post is held
+        (it used to need a new approval), and each is created exactly once, after the embargo."""
+        tenants = [F.Tenant(n) for n in range(3)]
+        worker = self.start(tenants, 1)
+        limiter = self.hosted.providers['discord'].rate_limiter
+        real, lock, reserved, embargo, first = limiter.seal, threading.Lock(), threading.Barrier(3), [], []
+
+        def seal(cur, permit, binding, intent_id, valid_until):
+            with lock:
+                waits = len(first) < 3
+                first.append(permit.id)
+            if waits:  # the first three seals: every loop holds a reserved permit
+                try:
+                    reserved.wait(timeout=30)
+                except threading.BrokenBarrierError:
+                    pass
+                with lock:
+                    if not embargo:
+                        embargo.append(self.global_429(retry=3))
+            return real(cur, permit, binding, intent_id, valid_until)
+        with patch.object(limiter, 'seal', seal):
+            self.drain(worker, 3, seconds=40)
+        found = self.assert_each_created_once_and_verified(3)
+        (seen, until), = embargo
+        during = [wall for times in self.wire.creates.values() for _, _, wall in times if seen <= wall < until]
+        self.assertEqual(during, [], 'no create reached Discord during the embargo')
+        for job in found.values():
+            self.assertIn('A Discord embargo blocked the rate permit before its intent was sealed; frozen approval waits '
+                          'without a POST', [event['message'] for event in job['events']])
+            self.assertNotIn('embargo_blocked_admission',
+                             [entry['unsentProof'] for entry in job.get('discordUnsentDispatches', [])],
+                             'no intent had been sealed under the blocked permit')
+
     def test_control_a_create_whose_transport_ran_and_failed_stays_uncertain(self):
         """The same embargo, observed while one create is inside the transport, which then fails: the request may
         have reached Discord, so that post stays uncertain for reconciliation and is never sent again."""

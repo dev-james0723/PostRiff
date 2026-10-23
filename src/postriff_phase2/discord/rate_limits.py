@@ -672,6 +672,13 @@ class SharedPostgresBudget:
             raise RateCoordinatorUnavailable()
         row = self._admission(cur,permit)
         now = self._policy(cur)
+        if row['state'] == 'blocked' and row['intent'] is None:
+            # observe() blocked this reserved permit (an embargo or hold seen before sealing). No intent exists and
+            # the permit was never consumed, so nothing was or can be sent with it: a rate wait for the embargo's
+            # remaining time, like a permit that expired before sealing.
+            wait = self._blocked_unsent_wait(cur,permit,now)
+            if wait is not None:
+                raise RateDelayed(wait,cause='permit_blocked',scope='embargo')
         if row['state'] != 'reserved':
             raise RateCoordinatorUnavailable()
         if min(row['expires'],valid_until) <= now:
@@ -701,14 +708,9 @@ class SharedPostgresBudget:
                 # observe() blocked this sealed, never-consumed permit (an embargo or hold seen after sealing). Refused
                 # here, before any transport: the fenced caller may prove its intent unsent (confirm_blocked_publish)
                 # and retry once the embargo is over. Only this admission can carry the intent to a POST.
-                cur.execute(f'''SELECT a.sent_at IS NULL,
-                        extract(epoch from (SELECT max(greatest(r.blocked_until,r.circuit_until)) FROM {STATE} r
-                                            WHERE r.scope_key=ANY(a.scope_keys)))::double precision
-                    FROM {ADMISSIONS} a WHERE a.id=%s::uuid''', (permit.id,))
-                unsent, until = cur.fetchone()
-                if unsent:
-                    raise RateDelayed(max(.05,(until or now)-now) if valid_number(until) else .05,
-                                      cause='permit_blocked',scope='embargo')
+                wait = self._blocked_unsent_wait(cur,permit,now)
+                if wait is not None:
+                    raise RateDelayed(wait,cause='permit_blocked',scope='embargo')
             if row['state'] != expected_state or permit.binding_hash and row['intent'] != intent_id:
                 raise RateCoordinatorUnavailable()
             if min(row['expires'],deadline if deadline is not None else MAX_EPOCH) <= now:
@@ -738,6 +740,18 @@ class SharedPostgresBudget:
             (permit.id, intent_id))
         if cur.rowcount != 1:
             raise RateCoordinatorUnavailable()
+
+    def _blocked_unsent_wait(self, cur, permit, now):
+        """For an admission observe() blocked before it was ever consumed: the seconds left of the embargo or circuit
+        on its scopes (at least .05; .05 when a hold blocked it), or None when it was ever sent."""
+        cur.execute(f'''SELECT a.sent_at IS NULL,
+                extract(epoch from (SELECT max(greatest(r.blocked_until,r.circuit_until)) FROM {STATE} r
+                                    WHERE r.scope_key=ANY(a.scope_keys)))::double precision
+            FROM {ADMISSIONS} a WHERE a.id=%s::uuid''', (permit.id,))
+        unsent, until = cur.fetchone()
+        if not unsent:
+            return None
+        return max(.05,until-now) if valid_number(until) else .05
 
     def confirm_blocked_publish(self, cur, permit, binding, intent_id):
         """Prove, in its owner's workspace transaction, that this sealed publish never left: observe() blocked the

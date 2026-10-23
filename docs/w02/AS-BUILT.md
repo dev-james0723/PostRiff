@@ -10,21 +10,22 @@ read from the code.
 | File | Change |
 |---|---|
 | `src/postriff_phase2/discord/lane.py` (new) | The lane: flag and budget parsing, shard parsing, the readiness test (`blocker`), one bounded loop per invocation, the pre-claim coordinator read, the bounded wait for a refused create permit, per-invocation counters and the log line; the minute cron's lag warning (`warn_if_lagging`); the health status (`status`). |
-| `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` only when the lane is on and the static part of `lane.blocker()` says it can run (the minute cron then does not claim Discord), and with the lane on adds the health status (`discordLaneStatus`) and logs the lag warning from its own report and, when the lane owns Discord, the projection; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below). After review: the unsent-permit recovery also accepts a permit an embargo or hold blocked after sealing ("A permit blocked after sealing"). |
-| `src/postriff_phase2/discord/rate_limits.py`, `src/postriff_phase2/social_connectors.py` | After review, at the coordinator's request: `consume()` refuses a sealed permit that an embargo or hold blocked, before any transport, as `permit_blocked` (with the embargo's remaining time), `confirm_blocked_publish()` proves such an intent unsent from its admission row, and the sender turns that refusal into the same pre-transport signal as an expired unconsumed permit ("A permit blocked after sealing", below). |
+| `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` only when the lane is on and the static part of `lane.blocker()` says it can run (the minute cron then does not claim Discord), and with the lane on adds the health status (`discordLaneStatus`) and logs the lag warning from its own report and, when the lane owns Discord, the projection; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below). After review: the seal path and the unsent-permit recovery also release a permit an embargo or hold blocked before it was used ("A permit an embargo blocks before it is used"). |
+| `src/postriff_phase2/discord/rate_limits.py`, `src/postriff_phase2/social_connectors.py` | After review, at the coordinator's request: `seal()` and `consume()` refuse a reserved or sealed permit that an embargo or hold blocked, before any transport, as `permit_blocked` (with the embargo's remaining time), `confirm_blocked_publish()` proves such an intent unsent from its admission row, and the sender turns that refusal into the same pre-transport signal as an expired unconsumed permit ("A permit an embargo blocks before it is used", below). |
 | `src/postriff_phase2/hosted_app.py` | Route `GET /api/cron/discord-worker/<shard>`: cron secret checked before the runtime starts (as the YouTube lanes); flag read per request; the request log files it under `cron`. |
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
 | `tests/test_discord_parallel_lane.py` (new) | 69 offline tests (run under the synthetic fence). |
 | `tests/test_discord_worker_lifecycle.py` | Its in-memory database double answers the lane's projection due probe. |
-| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 43 real-PostgreSQL tests and their fixture; skipped under the fence. |
+| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 44 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
 | `docs/w02/*` (new) | This file, the corrected plan, open questions, monitors, simulation results. |
 
 No migration, no new table, no new queue; the claim, the lease protocol, the approval checks and the launch gate are
-unchanged. One change to the coordinator and the sender, made after review at the coordinator's request: a sealed
-permit that an embargo or hold blocked is proven unsent and released ("A permit blocked after sealing").
+unchanged. One change to the coordinator and the sender, made after review at the coordinator's request: a permit that
+an embargo or hold blocked before it was used, sealed or not, is proven unsent and released ("A permit an embargo
+blocks before it is used").
 
 ## Flags and limits
 
@@ -213,7 +214,7 @@ through the Supabase pooler: about 20 per post (claim, renewals, seal, completio
 connection churn, not the lane, is likely the largest part of a step's real latency; the pooled factory would remove it
 but is a separate setting.
 
-## A permit blocked after sealing
+## A permit an embargo blocks before it is used
 
 An embargo or hold that the coordinator observes after a create's intent was sealed blocks that unused permit
 (`observe()`: every reserved or sealed admission in the blocked scope becomes `blocked`). The post used to end
@@ -230,6 +231,14 @@ or timed-out request, a lost response) and anything without the in-call refusal 
 and sending, a lease taken over, a restart) stays `uncertain` and is reconciled as before [measured on PostgreSQL:
 `test_a_global_429_seen_while_posts_are_sealed_sends_each_once_after_the_embargo` and its two controls].
 
+The sibling, a permit reserved but not yet sealed when the embargo or hold is observed, used to end `held` at the
+seal ("Discord rate permit expired or changed before sealing"): a new approval for a post nothing had touched.
+No intent exists there, so `seal()` now refuses such a permit (state `blocked`, no intent, never sent) as a rate
+wait for the embargo's remaining time, and the worker releases the post the way it releases a permit that expired
+before sealing (same eight-recovery bound; event "A Discord embargo blocked the rate permit before its intent was
+sealed") [measured on PostgreSQL: three loops each holding a reserved permit at a global 429; all three were held
+before the change, all three are sent once after the embargo now].
+
 ## Fail-safe behaviour
 
 What each cause does, in the minute cron's tick, in the 12 shards, and on the customer's post [reasoned from the
@@ -244,10 +253,10 @@ quoted texts are the events and next actions the existing worker writes.
 | Policy expired or not yet valid (a well-formed policy outside its validity) | frozen path: each claimed post is released for five minutes, and held once that wait passes its approval | stop at once, `coordinator_unavailable` | later than scheduled ("Await Discord shared rate budget; no POST occurred and this approval remains frozen"), or held ("Discord rate wait outlasts approval; review the frozen destination and approve again") | WARNING shard lines; `blocker` `coordinator_unavailable`; `policyDaysLeft` at or below 0 |
 | Coordinator degraded in one process | leaves Discord to the lane | that process's loops stop, `coordinator_degraded`; other processes' loops send | sent by the healthy loops | WARNING lines from that process; its `blocker` `coordinator_degraded` |
 | Coordinator degraded in every lane process | leaves Discord to the lane | every loop stops, `coordinator_degraded` | waits; once its approval's hour has passed, held when next claimed ("Discord needs a current human approval bound to this exact destination and content") | WARNING lines; `discord.lane.lagging` after five minutes |
-| Operator hold on the policy row | leaves Discord to the lane (it cannot see the hold) | each loop stops before its next claim, `operator_hold` | waits; a post between sealing and sending whose permit the hold blocked is released unsent and sent once after the hold (Q4; it used to be left `uncertain` with nothing sent) | M6; `operator_hold` lines |
+| Operator hold on the policy row | leaves Discord to the lane (it cannot see the hold) | each loop stops before its next claim, `operator_hold` | waits; a post whose permit the hold blocked before it was used, sealed or not, is released unsent and sent once after the hold (Q4; a sealed one used to be left `uncertain`, a reserved one `held`, with nothing sent) | M6; `operator_hold` lines |
 | Shard crons not reaching the function | leaves Discord to the lane | nothing runs | waits; held after its approval's hour | no lane lines; `discord.lane.lagging` after five minutes |
 | Projection missing | leaves Discord to the lane | stop at once, `schema` | waits; held after its approval's hour | WARNING lines; `discord.lane.lagging` |
-| Embargo, circuit, spent window or invalid-request budget | leaves Discord to the lane | sleep it out, or stop with `rate_wait` | later than scheduled; a post sealed when the embargo is observed is released unsent and sent once after it [measured on PostgreSQL: three loops, a global 429] | M4; `rate_wait` lines |
+| Embargo, circuit, spent window or invalid-request budget | leaves Discord to the lane | sleep it out, or stop with `rate_wait` | later than scheduled; a post whose permit was reserved or sealed when the embargo is observed is released unsent and sent once after it [measured on PostgreSQL: three loops, a global 429, both cases] | M4; `rate_wait` lines |
 
 Recovery, measured on real PostgreSQL (`test_discord_parallel_lane_postgres.py`, section (i)): with rate limits off,
 an expired policy or no coordinator the shards claim nothing and the minute cron does what the rows above say; once the
@@ -300,7 +309,7 @@ which carries no status.
 | A loop crashes between steps | nothing in flight; the next minute's loops continue |
 | A loop crashes mid-step before the intent | lease expires (45 s); released as unsent; sent once later |
 | A loop crashes after sealing or after the create left | never re-posted; the job is 'uncertain' for manual reconciliation; the request's admission keeps a slot until reviewed, and if it was the first request on that route, later posts to that channel wait until review (Q3) |
-| Operator hold set | every loop stops before its next claim; a post between sealing and sending whose permit the hold blocked is released unsent (Q4); queued posts wait |
+| Operator hold set | every loop stops before its next claim; a post whose permit the hold blocked before it was used is released unsent (Q4); queued posts wait |
 | Global 429 or circuit | loops sleep until it ends; the post whose read was refused waits and is sent later; a 429 on a create holds that post for review (existing rule) |
 | Budget exhausted | creates wait for the next window (bounded); reads wait as before |
 | Approval expires in the queue | held for a fresh approval when next claimed (monitor M7) |

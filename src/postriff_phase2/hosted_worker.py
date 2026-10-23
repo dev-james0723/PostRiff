@@ -1033,7 +1033,11 @@ class PostgresWorker:
                     operation['ratePermitRetries'] = operation.get('ratePermitRetries',0) + 1
                     status = discord_worker.release_unsent(job, now, 'rate_delayed',
                         retry_after_seconds=error.retry_after_seconds)
-                    self._event(job, status, 'Discord rate permit expired before intent; frozen approval waits without a POST', at=now)
+                    # No intent was sealed: seal() refused an expired permit, or one an embargo or hold blocked.
+                    self._event(job, status, ('A Discord embargo blocked the rate permit before its intent was sealed; '
+                                              'frozen approval waits without a POST')
+                                if error.rate_cause == 'permit_blocked' else
+                                'Discord rate permit expired before intent; frozen approval waits without a POST', at=now)
                     self.discord_stats['rateDelays'] += 1
                 else:
                     self._event(job,'held','Discord pre-intent permit recovery limit reached; nothing was posted',at=now)

@@ -60,7 +60,7 @@ Q1).
 - Requests per post are six, so every capacity statement in the plan was optimistic by a factor of three.
 - A process that dies with a request in flight leaves a slot counted until reviewed, and can block a channel's first route
   until then (Q3); more loops mean more requests in flight.
-- An operator hold could leave up to one post per loop 'uncertain' with nothing sent (Q4); a sealed post whose permit a hold or embargo blocks is now proven unsent and released (AS-BUILT.md).
+- An operator hold could leave up to one post per loop 'uncertain' with nothing sent (Q4); a post whose permit a hold or embargo blocks before it is used, sealed or not, is now proven unsent and released (AS-BUILT.md).
 - The coordinator's single policy row is a serialization point whose cost is the production database round trip, not
   measured here.
 - Each transaction opens a new database connection unless the pooled factory is enabled: about 20 per post.
