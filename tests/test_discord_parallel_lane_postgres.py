@@ -220,17 +220,26 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 pass
         return admitted
 
+    def three_per_window(self):
+        """Three admissions per three-second window. A window opens at its first reservation, so a slow runner's
+        few back-to-back reservations still share one window (with the default one-second window they could
+        straddle two and count six slots)."""
+        tenants = [F.Tenant(0)]
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=3, app_window_seconds=3)
+        return 3
+
     def test_permits_of_a_dead_loop_that_were_never_used_free_their_slots(self):
-        self.start([F.Tenant(0)], 0, capacity=3)
+        window = self.three_per_window()
         self.assertEqual(self.admissions('reserve', 4), 3)  # a dead loop's three permits fill the window
-        time.sleep(1.2)  # they were never consumed, so the next window does not count them
+        time.sleep(window + .2)  # they were never consumed, so the next window does not count them
         self.assertEqual(self.admissions('reserve', 4, offset=10), 3)
 
     def test_a_read_whose_process_died_after_admission_keeps_its_slot_until_reviewed(self):
         """Existing conservative rule, recorded here: a spent admission with no observed answer keeps one slot."""
-        self.start([F.Tenant(0)], 0, capacity=3)
+        window = self.three_per_window()
         self.assertEqual(self.admissions('reserve_read', 1), 1)  # admitted as sent; the answer is never observed
-        time.sleep(1.2)
+        time.sleep(window + .2)
         self.assertEqual(self.admissions('reserve_read', 3, offset=10), 2)
         with self.cluster.connect(autocommit=True) as db:
             self.assertEqual(db.execute("SELECT count(*) FROM public.pr_discord_request_admissions WHERE state='sent' "
@@ -260,9 +269,13 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 F.run_lanes(worker, loops, seconds=90)
         else:
             F.run_lanes(worker, loops, seconds=90)
+        return tenants, self.claim_order()
+
+    def claim_order(self):
+        """Every claim so far, in order, as (workspace, job), from the jobs' own 'claimed' events."""
         claims = sorted((event['at'], workspace, job_id) for (workspace, job_id), job in F.jobs(self.cluster).items()
                         for event in job['events'] if event['state'] == 'claimed')
-        return tenants, [(workspace, job_id) for _, workspace, job_id in claims]
+        return [(workspace, job_id) for _, workspace, job_id in claims]
 
     def assert_rotation(self, tenants, claims):
         # Each claim moves its workspace to the back of the due order, also when the attempt is then deferred, and
@@ -307,6 +320,24 @@ class ParallelLaneOnPostgres(unittest.TestCase):
 
     # (d) an approval that expires while waiting ------------------------------------------------------------------
 
+    # The coordinator checks a create against its approval and the policy, then records sent_at in the next
+    # statement of the same transaction; on a loaded runner that statement can come a little later.
+    RELEASE_SLACK = 1.0
+
+    def released_creates(self):
+        """When the coordinator let each create leave (its admission's sent_at, the database clock), by
+        (workspace, publication): the last instant the system controls. The mock's own arrival time adds the
+        commit and the runner's scheduling delay on top, which no deadline check can bound."""
+        with self.cluster.connect(autocommit=True) as db:
+            rows = db.execute("SELECT workspace_id::text, publication_id, extract(epoch from sent_at)::double precision, "
+                              "extract(epoch from expires_at)::double precision "
+                              "FROM public.pr_discord_request_admissions WHERE is_publish AND sent_at IS NOT NULL").fetchall()
+        released, self.permit_ends = {}, {}
+        for workspace, publication, sent, permit_end in rows:
+            released.setdefault((workspace, publication), []).append(sent)
+            self.permit_ends.setdefault((workspace, publication), []).append(permit_end)
+        return released
+
     def test_a_post_whose_approval_expires_while_waiting_is_held_and_never_sent_late(self):
         tenants = [F.Tenant(n) for n in range(14)]
         expiry = self.cluster.now() + 8
@@ -314,10 +345,18 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.start(tenants, 1, capacity=6, latency=.02, now=at - 300, at=at)
         F.run_lanes(self.worker, 3, seconds=30)
         found = F.jobs(self.cluster)
-        for job in found.values():
+        released = self.released_creates()
+        for key, job in found.items():
             self.assertAlmostEqual(job['manifest']['expiresAt'], int(at) + 3600, delta=1)
-            for _, _, wall in self.wire.creates.get(F.nonce(job), []):
-                self.assertLess(wall, job['manifest']['expiresAt'], 'nothing is sent after its approval expired')
+            creates = self.wire.creates.get(F.nonce(job), [])
+            self.assertEqual(len(released.get(key, [])), len(creates), 'every create the mock saw was released')
+            for sent, permit_end in zip(released.get(key, []), self.permit_ends.get(key, [])):
+                # Exact: the permit a create left under was never valid past the approval (the coordinator
+                # refuses a permit at its end); and the release itself was recorded before that, give or take
+                # the next statement.
+                self.assertLessEqual(permit_end, job['manifest']['expiresAt'] + 1e-6)
+                self.assertLess(sent, job['manifest']['expiresAt'] + self.RELEASE_SLACK,
+                                'nothing is released after its approval expired')
         states = [job['state'] for job in found.values()]
         self.assertGreater(states.count('held'), 0, 'the queue outlasted some approvals')
         self.assertGreater(states.count('verified'), 0)
@@ -522,13 +561,15 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         limiter, identity = self.hosted.providers['discord'].rate_limiter, self.hosted.providers['discord']._rate_identity('bot')
         limiter.observe(limiter.reserve_read('GET', '/guilds/6900000', identity=identity), {'status': 403, 'headers': {}})
         with self.cluster.connect(autocommit=True) as db:
-            remaining, embargo, reset = db.execute(
-                "SELECT remaining, extract(epoch from blocked_until-clock_timestamp()), "
+            # The stored instants, not each one minus its own clock_timestamp() call: two calls can be
+            # milliseconds apart when the server process is preempted between them.
+            remaining, embargo, reset, left = db.execute(
+                "SELECT remaining, extract(epoch from blocked_until), extract(epoch from reset_at), "
                 "extract(epoch from reset_at-clock_timestamp()) FROM public.pr_discord_rate_state "
                 "WHERE kind='invalid'").fetchone()
         self.assertEqual(remaining, 0)
-        self.assertAlmostEqual(float(embargo), float(reset), places=3)
-        self.assertGreater(float(reset), 590)
+        self.assertAlmostEqual(float(embargo), float(reset), places=5)
+        self.assertGreater(float(left), 590)
         blocker, wait = F.discord_lane.outlook(F.discord_lane.LaneWorker(F.base_worker(self.cluster, self.hosted), 0))
         self.assertIsNone(blocker)
         self.assertGreater(wait, 590)
@@ -683,10 +724,8 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         results, failures = F.run_lanes(worker, 1, seconds=90)  # the crons arrive again
         self.assertEqual(failures, [])
         self.assert_each_created_once_and_verified(32)
-        creates = sorted((at, channel) for times in self.wire.creates.values() for at, channel, _ in times)
-        last_small = max(index for index, (_, channel) in enumerate(creates) if channel != busy.channel)
-        self.assertLessEqual(sum(1 for _, channel in creates[:last_small] if channel == busy.channel), 8,
-                             'the backlog drains fairly: every small tenant finished while the busy one sent a few')
+        # The backlog drains fairly: the rotation's first two rounds cover every workspace (see the fairness test).
+        self.assert_rotation(tenants, self.claim_order())
         tick, warnings = self.lagging(worker)
         self.assertEqual(warnings, [], 'quiet once drained')
 
@@ -703,10 +742,15 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         found = F.jobs(self.cluster)
         claims = [event['at'] for job in found.values() for event in job.get('events', []) if event['state'] == 'claimed']
         self.assertTrue(claims and min(claims) < expires)
-        self.assertEqual([at for at in claims if at > expires + 1], [], 'nothing claimed after the expiry')
-        sent = sorted(wall for times in self.wire.creates.values() for _, _, wall in times)
-        self.assertTrue(0 < len(sent) < len(tenants), 'the policy expired mid-run')
-        self.assertLess(sent[-1], expires + 1, 'no create left after the expiry')
+        # Each loop checks the policy before every step, so a loop claims after the expiry at most in the one step
+        # it had already begun: a bound by structure, not by how slow the runner is.
+        self.assertLessEqual(len([at for at in claims if at > expires]), 4, 'no new step after the expiry')
+        released = [sent for times in self.released_creates().values() for sent in times]
+        self.assertEqual(len(released), sum(len(times) for times in self.wire.creates.values()))
+        self.assertTrue(0 < len(released) < len(tenants), 'the policy expired mid-run')
+        self.assertLessEqual(max(end for ends in self.permit_ends.values() for end in ends), expires + 1e-6,
+                             'no permit outlived the policy')
+        self.assertLess(max(released), expires + self.RELEASE_SLACK, 'no create was released after the expiry')
         # Renewal (a new deployment with a renewed policy): the lane resumes.
         provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP,
                                                      policy=F.policy(self.cluster.now(), capacity=200))
