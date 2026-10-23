@@ -246,7 +246,9 @@ sent to the coordinator and routed to the W-02 fix agent: keep the pure readines
 broken configuration stays), then one connection with one statement (the soonest-due read, an undefined table meaning
 `schema`), and stop `idle` before the coordinator read and the claim when nothing is due within the idle horizon. The
 lane claims only through `hint.next_at <= now`, so no claimable work is skipped. Idle cost: 1 connection, 1 statement.
-Options (d) and (e) (crons only once the flag is on; fewer shards when idle) were rejected.
+Options (d) and (e) (crons only once the flag is on; fewer shards when idle) were rejected. The W-02 agent implemented
+it in `820d8c7d` (merged here in `45352b92`); measured by the impact suite: an idle shard now opens 1 connection for 1
+statement (its pin updated in this branch).
 
 **SC-1 (non-Discord changes riding in the candidate).** For the owner; sizes are the lines a strip would touch.
 

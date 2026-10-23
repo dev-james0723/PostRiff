@@ -295,12 +295,13 @@ class SharedPathsLiveVersusCandidate(unittest.TestCase):
         self.assertEqual((self.rc['shard-off']['enabled'], self.rc['shard-off']['processed'], self.rc['shard-off']['status']['blocker']), (False, 0, 'disabled'))
 
     def test_pins_w02_shard_cost_with_the_lane_flag_on_and_no_discord_work(self):
-        """If the lane flag is turned on: each shard invocation with nothing to send opens 4 connections for 7 reads and
-        stops idle (12 shards x 1,440 minutes = about 69,000 connections a day before any Discord post)."""
+        """If the lane flag is turned on: each shard invocation with nothing to send opens 1 connection for 1 read (the
+        soonest-due projection read) and stops idle: 12 shards x 1,440 minutes = about 17,000 connections a day before
+        any Discord post. RC2-1, fixed on the W-02 branch in 820d8c7d; it was 4 connections for 7 reads (about 69,000)."""
         if not self.rc.get('laneAvailable'):
             self.skipTest('this candidate has no W-02 lane')
         phase = self.rc['phases']['shard-on']
-        self.assertEqual((phase['connections'], len(phase['statements']), phase['writes'], phase['rowsChanged'], phase['http']), (4, 7, [], {}, []))
+        self.assertEqual((phase['connections'], len(phase['statements']), phase['writes'], phase['rowsChanged'], phase['http']), (1, 1, [], {}, []))
         self.assertEqual((self.rc['shard-on']['enabled'], self.rc['shard-on']['stoppedBy']), (True, 'idle'))
 
     # --- other lanes inside the shared approval path ------------------------------------------------------------------
