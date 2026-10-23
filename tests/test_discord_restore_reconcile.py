@@ -206,7 +206,16 @@ class MatchingRules(unittest.TestCase):
         view = T.job_view('w', job(1, 'x', due=RESTORE - 600, expires=RESTORE - 10))
         self.assertFalse(T.could_have_been_sent(view, RESTORE, END, 5), 'its approval ended before the interval')
         view = T.job_view('w', job(1, 'x', due=RESTORE - 600, leaseUntil=END + 30))
-        self.assertFalse(T.could_have_been_sent(view, RESTORE, END, 5), 'leased past the interval end')
+        self.assertTrue(T.could_have_been_sent(view, RESTORE, END, 5), 'the lease holder may send at once')
+
+    def test_regression_a_post_leased_past_the_interval_end_and_then_deleted_is_held_not_resent(self):
+        """Drill finding (mid-run restore point): a worker held this post's lease at the restore point, sent it, and
+        a moderator deleted the message. The lease ran past the interval end. Judging 'not sent' from leaseUntil
+        resent it; it must be held."""
+        leased = job(1, 'Leased, sent, deleted', state='submitting', due=RESTORE - 30, leaseOwner='discord-lane-0-x',
+                     leaseUntil=END + 40)
+        result, _, _ = decide([leased], {'7000001': history(message(RESTORE + 1, 'Unrelated'))})
+        self.assertEqual(result['job-1'], ('ambiguous', 'due_in_interval_not_found'))
 
     def test_unclaimed_bot_messages_and_duplicates_already_visible_are_counted(self):
         verified = job(1, 'Posted twice', state='verified', providerReference='7000001/' + snowflake(RESTORE + 10))

@@ -307,9 +307,13 @@ def _near(view, message, lower):
 
 
 def could_have_been_sent(view, restore_point, interval_end, skew):
-    """Was there a moment inside the rewound interval when the worker could send this post with a valid approval?"""
-    due = max(view['nextAt'], view['leaseUntil'])
-    return max(due, restore_point) <= min(interval_end, view['expiresAt']) + skew
+    """Was there a moment inside the rewound interval when the worker could send this post with a valid approval?
+
+    The earliest moment is nextAt (a claim needs nextAt <= now). A lease does NOT delay it: the worker holding the
+    lease at the restore point may send at any moment of its lease; leaseUntil only says when another worker may take
+    over. (The first version used max(nextAt, leaseUntil); the mid-run drill caught a post that was leased past the
+    interval end, sent, deleted by a moderator, judged 'not sent' and sent again.)"""
+    return max(view['nextAt'], restore_point) <= min(interval_end, view['expiresAt']) + skew
 
 
 def plan(views, channels, owned, *, restore_point, interval_end, bot_id, skew=5.0):
