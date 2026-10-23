@@ -160,7 +160,8 @@ class CronRoute(unittest.TestCase):
                                                          'shard': 3, 'processed': 0, 'status': {
                                                              'version': 1, 'enabled': False, 'ready': False,
                                                              'blocker': 'disabled', 'maxSeconds': 50.0, 'maxSteps': 600,
-                                                             'shards': 12, 'policyDaysLeft': None}}})
+                                                             'shards': 12, 'policyDaysLeft': None,
+                                                             'quarantined': lane.quarantined()}}})
         app._runtime.assert_not_called()
 
     def test_unknown_shards_and_methods_are_not_routes(self):
@@ -376,12 +377,12 @@ class HealthStatus(unittest.TestCase):
     """lane.status(): a stable, pure health indication in the minute cron's report and every shard answer."""
     SHAPE = {'version': int, 'enabled': bool, 'ready': bool, 'blocker': (str, type(None)),
              'maxSeconds': (float, type(None)), 'maxSteps': (int, type(None)), 'shards': int,
-             'policyDaysLeft': (float, type(None))}
+             'policyDaysLeft': (float, type(None)), 'quarantined': int}
 
     def test_the_shape_is_stable_and_documented(self):
         value = lane.status(discord_social(), NOW, ON)
         self.assertEqual(value, {'version': 1, 'enabled': True, 'ready': True, 'blocker': None, 'maxSeconds': 50.0,
-                                 'maxSteps': 600, 'shards': 12, 'policyDaysLeft': 1.0})
+                                 'maxSteps': 600, 'shards': 12, 'policyDaysLeft': 1.0, 'quarantined': lane.quarantined()})
         for name, setup, _ in NOT_READY + (DEGRADED,):
             for values in (ON, {}, {**ON, lane.ENV_SECONDS: 'x'}):
                 with self.subTest(name, values=values):
@@ -997,6 +998,115 @@ class CreatePermitWait(unittest.TestCase):
             paced.reserve_discord_send({})
         self.assertLessEqual(clock.now, 1.0)
         self.assertEqual(len(calls), 3)
+
+
+class Quarantine(unittest.TestCase):
+    """G2E-C-10: a document the claim cannot read stops only its own workspace. The real-PostgreSQL proof, with other
+    workspaces to go on to, is in test_discord_parallel_lane_postgres.py (section m); here the claim's own rules."""
+    def setUp(self):
+        for item in (patch.dict(security_holds._INSTALLED, {'readable': True, 'checked': float('-inf')}),
+                     patch('postriff_phase2.billing.require_publishing', return_value=None),
+                     patch('socket.socket.connect', side_effect=AssertionError('Real network forbidden'))):
+            item.start()
+            self.addCleanup(item.stop)
+        self.db = MemoryDatabase(FlagOffIsTheFrozenBase.queue())
+        base = PostgresWorker(self.db.connection, discord_social(self.db.connection), clock=lambda: NOW + 301,
+                              worker_id='minute-worker', discord_workers=True)
+        self.worker = lane.LaneWorker(base, 0)
+
+    def failing_claim(self, errors):
+        """Replace the inherited claim by one that reads WORKSPACE and raises each error in turn, then succeeds."""
+        calls = []
+
+        def claim(worker, **options):
+            calls.append(options)
+            worker._examining = WORKSPACE
+            if len(calls) <= len(errors):
+                raise errors[len(calls) - 1]
+            return 'claimed'
+        return patch.object(PostgresWorker, '_claim', claim), calls
+
+    def test_a_failure_reading_a_document_sets_that_workspace_aside_and_the_claim_goes_on(self):
+        for error in (AttributeError('x'), TypeError('x'), KeyError('x'), IndexError('x'), ValueError('x')):
+            with self.subTest(error=type(error).__name__):
+                replaced, calls = self.failing_claim([error])
+                with replaced, patch.object(lane.LaneWorker, '_quarantine') as quarantine:
+                    self.assertEqual(self.worker.claim(discord_only=True), 'claimed')
+                self.assertEqual(len(calls), 2, 'the claim ran again')
+                quarantine.assert_called_once_with(WORKSPACE, error)
+
+    def test_a_failure_that_is_not_the_shape_of_a_document_is_raised_as_before(self):
+        for error in (RuntimeError('database down'), AlphaError('Worker claim lost its workspace revision.', 409),
+                      OSError('connection lost')):
+            with self.subTest(error=type(error).__name__):
+                replaced, calls = self.failing_claim([error])
+                with replaced, patch.object(lane.LaneWorker, '_quarantine') as quarantine, self.assertRaises(type(error)):
+                    self.worker.claim(discord_only=True)
+                self.assertEqual((len(calls), quarantine.called), (1, False))
+
+    def test_the_third_failure_in_one_claim_is_the_claim_code_not_a_document_and_is_raised(self):
+        replaced, calls = self.failing_claim([TypeError('1'), TypeError('2'), TypeError('3'), TypeError('4')])
+        with replaced, patch.object(lane.LaneWorker, '_quarantine') as quarantine, self.assertRaises(TypeError) as raised:
+            self.worker.claim(discord_only=True)
+        self.assertEqual(str(raised.exception), '3')
+        self.assertEqual((len(calls), quarantine.call_count), (lane.MAX_QUARANTINES_PER_CLAIM + 1,
+                                                              lane.MAX_QUARANTINES_PER_CLAIM))
+
+    def test_a_failure_before_any_workspace_is_read_is_raised(self):
+        def claim(worker, **options):
+            raise TypeError('before the first candidate')
+        with patch.object(PostgresWorker, '_claim', claim), patch.object(lane.LaneWorker, '_quarantine') as quarantine, \
+                self.assertRaises(TypeError):
+            self.worker.claim(discord_only=True)
+        self.assertFalse(quarantine.called)
+
+    def test_only_the_loops_unscoped_discord_claim_is_guarded(self):
+        scope = dict(workspace_id=WORKSPACE, job_id='j', approval_digest='a' * 64, dispatch_principal='p')
+        for name, options in (('scoped', {**scope, 'discord_only': True}), ('not Discord', {}),
+                              ('youtube', {'youtube_only': True})):
+            with self.subTest(name):
+                replaced, calls = self.failing_claim([TypeError('x')])
+                with replaced, patch.object(lane.LaneWorker, '_quarantine') as quarantine, self.assertRaises(TypeError):
+                    self.worker.claim(**options)
+                self.assertEqual((len(calls), quarantine.called), (1, False))
+
+    def test_a_workspace_that_cannot_be_set_aside_keeps_the_original_failure(self):
+        error = AttributeError('the document')
+        replaced, _ = self.failing_claim([error])
+        with replaced, patch.object(lane.LaneWorker, '_quarantine', side_effect=RuntimeError('database down')), \
+                self.assertRaises(AttributeError) as raised:
+            self.worker.claim(discord_only=True)
+        self.assertIs(raised.exception, error)
+
+    def test_setting_aside_dates_the_cursor_ahead_counts_and_logs_one_line_without_identifiers(self):
+        before = lane.quarantined()
+        with self.assertLogs('postriff.request', 'WARNING') as logged:
+            self.worker._quarantine(WORKSPACE, AttributeError("'NoneType' object has no attribute 'append'"))
+        (record,) = logged.records
+        entry = json.loads(record.getMessage())
+        self.assertEqual(entry, {'event': 'discord.lane.quarantined', 'error': 'AttributeError',
+                                 'quarantineSeconds': lane.QUARANTINE_SECONDS})
+        for private in (WORKSPACE, 'minute-worker', self.worker.worker_id, 'NoneType', 'append'):
+            self.assertNotIn(private, record.getMessage())
+        cursor = self.db.state['phase2'][hosted_worker.discord_worker.CURSOR]
+        until = self.db.now + lane.QUARANTINE_SECONDS
+        self.assertEqual(cursor, {'version': 1, 'lastClaimedAt': until, 'quarantinedUntil': until})
+        self.assertEqual((self.worker.discord_stats['quarantined'], lane.quarantined() - before), (1, 1))
+        self.assertEqual(lane.status(self.worker.social, NOW + 301, ON)['quarantined'], lane.quarantined())
+        for job in self.db.state['phase2']['jobs']:
+            self.assertEqual(job['state'], 'scheduled', 'only the cursor changed')
+            self.assertNotIn('lastDispatchedAt', job)
+
+    def test_a_workspace_set_aside_is_not_offered_again_until_its_window_ends_and_then_is_claimed_by_itself(self):
+        self.worker._quarantine(WORKSPACE, TypeError())
+        self.assertIsNone(self.worker.claim(discord_only=True), 'skipped: nothing else is due')
+        self.assertEqual(self.worker.discord_stats['claimMisses'], 1)
+        self.assertEqual({job['state'] for job in self.db.state['phase2']['jobs']}, {'scheduled'})
+        self.db.state['phase2'][hosted_worker.discord_worker.CURSOR]['quarantinedUntil'] = NOW + 300  # ended
+        claimed = self.worker.claim(discord_only=True)
+        self.assertEqual(claimed['workspaceId'], WORKSPACE)
+        self.assertNotIn('quarantinedUntil', self.db.state['phase2'][hosted_worker.discord_worker.CURSOR],
+                         'the first normal claim clears the mark')
 
 
 if __name__ == '__main__':

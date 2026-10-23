@@ -1065,7 +1065,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
         result, counted = self.shard()
         self.assertEqual((result['stoppedBy'], counted.connections, len(counted.statements)), ('idle', 1, 1))
-        self.assertEqual(counted.statements, [F.discord_lane._SOONEST])
+        self.assertEqual(counted.statements, [F.discord_lane._CLAIMABLE])
         self.assertEqual((result['counters']['steps'], result['counters']['claimed']), (0, 0))
         self.assertEqual(self.wire.calls, [])
         # Idle by the loop's own rule: the soonest due work lies beyond the idle horizon.
@@ -1078,7 +1078,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.start(tenants, 1)
         result, counted = self.shard()
         # The due probe in place of the schema check, then the loop: its coordinator read before the first claim.
-        self.assertEqual(counted.statements[0], F.discord_lane._SOONEST)
+        self.assertEqual(counted.statements[0], F.discord_lane._CLAIMABLE)
         self.assertIn('pr_discord_rate_state', counted.statements[1])
         self.assertEqual((result['counters']['posted'], result['counters']['verified']), (2, 2))
         self.assert_each_created_once_and_verified(2)
@@ -1305,6 +1305,138 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         (warning,) = warnings
         self.assertGreater(warning['oldestEligibleLagSeconds'], 600)
         self.assertEqual((warning['laneOwnsDiscord'], warning['laneBlocker']), (True, None))
+
+    # (m) a document the claim cannot read stops only its own workspace (G2E-C-10) ----------------------------------
+
+    def corrupt(self, workspace, damage, *, job=0):
+        """Damage one job of a workspace's stored document, the way a bad write or an old migration could."""
+        with self.cluster.connect() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (workspace,)).fetchone()[0]
+            damage(state['phase2']['jobs'][job])
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
+                       (json.dumps(state), workspace))
+
+    def poisoned(self, damage, *, workspaces=4, bad_posts=2):
+        """The workspace first in the claim order (the lowest id, never served) has `bad_posts` due posts, the first
+        damaged; the others have one each. Returns (bad tenant, healthy tenants, the damaged post's nonce, worker)."""
+        tenants = sorted((F.Tenant(n) for n in range(workspaces)), key=lambda tenant: tenant.id)
+        bad, healthy = tenants[0], tenants[1:]
+        states = F.seed(self.cluster, [bad], bad_posts)
+        F.seed(self.cluster, healthy, 1)
+        nonce = F.nonce(states[bad.id]['phase2']['jobs'][0])
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire)
+        self.corrupt(bad.id, damage)
+        return bad, healthy, nonce, F.base_worker(self.cluster, self.hosted)
+
+    def quarantine_lines(self, logged):
+        return [json.loads(record.getMessage()) for record in logged.records
+                if 'discord.lane.quarantined' in record.getMessage()]
+
+    def assert_healthy_workspaces_created_once(self, healthy):
+        found = F.jobs(self.cluster)
+        for tenant in healthy:
+            (job,) = [job for (workspace, _), job in found.items() if workspace == tenant.id]
+            self.assertEqual(job['state'], 'verified', 'a healthy workspace is served')
+            self.assertEqual(len(self.wire.creates[F.nonce(job)]), 1)
+        self.assertEqual(self.wire.duplicates(), 0)
+
+    def test_a_job_document_the_claim_cannot_read_stops_only_its_own_workspace(self):
+        """Before: a job with `events: null` raised in every claim, and the workspace stayed first in the claim order,
+        so the healthy workspaces' due posts were never claimed (G2E-C-10)."""
+        bad, healthy, damaged, worker = self.poisoned(lambda job: job.__setitem__('events', None))
+        before = F.discord_lane.quarantined()
+        with self.assertLogs('postriff.request', 'WARNING') as logged:
+            results = self.drain(worker, 1, seconds=30)  # failures, if any, are asserted by drain
+        self.assertNotIn('error', {result['stoppedBy'] for result in results}, 'the loop was not stopped by the document')
+        self.assert_healthy_workspaces_created_once(healthy)
+        self.assertEqual(self.wire.creates.get(damaged, []), [], 'the damaged post was not sent')
+        # Counted, and logged as one line with the exception class only.
+        self.assertEqual(sum(result['counters']['quarantined'] for result in results), 1)
+        (line,) = self.quarantine_lines(logged)
+        self.assertEqual(line, {'event': 'discord.lane.quarantined', 'error': 'AttributeError',
+                                'quarantineSeconds': F.discord_lane.QUARANTINE_SECONDS})
+        raw = '\n'.join(record.getMessage() for record in logged.records)
+        found = F.jobs(self.cluster)
+        for private in (bad.id, bad.guild, bad.channel, damaged, *[job['id'] for job in found.values()]):
+            self.assertNotIn(private, raw, 'no identifier is logged')
+        self.assertEqual(F.discord_lane.quarantined() - before, 1)
+        self.assertEqual(F.discord_lane.status(self.hosted, time.time())['quarantined'], F.discord_lane.quarantined())
+        # Only its rotation cursor changed: dated ahead, behind every other workspace.
+        with self.cluster.connect(autocommit=True) as db:
+            state, projected = db.execute(
+                'SELECT w.state,p.last_claimed_at FROM public.pr_workspaces w JOIN public.pr_discord_worker_projection p '
+                'ON p.workspace_id=w.id WHERE w.id=%s', (bad.id,)).fetchone()
+        cursor = state['phase2'][discord_worker.CURSOR]
+        self.assertGreater(cursor['quarantinedUntil'], self.cluster.now() + F.discord_lane.QUARANTINE_SECONDS - 60)
+        self.assertEqual((cursor['lastClaimedAt'], projected), (cursor['quarantinedUntil'], cursor['quarantinedUntil']))
+        self.assertEqual([job['state'] for job in state['phase2']['jobs']], ['scheduled', 'scheduled'])
+        self.assertIsNone(state['phase2']['jobs'][0]['events'], 'the damaged document is left for a person to repair')
+
+    def test_a_workspace_set_aside_is_skipped_until_its_window_ends_and_a_repaired_document_is_claimed_again(self):
+        bad, healthy, damaged, worker = self.poisoned(lambda job: job.__setitem__('attempts', None))
+        results = self.drain(worker, 1, seconds=30)
+        self.assertEqual(sum(result['counters']['quarantined'] for result in results), 1)
+        self.assert_healthy_workspaces_created_once(healthy)
+        calls = len(self.wire.calls)
+        # Inside the window nothing is read, claimed, counted or logged again, and an idle shard stops at its first look.
+        with self.assertNoLogs('postriff.request', 'WARNING'):
+            results, failures = F.run_lanes(worker, 2, seconds=30)
+        self.assertEqual(failures, [])
+        self.assertEqual({r['stoppedBy'] for r in results}, {'idle'})
+        self.assertEqual((sum(r['counters']['quarantined'] for r in results), sum(r['counters']['steps'] for r in results)),
+                         (0, 0))
+        self.assertEqual(len(self.wire.calls), calls, 'no request for the workspace set aside')
+        # Repaired, and its window over: the same workspace is claimed again, with no restart or manual step.
+        now = self.cluster.now()
+        self.corrupt(bad.id, lambda job: job.__setitem__('attempts', []))
+        with self.cluster.connect() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (bad.id,)).fetchone()[0]
+            state['phase2'][discord_worker.CURSOR].update(quarantinedUntil=now - 1, lastClaimedAt=now - 1)
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
+                       (json.dumps(state), bad.id))
+        self.drain(worker, 1, seconds=30)
+        found = F.jobs(self.cluster)
+        self.assertEqual(sorted({job['state'] for job in found.values()}), ['verified'])
+        self.assertEqual(len(self.wire.creates[damaged]), 1)
+        self.assertEqual(self.wire.duplicates(), 0)
+
+    def test_the_malformed_shapes_the_claim_already_handles_never_reach_the_guard(self):
+        """The review found six other shapes the existing checks hold or skip without raising. They still do, with
+        healthy workspaces claimed after them, and the guard is not involved (nothing is set aside)."""
+        shapes = {
+            'manifest.discord removed': lambda job: job['manifest'].pop('discord'),
+            'manifest.channelId points nowhere': lambda job: job['manifest'].__setitem__('channelId', 'no-such-channel'),
+            'manifest removed': lambda job: job.pop('manifest'),
+            'nextAt is a string': lambda job: job.__setitem__('nextAt', 'soon'),
+            'approvalDigest missing': lambda job: job.pop('approvalDigest'),
+            'discordAuthorization removed': lambda job: job.pop('discordAuthorization'),
+        }
+        for name, damage in shapes.items():
+            with self.subTest(name):
+                self.cluster.reset()
+                bad, healthy, damaged, worker = self.poisoned(damage)
+                with self.assertNoLogs('postriff.request', 'WARNING'):
+                    results, failures = F.run_lanes(worker, 1, seconds=30)
+                self.assertEqual(failures, [])
+                self.assertEqual(results[0]['counters']['quarantined'], 0)
+                self.assert_healthy_workspaces_created_once(healthy)
+                self.assertEqual(self.wire.creates.get(damaged, []), [], 'the damaged post was not sent')
+
+    def test_a_failure_in_every_workspace_is_the_claim_code_not_a_document_and_still_raises(self):
+        """Two workspaces are set aside, the third failure in the same claim is raised: a defect that hits every
+        workspace is loud (as before), not a queue quietly set aside."""
+        tenants = sorted((F.Tenant(n) for n in range(4)), key=lambda tenant: tenant.id)
+        F.seed(self.cluster, tenants, 1)
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire)
+        for tenant in tenants:
+            self.corrupt(tenant.id, lambda job: job.__setitem__('events', None))
+        lane_worker = F.discord_lane.LaneWorker(F.base_worker(self.cluster, self.hosted), 0)
+        with F.no_billing(), self.assertRaises(AttributeError):
+            lane_worker.claim(discord_only=True)
+        self.assertEqual(lane_worker.discord_stats['quarantined'], F.discord_lane.MAX_QUARANTINES_PER_CLAIM)
+        self.assertEqual(self.wire.calls, [])
 
 
 if __name__ == '__main__':

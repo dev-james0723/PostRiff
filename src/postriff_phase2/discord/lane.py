@@ -20,6 +20,7 @@ import math
 import os
 import random
 import re
+import threading
 import time
 import uuid
 
@@ -60,6 +61,12 @@ MAX_IDLE_MISSES = 6
 # unleased Discord job in its bounded sample) is later than this: shard crons that do not fire or cannot claim, a lane
 # that cannot keep up with a burst, or a minute tick that kept Discord because the lane could not run anywhere.
 LAG_WARNING_SECONDS = 300
+# A document the claim cannot read (a null where a list belongs, a missing key) is set aside, not retried: its workspace
+# is skipped this long, behind every other workspace, and at most this many are set aside by one claim; one more is
+# not a document but the claim code itself, and raises as before.
+QUARANTINE_SECONDS = 300
+MAX_QUARANTINES_PER_CLAIM = 2
+SHAPE_ERRORS = (AttributeError, IndexError, KeyError, TypeError, ValueError)
 _SHARD = re.compile(r'^(0|[1-9][0-9]?)$')
 _GUARDS = ('00:', '10:', '11:', '20:')  # application policy, bot global, bot credential, invalid-request budget
 _OUTLOOK = '''WITH observed AS (SELECT extract(epoch from clock_timestamp())::double precision AS at)
@@ -68,9 +75,22 @@ _OUTLOOK = '''WITH observed AS (SELECT extract(epoch from clock_timestamp())::do
     FROM observed LEFT JOIN public.pr_discord_rate_state r ON r.scope_key=ANY(%s::text[])'''
 _SOONEST = '''SELECT extract(epoch from clock_timestamp())::double precision,min(next_at)
     FROM public.pr_discord_worker_projection WHERE next_at IS NOT NULL'''
+# The loop's own look at the queue: _SOONEST without the workspaces set aside (LaneWorker.claim dates their rotation
+# cursor ahead and skips them). Counting them would keep every shard busy claiming nothing until their window ends;
+# the lag warning keeps reading _SOONEST, because their posts are late all the same.
+_CLAIMABLE = '''SELECT extract(epoch from clock_timestamp())::double precision,min(next_at)
+    FROM public.pr_discord_worker_projection
+    WHERE next_at IS NOT NULL AND last_claimed_at<=extract(epoch from clock_timestamp())::double precision'''
 COUNTERS = ('steps', 'claimed', 'posted', 'verified', 'held', 'uncertain', 'rateDelayed', 'leaseLost', 'recoveries',
             'retries', 'deadLetters', 'claimMisses', 'rejected', 'notSent', 'uncertainCreates', 'rateWaits', 'idleWaits',
-            'permitWaits')
+            'permitWaits', 'quarantined')
+_QUARANTINED = [0]  # workspaces this process has set aside since it started; a count, never an identifier
+_QUARANTINE_LOCK = threading.Lock()
+
+
+def quarantined():
+    """How many workspaces this process has set aside since it started (LaneWorker._quarantine)."""
+    return _QUARANTINED[0]
 
 
 def enabled(values=None):
@@ -150,6 +170,68 @@ class LaneWorker(PostgresWorker):
                          worker_binding=getattr(base, 'worker_binding', None), discord_workers=True)
         self.environment = values  # what this invocation was started with, for blocker()
         self.lane_counts = dict.fromkeys(('posted', 'verified', 'rejected', 'notSent', 'uncertainCreates'), 0)
+        self.discord_stats['quarantined'] = 0
+        self._examining = None  # the workspace the claim is reading, so a failure of its document can be pinned on it
+
+    def _discord_candidates(self, cur):
+        """The inherited selection, except that a workspace set aside (see claim) is not offered again until its
+        window ends, and the workspace being read is noted. Nothing else changes: same statements, same order."""
+        for row in super()._discord_candidates(cur):
+            cursor = (row[2].get('phase2') or {}).get(discord_worker.CURSOR) if isinstance(row[2], dict) else None
+            until = cursor.get('quarantinedUntil') if isinstance(cursor, dict) else None
+            if discord_worker.finite(until) and until > self.clock():
+                continue
+            self._examining = row[0]
+            yield row
+            self._examining = None  # only reached when the claim went on to the next candidate
+
+    def claim(self, **options):
+        """One workspace's unreadable document must not stop the lane (G2E-C-10).
+
+        A job with `events: null` raised in the claim, rolling it back, and the cursor order (least recently served
+        first) offered the same workspace first again: no other workspace was ever claimed. Here the failure is
+        pinned on the workspace being read, that workspace is set aside (_quarantine) and the claim goes on to the
+        next one. Only the unscoped Discord claim of the loop; anything else, and a failure that is not the shape of
+        a document (a database error, a lost revision), is the inherited behaviour."""
+        scoped = any(options.get(key) is not None for key in ('workspace_id', 'job_id', 'approval_digest', 'dispatch_principal'))
+        if not options.get('discord_only') or scoped:
+            return super().claim(**options)
+        for attempt in range(MAX_QUARANTINES_PER_CLAIM + 1):
+            self._examining = None
+            try:
+                return super().claim(**options)
+            except SHAPE_ERRORS as error:
+                workspace = self._examining
+                if workspace is None or attempt == MAX_QUARANTINES_PER_CLAIM:
+                    raise
+                try:
+                    self._quarantine(workspace, error)
+                except Exception:
+                    raise error from None  # it could not be set aside: the failure stays what it was
+
+    def _quarantine(self, workspace_id, error):
+        """Put the workspace behind every other one for QUARANTINE_SECONDS: its rotation cursor is dated that far ahead
+        and marked, in its own short transaction (the failed claim's has rolled back). Nothing else in the document
+        changes, so a repaired document is claimed again by itself when the window ends. Counted; one log line, the
+        exception class only: no workspace, job, channel, content or lease owner id."""
+        with self.connection_factory() as db, db.cursor() as cur:
+            cur.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
+            row = cur.fetchone()
+            if not row:
+                return
+            revision, raw = row
+            state = json.loads(raw) if isinstance(raw, str) else raw
+            until = self._db_now(cur) + QUARANTINE_SECONDS
+            state['phase2'][discord_worker.CURSOR] = {'version': 1, 'lastClaimedAt': until, 'quarantinedUntil': until}
+            cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
+                        (json.dumps(state), workspace_id, revision))
+            if cur.rowcount != 1:
+                raise AlphaError('Discord quarantine lost its workspace revision.', 409)
+        self.discord_stats['quarantined'] += 1
+        with _QUARANTINE_LOCK:
+            _QUARANTINED[0] += 1
+        logging.getLogger('postriff.request').warning(json.dumps({
+            'event': 'discord.lane.quarantined', 'error': type(error).__name__, 'quarantineSeconds': QUARANTINE_SECONDS}))
 
     def complete(self, claimed, result):
         # What Discord did, counted before the inherited fenced write; that write decides the job's state.
@@ -207,7 +289,8 @@ def status(social, now, values=None):
     rule for this process ('disabled', 'configuration', 'coordinator_unavailable', 'coordinator_degraded'), or None.
     maxSeconds, maxSteps: the invocation budget after clamping, None when misconfigured. shards: the cron entries.
     policyDaysLeft: days until the reviewed policy expires (negative once expired, two decimals), None when no policy
-    is visible to the caller.
+    is visible to the caller. quarantined: workspaces this process has set aside since it started because the claim
+    could not read their document (LaneWorker.claim); a count, never an identifier.
     """
     values = os.environ if values is None else values
     on = enabled(values)
@@ -219,7 +302,7 @@ def status(social, now, values=None):
     policy = getattr(getattr(_discord(social), 'rate_limiter', None), 'policy', None)
     days = round((policy.expires_at - now) / 86400, 2) if policy is not None and discord_worker.finite(now) else None
     return {'version': 1, 'enabled': on, 'ready': reason is None, 'blocker': reason, 'maxSeconds': seconds,
-            'maxSteps': steps, 'shards': SHARDS, 'policyDaysLeft': days}
+            'maxSteps': steps, 'shards': SHARDS, 'policyDaysLeft': days, 'quarantined': quarantined()}
 
 
 _NOT_READ = object()
@@ -312,9 +395,9 @@ def outlook(lane):
 
 
 def soonest_due(lane):
-    """Seconds until the soonest due Discord work in the projection (negative when overdue), or None."""
+    """Seconds until the soonest due Discord work the loop can claim (negative when overdue), or None."""
     with lane.connection_factory() as db, db.cursor() as cur:
-        cur.execute(_SOONEST)
+        cur.execute(_CLAIMABLE)
         now, soonest = cur.fetchone()
     return None if soonest is None or not discord_worker.finite(now) else soonest - now
 
@@ -337,7 +420,7 @@ def _projection_ready(lane):
         return reason
     try:
         with lane.connection_factory() as db, db.cursor() as cur:
-            cur.execute(_SOONEST)
+            cur.execute(_CLAIMABLE)
             now, soonest = cur.fetchone()
     except Exception as error:
         if getattr(error, 'sqlstate', None) == '42P01' or type(error).__name__ == 'UndefinedTable':
@@ -417,7 +500,7 @@ def run(worker, number, values=None, *, started=None, request_id=None, sleep=tim
         counts.update(claimed=stats['claims'], held=stats['held'], uncertain=stats['uncertain'],
                       rateDelayed=stats['rateDelays'], leaseLost=stats['leaseLost'], recoveries=stats['recoveries'],
                       retries=stats['retries'], deadLetters=stats['deadLetters'], claimMisses=stats['claimMisses'],
-                      permitWaits=lane.social.permit_waits, **lane.lane_counts)
+                      permitWaits=lane.social.permit_waits, quarantined=stats['quarantined'], **lane.lane_counts)
         result = {'version': 1, 'lane': 'discord', 'enabled': True, 'shard': number, 'stoppedBy': stopped,
                   'elapsedSeconds': round(monotonic() - started, 3), 'processed': counts['claimed'],
                   'budget': {'maxSeconds': seconds, 'maxSteps': max_steps}, 'counters': counts,
