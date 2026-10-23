@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 import secrets
+import threading
 import time
 import uuid
 from contextlib import contextmanager
@@ -28,6 +29,18 @@ def fail(message='Reconnect Discord and authorize the server and channel again.'
 REFRESH_CLAIM_TTL = 360
 # The refresh token is spent once Discord has answered; keep the new pair through a transient database error.
 SETTLE_ATTEMPTS = 3
+# G2E-A-05 / G2E-C-01. Reads that reach Discord (the server list, a server's channels, a re-check) share ONE application
+# window with every tenant. They are throttled per member and per workspace BEFORE any request to Discord. The UI makes a
+# handful of these a minute (open the picker, re-check, refresh), so these limits are far above normal use: a member may
+# make 30 in a minute, a workspace 120. One read per connection is in flight at a time, and a connection's channel list
+# and re-check answer are served from memory for READ_CACHE_SECONDS, so polling cannot multiply Discord traffic.
+READ_LIMIT_MEMBER = (30, 60)
+READ_LIMIT_WORKSPACE = (120, 60)
+READ_CACHE_SECONDS = 45
+# A connection that is NOT healthy (no channel can be used, the re-check found a problem) is likely being fixed in
+# Discord right now, so its answer is only reused for a few seconds.
+READ_RETRY_SECONDS = 10
+READ_WAIT_SECONDS = 25
 
 
 def identity_capabilities():
@@ -65,6 +78,7 @@ def validate_context(context, workspace, actor, adapter, redirect, scopes, capab
 class DiscordConnections:
     def __init__(self, oauth):
         self.oauth = oauth
+        self._flights, self._flights_guard = {}, threading.Lock()
 
     @property
     def adapter(self):
@@ -97,6 +111,37 @@ class DiscordConnections:
                     fail('Workspace unavailable.', 404)
                 state = json.loads(row[0]) if isinstance(row[0], str) else copy.deepcopy(row[0])
                 yield cur, state, None
+
+    def admit_read(self, cur, workspace, member):
+        """Throttle a read that reaches Discord. Called inside the transaction that has just proved the caller's role,
+        so a stranger cannot spend a workspace's allowance, and always BEFORE the first provider request."""
+        from ..hosted import throttle
+        throttle(cur, f'discord-read:{workspace}:{member}', *READ_LIMIT_MEMBER)
+        throttle(cur, f'discord-read:{workspace}', *READ_LIMIT_WORKSPACE)
+
+    def read_through(self, key, fetch, ttl=0):
+        """At most one Discord read in flight per `key` (a connection) in this process. With `ttl`, a successful answer
+        is reused for that many seconds by every caller that has already passed its own authorization; without it the
+        callers are only serialised and each runs `fetch` itself (the result may depend on the caller). `ttl` may be a
+        function of the answer. Errors are never cached. Across processes the shared throttle and the request
+        coordinator remain the bound."""
+        with self._flights_guard:
+            if len(self._flights) >= 1024:
+                for old, entry in list(self._flights.items()):
+                    if not entry['lock'].locked() and entry['expires'] <= time.monotonic():
+                        del self._flights[old]
+            flight = self._flights.setdefault(key, {'lock': threading.Lock(), 'expires': 0.0, 'value': None})
+        if not flight['lock'].acquire(timeout=READ_WAIT_SECONDS):
+            raise AlphaError('Discord is busy with this connection. Try again in a moment.', 429)
+        try:
+            if ttl and flight['expires'] > time.monotonic():
+                return copy.deepcopy(flight['value'])
+            value = fetch()
+            if ttl:
+                flight['value'], flight['expires'] = copy.deepcopy(value), time.monotonic() + (ttl(value) if callable(ttl) else ttl)
+            return value
+        finally:
+            flight['lock'].release()
 
     def save_state(self, cur, workspace, state):
         self.oauth.commands.engine.invalidate(state)
@@ -207,11 +252,20 @@ class DiscordConnections:
         if purpose == 'installation':
             if not snowflake(inputs.get('guildId')):
                 fail('Select the exact Discord server to authorize.', 400)
-            identity = self._fresh_identity(workspace, token, inputs.get('identityConnectionId'))
-            if not any(g['id'] == inputs['guildId'] for g in self.user_guilds(identity)):
+            with self.local(workspace, token) as (cur, _, actor):
+                # BEFORE the Discord reads below (they used to run first, so a throttled caller still cost Discord requests).
+                throttle(cur, f'oauth-start:{workspace}', 20, 600)
+                self.admit_read(cur, workspace, actor)
+
+            def manageable():
+                fresh = self._fresh_identity(workspace, token, inputs.get('identityConnectionId'))
+                return fresh, self.user_guilds(fresh)
+            identity, servers = self.read_through(('identity', workspace, str(inputs.get('identityConnectionId'))[:128]), manageable)
+            if not any(g['id'] == inputs['guildId'] for g in servers):
                 fail('This identity cannot manage the selected Discord server.', 403)
         with self.local(workspace, token) as (cur, state, actor):
-            throttle(cur, f'oauth-start:{workspace}', 20, 600)
+            if purpose != 'installation':
+                throttle(cur, f'oauth-start:{workspace}', 20, 600)
             links = state.get('phase2', {}).get('discordIdentityLinks', [])
             context = {'v': 1, 'purpose': purpose, 'workspaceId': workspace, 'memberId': actor,
                        'applicationId': adapter.client_id, 'redirectUri': redirect, 'discoverGuilds': discover,
@@ -626,7 +680,12 @@ class DiscordConnections:
     def guilds(self, workspace, token, connection):
         if token is None:
             fail('Sign in to manage Discord connections.', 401)
-        return {'identityConnectionId': connection, 'guilds': self.user_guilds(self._fresh_identity(workspace, token, connection))}
+        with self.local(workspace, token) as (cur, state, actor):
+            identity_record(state, connection, actor)  # someone else's identity spends none of this member's allowance
+            self.admit_read(cur, workspace, actor)
+        return {'identityConnectionId': connection,
+                'guilds': self.read_through(('identity', workspace, connection),
+                                            lambda: self.user_guilds(self._fresh_identity(workspace, token, connection)))}
 
     def public_identities(self, workspace, token):
         if token is None:
