@@ -99,6 +99,9 @@ def shape():
         check('the artifact keeps %s' % name, '${{ runner.temp }}/capacity/*/' + name in paths)
     check('the step summary carries the lock benchmark table', 'LOCKBENCH.md' in step('capacity', 'The receipt')['run'])
     check('the receipt goes to the step summary', 'GITHUB_STEP_SUMMARY' in step('capacity', 'The receipt')['run'])
+    check('the baseline scenario runs on the frozen tree, every other scenario on the tree under test',
+          step('capacity', 'Fetch the harness')['env']['TREE_SHA']
+          == "${{ matrix.scenario == 'baseline' && needs.plan.outputs.baseline || needs.plan.outputs.sha }}")
     fetch = step('capacity', 'Fetch the harness')['run']
     check('each fetched tree is verified at its exact SHA and clean', 'test "$(git -C "$dir" rev-parse HEAD)" = "$want"' in fetch
           and 'status --porcelain' in fetch)
@@ -198,6 +201,9 @@ def request_reader(fix):
     code, out, values = fix.read_request({**good, 'profile': 'lockbench', 'pools': '30'}, 'claude/discord-capacity-run-lockbench-l1')
     check('a lock benchmark request is one job per pool', code == 0 and json.loads(values.get('matrix', '[]')) == [
         {'scenario': 'lockbench', 'pool': 30}], out[-400:])
+    code, out, values = fix.read_request({**good, 'profile': 'baseline', 'pools': '20'}, 'claude/discord-capacity-run-baseline-b1')
+    check('a baseline request is one job and carries the frozen tree', code == 0 and json.loads(values.get('matrix', '[]')) == [
+        {'scenario': 'baseline', 'pool': 20}] and values.get('baseline') == rc, out[-400:])
     bad = [
         ('a short tree SHA', {**good, 'sha': 'abc'}, 'claude/discord-capacity-run-s1-t'),
         ('an upper-case tree SHA', {**good, 'sha': 'A' * 40}, 'claude/discord-capacity-run-s1-t'),
