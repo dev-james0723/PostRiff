@@ -24,10 +24,26 @@ using three attack styles:
 - **(iii) body-field** — a victim workspace/object named in the body (the OAuth `state` of a
   victim transaction; a victim job's approval digest).
 
-Expected result for every attack case: HTTP **403 or 404** (409 is accepted and recorded as a
-deny), **no 5xx**, **no victim marker** in the response body (checked in memory against values
-learned from the victim's own reads; never printed), and **no change** to either tenant's
-before/after snapshot.
+Expected result for every attack case, scored **strictly** (a denial must be the *isolation*
+control denying, not any refusal):
+
+- **workspace-scope (style i)** passes **only** on **403** whose body is the membership-gate
+  message `Workspace unavailable.` — and only if the case is also **differential**: the owner of
+  the attacked workspace, sending the byte-identical request, gets **past** the gate (a different
+  error, e.g. a stale-revision `409`, or success). If the owner is *also* gated the route is
+  simply broken and the case is **INCONCLUSIVE**, not a pass. A `404`/`409` on a ws-scope attack is
+  a **FAIL** (the gate was not the thing that denied).
+- **IDOR / body-field (styles ii, iii)** pass **only** on **404** or **409** whose body is one of
+  the known object-scoping denials (`Connection unavailable.`, `This item is not available in your
+  workspace.`, `This Discord identity is unavailable to this workspace member.`, `Connection
+  request unavailable.`). Any other body is **INCONCLUSIVE**.
+- A **2xx**, or a response carrying a **victim marker** (checked in memory against values learned
+  from the victim's own reads; never printed), is a **FAIL**.
+- **401 / 429 / 400 / 405 / 410 / 415 / any 5xx / a 3xx / HTML** are **INCONCLUSIVE — never a
+  deny** (they mean auth expired, rate-limited, step-up, or the route misbehaved; none of them
+  proves isolation). A run with any INCONCLUSIVE case does not meet G4.
+
+And, for every attack: **no change** to either tenant's before/after snapshot.
 
 | family | method | style | kind | blast | expected |
 |---|---|---|---|---|---|
@@ -53,6 +69,15 @@ before/after snapshot.
 a "route is broken" false pass): workspace GET, members, audit, channels, own destinations, own
 identity guilds, and an inert write (`p2_refresh`). A missing or failed control makes that family
 **INCONCLUSIVE = failure of the run**.
+
+**Differential ws-scope writes.** For every workspace-scope **write** the probe also sends the
+byte-identical request as the **owner of the attacked workspace**. The attack passes only if the
+attacker is stopped at the membership gate (`403 Workspace unavailable.`) *while the owner gets
+past it* (a different outcome — a stale-revision `409`, an owner-cannot-be-removed `409`, or
+success). If the owner is blocked too, the route itself is broken and the case is **INCONCLUSIVE**,
+never a pass — this is what stops a blanket `403` (WAF, auth, a disabled route) from masquerading
+as working isolation. A≠B is enforced up front: the probe refuses to run if the two tokens resolve
+to the **same user (`sub`)** or the **same workspace**.
 
 **No-side-effect proof**: snapshots before and after the attack set, per tenant, through that
 tenant's own reads (workspace revision, state projection, and counts of connections, identities,
@@ -85,6 +110,12 @@ gate; and non-workspace/self routes). `tests/test_q05_probe_coverage.py` fails i
   That requires a build whose connect gate admits A and B
   (`POSTRIFF_DISCORD_CONNECT_WORKSPACES` = `*` or the two workspace ids) and the owner to complete
   the Discord consents for both accounts.
+  - **The Discord objects must not be sendable while the probe runs.** Use drafts and
+    pending-review objects wherever possible, and make any scheduled Discord job **not due** —
+    schedule an approved job **at least 7 days out** and **cancel it after the run** — so that even
+    a mistakenly-accepted cross-tenant write (which the probe would catch as a FAIL) still cannot
+    post a real message. `--allow-send-risk` remains off regardless; this is defence in depth for
+    the one route (`job execute`) whose blast is `send`.
 
 ## 3. How the hosted run is performed
 
@@ -105,18 +136,48 @@ Run it on GitHub Actions or another runner with the `Q05_*` values held as secre
 ```
 # default, read-only, both directions:
 python scripts/q05_tenant_probe.py --out-md q05-receipt.md --out-json q05-cases.jsonl
-# full G4 run (writes), victims are the two throwaway accounts:
-python scripts/q05_tenant_probe.py --allow-writes --victim-is-synthetic \
+# writes, both directions (no send; the hosted gate run uses exactly this):
+python scripts/q05_tenant_probe.py --allow-writes \
     --out-md q05-receipt.md --out-json q05-cases.jsonl
 ```
 
-`--allow-send-risk` stays **off** for the hosted gate run: the `send`-blast cases (job execute)
-are denied before any dispatch anyway, and the default plan must never be able to send. Enable it
-only if the release owner explicitly authorizes it against the declared-synthetic accounts.
+`--allow-send-risk` (and its guard `--victim-is-synthetic`) stay **off** for the hosted run: the
+`send`-blast case (job execute) is denied before any dispatch anyway, and the hosted runner must
+never be able to send a Discord message. Those two flags exist for a **local**, owner-authorized
+run against declared-synthetic accounts only; the hosted workflow never passes them.
 
-Exit code is 0 only if every case that ran passed, no control was inconclusive, and no case that
-should have run was skipped for a missing victim object. The receipt says loudly when writes were
-not covered or when any case was NOT RUN.
+Exit code is 0 only if every case that ran **passed**, **no case was INCONCLUSIVE**, no control
+was inconclusive, and no case that should have run was skipped for a missing victim object. The
+receipt says loudly when writes were not covered or when any case was NOT RUN or INCONCLUSIVE.
+
+### The hosted path (`docs/q05/hosted/`)
+
+`docs/q05/hosted/q05-hosted-run.yml` is an **inert** GitHub Actions workflow (it lives only under
+`docs/`, never under `.github/`, until the owner installs it) that runs the probe against the live
+site under owner approval. It does **not** deploy, build, promote or change any setting. Its
+hardening, relevant to this plan:
+
+- **Credentials are single-use e-mail OTP codes only** — no password grant, no dashboard-created
+  users, no pasted session tokens. The owner requests a code on the website, puts it in a
+  short-lived Environment secret, and the workflow exchanges it at the fixed Supabase
+  `POST /auth/v1/verify`. The base URL and Supabase URL are **hard-coded in the workflow**; a
+  request branch carries only a SHA and a mode, so editing a request can never redirect credentials.
+- **The probe is SHA-pinned and hash-pinned.** The request carries `probeSha256`; the workflow
+  refuses a fetched probe whose hash differs, so the reviewed probe cannot be swapped under the
+  same commit. Every probe change gets an independent delta review before a request branch is built.
+- **The probe runs under a minimal environment** (`env -i` with only `PATH` and the `Q05_*` it
+  needs) and `python3 -I`, so no inherited secret or local module can reach or influence it.
+- **A≠B and key hygiene are enforced in the workflow too**: a `service_role`/secret key is refused
+  (decoded locally, never printed), and both throwaway e-mails must carry the `q05` marker.
+
+**generic vs gate mode (M6).** A **generic** run is a `--smoke` run of **whatever build is serving
+right now**; the step summary prints that build's `/api/health` `sourceRevision`. On the build live
+today (`c5fc1fd1`) `sourceRevision` is **`null`** (no Discord v2), so a generic run smoke-tests
+*that* build and is **not** G4 evidence for RC1/RC2. A **gate** run pins the promoted build's
+`expectSourceRevision` in the request; the workflow reads `/api/health` and **refuses to run** if
+the serving build does not match, so gate evidence is always tied to the exact reviewed build. The
+serving `sourceRevision` is read **before and after** the run; if it changes mid-run the result is
+void.
 
 This run must not be done through `vercel deploy` previews or any ad-hoc host; it runs against the
 already-promoted, authorized deployment (CLAUDE.md on-demand deployment policy). Opening a hosted

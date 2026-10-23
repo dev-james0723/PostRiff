@@ -28,12 +28,16 @@ python -m unittest tests.test_q05_tenant_probe_local
 python -m unittest tests.test_q05_tenant_probe_mutations
 python -m unittest tests.test_q05_probe_coverage
 
+# no-DB unit tests (redirect safety, A!=B guard, strict scope scoring) — run everywhere:
+python -m unittest tests.test_q05_probe_unit
+
 # or drive the backend directly and read the JSON result:
 python tests/q05_backend.py run --allow-writes --allow-send-risk --victim-is-synthetic
 ```
 
-All three test modules **skip cleanly** (not error) when the PostgreSQL 16 binaries or psycopg are
-absent, so they run under `python -m unittest discover -s tests`.
+The database-backed modules **skip cleanly** (not error) when the PostgreSQL 16 binaries or psycopg
+are absent, so they run under `python -m unittest discover -s tests`; `test_q05_probe_unit` needs
+no database and always runs.
 
 ## Result on clean RC1 source
 
@@ -41,11 +45,21 @@ Full run (`--allow-writes --allow-send-risk --victim-is-synthetic`): **probe exi
 
 - 66 cases, **66 PASS, 0 FAIL, 0 NOT RUN, 0 INCONCLUSIVE**.
 - Reads 22, writes 28 (blast: 22 state, 4 send, 4 inert across kinds), controls 14 + 2 snapshot.
+  By attack scope: **32 workspace-scope + 18 IDOR/body-field** cases, the rest controls/snapshots.
 - Both directions (A→B and B→A) covered.
-- Every cross-tenant attack denied with 403 / 404 / 409, no 5xx, no victim marker in any body.
+- **Strict scoring held** on clean RC1:
+  - every **workspace-scope** attack got **403 `Workspace unavailable.`** *and* was **differential**
+    — the 16 ws-scope writes each re-sent the byte-identical request as the attacked workspace's
+    **owner**, who got **past** the gate (a stale-revision `409`, owner-cannot-be-removed `409`, or
+    success); no case passed on a bare 403;
+  - every **IDOR / body-field** attack got **404 / 409** with a known object-scoping deny body;
+  - no 2xx, no 5xx, no victim marker in any body; nothing scored INCONCLUSIVE.
+- **A≠B guard**: the probe refused to start when the two tokens resolved to the same `sub` or the
+  same workspace (checked in `tests/test_q05_probe_unit.py`).
 - No-side-effect proof: both tenants' before/after snapshots identical (the owner `p2_refresh`
   control bumps only its own workspace revision by 1, which is not a tenant-data change).
-- **Database-level** snapshot: no row-count, `updated_at`, or revoked-count change on either tenant.
+- **Database-level** snapshot: no row-count, `updated_at`, `max(updated_at)`/newest-audit-id, or
+  revoked-count change on either tenant.
 - **Mock Discord transport: zero message sends** for the whole run.
 
 Read-only default run (no flags): exit 0; every write case **NOT RUN (gated)**; zero Discord
@@ -58,7 +72,8 @@ file edited), then the full probe runs against the mutated app. Observed:
 
 | mutation | control removed | probe exit | cases that turned FAIL | how detected |
 |---|---|---|---|---|
-| **M1** | workspace membership gate (`transaction` WHERE → `OR TRUE`) | 1 | 16 reads + 6 writes + 2 snapshots + 2 controls (26) | HTTP 200 + victim marker on reads; 2xx + snapshot change on writes; no-side-effect snapshot (API + DB) fires; controls go inconclusive |
+| **M1** | workspace membership gate (`transaction` WHERE → `OR TRUE`) | 1 | **30 FAIL** = 16 ws-scope reads + 12 ws-scope writes + 2 snapshot controls (the remaining ws-scope writes score INCONCLUSIVE, never PASS) | HTTP 200 + victim marker on reads; 2xx / state change on writes; the differential flips (attacker now gets *past* the gate just like the owner); no-side-effect snapshot (API + DB) fires |
+| **M1b** | same gate removed, writes on / send off — **invariant check** | 1 | **0 of 32** workspace-scope cases PASS; 28 of 30 non-send ws-scope cases FAIL, the other 2 INCONCLUSIVE | proves the old bug is gone: no ws-scope read or write may silently PASS on an object check when the gate is removed (`test_m1b_gate_removed_fails_every_workspace_scope_case`) |
 | **M2** | connection/credential → workspace binding (every credential read on the path) | 1 | `read.idor.destinations.A→B`, `…B→A` | destinations IDOR returns HTTP 200 leaking the victim's connection — probe flags 2xx + marker |
 | **M3** | OAuth transaction → workspace+member binding (`complete` SELECT + `row[1]!=actor` + `validate_context` + `save_identity`) | 1 | `snapshot.no_side_effect.A`, `…B` | cross-tenant completion advances far enough to commit a side effect (victim OAuth transaction consumed + an audit row); the no-side-effect proof (API + DB) catches it although the HTTP status is 409 |
 | **M5** | atomicity of a denied write — a committed workspace-blind credential revoke that then returns 404 | 1 | DB-side-effect flagged on both tenants (+ the victim-owner's own control breaks) | the HTTP status looks denied and the **state JSON is unchanged, so the API-level snapshot alone misses it**; the **DB-level** snapshot (`revoked`/`updated_at`) catches it — exactly the case the harness DB proof exists for |
