@@ -94,5 +94,8 @@ fi
 # This fixture requires Linux/CI, the synthetic fence and the owned test role.
 # It must not inherit the ordinary generic PostgreSQL catalogue.
 discord_validation_gate engagement-sql python scripts/postriff_disposable_postgres.py tests/phase2/postgres_discord_engagement.py
+# Credential custody (authorizer checked before Discord, a member who is gone leaves no live credential, suspend/resume, read
+# throttling, mixed flags, pool mode): synthetic Discord, the same owned cluster discipline as the gate above.
+discord_validation_gate custody-sql python scripts/postriff_disposable_postgres.py tests/phase2/postgres_discord_custody.py
 discord_validation_gate fixture python tests/discord_ui_fixture.py .depot/discord-p0-ui.json
 exit "$discord_validation_status"
