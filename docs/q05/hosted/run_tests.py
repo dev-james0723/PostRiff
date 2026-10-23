@@ -6,6 +6,8 @@ a local bare repository. `git`, `jq`, `python3` and `sed` are the real ones.
 
 Run: python3 docs/q05/hosted/run_tests.py   (needs PyYAML, jq, git, bash)
 """
+import base64
+import hashlib
 import json
 import os
 import shutil
@@ -64,10 +66,16 @@ case "$url" in
   *"/channels/discord/oauth/start"*)
     if [ -n "${FAIL_START:-}" ]; then printf '{"error":"discord not enabled"}\n'; exit 0; fi
     printf '{"authorizeUrl":"https://discord.com/oauth2/authorize?client_id=1&state=%s&scope=identify"}\n' "${FAKE_STATE}";;
+  *"/channels")
+    # the connections-v2 flag read used before minting an OAuth state
+    printf '{"providers":[{"id":"discord","discordConnectionsV2":%s}]}\n' "${V2_ON:-true}";;
   *"/auth/v1/verify"*)
     if [ -n "${FAIL_VERIFY:-}" ]; then printf '{"error":"invalid otp","leaky_echo":%s}\n' "$data"; exit 0; fi
     printf '{"access_token":"%s","token_type":"bearer","expires_in":3600}\n' "${FAKE_TOKEN}";;
+  *"/auth/v1/logout"*) printf '{}\n';;
   *"/api/auth/verify"*) printf '{"workspaceId":"%s"}\n' "${FAKE_WS}";;
+  *"/api/health"*)
+    if [ -n "${HEALTH_REV:-}" ]; then printf '{"sourceRevision":"%s"}\n' "$HEALTH_REV"; else printf '{"sourceRevision":null}\n'; fi;;
   *"/api/workspaces")
     case "${WS_COUNT:-1}" in
       0) printf '{"workspaces":[]}\n';;
@@ -93,8 +101,15 @@ keys = ("Q05_BASE_URL", "Q05_TOKEN_A", "Q05_TOKEN_B", "Q05_WORKSPACE_A", "Q05_WO
         "Q05_VICTIM_A_OAUTH_STATE", "Q05_VICTIM_B_OAUTH_STATE")
 env = {k: os.environ.get(k, "") for k in keys}
 env["smoke"] = "--smoke" in a
-open(os.path.join(os.path.dirname(os.path.abspath(out_json or "x")) or ".", "probe_env.json"), "w").write(json.dumps(env))
-cases = json.loads(os.environ.get("PROBE_CASES") or "[]")
+env["inherited_secret_seen"] = os.environ.get("INHERITED_SECRET", "")  # must be "" under env -i
+env["victim_is_synthetic_flag"] = "--victim-is-synthetic" in a
+open("probe_env.json", "w").write(json.dumps(env))  # cwd is the workspace dir (preserved by env -i)
+# knobs come from a FILE, not env, because the workflow runs the probe under `env -i` (M2 minimal env)
+try:
+    knobs = json.load(open("probe_knobs.json"))
+except Exception:
+    knobs = {}
+cases = knobs.get("cases", [])
 if out_json:
     with open(out_json, "w") as fh:
         for c in cases:
@@ -102,8 +117,11 @@ if out_json:
         fh.write(json.dumps({"summary": {"cases": len(cases)}}) + "\n")
 if out_md:
     open(out_md, "w").write("# Q-05 receipt (stub)\n\nroutes only, no ids.\n")
-sys.exit(int(os.environ.get("PROBE_EXIT", "0")))
+sys.exit(int(knobs.get("exit", 0)))
 '''
+
+PROBE_SHA256 = hashlib.sha256(STUB_PROBE.encode()).hexdigest()
+EXPECT_REV = "c" * 40  # a 40-hex "promoted build" sourceRevision for gate-mode tests
 
 failures = []
 passes = 0
@@ -215,13 +233,18 @@ def req_case(label, body, branch, expect_ok, age=60, wrong_tip=False, attempt='1
     if wrong_tip:
         git('update-ref', f'refs/heads/{PROBE_BRANCH}', alt, cwd=os.path.join(root, 'origin', 'PostRiff.git'))
     if isinstance(body, dict):
+        body = dict(body)
+        body.setdefault('probeSha256', PROBE_SHA256)
+        if body.get('mode') == 'gate':
+            body.setdefault('expectSourceRevision', EXPECT_REV)
         body = json.loads(json.dumps(body).replace('SHA', sha))
     write_request(root, body, age=age)
     code, text, out = run(REQ, root, {'REF_NAME': branch, 'GITHUB_RUN_ATTEMPT': attempt})
     check(label, (code == 0) == expect_ok, f'(exit {code}) {text[-200:]}')
     if expect_ok:
-        lines = out.splitlines()
-        check(f'  outputs are two clean lines ({label})', len(lines) == 2 and lines[0].startswith('sha=') and lines[1].startswith('mode='), repr(out))
+        keys = sorted(l.split('=', 1)[0] for l in out.splitlines() if '=' in l)
+        check(f'  outputs sha/mode/probesha/expectrev only ({label})',
+              keys == ['expectrev', 'mode', 'probesha', 'sha'], repr(out))
     shutil.rmtree(root)
     return text
 
@@ -253,28 +276,41 @@ def main_suite():
 
     print('fetch step')
     root, sha, alt = workspace()
-    code, text, _ = run(FETCH, root, {'SOURCE_SHA': sha})
+    # The request always carries a validated probeSha256 (the req step refuses one that is missing),
+    # so the fetch step always has it set; pass it here as the real workflow does.
+    code, text, _ = run(FETCH, root, {'SOURCE_SHA': sha, 'PROBE_SHA256': PROBE_SHA256})
     check('the probe is fetched at the exact SHA despite orphan gitlinks', code == 0 and 'Q-05 cross-tenant isolation probe' in read(root, 'work/probe.py'), text[-200:])
     shutil.rmtree(root)
     root, sha, alt = workspace()
-    code, text, _ = run(FETCH, root, {'SOURCE_SHA': '2' * 40})
+    code, text, _ = run(FETCH, root, {'SOURCE_SHA': '2' * 40, 'PROBE_SHA256': PROBE_SHA256})
     check('a SHA that does not exist is refused', code != 0)
     shutil.rmtree(root)
     root, sha, alt = workspace(probe_body='print("not the probe")\n')
-    code, text, _ = run(FETCH, root, {'SOURCE_SHA': sha})
+    code, text, _ = run(FETCH, root, {'SOURCE_SHA': sha, 'PROBE_SHA256': PROBE_SHA256})
     check('a fetched file that is not the probe is refused', code != 0 and 'not the Q-05 probe' in text, text[-160:])
     shutil.rmtree(root)
 
-    print('sign-in + probe step')
-    secrets_otp = {'Q05_EMAIL_A': EMAIL_A, 'Q05_CODE_A': CODE_A, 'Q05_EMAIL_B': EMAIL_B, 'Q05_CODE_B': CODE_B,
-                   'Q05_SUPABASE_PUBLISHABLE_KEY': 'pk_test_publishable_1234567890'}
-    secrets_tok = {'Q05_TOKEN_A': 'ready-token-AAAA', 'Q05_TOKEN_B': 'ready-token-BBBB'}
+    print('fetch step: probeSha256')
+    root, sha, alt = workspace()
+    code, text, _ = run(FETCH, root, {'SOURCE_SHA': sha, 'PROBE_SHA256': PROBE_SHA256})
+    check('a matching probeSha256 is accepted', code == 0, text[-160:])
+    shutil.rmtree(root)
+    root, sha, alt = workspace()
+    code, text, _ = run(FETCH, root, {'SOURCE_SHA': sha, 'PROBE_SHA256': 'deadbeef' * 8})
+    check('a mismatched probeSha256 is refused', code != 0 and 'reviewed probeSha256' in text, text[-160:])
+    shutil.rmtree(root)
 
-    def signin(mode, secrets, probe_exit='0', cases=None, knobs=None, place_probe=True):
+    print('sign-in + probe step')
+    PUB = 'sb_publishable_test1234567890'
+    secrets_otp = {'Q05_EMAIL_A': EMAIL_A, 'Q05_CODE_A': CODE_A, 'Q05_EMAIL_B': EMAIL_B, 'Q05_CODE_B': CODE_B,
+                   'Q05_SUPABASE_PUBLISHABLE_KEY': PUB}
+
+    def signin(mode, secrets, exit_code=0, cases=None, knobs=None):
         root, sha, alt = workspace()
-        if place_probe:
-            open(os.path.join(root, 'work', 'probe.py'), 'w').write(STUB_PROBE)
-        env = {'MODE': mode, 'PROBE_EXIT': probe_exit, 'PROBE_CASES': json.dumps(cases or [])}
+        open(os.path.join(root, 'work', 'probe.py'), 'w').write(STUB_PROBE)
+        with open(os.path.join(root, 'work', 'probe_knobs.json'), 'w') as fh:
+            json.dump({'cases': cases or [], 'exit': exit_code}, fh)
+        env = {'MODE': mode, 'EXPECT_REV': EXPECT_REV, 'INHERITED_SECRET': 'leaky-inherited-value'}
         env.update(secrets)
         env.update(knobs or {})
         code, text, _ = run(SIGNIN, root, env)
@@ -285,44 +321,62 @@ def main_suite():
         shutil.rmtree(root)
         return code, text, penv, summary, curl
 
-    # happy: OTP mode, generic
+    # happy: OTP, generic (serving build sourceRevision null -> smoke)
     code, text, penv, summary, curl = signin('generic', secrets_otp)
     check('generic OTP run succeeds and runs the probe', code == 0 and penv.get('Q05_BASE_URL') == BASE_URL and penv.get('Q05_TOKEN_A') == FAKE_TOKEN and penv.get('Q05_WORKSPACE_A') == FAKE_WS, text[-300:])
-    check('generic passes --smoke to the probe', penv.get('smoke') is True)
-    check('the receipt is written to the step summary', 'Q-05 hosted probe (generic)' in summary and 'routes only' in summary)
-    check('the OTP code is exchanged at the FIXED Supabase verify endpoint only', f'CURL POST {SUPABASE_URL}/auth/v1/verify' in curl and 'grant_type=password' not in curl)
-    check('no secret appears outside an add-mask line (generic OTP)', all(s not in strip_masks(text) for s in (FAKE_TOKEN, EMAIL_A, CODE_A, FAKE_WS, 'pk_test_publishable_1234567890')), strip_masks(text)[-300:])
+    check('generic passes --smoke and not the synthetic flag', penv.get('smoke') is True and penv.get('victim_is_synthetic_flag') is False)
+    check('the probe ran under a minimal env (no inherited secret reached it)', penv.get('inherited_secret_seen') == '', penv)
+    check('the receipt and the serving sourceRevision are in the step summary', 'Q-05 hosted probe (generic)' in summary and 'sourceRevision' in summary and 'SMOKE run' in summary)
+    check('the OTP code is exchanged at the FIXED Supabase verify endpoint; no password grant', f'CURL POST {SUPABASE_URL}/auth/v1/verify' in curl and 'grant_type=password' not in curl)
+    check('both sessions are signed out at the end', curl.count(f'CURL POST {SUPABASE_URL}/auth/v1/logout') == 2)
+    check('no secret appears outside an add-mask line (generic OTP)', all(s not in strip_masks(text) for s in (FAKE_TOKEN, EMAIL_A, CODE_A, FAKE_WS, PUB)), strip_masks(text)[-300:])
     check('every secret is masked at least once', all(f'::add-mask::{s}' in text for s in (FAKE_TOKEN, EMAIL_A, CODE_A, FAKE_WS)))
 
-    # gate mode mints a victim OAuth state and passes it to the probe
-    code, text, penv, summary, curl = signin('gate', secrets_otp, cases=[{'case': 'x', 'verdict': 'PASS', 'blast': ''}])
-    check('gate run succeeds and mints a victim OAuth state', code == 0 and penv.get('Q05_VICTIM_A_OAUTH_STATE') == FAKE_STATE, text[-300:])
+    # gate mode (serving build matches expectSourceRevision) mints a state and passes it to the probe
+    code, text, penv, summary, curl = signin('gate', secrets_otp, cases=[{'case': 'x', 'verdict': 'PASS', 'blast': ''}], knobs={'HEALTH_REV': EXPECT_REV})
+    check('gate run succeeds when sourceRevision matches, and mints a victim OAuth state', code == 0 and penv.get('Q05_VICTIM_A_OAUTH_STATE') == FAKE_STATE, text[-300:])
     check('gate does NOT pass --smoke', penv.get('smoke') is False)
-    check('gate calls the discord connect-start on the FIXED base URL', f'{BASE_URL}/api/workspaces/{FAKE_WS}/channels/discord/oauth/start' in curl)
     check('the minted state is masked', f'::add-mask::{FAKE_STATE}' in text and FAKE_STATE not in strip_masks(text))
 
-    # ready-made token mode: no Supabase call at all
-    code, text, penv, summary, curl = signin('generic', secrets_tok)
-    check('ready-made tokens are used and no Supabase verify is called', code == 0 and penv.get('Q05_TOKEN_A') == 'ready-token-AAAA' and '/auth/v1/verify' not in curl, curl[-200:])
+    # gate refuses when the serving build does not match the requested expectSourceRevision (M6)
+    code, text, *_ = signin('gate', secrets_otp, knobs={'HEALTH_REV': 'a' * 40})
+    check('gate refuses a serving build whose sourceRevision != expectSourceRevision', code != 0 and 'does not match expectSourceRevision' in text, text[-200:])
+
+    # gate with connections-v2 OFF mints no state (L3: never reserve a cap slot on a v2-off build)
+    code, text, penv, *_ = signin('gate', secrets_otp, cases=[{'case': 'x', 'verdict': 'PASS', 'blast': ''}], knobs={'HEALTH_REV': EXPECT_REV, 'V2_ON': 'false'})
+    check('gate mints no OAuth state when connections-v2 is off', penv.get('Q05_VICTIM_A_OAUTH_STATE') == '')
+
+    # M2: a secret/service key is refused (decoded locally, never printed)
+    code, text, *_ = signin('generic', {**secrets_otp, 'Q05_SUPABASE_PUBLISHABLE_KEY': 'sb_secret_abcdef123456'})
+    check('a sb_secret_ key is refused', code != 0 and 'SECRET' in text)
+    import base64 as _b64
+    svc = 'h.' + _b64.urlsafe_b64encode(b'{"role":"service_role"}').rstrip(b'=').decode() + '.s'
+    code, text, *_ = signin('generic', {**secrets_otp, 'Q05_SUPABASE_PUBLISHABLE_KEY': svc})
+    check('a service_role JWT key is refused, without printing it', code != 0 and 'service_role' in text and svc not in strip_masks(text))
+    anon = 'h.' + _b64.urlsafe_b64encode(b'{"role":"anon"}').rstrip(b'=').decode() + '.s'
+    code, text, *_ = signin('generic', {**secrets_otp, 'Q05_SUPABASE_PUBLISHABLE_KEY': anon})
+    check('an anon JWT key is accepted', code == 0)
+
+    # M3: both e-mail local parts must carry the q05 marker
+    code, text, *_ = signin('generic', {**secrets_otp, 'Q05_EMAIL_A': 'realperson@gmail.com'})
+    check('an e-mail without the q05 marker is refused', code != 0 and 'marker q05' in text)
 
     # failures / leaks
-    code, text, *_ = signin('generic', {})
-    check('no credentials at all fails, with a hint and no values', code != 0 and 'set Q05_EMAIL_A' in text)
-    code, text, _penv, _s, _c = signin('generic', {**secrets_otp, 'Q05_CODE_A': CODE_A}, knobs={'FAIL_VERIFY': '1'})
+    code, text, *_ = signin('generic', {'Q05_SUPABASE_PUBLISHABLE_KEY': PUB})
+    check('no OTP credentials fails, with a hint and no values', code != 0 and 'set Q05_EMAIL_A' in text)
+    code, text, *_ = signin('generic', secrets_otp, knobs={'FAIL_VERIFY': '1'})
     check('a rejected OTP code fails the run', code != 0 and 'did not verify' in text, text[-200:])
     check('a leaky verify response never prints the e-mail or code', EMAIL_A not in strip_masks(text) and CODE_A not in strip_masks(text), strip_masks(text)[-300:])
     code, text, *_ = signin('generic', secrets_otp, knobs={'WS_COUNT': '0'})
-    check('zero workspaces fails the run (account not signed up / not bootstrapped)', code != 0 and 'workspace resolution failed' in text)
+    check('zero workspaces fails the run', code != 0 and 'workspace resolution failed' in text)
     code, text, *_ = signin('generic', secrets_otp, knobs={'WS_COUNT': '2'})
     check('two workspaces fails the run (ambiguous)', code != 0 and 'workspace resolution failed' in text)
-    code, text, *_ = signin('generic', secrets_otp, probe_exit='1')
+    code, text, *_ = signin('generic', secrets_otp, exit_code=1)
     check('a non-zero probe exit fails the job', code != 0 and 'probe exit: 1' in text)
-    # gate completeness: a non-send NOT RUN fails gate; a send NOT RUN is allowed
-    code, text, *_ = signin('gate', secrets_otp, cases=[{'case': 'read.x', 'verdict': 'NOT_RUN', 'blast': ''}])
+    code, text, *_ = signin('gate', secrets_otp, cases=[{'case': 'read.x', 'verdict': 'NOT_RUN', 'blast': ''}], knobs={'HEALTH_REV': EXPECT_REV})
     check('gate fails when a non-send case is NOT RUN', code != 0 and 'were NOT RUN that must run' in text, text[-200:])
-    code, text, *_ = signin('gate', secrets_otp, cases=[{'case': 'write.send.y', 'verdict': 'NOT_RUN', 'blast': 'send'}])
+    code, text, *_ = signin('gate', secrets_otp, cases=[{'case': 'write.send.y', 'verdict': 'NOT_RUN', 'blast': 'send'}], knobs={'HEALTH_REV': EXPECT_REV})
     check('gate tolerates a send-blast case being NOT RUN (send-risk off)', code == 0, text[-200:])
-    # smoke tolerates undiscovered: generic with a non-send NOT RUN and probe exit 0 still passes the job
     code, text, *_ = signin('generic', secrets_otp, cases=[{'case': 'read.x', 'verdict': 'NOT_RUN', 'blast': ''}])
     check('generic/smoke does not fail the job on a NOT RUN case', code == 0, text[-200:])
 
@@ -342,7 +396,8 @@ def shape_checks(d, path):
           'secrets.VERCEL' not in text and not any('VERCEL' in k.upper() for s in job['steps'] for k in (s.get('env') or {})))
     check('the base URL and Supabase URL are hard-coded literals', d['env']['BASE_URL'] == 'https://rafii.io' and d['env']['SUPABASE_URL'] == 'https://buoyhkbodnhzngaotoel.supabase.co')
     check('no run block reads base_url/supabase from the request', all('REQUEST.json' not in s.get('run', '') or ('base_url' not in s.get('run', '').lower() and 'supabase' not in s.get('run', '').lower()) for s in job['steps']))
-    check('the request step reads only sha and mode from REQUEST.json', REQ.count('REQUEST.json') == 2 and '"sha"' in REQ and '"mode"' in REQ.replace('("mode","")', '').replace('.get("mode"', 'X') or '.get("mode"' in REQ)
+    check('the request step reads sha, mode, probeSha256 and expectSourceRevision only from REQUEST.json',
+          REQ.count('REQUEST.json') == 4 and all(k in REQ for k in ('"sha"', '"mode"', '"probeSha256"', '"expectSourceRevision"')))
     check('no run block interpolates a ${{ }} expression', all('${{' not in s.get('run', '') for s in job['steps']))
     check('every action is pinned to a full 40-hex SHA', all(len(s['uses'].split('@')[1].split(' ')[0]) == 40 for s in job['steps'] if 'uses' in s))
     secret_steps = sorted(n for n, s in STEPS.items() if any('secrets.' in str(v) for v in (s.get('env') or {}).values()))
@@ -351,9 +406,24 @@ def shape_checks(d, path):
     check('generic passes --smoke, gate never enables send-risk', '--smoke' in signin_run and '--allow-send-risk' not in signin_run)
     check('the step exits with the probe return code', 'exit "$rc"' in signin_run)
     check('the gate check exempts only send-blast NOT RUN', '.verdict == "NOT_RUN" and .blast != "send"' in signin_run)
+    # hardening (adversarial review): minimal env, pinned python, probe hash, health gate, sign-out, key/e-mail guards
+    check('the probe runs under a minimal env (env -i) and pinned python (python3 -I)', 'env -i PATH=' in signin_run and 'python3 -I' in signin_run)
+    check('the probe is NEVER told it may send, and the synthetic flag is not passed here',
+          '--allow-send-risk' not in signin_run and '--victim-is-synthetic' not in signin_run)
+    check('the fetch step pins and verifies the reviewed probeSha256', 'PROBE_SHA256' in FETCH and 'reviewed probeSha256' in FETCH)
+    check('gate refuses a serving build whose sourceRevision != expectSourceRevision',
+          '/api/health' in signin_run and 'does not match expectSourceRevision' in signin_run)
+    check('both sessions are signed out via a trap on EXIT', 'trap cleanup EXIT' in signin_run and '/auth/v1/logout' in signin_run)
+    check('a secret/service-role key is refused before any sign-in', 'service_role' in signin_run and 'SECRET' in signin_run)
+    check('both e-mail local parts must carry the q05 marker', 'q05' in signin_run and 'marker q05' in signin_run)
+    check('every curl has a connect and max timeout', '--connect-timeout 10' in signin_run and '--max-time 30' in signin_run)
 
 
 # --------------------------------------------------------------------------- mutation harness
+EVAL_SECRETS = {'Q05_EMAIL_A': EMAIL_A, 'Q05_CODE_A': CODE_A, 'Q05_EMAIL_B': EMAIL_B, 'Q05_CODE_B': CODE_B,
+                'Q05_SUPABASE_PUBLISHABLE_KEY': 'sb_publishable_eval1234567890'}
+
+
 def evaluate(path):
     """A compact representative subset for the mutation harness. Returns True if ALL pass."""
     global failures, passes
@@ -365,49 +435,77 @@ def evaluate(path):
         return False
     try:
         reqrun = step('Read the request', d)['run']
+        fetchrun = step('Fetch the probe', d)['run']
         signinrun = step('Sign in both accounts', d)['run']
     except Exception:
         return False
     results = []
 
-    # req: generic passes, bad mode refused, not-tip refused, re-run refused
+    # req: generic passes, bad mode refused, not-tip refused, re-run refused. Every request pins the
+    # reviewed probeSha256 (and, in gate mode, expectSourceRevision) just as make_request_branch.sh does.
     def req(body, branch, age=60, attempt='1', wrong_tip=False):
         root, sha, alt = workspace()
         if wrong_tip:
             git('update-ref', f'refs/heads/{PROBE_BRANCH}', alt, cwd=os.path.join(root, 'origin', 'PostRiff.git'))
-        b = json.loads(json.dumps(body).replace('SHA', sha)) if isinstance(body, dict) else body
-        write_request(root, b, age=age)
+        if isinstance(body, dict):
+            body = dict(body)
+            body.setdefault('probeSha256', PROBE_SHA256)
+            if body.get('mode') == 'gate':
+                body.setdefault('expectSourceRevision', EXPECT_REV)
+            body = json.loads(json.dumps(body).replace('SHA', sha))
+        write_request(root, body, age=age)
         code, _t, _o = run(reqrun, root, {'REF_NAME': branch, 'GITHUB_RUN_ATTEMPT': attempt})
         shutil.rmtree(root)
         return code
     results.append(req({'sha': 'SHA', 'mode': 'generic'}, RUN_G) == 0)
-    results.append(req({'sha': 'SHA', 'mode': 'deploy'}, RUN_G) != 0)
+    results.append(req({'sha': 'SHA', 'mode': 'deploy'}, RUN_G) != 0)       # unknown mode refused
     results.append(req({'sha': 'SHA', 'mode': 'generic'}, RUN_G, wrong_tip=True) != 0)
     results.append(req({'sha': 'SHA', 'mode': 'generic'}, RUN_G, attempt='2') != 0)
 
-    # signin: happy OTP, leak check, probe-exit propagation, gate NOT-RUN, URL fixity
-    def signin(mode, secrets, probe_exit='0', cases=None, knobs=None):
+    # fetch: the reviewed probeSha256 must match the fetched probe
+    def fetch(probe_sha256):
+        root, sha, alt = workspace()
+        code, _t, _o = run(fetchrun, root, {'SOURCE_SHA': sha, 'PROBE_SHA256': probe_sha256})
+        shutil.rmtree(root)
+        return code
+    results.append(fetch(PROBE_SHA256) == 0)
+    results.append(fetch('deadbeef' * 8) != 0)
+
+    # signin: the probe runs under env -i from a knobs FILE (never env), so tests set cases/exit there.
+    def signin(mode, secrets, exit_code=0, cases=None, knobs=None):
         root, sha, alt = workspace()
         open(os.path.join(root, 'work', 'probe.py'), 'w').write(STUB_PROBE)
-        env = {'MODE': mode, 'PROBE_EXIT': probe_exit, 'PROBE_CASES': json.dumps(cases or [])}
+        with open(os.path.join(root, 'work', 'probe_knobs.json'), 'w') as fh:
+            json.dump({'cases': cases or [], 'exit': exit_code}, fh)
+        env = {'MODE': mode, 'EXPECT_REV': EXPECT_REV, 'INHERITED_SECRET': 'leaky-inherited-value'}
         env.update(secrets); env.update(knobs or {})
         code, text, _ = run(signinrun, root, env)
         penv = read(root, 'work/probe_env.json'); penv = json.loads(penv) if penv else {}
         curl = read(root, 'curl.log')
         shutil.rmtree(root)
         return code, text, penv, curl
-    sotp = {'Q05_EMAIL_A': EMAIL_A, 'Q05_CODE_A': CODE_A, 'Q05_EMAIL_B': EMAIL_B, 'Q05_CODE_B': CODE_B,
-            'Q05_SUPABASE_PUBLISHABLE_KEY': 'pk_test_publishable_1234567890'}
+    sotp = EVAL_SECRETS
     code, text, penv, curl = signin('generic', sotp)
     results.append(code == 0 and penv.get('Q05_TOKEN_A') == FAKE_TOKEN and penv.get('smoke') is True)
+    results.append(penv.get('inherited_secret_seen') == '')                 # env -i: no inherited secret
     results.append(all(s not in strip_masks(text) for s in (FAKE_TOKEN, EMAIL_A, CODE_A, FAKE_WS)))
     results.append(f'CURL POST {SUPABASE_URL}/auth/v1/verify' in curl and 'grant_type=password' not in curl)
+    results.append(curl.count(f'CURL POST {SUPABASE_URL}/auth/v1/logout') == 2)   # both sessions signed out
     code, text, *_ = signin('generic', sotp, knobs={'FAIL_VERIFY': '1'})
     results.append(code != 0 and EMAIL_A not in strip_masks(text) and CODE_A not in strip_masks(text))
-    code, _t, *_ = signin('generic', sotp, probe_exit='1')
+    code, _t, *_ = signin('generic', sotp, exit_code=1)
+    results.append(code != 0)                                              # probe exit propagated
+    # gate: health must match expectSourceRevision, and a non-send NOT-RUN case fails the gate
+    code, _t, *_ = signin('gate', sotp, cases=[{'case': 'read.x', 'verdict': 'NOT_RUN', 'blast': ''}], knobs={'HEALTH_REV': EXPECT_REV})
     results.append(code != 0)
-    code, _t, *_ = signin('gate', sotp, cases=[{'case': 'read.x', 'verdict': 'NOT_RUN', 'blast': ''}])
-    results.append(code != 0)
+    code, _t, *_ = signin('gate', sotp, knobs={'HEALTH_REV': 'a' * 40})
+    results.append(code != 0)                                              # serving build != expectSourceRevision
+    # key / e-mail guards
+    svc = 'h.' + base64.urlsafe_b64encode(b'{"role":"service_role"}').rstrip(b'=').decode() + '.s'
+    code, _t, *_ = signin('generic', {**sotp, 'Q05_SUPABASE_PUBLISHABLE_KEY': svc})
+    results.append(code != 0)                                              # service_role JWT refused
+    code, _t, *_ = signin('generic', {**sotp, 'Q05_EMAIL_A': 'realperson@gmail.com'})
+    results.append(code != 0)                                              # missing q05 marker refused
 
     # shape
     try:
@@ -439,9 +537,15 @@ MUTATIONS = [
     ('accept a password grant again', '"$SUPABASE_URL/auth/v1/verify"', '"$SUPABASE_URL/auth/v1/token?grant_type=password"'),
     ('stop exiting with the probe code', 'exit "$rc"', 'exit 0'),
     ('let gate accept any NOT RUN case', '.verdict == "NOT_RUN" and .blast != "send"', '.verdict == "NOT_RUN" and .blast == "send"'),
-    ('widen the mode check to anything', "generic|gate) : ;;", "generic|gate|*) : ;;"),
+    ('accept any mode (drop the generic/gate allowlist)', '*) echo \'mode must be "generic" or "gate"\'; exit 1 ;;', '*) : ;;'),
     ('drop the run_attempt guard', "[ \"${GITHUB_RUN_ATTEMPT:-1}\" = 1 ] || { echo 're-runs are refused; push a new request'; exit 1; }", "true"),
     ('drop the tip-of-branch check', '[ "$tip" = "$sha" ] || { echo "the request SHA is not the current tip of ${RC_BRANCH}"; exit 1; }', 'true'),
+    # adversarial-review additions
+    ('accept a service_role key', "[ \"$role\" != service_role ] || { echo 'refusing: the key is a service_role JWT, not the anon/publishable key'; exit 1; }", "true"),
+    ('drop the probeSha256 verification', "*) echo 'the fetched probe does not match the reviewed probeSha256 in the request'; exit 1 ;;", "*) : ;;"),
+    ('drop the gate health-revision gate', '[ "$REV_BEFORE" = "$EXPECT_REV" ] || { echo "gate: the serving build sourceRevision does not match expectSourceRevision in the request"; exit 1; }', "true"),
+    ('drop the e-mail q05 marker check', "*) echo 'refusing: both test e-mail local parts must contain the marker q05 (e.g. name+q05a@gmail.com)'; exit 1 ;;", "*) : ;;"),
+    ('run the probe with the full inherited env (drop env -i)', 'env -i PATH="$PATH" \\', 'env PATH="$PATH" \\'),
 ]
 
 

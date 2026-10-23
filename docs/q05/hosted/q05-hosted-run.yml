@@ -52,20 +52,25 @@ jobs:
           { [ "$age" -ge -60 ] && [ "$age" -le 43200 ]; } || { echo "the request commit is not from the last twelve hours (age ${age}s); push a new request"; exit 1; }
           sha="$(python3 -I -c 'import json; print(json.load(open("request/probe/REQUEST.json"))["sha"])')"
           mode="$(python3 -I -c 'import json; print(json.load(open("request/probe/REQUEST.json")).get("mode",""))')"
+          probesha="$(python3 -I -c 'import json; print(json.load(open("request/probe/REQUEST.json")).get("probeSha256",""))')"
+          expectrev="$(python3 -I -c 'import json; print(json.load(open("request/probe/REQUEST.json")).get("expectSourceRevision",""))')"
           # Whole-string matches only, before anything is written to the step outputs.
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'the request does not hold a 40 hex SHA'; exit 1; }
+          [[ "$probesha" =~ ^[0-9a-f]{16,64}$ ]] || { echo 'the request does not hold a probeSha256 (16-64 hex)'; exit 1; }
           case "$mode" in
-            generic|gate) : ;;
+            generic) [ -z "$expectrev" ] || { echo 'generic mode must not pin expectSourceRevision'; exit 1; } ;;
+            gate) [[ "$expectrev" =~ ^[0-9a-f]{40}$ ]] || { echo 'gate mode requires expectSourceRevision (40 hex) in the request'; exit 1; } ;;
             *) echo 'mode must be "generic" or "gate"'; exit 1 ;;
           esac
           # The SHA must be the current tip of the probe branch. ls-remote needs no token on a public repo.
           tip="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/${RC_BRANCH}" | awk 'NR==1{print $1}')"
           [ -n "$tip" ] || { echo "could not read the tip of ${RC_BRANCH}"; exit 1; }
           [ "$tip" = "$sha" ] || { echo "the request SHA is not the current tip of ${RC_BRANCH}"; exit 1; }
-          { echo "sha=$sha"; echo "mode=$mode"; } >> "$GITHUB_OUTPUT"
+          { echo "sha=$sha"; echo "mode=$mode"; echo "probesha=$probesha"; echo "expectrev=$expectrev"; } >> "$GITHUB_OUTPUT"
       - name: Fetch the probe script at that exact SHA (manual fetch; the repo has orphan vendor gitlinks)
         env:
           SOURCE_SHA: ${{ steps.req.outputs.sha }}
+          PROBE_SHA256: ${{ steps.req.outputs.probesha }}
         run: |
           set -euo pipefail
           git init -q rc
@@ -75,84 +80,135 @@ jobs:
           test "$(git -C rc rev-parse HEAD)" = "$SOURCE_SHA"
           git -C rc show "HEAD:scripts/q05_tenant_probe.py" > "$GITHUB_WORKSPACE/probe.py"
           grep -q 'Q-05 cross-tenant isolation probe' "$GITHUB_WORKSPACE/probe.py" || { echo 'the fetched file is not the Q-05 probe'; exit 1; }
+          # The request pins the probe's sha256 (reviewed before the request was built). Refuse a
+          # fetched probe whose hash differs, so the content of this SHA cannot be swapped under review.
+          actual="$(sha256sum "$GITHUB_WORKSPACE/probe.py" | cut -d' ' -f1)"
+          case "$actual" in
+            "$PROBE_SHA256"*) : ;;
+            *) echo 'the fetched probe does not match the reviewed probeSha256 in the request'; exit 1 ;;
+          esac
       - name: Sign in both accounts, resolve their workspaces, and run the probe
         env:
           MODE: ${{ steps.req.outputs.mode }}
-          # Credential modes, in order of preference: (a) single-use e-mail OTP codes + e-mails, or
-          # (b) ready-made short-lived access tokens. No password grant, no dashboard-created users.
-          # Each secret is read only in this step.
+          EXPECT_REV: ${{ steps.req.outputs.expectrev }}
+          # Credential: single-use e-mail OTP codes + e-mails ONLY. No password grant, no
+          # dashboard-created users, no pasted session tokens. Each secret is read only here.
           Q05_EMAIL_A: ${{ secrets.Q05_EMAIL_A }}
           Q05_CODE_A: ${{ secrets.Q05_CODE_A }}
           Q05_EMAIL_B: ${{ secrets.Q05_EMAIL_B }}
           Q05_CODE_B: ${{ secrets.Q05_CODE_B }}
-          Q05_TOKEN_A: ${{ secrets.Q05_TOKEN_A }}
-          Q05_TOKEN_B: ${{ secrets.Q05_TOKEN_B }}
           Q05_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.Q05_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           set -euo pipefail
           GUARD='X-Postriff-Request: founder-alpha'
+          CURL() { curl -sS --connect-timeout 10 --max-time 30 "$@"; }
           # Mask every secret input before it could reach a log line (belt and braces with "never print").
-          for s in "${Q05_SUPABASE_PUBLISHABLE_KEY:-}" "${Q05_EMAIL_A:-}" "${Q05_EMAIL_B:-}" "${Q05_CODE_A:-}" "${Q05_CODE_B:-}" "${Q05_TOKEN_A:-}" "${Q05_TOKEN_B:-}"; do
+          for s in "${Q05_SUPABASE_PUBLISHABLE_KEY:-}" "${Q05_EMAIL_A:-}" "${Q05_EMAIL_B:-}" "${Q05_CODE_A:-}" "${Q05_CODE_B:-}"; do
             [ -n "$s" ] && echo "::add-mask::$s" || true
           done
-          mint_token() {
-            who="$1"; email=""; code=""; ready=""
-            case "$who" in
-              A) email="${Q05_EMAIL_A:-}"; code="${Q05_CODE_A:-}"; ready="${Q05_TOKEN_A:-}" ;;
-              B) email="${Q05_EMAIL_B:-}"; code="${Q05_CODE_B:-}"; ready="${Q05_TOKEN_B:-}" ;;
+          # M2: the publishable/anon key only. Refuse a secret key or a service_role JWT (decoded locally,
+          # never printed). An sb_publishable_ value or an anon JWT is accepted; an unknown shape is left to
+          # the server to reject (a wrong key cannot sign anyone in).
+          key="${Q05_SUPABASE_PUBLISHABLE_KEY:-}"
+          [ -n "$key" ] || { echo 'Q05_SUPABASE_PUBLISHABLE_KEY is required'; exit 1; }
+          case "$key" in
+            sb_secret_*|sbp_secret_*|service_role*) echo 'refusing: that looks like a SECRET/service key, not the publishable/anon key'; exit 1 ;;
+          esac
+          role="$(printf '%s' "$key" | python3 -I -c 'import sys,base64,json; t=sys.stdin.read().strip().split("."); p=(t[1]+"="*(-len(t[1])%4)) if len(t)>=2 else ""; print((json.loads(base64.urlsafe_b64decode(p)).get("role") or "") if p else "")' 2>/dev/null || true)"
+          [ "$role" != service_role ] || { echo 'refusing: the key is a service_role JWT, not the anon/publishable key'; exit 1; }
+          # M3: both e-mail local parts must carry the marker "q05" (plus-addressing, e.g. name+q05a@gmail.com),
+          # so a real everyday account is not used against the live site by mistake.
+          for e in "${Q05_EMAIL_A:-}" "${Q05_EMAIL_B:-}"; do
+            [ -n "$e" ] || continue   # a missing e-mail is reported by mint_token, not as a bad marker
+            local_part="${e%@*}"
+            case "$local_part" in
+              *[qQ][0][5]*|*q05*|*Q05*) : ;;
+              *) echo 'refusing: both test e-mail local parts must contain the marker q05 (e.g. name+q05a@gmail.com)'; exit 1 ;;
             esac
-            # (a) single-use e-mail OTP code: exchange it for a short-lived access token (public verify endpoint).
-            if [ -n "$email" ] && [ -n "$code" ]; then
-              [ -n "${Q05_SUPABASE_PUBLISHABLE_KEY:-}" ] || { echo "account $who: Q05_SUPABASE_PUBLISHABLE_KEY is required with an OTP code" >&2; return 1; }
-              body="$(jq -nc --arg e "$email" --arg t "$code" '{type:"email",email:$e,token:$t}')"
-              resp="$(curl -sS -X POST "$SUPABASE_URL/auth/v1/verify" -H "apikey: $Q05_SUPABASE_PUBLISHABLE_KEY" -H 'Content-Type: application/json' --data "$body")" || { echo "account $who: OTP verify request failed" >&2; return 1; }
-              tok="$(printf '%s' "$resp" | jq -r '.access_token // empty' 2>/dev/null || true)"
-              [ -n "$tok" ] || { echo "account $who: the OTP code did not verify (expired, already used, or wrong e-mail)" >&2; return 1; }
-              printf '%s' "$tok"; return 0
-            fi
-            # (b) a ready-made short-lived access token pasted by the owner.
-            if [ -n "$ready" ]; then printf '%s' "$ready"; return 0; fi
-            echo "account $who: set Q05_EMAIL_$who + Q05_CODE_$who (preferred) or Q05_TOKEN_$who" >&2
-            return 1
+          done
+          mint_token() {
+            who="$1"; email=""; code=""
+            case "$who" in
+              A) email="${Q05_EMAIL_A:-}"; code="${Q05_CODE_A:-}" ;;
+              B) email="${Q05_EMAIL_B:-}"; code="${Q05_CODE_B:-}" ;;
+            esac
+            [ -n "$email" ] && [ -n "$code" ] || { echo "account $who: set Q05_EMAIL_$who and Q05_CODE_$who" >&2; return 1; }
+            body="$(jq -nc --arg e "$email" --arg t "$code" '{type:"email",email:$e,token:$t}')"
+            resp="$(CURL -X POST "$SUPABASE_URL/auth/v1/verify" -H "apikey: $key" -H 'Content-Type: application/json' --data "$body")" || { echo "account $who: OTP verify request failed" >&2; return 1; }
+            tok="$(printf '%s' "$resp" | jq -r '.access_token // empty' 2>/dev/null || true)"
+            [ -n "$tok" ] || { echo "account $who: the OTP code did not verify (used, expired, or wrong e-mail) — request a new code" >&2; return 1; }
+            printf '%s' "$tok"
           }
           resolve_ws() {
             token="$1"
-            curl -sS -X POST "$BASE_URL/api/auth/verify" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -H "$GUARD" -H "Origin: $BASE_URL" --data '{}' >/dev/null 2>&1 || true
-            wsjson="$(curl -sS "$BASE_URL/api/workspaces" -H "Authorization: Bearer $token")" || { echo 'workspace list request failed' >&2; return 1; }
+            CURL -X POST "$BASE_URL/api/auth/verify" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -H "$GUARD" -H "Origin: $BASE_URL" --data '{}' >/dev/null 2>&1 || true
+            wsjson="$(CURL "$BASE_URL/api/workspaces" -H "Authorization: Bearer $token")" || { echo 'workspace list request failed' >&2; return 1; }
             ws="$(printf '%s' "$wsjson" | jq -r 'if ((.workspaces // []) | length) == 1 then .workspaces[0].workspaceId else empty end' 2>/dev/null || true)"
             [ -n "$ws" ] || { echo 'could not resolve exactly one workspace for this account' >&2; return 1; }
             printf '%s' "$ws"
           }
+          connections_v2_on() {
+            # L3: only mint an OAuth state where the connections-v2 flow is live, so the identity start
+            # cannot reserve a shared Discord server-cap slot (the original flow would, on a v2-off build).
+            CURL "$BASE_URL/api/workspaces/$2/channels" -H "Authorization: Bearer $1" 2>/dev/null \
+              | jq -e '[.providers[]? | select(.id=="discord" and .discordConnectionsV2==true)] | length > 0' >/dev/null 2>&1
+          }
           mint_state() {
             token="$1"; ws="$2"
-            resp="$(curl -sS -X POST "$BASE_URL/api/workspaces/$ws/channels/discord/oauth/start" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -H "$GUARD" -H "Origin: $BASE_URL" --data '{"capability":"identity","input":{"discordPurpose":"identity"}}' 2>/dev/null)" || return 0
+            connections_v2_on "$token" "$ws" || return 0   # route absent / v2 off: leave the state empty
+            resp="$(CURL -X POST "$BASE_URL/api/workspaces/$ws/channels/discord/oauth/start" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -H "$GUARD" -H "Origin: $BASE_URL" --data '{"capability":"identity","input":{"discordPurpose":"identity"}}' 2>/dev/null)" || return 0
             url="$(printf '%s' "$resp" | jq -r '.authorizeUrl // empty' 2>/dev/null || true)"
             printf '%s' "$url" | sed -n 's/.*[?&]state=\([A-Za-z0-9_-]*\).*/\1/p'
           }
+          # shellcheck disable=SC2329  # invoked indirectly via cleanup/trap
+          logout() { CURL -X POST "$SUPABASE_URL/auth/v1/logout" -H "apikey: $key" -H "Authorization: Bearer $1" >/dev/null 2>&1 || true; }
+          health_rev() { CURL "$BASE_URL/api/health" 2>/dev/null | jq -r '.sourceRevision // "null"' 2>/dev/null || echo null; }
+
           TOKEN_A="$(mint_token A)" || exit 1; echo "::add-mask::$TOKEN_A"
           TOKEN_B="$(mint_token B)" || exit 1; echo "::add-mask::$TOKEN_B"
+          # shellcheck disable=SC2329  # invoked indirectly via trap
+          cleanup() { logout "$TOKEN_A"; logout "$TOKEN_B"; }
+          trap cleanup EXIT
           WS_A="$(resolve_ws "$TOKEN_A")" || { echo 'account A: workspace resolution failed'; exit 1; }; echo "::add-mask::$WS_A"
           WS_B="$(resolve_ws "$TOKEN_B")" || { echo 'account B: workspace resolution failed'; exit 1; }; echo "::add-mask::$WS_B"
+
+          REV_BEFORE="$(health_rev)"
+          if [ "$MODE" = gate ]; then
+            [ "$REV_BEFORE" = "$EXPECT_REV" ] || { echo "gate: the serving build sourceRevision does not match expectSourceRevision in the request"; exit 1; }
+          fi
           VICTIM_A=""; VICTIM_B=""
           if [ "$MODE" = gate ]; then
-            # Best effort: a pending OAuth transaction per account for the state-binding case. If Discord
-            # v2 is not live the start call returns nothing; the probe then reports that case NOT RUN and
-            # gate fails, which correctly says the build is not ready. These transactions expire in 10 min.
             VICTIM_A="$(mint_state "$TOKEN_A" "$WS_A")"; [ -n "$VICTIM_A" ] && echo "::add-mask::$VICTIM_A" || true
             VICTIM_B="$(mint_state "$TOKEN_B" "$WS_B")"; [ -n "$VICTIM_B" ] && echo "::add-mask::$VICTIM_B" || true
           fi
-          args=(--allow-writes --victim-is-synthetic --delay 0.05 --out-md receipt.md --out-json cases.jsonl)
+          # M3: the send-risk and synthetic declarations are never passed here, so the hosted runner
+          # can never run a send-blast case (a wrongly-accepted attack still cannot send a message).
+          args=(--allow-writes --delay 0.05 --out-md receipt.md --out-json cases.jsonl)
           if [ "$MODE" = generic ]; then args+=(--smoke); fi
           rc=0
-          Q05_BASE_URL="$BASE_URL" Q05_TOKEN_A="$TOKEN_A" Q05_TOKEN_B="$TOKEN_B" \
+          # M2/L2: a MINIMAL environment (only PATH + the Q05_* the probe needs) and python3 -I, so no
+          # inherited secret reaches the probe process and no local module/env can influence it.
+          env -i PATH="$PATH" \
+            Q05_BASE_URL="$BASE_URL" Q05_TOKEN_A="$TOKEN_A" Q05_TOKEN_B="$TOKEN_B" \
             Q05_WORKSPACE_A="$WS_A" Q05_WORKSPACE_B="$WS_B" \
             Q05_VICTIM_A_OAUTH_STATE="$VICTIM_A" Q05_VICTIM_B_OAUTH_STATE="$VICTIM_B" \
-            python3 "$GITHUB_WORKSPACE/probe.py" "${args[@]}" || rc=$?
-          # The receipt is templated (routes only, no ids, bodies or tokens): safe for the public summary.
-          { echo "## Q-05 hosted probe (${MODE}) against ${BASE_URL}"; echo; cat receipt.md 2>/dev/null || echo '(no receipt produced)'; } >> "$GITHUB_STEP_SUMMARY"
+            python3 -I "$GITHUB_WORKSPACE/probe.py" "${args[@]}" || rc=$?
+          REV_AFTER="$(health_rev)"
+          # M6: record which build answered. sourceRevision is null on a build without Discord v2 (the
+          # serving build today, c5fc1fd1): a generic run then smoke-tests THAT build, not RC1/RC2.
+          {
+            echo "## Q-05 hosted probe (${MODE}) against ${BASE_URL}"
+            echo
+            echo "- serving build sourceRevision before: \`${REV_BEFORE}\`, after: \`${REV_AFTER}\`"
+            if [ "$MODE" = generic ]; then
+              echo "- NOTE: a generic run is a SMOKE run of the build that is serving right now (sourceRevision"
+              echo "  above); if that is \`null\` the build has no Discord v2 and this is NOT RC1/RC2 gate evidence."
+            fi
+            echo
+            cat receipt.md 2>/dev/null || echo '(no receipt produced)'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$REV_BEFORE" = "$REV_AFTER" ] || { echo "the serving build changed mid-run; result is void"; rc=1; }
           if [ "$MODE" = gate ]; then
-            # Gate completeness: the ONLY NOT RUN cases allowed are the send-blast ones (send-risk is never
-            # enabled here, so a wrongly-accepted attack can still never cause a real Discord message).
             bad="$(jq -rs '[.[] | select(.verdict == "NOT_RUN" and .blast != "send")] | length' cases.jsonl 2>/dev/null || echo 999)"
             [ "$bad" = 0 ] || { echo "gate: ${bad} case(s) were NOT RUN that must run (only send-blast cases may be gated off)"; rc=1; }
           fi
