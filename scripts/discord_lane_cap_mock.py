@@ -579,9 +579,21 @@ def main(argv=None):
     stop = threading.Event()
 
     def periodic():
-        while not stop.wait(5):
+        # A checkpoint every few seconds, so a run cut short (a container restart) can still be analysed:
+        # the request log so far (mock-requests.partial.jsonl) and the counters (mock-live.json).
+        written = 0
+        while not stop.wait(3):
             try:
+                with world.lock:
+                    fresh = world.log[written:]
+                    written = len(world.log)
+                if fresh:
+                    with open(os.path.join(args.out, 'mock-requests.partial.jsonl'), 'a') as handle:
+                        for record in fresh:
+                            handle.write(json.dumps(record, separators=(',', ':')) + '\n')
                 snapshot = world.snapshot()
+                with world.lock:
+                    snapshot['createsByNonce'] = {nonce: list(times) for nonce, times in world.nonces.items()}
                 with open(os.path.join(args.out, 'mock-live.json.tmp'), 'w') as handle:
                     json.dump(snapshot, handle)
                 os.replace(os.path.join(args.out, 'mock-live.json.tmp'), os.path.join(args.out, 'mock-live.json'))

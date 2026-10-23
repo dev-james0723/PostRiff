@@ -341,6 +341,9 @@ class Harness:
                                                       log=self.log)
             self.admin_dsn = self.cluster.dsn
             self.config['database'] = 'local throwaway cluster'
+            self.config['clusterDirectory'] = self.cluster.tmp
+            self.config['clusterPort'] = self.cluster.port
+            self.config['clusterPgBin'] = str(self.cluster.pg_bin)
         cluster_tools.apply_schema(self.admin_dsn, self.tree, log=self.log)
         with self.admin() as db:
             self.config['serverVersion'] = db.execute('SHOW server_version').fetchone()[0]
@@ -1094,6 +1097,47 @@ def differences(result, config):
     return items
 
 
+def recover(run_dir):
+    """Collect what an interrupted run left (a container restart kills every process but keeps /tmp): restart the
+    throwaway cluster from its data directory, read the final job states and database figures, stop it, and use the
+    mock's checkpointed request log. The receipt then says PARTIAL and where the run was cut."""
+    run_dir = Path(run_dir)
+    config = json.loads((run_dir / 'config.json').read_text())
+    directory = config.get('clusterDirectory')
+    if not directory or not Path(directory, 'data').exists():
+        raise SystemExit('no throwaway cluster directory left for %s' % run_dir)
+    mock_dir = run_dir / 'mock'
+    if not (mock_dir / 'mock-requests.jsonl').exists() and (mock_dir / 'mock-requests.partial.jsonl').exists():
+        shutil.copy(mock_dir / 'mock-requests.partial.jsonl', mock_dir / 'mock-requests.jsonl')
+    if not (mock_dir / 'mock-summary.json').exists() and (mock_dir / 'mock-live.json').exists():
+        shutil.copy(mock_dir / 'mock-live.json', mock_dir / 'mock-summary.json')
+    runas = ['runuser', '-u', 'postgres', '--'] if os.geteuid() == 0 else []
+    pg_ctl = str(Path(config['clusterPgBin']) / 'pg_ctl')
+    data = str(Path(directory) / 'data')
+    try:
+        os.unlink(Path(data) / 'postmaster.pid')
+    except OSError:
+        pass
+    subprocess.run([*runas, pg_ctl, '-D', data, '-l', str(Path(directory) / 'postgres.log'), '-w', '-t', '60', 'start'],
+                   check=True, stdout=subprocess.DEVNULL)
+    try:
+        shell = Harness.__new__(Harness)
+        shell.dir, shell.config, shell.kills, shell.lock_windows = run_dir, config, [], []
+        shell.cluster = type('C', (), {'logfile': Path(directory) / 'postgres.log'})()
+        shell.admin_dsn = 'host=%s port=%s dbname=postgres user=postgres' % (Path(directory) / 'sock', config['clusterPort'])
+        if not (run_dir / 'final-states.json').exists():
+            Harness.collect(shell)
+    finally:
+        subprocess.run([*runas, pg_ctl, '-D', data, '-m', 'immediate', '-w', 'stop'], stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+    shutil.rmtree(directory, ignore_errors=True)
+    config.pop('harnessError', None)
+    config['endReason'] = 'INTERRUPTED (partial: %s); collected afterwards' % config.get('interruptedNote', 'the run was cut short')
+    config['partial'] = True
+    (run_dir / 'config.json').write_text(json.dumps(config, indent=1, default=str))
+    return finish(run_dir)
+
+
 def finish(run_dir):
     run_dir = Path(run_dir)
     config = json.loads((run_dir / 'config.json').read_text())
@@ -1229,6 +1273,8 @@ def main(argv=None):
     common(profile)
     again = sub.add_parser('analyze', help='recompute result.json and RECEIPT.md for a finished run directory')
     again.add_argument('run_dir')
+    again.add_argument('--recover', action='store_true',
+                       help='an interrupted run: restart its leftover throwaway cluster, collect, then analyse (PARTIAL)')
     sub.add_parser('scenarios', help='list scenarios and profiles')
     args = parser.parse_args(argv)
     if args.command == 'scenarios':
@@ -1238,7 +1284,7 @@ def main(argv=None):
             print('profile %-9s %s' % (name, ', '.join(items)))
         return 0
     if args.command == 'analyze':
-        result = finish(args.run_dir)
+        result = recover(args.run_dir) if args.recover else finish(args.run_dir)
         print(json.dumps({'verdicts': [(v['id'], v['verdict']) for v in result.get('verdicts', [])],
                           'expectations': [(e['id'], e['verdict']) for e in result.get('expectations', [])]}))
         return 0
