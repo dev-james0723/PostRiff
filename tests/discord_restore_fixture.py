@@ -30,13 +30,14 @@ from pathlib import Path
 
 import discord_lane_fixture as F
 
-PG_BIN = Path(os.environ.get('POSTRIFF_PG_BIN') or '/usr/lib/postgresql/16/bin')
+PG_BIN = Path(os.environ.get('POSTRIFF_PG_BIN') or '/nonexistent-postgres-bin')  # set by the caller, as in W-02
 DISCORD_EPOCH_MS = 1420070400000
 SCHEMA = (F.ROOT / 'tests/phase2/rls.sql', *(F.ROOT / 'migrations/postriff' / name for name in F.MIGRATIONS))
 
 
 def available():
-    return bool(F.psycopg and (PG_BIN / 'initdb').exists() and (PG_BIN / 'pg_basebackup').exists())
+    return bool(os.environ.get('POSTRIFF_PG_BIN') and F.psycopg and (PG_BIN / 'initdb').exists()
+                and (PG_BIN / 'pg_basebackup').exists())
 
 
 def free_port():

@@ -40,6 +40,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+os.environ.setdefault('POSTRIFF_PG_BIN', '/usr/lib/postgresql/16/bin')  # the drill's default; tests require it set
 sys.path[:0] = [str(ROOT / 'tests'), str(ROOT / 'src'), str(ROOT / 'scripts')]
 import discord_lane_fixture as F  # noqa: E402
 import discord_restore_fixture as R  # noqa: E402
