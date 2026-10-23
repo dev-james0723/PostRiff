@@ -1,6 +1,6 @@
 # FRESH-CUSTOMER ACCEPTANCE (gate G7) and its receipt, with the real-flow session (gate G3)
 
-Written 2026-10-23 about 04:05Z for `RELEASE-DEFINITION-v2.md`. **Release status: NO-GO.** This repository is public: the receipt below is filled with states and counts only, never with workspace ids, e-mail addresses, Discord ids, tokens or message text. Real values live in a private copy.
+Written 2026-10-23 about 03:57Z for `RELEASE-DEFINITION-v2.md`. **Release status: NO-GO.** This repository is public: the receipt below is filled with states and counts only, never with workspace ids, e-mail addresses, Discord ids, tokens or message text. Real values live in a private copy.
 
 ## 1. Two sessions, in this order
 

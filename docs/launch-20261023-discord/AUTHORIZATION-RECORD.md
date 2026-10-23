@@ -162,3 +162,76 @@ Question put to the owner (one line to answer):
 - With `POSTRIFF_DISCORD_CONNECT_WORKSPACES=*` the gate returns "open to all" for every workspace (`launch_gate.py`). After it, the start path asks only for: a signed-in member with the connections permission in their own workspace, a linked Discord identity that manages the chosen server, at most three starts in flight per person, the server cap, 20 starts per ten minutes per workspace, and the Discord switches (connections v2 and authorization v2 on, provider not paused). The identity admission at the callback applies to YouTube only. No other allowlist was found on the Discord connect path.
 - The open setting lives on the build command (the gate and the cap). A later production build that omits it would silently close Discord again, and a build without the cap line falls back to the code default of 90 servers. Making it a project variable is a separate step and needs the owner's yes.
 - Capacity: on the frozen head one Discord post costs six requests and the worker budget is about 6 to 12 posts a minute, so 5,000 same-minute posts take roughly 7 to 14 hours; the standard cannot be met without W-02 (simulated about 23 minutes at the reviewed 25 requests a second).
+
+## Reply 13, received 2026-10-23 about 04:15Z ("Conditional Approval & RC2 Execution Instructions")
+
+> Reply 13 — Conditional Approval & RC2 Execution Instructions
+>
+> 芝麻開門。以下係我對六項問題嘅正式決定，請記入 Authorization Record，然後繼續所有已授權嘅工程、測試、修復及獨立審查工作。唔需要每完成一個普通步驟就停低問我。
+>
+> 1. 容量標準：暫時同意，作為 RC2 壓測驗收門檻。
+> * 5,000 條同分鐘到期：P50 ≤12 分鐘、P95 ≤25 分鐘、最大 ≤40 分鐘。
+> * 0 duplicate、0 expired approval 後發送。
+> * 不超過 25 rps 全域測試預算，同時必須遵守 Discord 實際 global、per-route 及其他適用 rate limits。
+> * 小型租戶（≤5 條）即使其他租戶有 3,000 條 backlog，亦須在 15 分鐘內完成。
+> * 必須測試公平調度、429、5xx、重試、worker crash、database contention、approval expiry、跨租戶隔離及 backlog recovery。
+> * 以上只係極端 spike 嘅內部 release benchmark，唔係對客戶承諾嘅正常排程準確度。請額外制定正常負載 SLO。
+>
+> 如果 Depot 真實測試不達標，優先優化 request 數量、調度及吞吐量，不要直接降低驗收標準。任何提高 25 rps 政策上限嘅方案，需要重新審查。
+>
+> 2. H-07：James 暫任 Release Captain，但不代表已有 24/7 值班覆蓋。
+> 請先建立可遠端操作嘅監控、警報、停發及回滾方案，確保 Mac 離線仍可執行。
+> 必須有 backlog、delivery failures、rate-limit exhaustion、silent halt、跨租戶安全異常等警報，並提供實際演練收據。
+> 正式公開前要確認真正可用嘅值班時段與警報接收渠道。未完成不得宣稱 H-07 VERIFIED。
+>
+> 3. M-03：繼續核實 Supabase 備份與還原。
+> 先透過現有授權工具唯讀查詢 PITR、backup status、最新可還原時間、RPO/RTO，以及還原程序。
+> 如果無法取得，提供我最簡單嘅 Dashboard 截圖步驟。
+> 不准直接修改 Production database，不准在 Production 執行破壞性還原測試。若冇 PITR，請具體評估風險及替代備份方案。
+>
+> 4. Q-05：批准繼續完整跨租戶隔離測試。
+> 批准 RC1/RC2 隔離環境進行 A/B 雙向讀寫探測、negative tests、authorization mutation tests，以及 mock Discord 驗證。
+> 故意拆除授權檢查只能在完全隔離嘅測試 fixture 或 branch 進行，絕不可進入可部署 Production 嘅版本。
+> Production A/B 帳戶必須透過正常 signup/auth 流程建立，不准直接向 Production Auth 寫入假用戶。如仍需要我開兩個帳戶，先完成所有獨立測試，再提供最少步驟。
+> Test credentials 應使用受保護、短期、最小權限嘅 secrets，不能輸出到 logs。
+>
+> 5. Release 次序：原則同意 Dark → Private Verification → Public，但附帶嚴格條件。
+> 請將 AUTH-5 明確分開：
+> * Pre-promotion：本地及隔離環境跨租戶安全驗證、獨立 code review、CI、安全配置檢查全部通過。
+> * Private canary：只有在我另行批准 Production promotion 後，先可用 tester-only gate 驗證真實 Discord 物件。
+> * Pre-public：真實 A/B 跨租戶驗證、Discord 功能測試、容量測試、監控、rollback drill 全部 VERIFIED，先可以開放所有 workspace。
+> 任何一關失敗都係 NO-GO。
+> 不能用「暗版已 promote」代替安全驗證。請確認未啟用功能對現有 Production 客戶冇可觀察嘅回歸或副作用。
+> Production build、promotion、環境變數修改及正式全開，仍然需要我逐項明確批准。
+>
+> 6. H-03：OK 查。
+> 批准唯讀查詢現有 tester workspace 嘅 Discord user/server/channel metadata，包括可見及不可見 channel 嘅測試所需識別資料。
+> 不可讀取 tokens、message contents 或其他用戶私隱資料。
+> 同意規劃使用新嘅空白 Discord server 測試全新客戶 onboarding、server cap 及 permission flows。
+> 真實 Discord 發送必須使用先前已批准嘅測試帳戶及具體訊息，最多 3 條；如果既有批准未涵蓋內容、目的地或時段，請先提出精確批准請求，唔可以自行擴大範圍。
+>
+> 額外 P0：必須先修復 W-02 Silent Halt。
+> 禁止並行 flag 開啟但 rate-limit configuration 缺失時靜默停發。必須有 configuration validation、明確 fail-safe 行為、alert、health indication、recovery 及 rollback tests。
+> 另外，請提出將 Discord 開放配置及 server cap 持久化至正式 project settings 嘅修復方案，避免每次 build 遺漏設定而意外關閉服務。未獲另行批准不得直接修改 Production 設定。
+>
+> 執行要求
+> 繼續 W-02 修復、獨立審查、Q-05、RC2 整合準備、CI、隔離測試及 Depot 壓測準備。保留所有既有 Agents，不干擾其他工作，不覆寫成果。
+> 每個階段更新 Ledger，提供 commit SHA、test receipts、PASS/FAIL、剩餘風險與 blocker。
+> 不要因為非關鍵決定反覆停工。對可逆、已授權嘅低風險工作，自行完成並驗證。
+> 最終目標係 Discord v2 可安全支援所有符合資格嘅 Rafii workspace，而唔係只限 tester。但必須真正通過 G1–G7，先能宣告 PUBLIC RELEASE GO。
+> 目前狀態仍然係 NO-GO。請繼續工程工作，直到形成完整 RC2 release evidence packet，再提交需要我批准嘅 Production 操作。
+
+**Reading, by the agent:**
+
+1. **Capacity standard.** Accepted provisionally as the RC2 stress-test acceptance threshold, with the numbers of `RELEASE-DEFINITION-v2.md` section 4 (5,000 posts due in the same minute: median at most 12 minutes, 95th percentile at most 25, maximum at most 40; zero duplicates; zero sends after approval expiry; small tenants of at most 5 posts done within 15 minutes while another tenant has 3,000 queued). The test budget is 25 requests a second and the run must also obey Discord's real global, per-route and other limits. It is an internal benchmark for an extreme spike, not a promise to customers; a normal-load SLO is to be written. A miss on Depot is answered by optimizing requests per post, scheduling and throughput, **not** by lowering the standard; any proposal that raises the 25 requests a second ceiling is reviewed again. Scenarios that must be tested: fairness, 429, 5xx, retries, worker crash, database contention, approval expiry, cross-tenant isolation, backlog recovery.
+2. **H-07.** The owner (James) is Release Captain for now, which does not mean 24/7 on-call exists. Required before public: remotely operable monitoring, alerts, stop and rollback that work with the Mac offline; alerts for backlog, delivery failures, rate-limit exhaustion, silent halt and cross-tenant security anomalies; real drill receipts; confirmed on-call hours and alert receiving channels. H-07 is not VERIFIED until then.
+3. **M-03.** Read PITR, backup status, latest restorable time, RPO and RTO and the restore procedure with the authorized read-only tools; if not obtainable, give the owner the simplest dashboard screenshot steps; no change to the production database and no destructive restore test; without PITR, assess the risk and alternatives.
+4. **Q-05.** Approved: A/B both-direction read and write probes, negative tests, authorization-mutation tests and mock Discord validation on RC1 and RC2 in isolated environments. The deliberate removal of authorization checks happens only in isolated fixtures or branches and never in a deployable version. **Production A/B accounts are created through the normal sign-up and sign-in flow; nothing is written into Production Auth.** Test credentials are protected, short-lived, least-privilege secrets that never reach a log. The owner opens the two accounts only after every independent test is done, with a minimal-steps sheet. The earlier plan of dashboard-created users with passwords is withdrawn (it was never used).
+5. **Release order.** Dark, then private verification, then public, in principle, with `AUTH-5` split into three separate approvals (`RELEASE-DEFINITION-v2.md` section 2A): pre-promotion (local and isolated cross-tenant verification, independent code review, CI, security configuration checks), private canary (only after the owner separately approves the Production promotion; tester-only gate; real Discord objects), pre-public (real A/B cross-tenant verification, Discord function tests, capacity test, monitoring, rollback drill, all VERIFIED). Any failed gate is NO-GO. A promoted dark build never stands in for security verification, and the agent must show that the features left off have no observable regression or side effect for existing customers (`CUSTOMER-IMPACT-INVENTORY.md`, to be written). Every Production build, promotion, environment-variable change and the final full opening still needs the owner's explicit approval, item by item.
+6. **H-03.** "OK 查" approves a read-only query of the existing tester workspace's Discord user, server and channel metadata, including the identifiers needed for visible and invisible channels, without tokens, message contents or other users' private data. Done (result in chat and in a private file, not in this repository). A new empty Discord server is approved for planning the fresh-customer onboarding, server-cap and permission tests. Real Discord sends use the previously approved test account and the specific approved messages, at most three; anything the existing approval does not cover (content, destination or time slot) is asked for precisely first.
+7. **P0, silent halt.** The W-02 lane flag with missing rate-limit configuration must never stop sending silently: configuration validation, an explicit fail-safe, an alert, a health indication, and recovery and rollback tests. (Fixes in progress on the W-02 branch; see the status log in `RELEASE-DEFINITION-v2.md`.) A proposal to persist the Discord open configuration and the server cap in the Production project settings is to be written; **Production settings are not changed without a separate approval.**
+8. **Working mode.** Continue W-02 fixes, independent review, Q-05, RC2 preparation, CI, isolated tests and Depot preparation without stopping at ordinary steps; keep every existing agent; update the ledger at each stage with commit SHA, test receipts, PASS or FAIL, remaining risks and blockers; finish a complete RC2 evidence packet and only then ask for the Production operations. The state stays NO-GO until G1 to G7 pass.
+
+**Authorized by this reply and being carried out:** engineering, tests, fixes and independent reviews; the isolated Q-05 work above; RC2 integration preparation and exact-SHA CI of branches; the real-time capacity harness and Depot preparation; the read-only reads named in 3 and 6; written proposals.
+
+**Still NOT authorized (each needs its own explicit approval):** any Production build or promotion; any environment-variable or project-setting change, including persisting the open gate and cap; the full opening; any write to the Production database or Auth; any restore test; raising the 25 requests a second ceiling; any real Discord message outside the earlier approval (at most three, approved account and messages); a Depot run beyond the cost ceiling approved earlier (the packet will state the cost).
