@@ -447,10 +447,11 @@ class DiscordProvider(OAuthProvider):
                     break
                 except RateDelayed as error:
                     if (isinstance(rate_permit, Permit) and binding is not None
-                            and error.rate_cause == 'permit_expired'):
+                            and error.rate_cause in ('permit_expired', 'permit_blocked')):
                         # Mint only around admission/consume, before transport.
                         # A transport exception can never acquire this proof.
-                        raise UnconsumedPublishPermit(rate_permit.id, error.retry_after_seconds) from error
+                        raise UnconsumedPublishPermit(rate_permit.id, error.retry_after_seconds,
+                                                      cause=error.rate_cause) from error
                     wait = max(error.retry_after_seconds, .005 * 2 ** attempt) + secrets.randbelow(26) / 1000
                     if not resumable or attempt + 1 >= attempts or time.monotonic() + wait > wait_deadline:
                         if method == 'GET':

@@ -1033,7 +1033,11 @@ class PostgresWorker:
                     operation['ratePermitRetries'] = operation.get('ratePermitRetries',0) + 1
                     status = discord_worker.release_unsent(job, now, 'rate_delayed',
                         retry_after_seconds=error.retry_after_seconds)
-                    self._event(job, status, 'Discord rate permit expired before intent; frozen approval waits without a POST', at=now)
+                    # No intent was sealed: seal() refused an expired permit, or one an embargo or hold blocked.
+                    self._event(job, status, ('A Discord embargo blocked the rate permit before its intent was sealed; '
+                                              'frozen approval waits without a POST')
+                                if error.rate_cause == 'permit_blocked' else
+                                'Discord rate permit expired before intent; frozen approval waits without a POST', at=now)
                     self.discord_stats['rateDelays'] += 1
                 else:
                     self._event(job,'held','Discord pre-intent permit recovery limit reached; nothing was posted',at=now)
@@ -1116,12 +1120,20 @@ class PostgresWorker:
                     or any(job.get(k) for k in ('discordReceipts','providerReference','container',
                         'providerUpload','providerAssets','providerThread','progress','url','verification'))):
                 return False
-            provider.rate_limiter.abandon_expired_publish(cur, permit, binding, intent['id'])
+            # Proof that the intent never left, from the admission row, under its lock: expired while sealed and
+            # unconsumed (then fenced as blocked), or already blocked by an embargo or hold observed after sealing,
+            # never consumed. consume() refused it in this same call, before any transport.
+            blocked = error.rate_cause == 'permit_blocked'
+            if blocked:
+                provider.rate_limiter.confirm_blocked_publish(cur, permit, binding, intent['id'])
+            else:
+                provider.rate_limiter.abandon_expired_publish(cur, permit, binding, intent['id'])
             now = self._db_now(cur)
             if not self._owns(job, claimed, now) or job['manifest']['expiresAt'] <= now:
                 raise AlphaError('Discord authority expired during unsent recovery.', 409)
             job.setdefault('discordUnsentDispatches', []).append({**intent,
-                'unsentProof': 'expired_unconsumed_admission', 'abandonedAt': now})
+                'unsentProof': 'embargo_blocked_admission' if blocked else 'expired_unconsumed_admission',
+                'abandonedAt': now})
             job['discordDispatchIntents'] = []
             for attempt in job.get('attempts', []):
                 if attempt.get('discordIntentId') == intent['id']:
@@ -1130,7 +1142,9 @@ class PostgresWorker:
             job[discord_worker.KEY]['ratePermitRetries'] = job[discord_worker.KEY].get('ratePermitRetries', 0) + 1
             status = discord_worker.release_unsent(job, now, 'rate_delayed',
                 retry_after_seconds=error.retry_after_seconds)
-            self._event(job, status, 'Expired Discord permit was never consumed; intent archived before safe rate wait', at=now)
+            self._event(job, status, ('A Discord embargo blocked the sealed permit before it was consumed; no POST was '
+                                      'started; intent archived before safe rate wait') if blocked else
+                        'Expired Discord permit was never consumed; intent archived before safe rate wait', at=now)
             cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
                 (json.dumps(state), claimed['workspaceId'], revision))
             if cur.rowcount != 1:
@@ -1330,9 +1344,14 @@ class PostgresWorker:
                 # The lane cannot run anywhere (rate limits off, no current policy, a bad lane budget): keep the
                 # frozen Discord path. The lease protocol makes the two schedulers safe together.
                 result = self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
-            # Health indication (this process's full rule), and the lag warning from this tick's own report; no query.
+            # Health indication (this process's full rule), and the lag warning: this tick's own report (a sample of
+            # 256 workspaces) and, when the lane owns Discord, the projection's oldest due work (every workspace, one
+            # indexed statement). A tick that kept Discord runs the frozen path's statements only.
             result['discordLaneStatus'] = lane.status(self.social, self.clock())
-            lane.warn_if_lagging(result, reason)
+            if reason is None:
+                lane.warn_if_lagging(result, reason, lane.projected_lag(self))
+            else:
+                lane.warn_if_lagging(result, reason)
             return result
         return self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
 

@@ -81,5 +81,5 @@ The full table (also 20 ms locks) is printed by the command. Readings:
 ## Correctness in every run
 
 0 duplicate creates and 0 requests above the trailing-second ceiling at the 25 per second policy, in every real run.
-The 24 real-PostgreSQL tests (`tests/test_discord_parallel_lane_postgres.py`) assert these properties directly, with
+The 44 real-PostgreSQL tests (`tests/test_discord_parallel_lane_postgres.py`) assert these properties directly, with
 crashes, races, holds, a global 429, a spent invalid-request budget and expiring approvals.
