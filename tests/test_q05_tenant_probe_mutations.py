@@ -93,7 +93,7 @@ MUTATIONS = {
 }
 
 
-def run_mutated(name):
+def run_mutated(name, send=True):
     hunks = MUTATIONS[name]
     tmp = tempfile.mkdtemp(prefix="q05-mut-")
     try:
@@ -106,8 +106,9 @@ def run_mutated(name):
                 raise AssertionError(f"mutation {name}: hunk no longer matches {rel}; update the test")
             path.write_text(text.replace(old, new, 1))
         env = dict(os.environ, Q05_SRC_ROOT=str(src))
-        cmd = [sys.executable, str(REPO / "tests/q05_backend.py"), "run",
-               "--allow-writes", "--allow-send-risk", "--victim-is-synthetic"]
+        cmd = [sys.executable, str(REPO / "tests/q05_backend.py"), "run", "--allow-writes"]
+        if send:
+            cmd += ["--allow-send-risk", "--victim-is-synthetic"]
         proc = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
         assert proc.stdout, "backend produced no JSON. stderr tail:\n" + proc.stderr[-2000:]
         return json.loads(proc.stdout.splitlines()[-1])
@@ -120,6 +121,11 @@ def failed_cases(result, prefix):
             if c["verdict"] == "FAIL" and c["case"].startswith(prefix)]
 
 
+def run_mutated_readonly(name):
+    """Like run_mutated but writes-on, send-risk OFF (so no send case runs) — for M1b counting."""
+    return run_mutated(name, send=False)
+
+
 @unittest.skipUnless(HAVE_PSYCOPG and pg_available(), REASON)
 class Q05MutationDetection(unittest.TestCase):
     def test_m1_membership_gate(self):
@@ -128,10 +134,25 @@ class Q05MutationDetection(unittest.TestCase):
         self.assertNotEqual(r["probeExit"], 0, "probe did not detect a disabled membership gate")
         self.assertTrue(failed_cases(r, "read."), "no READ case failed under M1")
         self.assertTrue(failed_cases(r, "write."), "no WRITE case failed under M1")
-        # the no-side-effect proof must also fire (both tenants mutated cross-tenant)
-        self.assertTrue(failed_cases(r, "snapshot."), "no-side-effect snapshot did not fire under M1")
-        self.assertFalse(r["dbSideEffect"]["A"]["ok"] and r["dbSideEffect"]["B"]["ok"],
-                         "DB-level snapshot did not see the cross-tenant writes")
+
+    def test_m1b_gate_removed_fails_every_workspace_scope_case(self):
+        # M1b: with the membership gate removed, NO workspace-scope read or write may silently
+        # PASS (the old bug: only 6 of 14 writes turned FAIL while the rest passed on object
+        # checks). Every ws-scope case must be FAIL or INCONCLUSIVE — never PASS — and the run
+        # must fail. Most turn FAIL; invite can land on a seat/validation limit (INCONCLUSIVE),
+        # which is still a run failure, never a false deny. Send cases are gated off here.
+        r = run_mutated_readonly("M1_membership_gate")
+        self.assertEqual(r["status"], "ran")
+        self.assertNotEqual(r["probeExit"], 0)
+        ws = [c for c in r["cases"] if c.get("scope") == "ws_scope"
+              and c["kind"] in ("read", "write") and c["blast"] != "send"]
+        self.assertGreaterEqual(len(ws), 28, f"expected many ws-scope cases, saw {len(ws)}")
+        passed = [c["case"] for c in ws if c["verdict"] == "PASS"]
+        self.assertEqual(passed, [], f"ws-scope case(s) silently PASSED with the gate removed: {passed}")
+        failed = sum(1 for c in ws if c["verdict"] == "FAIL")
+        # not 6: the overwhelming majority must be hard FAIL, not merely inconclusive.
+        self.assertGreaterEqual(failed, len(ws) - 2,
+                                f"only {failed}/{len(ws)} ws-scope cases turned FAIL under M1b")
 
     def test_m2_connection_workspace_binding(self):
         r = run_mutated("M2_connection_workspace_binding")

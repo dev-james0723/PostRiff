@@ -36,6 +36,7 @@ Intentionally gated-off writes (no --allow-writes) do not by themselves fail the
 run, but the receipt says loudly that writes were not covered.
 """
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -173,6 +174,13 @@ class Budget:
             raise RuntimeError(f"request budget of {self.limit} exhausted")
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect: return None so the 3xx is the observed status and the
+    Authorization header is never resent to the Location (possibly another origin)."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class Client:
     def __init__(self, config, budget, delay):
         self.config = config
@@ -180,9 +188,15 @@ class Client:
         self.delay = delay
         # localhost http needs no TLS context; https uses the default verified one.
         self._ctx = ssl.create_default_context() if config.base_url.startswith("https") else None
+        handlers = [_NoRedirect()]
+        if self._ctx is not None:
+            handlers.append(urllib.request.HTTPSHandler(context=self._ctx))
+        self._opener = urllib.request.build_opener(*handlers)
 
     def request(self, method, path, token_key, *, body=None, mutation=False):
-        """Return (status, text, body_obj). Never raises on HTTP error status."""
+        """Return (status, text, body_obj). Never raises on HTTP error status, and never
+        follows a redirect (a 3xx is returned as-is, so Authorization cannot leak to another
+        origin and a redirect scores as INCONCLUSIVE, never a deny)."""
         self.budget.take()
         if self.delay:
             time.sleep(self.delay)
@@ -202,7 +216,7 @@ class Client:
             headers[self.config.extra_header_name] = self.config.extra_header_value
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=30, context=self._ctx) as resp:
+            with self._opener.open(req, timeout=30) as resp:
                 raw = resp.read(2_000_000)
                 status = resp.status
         except urllib.error.HTTPError as err:
@@ -347,7 +361,15 @@ def snapshot(client, config, key):
          if isinstance(m, dict)])
     st, _t, abody = client.request("GET", f"/api/workspaces/{ws}/audit", tok)
     events = abody.get("events", []) if st == 200 and isinstance(abody, dict) else []
+    # The server returns at most ~200 audit rows, so the count alone can miss a silent write that
+    # adds one and ages one out. Also hash the newest rows' ids and timestamps.
     parts["auditCount"] = len(events) if isinstance(events, list) else None
+    if isinstance(events, list):
+        ids = sorted((str(e.get("id", "")), str(e.get("at", e.get("createdAt", e.get("timestamp", "")))))
+                     for e in events if isinstance(e, dict))
+        parts["auditDigest"] = hashlib.sha256(json.dumps(ids, sort_keys=True).encode()).hexdigest()
+    else:
+        parts["auditDigest"] = None
 
     canon = json.dumps(parts, sort_keys=True, default=str)
     digest = hashlib.sha256(canon.encode()).hexdigest()
@@ -374,7 +396,8 @@ def snapshot_diff_groups(before_detail, after_detail):
 class Case:
     def __init__(self, cid, method, template, direction, kind, blast, path,
                  token_key, *, body=None, mutation=False, expected=("403", "404"),
-                 needs=None, victim_key=None):
+                 needs=None, victim_key=None, scope=None, differential=False,
+                 owner_token_key=None):
         self.cid = cid
         self.method = method
         self.template = template
@@ -388,13 +411,52 @@ class Case:
         self.expected = list(expected)
         self.needs = needs                    # None, or ("why it could not be built")
         self.victim_key = victim_key          # which tenant owns the data being attacked
+        # how the denial is scored: "ws_scope" (403 + the gate body) or "idor" (404/409 + an
+        # object-binding body). None for controls.
+        self.scope = scope
+        # ws_scope differential: the legitimate owner of the attacked workspace sends the
+        # identical request and must get PAST the gate (any answer that is not the gate 403).
+        self.differential = differential
+        self.owner_token_key = owner_token_key
         # results
         self.observed = None
+        self.owner_observed = None
         self.verdict = None
         self.note = ""
 
 
-DENY_STATUSES = {400, 401, 403, 404, 405, 409, 410, 415, 429}
+# Exact deny bodies, read from the RC source (hosted.py / store.py / oauth.py / discord/oauth.py).
+# Compared in memory against a response's "error" field; never printed.
+GATE_DENY_BODY = "Workspace unavailable."   # the uniform tenant membership gate (403)
+IDOR_DENY_BODIES = frozenset({
+    "Connection unavailable.",                                     # oauth._member_grant / _disconnect
+    "This item is not available in your workspace.",               # store.find (jobs)
+    "This Discord identity is unavailable to this workspace member.",  # discord identity_record
+    "Connection request unavailable.",                             # discord OAuth state binding
+})
+# Statuses that are neither a clean deny nor a clear accept: a run that sees one on an attack
+# cannot conclude isolation holds, so it is INCONCLUSIVE (a failure of the run), never a PASS.
+INCONCLUSIVE_STATUSES = {400, 401, 405, 410, 415, 429}
+
+
+def error_body(obj, text):
+    """The app's error message from a parsed JSON body, or None for a non-JSON/HTML response.
+    Returned for in-memory comparison only; callers must never print it."""
+    if isinstance(obj, dict) and isinstance(obj.get("error"), str):
+        return obj["error"]
+    return None
+
+
+def jwt_sub(token):
+    """The `sub` claim from a JWT access token, locally (base64, no network), or None. Never printed."""
+    try:
+        seg = token.split(".")[1]
+        seg += "=" * (-len(seg) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(seg.encode()))
+        sub = payload.get("sub")
+        return sub if isinstance(sub, str) and sub else None
+    except Exception:
+        return None
 
 
 # --------------------------------------------------------------------------- #
@@ -411,12 +473,16 @@ def build_matrix(disc, config, flags):
         a_ws = config.workspace[attacker]
         v_ws = config.workspace[victim]
         d_v = disc[victim]
-        d_a = disc[attacker]
         arrow = f"{attacker}->{victim}"
         vph = f"<{victim}.workspace>"
         aph = f"<{attacker}.workspace>"
+        # Deliberately-stale revision: bootstrap starts a workspace above 0, so expectedRevision 0
+        # always loses the revision compare-and-swap (409) AFTER the membership gate — the attacker
+        # hits the gate (403) first, and the owner-differential request gets a harmless 409, never a
+        # mutation.
+        STALE = 0
 
-        # ---------- READ, style (i): victim workspace id in path -------------- #
+        # ---------- READ, style (i): victim workspace id in path (differential) ---------- #
         for suffix, tail in (("get", ""), ("members", "/members"), ("audit", "/audit"),
                              ("invitations", "/invitations"), ("export", "/export"),
                              ("channels", "/channels"), ("analytics", "/analytics/summary"),
@@ -424,9 +490,10 @@ def build_matrix(disc, config, flags):
             cases.append(Case(
                 f"read.ws_scope.{suffix}.{arrow}", "GET",
                 f"/api/workspaces/{vph}{tail}", arrow, "read", "",
-                f"/api/workspaces/{v_ws}{tail}", attacker, victim_key=victim))
+                f"/api/workspaces/{v_ws}{tail}", attacker, victim_key=victim,
+                scope="ws_scope", differential=True, owner_token_key=victim))
 
-        # ---------- READ, style (ii): own workspace id + victim object id ----- #
+        # ---------- READ, style (ii): own workspace id + victim object id (IDOR) ---------- #
         if d_v.connections:
             vconn = d_v.connections[0]
             cases.append(Case(
@@ -434,7 +501,7 @@ def build_matrix(disc, config, flags):
                 f"/api/workspaces/{aph}/channels/<{victim}.connection>/destinations",
                 arrow, "read", "",
                 f"/api/workspaces/{a_ws}/channels/{vconn}/destinations", attacker,
-                victim_key=victim))
+                victim_key=victim, scope="idor"))
         else:
             cases.append(_not_built(f"read.idor.destinations.{arrow}", "GET",
                 f"/api/workspaces/{aph}/channels/<{victim}.connection>/destinations",
@@ -447,70 +514,75 @@ def build_matrix(disc, config, flags):
                 f"/api/workspaces/{aph}/discord/identities/<{victim}.identity>/guilds",
                 arrow, "read", "",
                 f"/api/workspaces/{a_ws}/discord/identities/{vid}/guilds", attacker,
-                victim_key=victim))
+                victim_key=victim, scope="idor"))
             cases.append(Case(
                 f"read.idor.private_review.{arrow}", "GET",
                 f"/api/workspaces/{aph}/discord/private-review/<{victim}.identity>",
                 arrow, "read", "",
                 f"/api/workspaces/{a_ws}/discord/private-review/{vid}", attacker,
-                victim_key=victim))
+                victim_key=victim, scope="idor"))
         else:
-            for sfx, tailtmpl, tailreal in (
-                ("identity_guilds", "/discord/identities/<%s.identity>/guilds", None),
-                ("private_review", "/discord/private-review/<%s.identity>", None)):
+            for sfx, tailtmpl in (("identity_guilds", "/discord/identities/<%s.identity>/guilds"),
+                                  ("private_review", "/discord/private-review/<%s.identity>")):
                 cases.append(_not_built(f"read.idor.{sfx}.{arrow}", "GET",
                     f"/api/workspaces/{aph}" + (tailtmpl % victim),
                     arrow, "read", "", victim, "no discord identity discovered for victim"))
 
         # ---------- WRITE, style (i): victim workspace id in path ------------- #
+        # Differential writes: the owner's identical request gets a harmless 409 (stale revision)
+        # or 409 (owner-cannot-be-removed), i.e. PAST the gate, while the attacker gets the gate 403.
         cases.append(Case(
             f"write.ws_scope.mutate_mode.{arrow}", "POST",
             f"/api/workspaces/{vph}/actions", arrow, "write", "state",
             f"/api/workspaces/{v_ws}/actions", attacker,
-            body={"action": "mode", "payload": {"mode": "personal"},
-                  "expectedRevision": d_v.revision}, mutation=True, victim_key=victim))
+            body={"action": "mode", "payload": {"mode": "personal"}, "expectedRevision": STALE},
+            mutation=True, victim_key=victim, scope="ws_scope", differential=True, owner_token_key=victim))
         cases.append(Case(
             f"write.ws_scope.mutate_refresh.{arrow}", "POST",
             f"/api/workspaces/{vph}/actions", arrow, "write", "inert",
             f"/api/workspaces/{v_ws}/actions", attacker,
-            body={"action": "p2_refresh", "payload": {}, "expectedRevision": d_v.revision},
-            mutation=True, victim_key=victim))
-        cases.append(Case(
-            f"write.ws_scope.invite.{arrow}", "POST",
-            f"/api/workspaces/{vph}/invitations", arrow, "write", "state",
-            f"/api/workspaces/{v_ws}/invitations", attacker,
-            body={"email": "q05-probe@example.invalid", "role": "viewer", "permissions": {}},
-            mutation=True, victim_key=victim))
-        if d_v.members:
-            vmember = d_v.members[0]
-            cases.append(Case(
-                f"write.ws_scope.member_remove.{arrow}", "DELETE",
-                f"/api/workspaces/{vph}/members/<{victim}.member>", arrow, "write", "state",
-                f"/api/workspaces/{v_ws}/members/{vmember}", attacker,
-                mutation=True, victim_key=victim))
-        # approvals / publish-now / schedule / cancel-pause all enter through /actions and
-        # the mutate() path; each hits the same membership gate for a foreign workspace.
+            body={"action": "p2_refresh", "payload": {}, "expectedRevision": STALE},
+            mutation=True, victim_key=victim, scope="ws_scope", differential=True, owner_token_key=victim))
         cases.append(Case(
             f"write.ws_scope.approve.{arrow}", "POST",
             f"/api/workspaces/{vph}/actions", arrow, "write", "state",
             f"/api/workspaces/{v_ws}/actions", attacker,
             body={"action": "p2_approve", "payload": {"reviewId": "q05", "digest": "q05", "confirmed": True},
-                  "expectedRevision": d_v.revision}, mutation=True, victim_key=victim))
+                  "expectedRevision": STALE}, mutation=True, victim_key=victim,
+            scope="ws_scope", differential=True, owner_token_key=victim))
         cases.append(Case(
             f"write.ws_scope.cancel.{arrow}", "POST",
             f"/api/workspaces/{vph}/actions", arrow, "write", "state",
             f"/api/workspaces/{v_ws}/actions", attacker,
-            body={"action": "p2_cancel", "payload": {"jobId": "q05"}, "expectedRevision": d_v.revision},
-            mutation=True, victim_key=victim))
-        # Discord connect start for a foreign workspace (the connect/start family).
+            body={"action": "p2_cancel", "payload": {"jobId": "q05"}, "expectedRevision": STALE},
+            mutation=True, victim_key=victim, scope="ws_scope", differential=True, owner_token_key=victim))
+        if d_v.members:
+            vmember = d_v.members[0]  # the victim's own owner id: the owner-differential removes self -> 409
+            cases.append(Case(
+                f"write.ws_scope.member_remove.{arrow}", "DELETE",
+                f"/api/workspaces/{vph}/members/<{victim}.member>", arrow, "write", "state",
+                f"/api/workspaces/{v_ws}/members/{vmember}", attacker,
+                mutation=True, victim_key=victim, scope="ws_scope", differential=True, owner_token_key=victim))
+        else:
+            cases.append(_not_built(f"write.ws_scope.member_remove.{arrow}", "DELETE",
+                f"/api/workspaces/{vph}/members/<{victim}.member>", arrow, "write", "state",
+                victim, "no victim member discovered"))
+        # invite and connect-start are strict-attacker (no owner differential: a legitimate owner
+        # request would mutate / send an e-mail). Gate removal still turns them FAIL (2xx or past-gate).
+        cases.append(Case(
+            f"write.ws_scope.invite.{arrow}", "POST",
+            f"/api/workspaces/{vph}/invitations", arrow, "write", "state",
+            f"/api/workspaces/{v_ws}/invitations", attacker,
+            body={"email": "q05-probe@example.invalid", "role": "viewer", "permissions": {}},
+            mutation=True, victim_key=victim, scope="ws_scope"))
         cases.append(Case(
             f"write.ws_scope.discord_connect_start.{arrow}", "POST",
             f"/api/workspaces/{vph}/channels/discord/oauth/start", arrow, "write", "state",
             f"/api/workspaces/{v_ws}/channels/discord/oauth/start", attacker,
             body={"capability": "identity", "input": {"discordPurpose": "identity"}},
-            mutation=True, victim_key=victim))
+            mutation=True, victim_key=victim, scope="ws_scope"))
 
-        # ---------- WRITE, style (ii)/(iii): own ws + victim object id -------- #
+        # ---------- WRITE, style (ii)/(iii): own ws + victim object id (IDOR) -------- #
         if d_v.connections:
             vconn = d_v.connections[0]
             cases.append(Case(
@@ -518,13 +590,13 @@ def build_matrix(disc, config, flags):
                 f"/api/workspaces/{aph}/channels/<{victim}.connection>/destination",
                 arrow, "write", "state",
                 f"/api/workspaces/{a_ws}/channels/{vconn}/destination", attacker,
-                body={"destinationId": "100000000000000001"}, mutation=True, victim_key=victim))
+                body={"destinationId": "100000000000000001"}, mutation=True, victim_key=victim, scope="idor"))
             cases.append(Case(
                 f"write.idor.channel_disconnect.{arrow}", "DELETE",
                 f"/api/workspaces/{aph}/channels/<{victim}.connection>",
                 arrow, "write", "state",
                 f"/api/workspaces/{a_ws}/channels/{vconn}", attacker,
-                mutation=True, victim_key=victim))
+                mutation=True, victim_key=victim, scope="idor"))
             if d_v.destinations.get(vconn):
                 vdest = d_v.destinations[vconn][0]
                 cases.append(Case(
@@ -532,7 +604,17 @@ def build_matrix(disc, config, flags):
                     f"/api/workspaces/{aph}/channels/<{victim}.connection>/destinations/<{victim}.destination>",
                     arrow, "write", "state",
                     f"/api/workspaces/{a_ws}/channels/{vconn}/destinations/{vdest}", attacker,
-                    mutation=True, victim_key=victim))
+                    mutation=True, victim_key=victim, scope="idor"))
+            else:
+                cases.append(_not_built(f"write.idor.destination_remove.{arrow}", "DELETE",
+                    f"/api/workspaces/{aph}/channels/<{victim}.connection>/destinations/<{victim}.destination>",
+                    arrow, "write", "state", victim, "no victim destination discovered"))
+        else:
+            for sfx in ("destination_choose", "channel_disconnect", "destination_remove"):
+                cases.append(_not_built(f"write.idor.{sfx}.{arrow}",
+                    "POST" if sfx == "destination_choose" else "DELETE",
+                    f"/api/workspaces/{aph}/channels/<{victim}.connection>/...",
+                    arrow, "write", "state", victim, "no discord connection discovered for victim"))
         if d_v.identities:
             vid = d_v.identities[0]
             cases.append(Case(
@@ -540,30 +622,32 @@ def build_matrix(disc, config, flags):
                 f"/api/workspaces/{aph}/discord/identities/<{victim}.identity>/disconnect",
                 arrow, "write", "state",
                 f"/api/workspaces/{a_ws}/discord/identities/{vid}/disconnect", attacker,
-                mutation=True, victim_key=victim))
-            # NOTE: /discord/interaction-links/<id>/bind is intentionally NOT in the matrix.
-            # The User-Install feature (POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED) is OFF at
-            # launch (docs .../C-01-env-matrix.md), so the route answers 503 feature-disabled
-            # for every caller and is not part of the opened surface. Its IDOR check binds the
-            # same identity_record() boundary this disconnect case already exercises. See
-            # EXCLUDED_FAMILIES["interaction-links"] and the coverage test.
+                mutation=True, victim_key=victim, scope="idor"))
+            # /discord/interaction-links/<id>/bind is intentionally excluded (User-Install feature
+            # OFF at launch; same identity_record() boundary as identities/disconnect; see
+            # EXCLUDED_FAMILIES["interaction-links"]).
+        else:
+            cases.append(_not_built(f"write.idor.identity_disconnect.{arrow}", "POST",
+                f"/api/workspaces/{aph}/discord/identities/<{victim}.identity>/disconnect",
+                arrow, "write", "state", victim, "no discord identity discovered for victim"))
 
         # ---------- WRITE, blast=send: dispatch-capable routes ---------------- #
         if d_v.jobs:
             vjob, vdigest = d_v.jobs[0]
-            # style (i): victim workspace id in path (membership boundary).
             cases.append(Case(
                 f"write.send.job_execute_ws_scope.{arrow}", "POST",
                 f"/api/workspaces/{vph}/jobs/<{victim}.job>/execute", arrow, "write", "send",
                 f"/api/workspaces/{v_ws}/jobs/{vjob}/execute", attacker,
-                body={"approvalDigest": vdigest or "0" * 64}, mutation=True, victim_key=victim))
-            # style (ii): own workspace + victim job id (IDOR) + victim digest (iii).
+                body={"approvalDigest": vdigest or "0" * 64}, mutation=True, victim_key=victim, scope="ws_scope"))
             cases.append(Case(
                 f"write.send.job_execute_idor.{arrow}", "POST",
                 f"/api/workspaces/{aph}/jobs/<{victim}.job>/execute", arrow, "write", "send",
                 f"/api/workspaces/{a_ws}/jobs/{vjob}/execute", attacker,
-                body={"approvalDigest": vdigest or "0" * 64}, mutation=True, victim_key=victim))
+                body={"approvalDigest": vdigest or "0" * 64}, mutation=True, victim_key=victim, scope="idor"))
         else:
+            cases.append(_not_built(f"write.send.job_execute_ws_scope.{arrow}", "POST",
+                f"/api/workspaces/{vph}/jobs/<{victim}.job>/execute", arrow, "write", "send",
+                victim, "no job discovered for victim"))
             cases.append(_not_built(f"write.send.job_execute_idor.{arrow}", "POST",
                 f"/api/workspaces/{aph}/jobs/<{victim}.job>/execute", arrow, "write", "send",
                 victim, "no job discovered for victim"))
@@ -576,7 +660,7 @@ def build_matrix(disc, config, flags):
                 f"/api/workspaces/{aph}/channels/discord/oauth/complete",
                 arrow, "write", "state",
                 f"/api/workspaces/{a_ws}/channels/discord/oauth/complete", attacker,
-                body={"state": vstate, "code": "q05-probe-code"}, mutation=True, victim_key=victim))
+                body={"state": vstate, "code": "q05-probe-code"}, mutation=True, victim_key=victim, scope="idor"))
         else:
             cases.append(_not_built(f"write.state_binding.oauth_complete.{arrow}", "POST",
                 f"/api/workspaces/{aph}/channels/discord/oauth/complete",
@@ -635,6 +719,37 @@ def _not_built(cid, method, template, direction, kind, blast, victim_key, why):
     return c
 
 
+class _FullFlags:
+    allow_writes = allow_send_risk = victim_is_synthetic = True
+    smoke = False
+
+
+def _full_discovery(config):
+    disc = {}
+    for k in ("A", "B"):
+        d = Discovery(k, config.workspace.get(k) or f"<{k}.workspace>")
+        d.ok, d.revision = True, 1
+        d.connections = [f"{k}-conn"]
+        d.all_channel_ids = [f"{k}-conn"]
+        d.identities = [f"{k}-identity"]
+        d.destinations = {f"{k}-conn": [f"{k}-dest"]}
+        d.jobs = [(f"{k}-job", "0" * 64)]
+        d.members = [f"{k}-member"]
+        disc[k] = d
+    return disc
+
+
+def expected_case_ids(config):
+    """The FIXED full set of case ids the matrix produces when every victim object is discovered.
+    Gate mode fails if any of these is missing from an actual run (M4)."""
+    saved = dict(config.victim_oauth_state)
+    config.victim_oauth_state = {"A": "state-a", "B": "state-b"}
+    try:
+        return {c.cid for c in build_matrix(_full_discovery(config), config, _FullFlags())}
+    finally:
+        config.victim_oauth_state = saved
+
+
 # --------------------------------------------------------------------------- #
 # Execution and verdicts
 # --------------------------------------------------------------------------- #
@@ -669,26 +784,34 @@ def run_case(client, case, disc, flags):
         case.observed = "-"
         return
 
-    status, text, _obj = client.request(case.method, case.path, case.token_key,
-                                         body=case.body, mutation=case.mutation)
+    status, text, obj = client.request(case.method, case.path, case.token_key,
+                                       body=case.body, mutation=case.mutation)
     case.observed = str(status)
+    err = error_body(obj, text)
 
     if case.kind == "control":
-        case.verdict = "PASS" if status == 200 else "FAIL"
-        if status != 200:
-            case.note = "control route did not succeed (family inconclusive)"
+        # A control passes ONLY on a 2xx: a success (or object-level answer) proves the owner
+        # gets through the route. Anything else makes the family INCONCLUSIVE (a run failure),
+        # so a 403/404/step-up on a control can never be mistaken for a healthy deny elsewhere.
+        if 200 <= status <= 299:
+            case.verdict = "PASS"
+        else:
+            case.verdict = "FAIL"
+            case.note = "control did not succeed (INCONCLUSIVE): the owner must get through this route"
         return
 
-    # attack case
     markers = disc[case.victim_key].markers if case.victim_key else set()
+
+    def inconclusive(reason):
+        case.verdict = "INCONCLUSIVE"
+        case.note = reason
+
     if status == 0:
-        case.verdict = "FAIL"
-        case.note = "transport error"
-        return
+        return inconclusive("transport error (cannot conclude)")
+    if 300 <= status <= 399:
+        return inconclusive("redirect not followed (cannot conclude; Authorization not resent)")
     if 500 <= status <= 599:
-        case.verdict = "FAIL"
-        case.note = "server error (5xx) on attack"
-        return
+        return inconclusive("server error 5xx (cannot conclude)")
     if 200 <= status <= 299:
         case.verdict = "FAIL"
         case.note = "attack unexpectedly accepted (2xx)"
@@ -697,13 +820,41 @@ def run_case(client, case, disc, flags):
         case.verdict = "FAIL"
         case.note = "victim marker present in response"
         return
-    if status in DENY_STATUSES:
-        case.verdict = "PASS"
-        if status not in (403, 404):
-            case.note = f"denied via {status} (not 403/404)"
-        return
-    case.verdict = "FAIL"
-    case.note = f"unexpected status {status}"
+
+    if case.scope == "ws_scope":
+        # A workspace-scope attack passes ONLY on the tenant gate's own 403 body.
+        if status == 403 and err == GATE_DENY_BODY:
+            if case.differential and case.owner_token_key:
+                o_status, _ot, o_obj = client.request(case.method, case.path, case.owner_token_key,
+                                                       body=case.body, mutation=case.mutation)
+                case.owner_observed = str(o_status)
+                o_err = error_body(o_obj, None)
+                if o_status == 0 or 500 <= o_status <= 599 or 300 <= o_status <= 399:
+                    return inconclusive("owner differential request failed; cannot confirm the gate is tenant-specific")
+                if o_status == 403 and o_err == GATE_DENY_BODY:
+                    return inconclusive("the owner of the attacked workspace also hit the gate (differential broken)")
+                # owner got PAST the gate (object-level/validation answer), attacker got the gate: confirmed
+            case.verdict = "PASS"
+            return
+        if status == 403:
+            return inconclusive("403 but not the tenant-gate body (permission/origin?), not the membership gate")
+        if status in (404, 409):
+            case.verdict = "FAIL"
+            case.note = "workspace-scope attack was NOT stopped at the membership gate (reached an object check)"
+            return
+        return inconclusive(f"status {status} on a workspace-scope attack")
+
+    if case.scope == "idor":
+        if status in (404, 409) and err in IDOR_DENY_BODIES:
+            case.verdict = "PASS"
+            return
+        if status in (404, 409):
+            return inconclusive("object-level 404/409 but not a known object-binding body")
+        if status == 403:
+            return inconclusive("403 on an IDOR attack (step-up/permission?); cannot attribute to tenancy")
+        return inconclusive(f"status {status} on an IDOR attack")
+
+    return inconclusive("case has no deny scope")
 
 
 # --------------------------------------------------------------------------- #
@@ -719,6 +870,8 @@ def case_record(case):
         "blast": case.blast,
         "expected": "|".join(case.expected),
         "observed": case.observed,
+        "ownerObserved": case.owner_observed,
+        "scope": case.scope or "",
         "verdict": case.verdict,
         "note": case.note,
     }
@@ -749,14 +902,16 @@ def write_markdown(path, cases, summary, flags, config):
                      + (" (allowed in this smoke run)." if flags.smoke else "."))
         lines.append("")
     if summary["inconclusive"]:
-        lines.append(f"> INCONCLUSIVE: **{summary['inconclusive']}** control(s) failed. "
-                     "A failed control means a 404/403 on an attack cannot be trusted as a deny.")
+        lines.append(f"> INCONCLUSIVE: **{summary['inconclusive']}** case(s) could not be classified as a "
+                     "clean deny (a failed control, or an attack that returned a redirect, 5xx, 401/429/"
+                     "400/405/410/415, or a 4xx without the expected deny body). The run FAILS; these are "
+                     "never counted as passes.")
         lines.append("")
     lines.append("## Aggregate")
     lines.append("")
     lines.append("| metric | count |")
     lines.append("|---|---|")
-    for k in ("total", "passed", "failed", "not_run_gated", "undiscovered",
+    for k in ("total", "passed", "failed", "inconclusive", "not_run_gated", "undiscovered",
               "controls_passed", "controls_failed", "reads", "writes",
               "blast_state", "blast_send", "blast_inert"):
         lines.append(f"| {k} | {summary.get(k, 0)} |")
@@ -811,15 +966,18 @@ def summarize(cases, smoke=False):
             if c.kind == "control":
                 s["controls_failed"] += 1
                 s["inconclusive"] += 1
+        elif c.verdict == "INCONCLUSIVE":
+            s["inconclusive"] += 1
         elif c.verdict == "NOT_RUN":
             if c.note.startswith("undiscovered"):
                 s["undiscovered"] += 1
             else:
                 s["not_run_gated"] += 1
-    # exit 0 only if no FAIL, no inconclusive control, and (unless --smoke) no undiscovered
+    # exit 0 only if no FAIL, nothing INCONCLUSIVE (a control that did not succeed, or an attack
+    # whose status could not be classified as a clean deny), and (unless --smoke) no undiscovered
     # victim case. --smoke is for a smoke run against a build that cannot yet hold the Discord
-    # objects some cases need: undiscovered cases are still reported loudly as NOT RUN, they
-    # just do not fail the exit. A FAIL or an inconclusive control always fails, in any mode.
+    # objects some cases need: undiscovered cases are still reported loudly as NOT RUN, they just
+    # do not fail the exit. A FAIL or anything INCONCLUSIVE always fails, in any mode.
     s["smoke"] = bool(smoke)
     ok = s["failed"] == 0 and s["inconclusive"] == 0 and (smoke or s["undiscovered"] == 0)
     s["exit"] = 0 if ok else 1
@@ -876,6 +1034,15 @@ def main(argv=None):
         print("missing required environment variables: " + ", ".join(missing), file=sys.stderr)
         return 2
 
+    # A and B must be two DIFFERENT tenants, or every "cross-tenant" result is meaningless.
+    if config.workspace["A"] == config.workspace["B"]:
+        print("refusing: Q05_WORKSPACE_A and Q05_WORKSPACE_B are the same workspace", file=sys.stderr)
+        return 2
+    sub_a, sub_b = jwt_sub(config.token["A"]), jwt_sub(config.token["B"])
+    if sub_a and sub_b and sub_a == sub_b:
+        print("refusing: the two access tokens belong to the same user (identical sub claim)", file=sys.stderr)
+        return 2
+
     budget = Budget(args.budget)
     client = Client(config, budget, args.delay)
 
@@ -925,8 +1092,17 @@ def main(argv=None):
             sc.note = "changed groups: " + ",".join(groups)
         snapshot_cases.append(sc)
 
-    all_cases = attack_cases + control_cases + snapshot_cases
-    # snapshot failures also make the run inconclusive-equivalent (counted as FAIL)
+    # M4: every expected case id must be present (a forgotten NOT RUN placeholder is a bug).
+    missing_ids = sorted(expected_case_ids(config) - {c.cid for c in cases})
+    extra_cases = []
+    if missing_ids:
+        mc = Case("matrix.missing_cases", "-", "(fixed expected list)", "control", "control", "",
+                  None, None, expected=("complete",))
+        mc.verdict, mc.observed = "FAIL", "missing"
+        mc.note = f"{len(missing_ids)} expected case id(s) absent from the run: " + ",".join(missing_ids)
+        extra_cases.append(mc)
+
+    all_cases = attack_cases + control_cases + snapshot_cases + extra_cases
     summary = summarize(all_cases, smoke=flags.smoke)
     # fold snapshot FAILs into failed count already done by summarize (kind=control)
     # but snapshot FAIL is counted as controls_failed/inconclusive which is correct.
