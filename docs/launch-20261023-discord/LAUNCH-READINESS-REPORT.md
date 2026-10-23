@@ -1,6 +1,6 @@
 # LAUNCH-READINESS-REPORT (Discord capped Wave 1)
 
-Generated 2026-10-22T23:13:12Z. Candidate: `claude/discord-launch-rc-20261023` at `2a5a523d` (draft PR #222, frozen, CI green on the exact SHA). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
+Generated 2026-10-23T01:32:20Z. Candidate: `claude/discord-launch-rc-20261023` at `2a5a523d` (draft PR #222, frozen, CI green on the exact SHA). Live build: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (source `c5fc1fd1`, no Discord v2 code).
 
 ## Recommendation: **NO-GO today**
 
@@ -15,7 +15,7 @@ A false GO is the worst outcome. The candidate is frozen and green; what is miss
 
 **What would flip it:** every row below that is a Wave 1 MUST becomes VERIFIED with evidence, no abort trigger has fired, and the owner says GO. The fastest honest path is in `RUNBOOK-LAUNCH.md` section 2; the owner's part is about 60 minutes in total, plus the machine or token for the builds.
 
-## Wave 1 GO criteria (54 items; 2 BLOCKED_EXTERNAL, 27 NOT_RUN, 25 VERIFIED)
+## Wave 1 GO criteria (54 items; 2 BLOCKED_EXTERNAL, 20 NOT_RUN, 32 VERIFIED)
 
 | ID | Item | Owner | Status | State | Evidence |
 |---|---|---|---|---|---|
@@ -48,19 +48,19 @@ A false GO is the worst outcome. The candidate is frozen and green; what is miss
 | R-03 | 429 and ban handling | AGENT | **VERIFIED** | implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3) (15 tests: Cloudflare-style 429, scopes, hints, held routes, operator hold) | tests/test_discord_ban_handling.py |
 | R-05 | Worker throughput | AGENT | **NOT_RUN** | decision recorded with the budget arithmetic; per-step latency not measured; late-post note in the schedule dialog | MEASUREMENTS.md; tests/test_discord_worker_budget.py |
 | C-01 | Env matrix for the RC | AGENT | **VERIFIED** | matrix written; the dangerous values live only on the build commands | C-01-env-matrix.md |
-| C-02 | Names-only readback of production env | AGENT | **BLOCKED_EXTERNAL** | incomplete: the tool returned 100 of 271 production env records and only 48 names; no Discord variable exists in the readable window (created 10-14 or later); the older 223 are unreadable. Row 8 is approved (na… | private audit (not in the repository); APPROVAL-PACKET-1.md row 8 |
-| C-03 | Apply non-secret env changes in one batch | AGENT+APPROVAL | **NOT_RUN** | AUTH-3 and AUTH-4 approved (rows 1 to 3); applied by the agent just before the D1 build, then read back by name and value (env is project-wide, so not earlier) | AUTHORIZATION-RECORD.md rows 1 to 3 |
+| C-02 | Names-only readback of production env | AGENT | **VERIFIED** | names-only readback done through the owner-approved GitHub Actions route (read-only preflight, run 39882363204, 2026-10-23T01:11Z): 176 production names; the six required names (Discord client id and secret, bo… | GitHub Actions run 39882363204; BUILD-VIA-GITHUB-ACTIONS.md |
+| C-03 | Apply non-secret env changes in one batch | AGENT+APPROVAL | **VERIFIED** | applied by the agent 2026-10-23T01:17Z through the Vercel API: four Discord flags set to true, the rate policy (revision rafii-w1-20261023, valid until 2026-11-22, renew by 2026-11-15) and the worker budget of … | AUTHORIZATION-RECORD.md rows 1 to 3; RC-RECEIPT.md section 4 |
 | C-04 | Cron lanes | AGENT | **NOT_RUN** | the candidate keeps the only live cron (/api/cron/worker every minute), proven by the superset proof; the post-promotion check is not done | scripts/rc_superset_proof.py crons check |
 | C-05 | OAuth start URL audit (read-only) | AGENT | **NOT_RUN** | needs the staged build |  |
 | M-02 | RLS, FORCE RLS and grants on Discord tables | AGENT | **VERIFIED** | RLS and FORCE RLS on, anon has no grants, authenticated has no access to the Discord, credential or OAuth tables, service_role grants as migrations 124 to 131 give | private audit (not in the repository); monitoring.sql planned against the schema |
 | M-03 | Backup and restore point | AGENT | **BLOCKED_EXTERNAL** | cannot be determined with the tools available: Pro plan means daily backups kept 7 days; PITR is a paid add-on; WAL archiving is running. The owner must read the dashboard | APPROVAL-PACKET-1.md row 11 |
-| Q-01 | Pre-flight for the build | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
-| Q-02 | Build ONE staged RC | AGENT+APPROVAL | **NOT_RUN** | AUTH-1 approved for D1 and D2 (packet rows 5 and 6, nothing more: a third build needs a new yes); waits for exact-SHA CI green, the freeze, the tester workspace id and a machine with the Vercel CLI (the owner's… | AUTHORIZATION-RECORD.md; BUILD-RUNSHEET.md |
-| Q-03 | Provenance of the deployed RC | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
-| Q-04 | Smoke on the RC URL | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
-| Q-05 | Hosted tenant-isolation probe | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
-| Q-06 | Rollback target | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
-| Q-07 | Promotion packet | AGENT | **NOT_RUN** | waits for the frozen SHA and the owner | RUNBOOK-LAUNCH.md |
+| Q-01 | Pre-flight for the build | AGENT | **VERIFIED** | project postriff-phase2-private (prj_6ufJ...) in the Rafii team confirmed, not rafii-consumer-staging; no other build in flight before D1; rafii.io named dpl_47SGx before and after D1; the cost note was posted … | RC-RECEIPT.md section 4 |
+| Q-02 | Build ONE staged RC | AGENT+APPROVAL | **VERIFIED** | D1 built and READY: dpl_25ihHyiZCzZXAjVsJqJiYcCWA51n, run 39883169905, 4 min 3 s, source 2a5a523d. The GitHub job shows red only because the agent's own domain alarm fired on the project's internal login-protec… | RC-RECEIPT.md section 4; BUILD-VIA-GITHUB-ACTIONS.md |
+| Q-03 | Provenance of the deployed RC | AGENT | **VERIFIED** | 257 of 257 visible source files equal the frozen tree; 7 of 7 deeper files probed by content hash are present (3 exist only in the RC); the 2 RC-only files probed are absent from the live dpl_47SG; /api/health … | RC-RECEIPT.md section 4 |
+| Q-04 | Smoke on the RC URL | AGENT | **VERIFIED** | on D1 without a session: /api/health 200 with the expected source revision; /api/me and /api/workspaces 401; no 5xx and no error lines in the runtime log; no cron call reached D1. NOT covered here: the connect … | RC-RECEIPT.md section 5 |
+| Q-05 | Hosted tenant-isolation probe | AGENT | **BLOCKED_EXTERNAL** | the hosted two-workspace probe needs two real accounts the agent cannot create. CI evidence on the exact SHA: cross-tenant destination, consent, lease and state-binding tests pass (test_discord_destinations, te… | APPROVAL-PACKET-2.md section 4 |
+| Q-06 | Rollback target | AGENT | **VERIFIED** | rollback target is dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg (READY, rollback candidate, serves rafii.io, fingerprinted as the c5fc1fd1 lineage in S-01); the five Discord migrations are already in production and additiv… | RUNBOOK-INCIDENT.md; APPROVAL-PACKET-2.md |
+| Q-07 | Promotion packet | AGENT | **NOT_RUN** | APPROVAL-PACKET-2.md is written; the promotion waits for H-05 and the owner's answer on Q-05 | APPROVAL-PACKET-2.md |
 | X-01 | Dark promotion (gate closed except testers and grandfathered workspaces) | AGENT+APPROVAL | **NOT_RUN** | AUTH-5 approved (the rev B+ row) on condition that Q-01 to Q-07 are VERIFIED and the H-05 sign-off exists; promotion is an API call the agent can make, so it needs no machine | AUTHORIZATION-RECORD.md; BUILD-RUNSHEET.md section G |
 | X-02 | Real OAuth and bot install (PRD A08) | HUMAN | **NOT_RUN** | waits for the dark promotion and the tester session | RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md |
 | X-03 | One real send and read-back (PRD A09) | HUMAN | **NOT_RUN** | waits for the dark promotion and the tester session | RUNBOOK-LAUNCH.md; TESTER-SESSION-SCRIPT.md |

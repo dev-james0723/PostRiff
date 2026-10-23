@@ -205,10 +205,16 @@ jobs:
           echo "deployment url: $url"
           vercel inspect "$url" --scope "$TEAM" > "$RUNNER_TEMP/inspect.txt" 2>&1 || { grep -E '^Error' "$RUNNER_TEMP/inspect.txt" || true; echo 'vercel inspect failed: read the deployment id from the dashboard'; exit 1; }
           grep -E '^\s*(id|name|target|status|url|Created|created|[Dd]uration|[Bb]uild|[Bb]illable|CPU)\b' "$RUNNER_TEMP/inspect.txt" || true
-          # Detection, not prevention: a skipped-domain build must not carry a production domain.
-          if grep -E '^[[:space:]]*[^[:alnum:][:space:]]+[[:space:]]*https://' "$RUNNER_TEMP/inspect.txt" | grep -Eq '//([A-Za-z0-9-]+\.)*rafii\.io(/|$|[[:space:]])|//(postriff-phase2-private|postriff-phase2-private-jamesau0723-6572s-projects)\.vercel\.app(/|$|[[:space:]])'; then
-            echo 'A PRODUCTION DOMAIN IS ATTACHED TO THIS BUILD: tell the owner and the agent now'
+          # Detection, not prevention: a skipped-domain build must not carry a customer-facing domain. Vercel always moves the
+          # project's internal default domain (team-scoped .vercel.app, login-protected) to each new production build; that is
+          # expected (seen on the first build, 2026-10-23) and only noted.
+          aliases="$(grep -E '^[[:space:]]*[^[:alnum:][:space:]]+[[:space:]]*https://' "$RUNNER_TEMP/inspect.txt" || true)"
+          if grep -Eq '//([A-Za-z0-9-]+\.)*rafii\.io(/|$|[[:space:]])|//postriff-phase2-private\.vercel\.app(/|$|[[:space:]])' <<< "$aliases"; then
+            echo 'A CUSTOMER-FACING DOMAIN IS ATTACHED TO THIS BUILD: tell the owner and the agent now'
             exit 1
+          fi
+          if grep -Eq '//postriff-phase2-private-jamesau0723-6572s-projects\.vercel\.app(/|$|[[:space:]])' <<< "$aliases"; then
+            echo 'note: the project internal default domain (login-protected) follows this build; rafii.io is not attached'
           fi
           { [ -z "$(git status --porcelain)" ] && [ ! -e .vercel ]; } || { echo 'the CLI changed the working tree'; exit 1; }
           { echo "### ${twin} build of ${SHA}"; echo "URL: ${url}"; } >> "$GITHUB_STEP_SUMMARY"

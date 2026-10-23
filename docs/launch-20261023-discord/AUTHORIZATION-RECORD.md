@@ -102,3 +102,13 @@ Question put to the owner (one line to answer):
 **Not changed by this reply:** the rows, the two builds, the cap of 10,000, the bot-only decision, and everything under "Not covered by this reply" above. H-05, H-07 and H-03 remain the owner's own acts. The tester session still needs the tester Discord user id, the test server id, a public test channel id and a private channel id the bot cannot see.
 
 **Facts the agent noticed while preparing this (not owner decisions):** the repository is public, so workflow logs are public; the workflow therefore prints no user name, no secret, and masks the tester id. The first attempt by the agent to push an inert test workflow was refused by the session's safety layer as a deploy-path action; the agent did not work around it and asked the owner, whose reply above is the permission.
+
+## Replies 7 to 10, received 2026-10-23 between about 00:30Z and 01:20Z (short confirmations and approval taps)
+
+> "1. I confirm  2. Added TESTER_WORKSPACE_ID" ... "Done" ... "Done" ... "Done go"
+
+**Reading, by the agent:** (7) the owner confirmed that the single workspace with a Discord installation is the tester workspace and added its id to the environment (the id is not in this repository). (8) after the first preflight showed that Vercel rejected the token's scope, the owner replaced `VERCEL_TOKEN` with a wider-scope token and moved the tester id to an environment secret. (9) the owner approved the second preflight run (commit `9dd6b1b`) in GitHub, which is the owner's own act and is what the environment gate records. (10) the owner approved the D1 build run (commit `a2a1070`) after asking whether `rafii.io` still naming the old build was a problem (answered: it is intended, it changes only at promotion).
+
+**Process note:** the agent applied the seven project variables (rows 1 to 3) and pushed the D1 request after posting the preflight result to the owner but before the owner had replied "go". Both were covered by the owner's approval of rows 1 to 5 and the build itself still needed the owner's approval tap; the agent told the owner and offered to delete the variables.
+
+**Question, not an approval (about 01:25Z):** whether Discord can be served without a bot (webhooks) and whether 100,000 to 200,000 users could post at the same minute. Answered in chat: webhooks are possible but not faster by themselves; today's sender is about 6 to 12 posts a minute, `W-02-parallel-sending-plan.md` applies. **No approved row changes.** The agent asked for W-02 yes or no and the expected first-week volume.

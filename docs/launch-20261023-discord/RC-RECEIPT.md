@@ -50,17 +50,17 @@ Earlier runs, kept for the record (none is evidence for the frozen SHA): the qua
 
 | Field | D1 (dark twin) | D2 (open twin) |
 |---|---|---|
-| Built by, when (UTC) | - | - |
-| Command (flags only, no values): `vercel deploy --prod --skip-domain --meta rafiiSourceSha=<sha> --env ...` | - | - |
-| Deployment ID | - | - |
-| Deployment URL | - | - |
-| Target / state | - | - |
-| Build duration, cost note | - | - |
-| Source fingerprint equals the frozen SHA | - | - |
-| Env names present (readback, names only) | - | - |
-| Gate value class (`tester workspace` / `*`) | - | - |
-| Server cap passed | - | - |
-| Aliased to `rafii.io` | - | - |
+| Built by, when (UTC) | GitHub Actions run 39883169905, request commit `a2a1070` (route A, `BUILD-VIA-GITHUB-ACTIONS.md`), approved by the owner 2026-10-23 01:19Z; created 01:19:41Z, READY 01:23:47Z | - |
+| Command (flags only, no values): `vercel deploy --prod --skip-domain --meta rafiiSourceSha=<sha> --env ...` | `vercel deploy --prod --skip-domain --yes --scope <team> --meta rafiiSourceSha=<sha> --meta rafiiTwin=dark --env POSTRIFF_DISCORD_CONNECT_WORKSPACES=<tester workspace, a GitHub secret> --env POSTRIFF_OAUTH_DISCORD_REVIEWED=true --env POSTRIFF_DISCORD_GUILD_CAP=10000` | - |
+| Deployment ID | `dpl_25ihHyiZCzZXAjVsJqJiYcCWA51n` | - |
+| Deployment URL | `postriff-phase2-private-hldzoymdu-jamesau0723-6572s-projects.vercel.app` (login-protected: anonymous requests get 403) | - |
+| Target / state | production (staged) / READY | - |
+| Build duration, cost note | 4 min 3 s (estimate was 2.5 min; cap $5 per build); billable duration and CPU minutes: unavailable through the CLI, so cost is not observed | - |
+| Source fingerprint equals the frozen SHA | 257 of 257 visible source files equal the frozen tree (0 absent, 0 different, 32 of 32 directory listings equal); 7 of 7 deeper files probed by content hash are present (3 exist only in the RC); the 2 RC-only files probed are absent from the live `dpl_47SG`; `/api/health` reports `sourceRevision` `2a5a523d788eef67a5c7dbed609a98efa6650eef`. Visible zone is 11% of the upload set, so this is the same sample-based standard as S-01 | - |
+| Env names present (readback, names only) | seven project variables created and read back by name and value (`CHECKLIST.md` C-03); production names list from the preflight run 39882363204 (176 names; the six required present; none of the names that must stay unset) | - |
+| Gate value class (`tester workspace` / `*`) | `tester workspace` (passed as a GitHub secret, masked in the log, not readable back); proven by the closed-state check and X-02 after the dark promotion | - |
+| Server cap passed | 10000 | - |
+| Aliased to `rafii.io` | No: `rafii.io` still names `dpl_47SG…`. Vercel moved the project's internal default domain (`postriff-phase2-private-jamesau0723-6572s-projects.vercel.app`, login-protected) to D1 at 01:23:47Z, as it does for every production build; D1 had no runtime log lines other than the agent's probes and no cron call | - |
 | Promoted at (UTC) | - | - |
 
 ## 5. Acceptance (hosted, on D1 before any exposure)

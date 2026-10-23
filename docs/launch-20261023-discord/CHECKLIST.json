@@ -1,9 +1,9 @@
 {
-  "recordedAt": "2026-10-22T23:13:12Z",
+  "recordedAt": "2026-10-23T01:32:20Z",
   "snapshot": "2026-10-22 ~17:00 UTC",
   "objective": "Let customers connect Discord to Rafii tomorrow at the largest scale that can be proven safe (capped Wave 1), and prepare Wave 2 ('thousands').",
   "releaseStatus": "NO_GO",
-  "releaseStatusNote": "NO_GO at 2026-10-22T23:13:12Z: the candidate is frozen and exact-SHA CI is green, and the owner approved the packet rows, but nothing is built or deployed, there is no real-customer acceptance, H-03 (tester session), H-05 (sign-off) and H-07 (on-call) are open, Discord verification status is unknown, backups are unverified, and no machine with the Vercel CLI is available to this session. Flip only through F-01.",
+  "releaseStatusNote": "NO_GO at 2026-10-23T01:32:20Z: the candidate is frozen and exact-SHA CI is green, and the owner approved the packet rows, but nothing is built or deployed, there is no real-customer acceptance, H-03 (tester session), H-05 (sign-off) and H-07 (on-call) are open, Discord verification status is unknown, backups are unverified, and no machine with the Vercel CLI is available to this session. Flip only through F-01.",
   "targetWave": "W1",
   "statusVocabulary": [
     "VERIFIED",
@@ -158,7 +158,7 @@
         "APPROVAL-PACKET-1.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "decided by the owner (replies 4 and 5): the first opening is at a server cap of 10,000 on both twins, with no staged ramp; the agent advised a ramp and recorded the risk"
     },
     {
@@ -178,7 +178,7 @@
         "APPROVAL-PACKET-1.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "default applied by the agent (assumption logged); the owner has not replied: Discord delta on the live line only"
     },
     {
@@ -198,7 +198,7 @@
         "APPROVAL-PACKET-1.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "default applied by the agent (assumption logged); the owner has not replied: engagement OFF"
     },
     {
@@ -218,7 +218,7 @@
         "AUTHORIZATION-RECORD.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "decision taken by the owner with packet row 4: POSTRIFF_OAUTH_DISCORD_REVIEWED=true on the two RC build commands only, never in project env; opening stays a separate step"
     },
     {
@@ -238,7 +238,7 @@
         "APPROVAL-PACKET-1.md section 2"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "T0 and GO_TIME not given; the agent assumes T0 = 24 hours after its start and says so"
     },
     {
@@ -259,7 +259,7 @@
         "AUTHORIZATION-RECORD.md reply 5"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "the owner wants thousands to tens of thousands of users on the open version (reply 5); the agent replaced its default load assumption: proven sending capacity is 6 to 12 Discord posts a minute, so heavy use queues and posts whose approval expires are held for a fresh approval; worker parallelism (W-02) is the next engineering step"
     },
     {
@@ -279,7 +279,7 @@
         "APPROVAL-PACKET-1.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "default applied by the agent (assumption logged); the owner has not replied: identity-only linking is not opened to the public"
     },
     {
@@ -300,7 +300,7 @@
         "H-01-verification-prep.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "owner-attested: the verified-app check mark is shown on the production bot tag (screenshot seen, not stored) and the owner confirms it is the production app; compare the client id in the authorize URL (C-05) on the staged build"
     },
     {
@@ -320,7 +320,7 @@
         "PORTAL-AUDIT-SHEET.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "human only (or AUTH-10 read-only); audit sheet prepared"
     },
     {
@@ -340,7 +340,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "human only; session script prepared"
     },
     {
@@ -360,7 +360,7 @@
         "AUTHORIZATION-RECORD.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "owner replied after packet rev D (RC head 2a5a523d): \"Approve all from 1 to 15 and rev B+\"; read as rows 1 to 15 plus the last row of the table, labelled (rev B+); the conditions written in the rows still apply"
     },
     {
@@ -380,7 +380,7 @@
         "APPROVAL-PACKET-1.md section 2"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "human only"
     },
     {
@@ -398,7 +398,7 @@
       "status": "NOT_RUN",
       "evidence": [],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "human only (optional)"
     },
     {
@@ -418,7 +418,7 @@
         "APPROVAL-PACKET-1.md section 2"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "human only"
     },
     {
@@ -441,7 +441,7 @@
         "AUTHORIZATION-RECORD.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "approved by the owner with packet row 14: the wording as drafted (P-01-privacy-terms-diff.md, commit 4680efce on the RC); the pages keep their draft banner"
     },
     {
@@ -478,7 +478,7 @@
         "S-01-lineage-report.md"
       ],
       "sourceSha": "c5fc1fd10350f3142ec6f34b2c373139e85abb39",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "live build is c5fc1fd1 (Mastodon production candidate), 257 of 257 listed files identical, 48 of 48 hidden-file probes; no Discord v2 code in production"
     },
     {
@@ -502,7 +502,7 @@
         "RC-RECEIPT.md section 3"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "matrix written with the code path, route or cron, tests and proof for every live capability, plus the capability levels Discord will show; its rows rest on tests that pass in CI on the exact SHA 2a5a523d, and the superset proof passes at the frozen SHA"
     },
     {
@@ -527,7 +527,7 @@
         "superset-allowlist.json"
       ],
       "sourceSha": "d4572f68",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "candidate branch built as a merge of the live line c5fc1fd1 and the Discord line b960bfe0 plus the launch controls; 11 conflicted files resolved as unions"
     },
     {
@@ -551,7 +551,7 @@
         "superset-allowlist.json"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "superset proof passes with 29 deliberate, explained rewrites; re-run at freeze"
     },
     {
@@ -573,7 +573,7 @@
         "S-05-migration-reconciliation.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "nothing to apply for Discord; migrations 108 to 112 are absent in production but also absent from the live build; retired Mastodon 131 to 133 absent everywhere"
     },
     {
@@ -597,7 +597,7 @@
         "https://github.com/dev-james0723/PostRiff/pull/222"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "exact-SHA CI on 2a5a523d: ten workflows, fourteen check runs, eleven success and three skipped by design (local-gates, scenes, founder, growth studio, growth metrics, composer input; library, agent-ui and the qualification dispatched on the same head). Earlier heads failed or were cancelled for reasons since fixed or re-run (secret scan, npm audit, pip-audit, the Mastodon opt-in, the real-PostgreSQL tests under the fence, a Chromium install hang, one WebKit check); none of them is evidence for this head"
     },
     {
@@ -621,7 +621,7 @@
         "commit 0c6a9c36 (secret allowlist)"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "npm audit 0 vulnerabilities and pip-audit clean at the candidate head (before: 2 critical + 1 high in next 16.3.8 and @sentry/nextjs 10.74.0, and 4 advisories in pypdf 6.20.1; the same lockfile and pin are live today). Deliberate deviation from \"keep the pypdf 6.20.1 pin\": the pin fails a CI gate and parses uploaded PDFs with known issues, so it is 6.21.1 (the Telegram lane already runs it); Pillow 13.0.0 kept; offline secret scan PASS with reviewed allowlist entries only; local tsc, oxlint, 1,010 web tests, the full Python suite (6,141) and a production build pass. CI on the exact SHA passes: local-gates Dependency audits and Offline source secret scan, and the library run (secret scan, npm audit)"
     },
     {
@@ -645,7 +645,7 @@
         "https://github.com/dev-james0723/PostRiff/pull/222"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "frozen 2026-10-22T22:37Z by the agent: head 2a5a523d, branch tip unchanged, CI green on every workflow, superset proof PASS, both independent review rounds closed, H-08 wording approved by the owner; any further change to the branch voids the freeze and the approvals that name this SHA"
     },
     {
@@ -667,7 +667,7 @@
         "https://github.com/dev-james0723/PostRiff/pull/222"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "draft PR \"DO NOT MERGE: Discord launch RC\", base branch points at the live commit so the diff is the Discord delta"
     },
     {
@@ -691,7 +691,7 @@
         "tests/test_discord_launch_hardening.py (34 tests)"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Enforced at connect START and in the catalog; deliberately not at the callback, destinations or publish (would strand a consented install; the kill switch covers them). After the independent review: an identity that must reconnect counts as a footprint, production is recognised whatever its case or spacing, and the original (non-v2) flow sits behind the same gate. Decision D-08: a workspace with a footprint may start any kind of connection"
     },
     {
@@ -715,7 +715,7 @@
         "tests/test_discord_launch_cap_race.py (real PostgreSQL)"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Counts every distinct bot-install server including revoked grants (a disconnect leaves the bot in the server) plus every installation start in flight, one slot per row (a second review showed that counting once per person let one account open the bot to many servers for one slot); one person (workspace and member) may have at most three starts in flight, reconnects included; reserved under an advisory lock at start for both the v2 and the original flow; a server that already has a credential row is admitted at any fill, a reconnect takes no slot. Residual: servers the bot joins without a stored row (another server picked, tab closed, callback failed, manual invite) are not counted; mitigated by comparing the Portal count with Q9 and Q12. Low residuals from the narrow third check (RUNBOOK-LAUNCH section 7): hoarding by many accounts is bounded per person only (Q9 threshold, Q13); the per-person refusal reuses the capacity wording; the count scans are slow only at a million never-purged rows"
     },
     {
@@ -739,7 +739,7 @@
         "web/tests/discord-launch-gate.test.cjs"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "partial: closed, full, busy, unavailable and late-post wording shipped in three languages, now at every screen that can receive the four codes (connect, server list, destination picker, verify, engagement) and a separate wording for the page Discord returns to, because the bot may already be in the server; the Channels card capability wording is unchanged (already Assisted / identity only); verification-pending state not built"
     },
     {
@@ -762,7 +762,7 @@
         "RUNBOOK-INCIDENT.md"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Kill switch composes with the gate (KillSwitch tests). On Vercel the switch needs a new build; the runbook uses a third twin and a database hold for seconds-level stops"
     },
     {
@@ -786,7 +786,7 @@
         "RUNBOOK-LAUNCH.md section 0"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3). Correction to the item: env changes reach new builds only, so widening is done by promoting a pre-built twin, not by an env edit"
     },
     {
@@ -807,7 +807,7 @@
         "tests/test_discord_rate_policy_tool.py"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "policy tool and 22 tests pass locally; applying the value is AUTH-4. Policy last used by the coordinator expires between 10-23 18:47Z and 10-24 18:47Z"
     },
     {
@@ -829,7 +829,7 @@
         "AUTHORIZATION-RECORD.md row 9"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "approved by the owner (row 9, AUTH-2, ceiling $4.32) but deferred: the existing harness is on the unmerged #197 branch (.depot/workflows/discord-capacity-stage-a-*) and runs through the owner's Depot account; it does not gate a 90-server Wave 1"
     },
     {
@@ -851,7 +851,7 @@
         "tests/test_discord_ban_handling.py"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "implemented; passing in CI on the exact SHA 2a5a523d (local-gates and the qualification; run links in RC-RECEIPT.md section 3) (15 tests: Cloudflare-style 429, scopes, hints, held routes, operator hold)"
     },
     {
@@ -873,7 +873,7 @@
         "MEASUREMENTS.md"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "model and user-facing messages done; request counts are from code and the harness constant, not measured"
     },
     {
@@ -896,7 +896,7 @@
         "tests/test_discord_worker_budget.py"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "decision recorded with the budget arithmetic; per-step latency not measured; late-post note in the schedule dialog"
     },
     {
@@ -916,7 +916,7 @@
         "RUNBOOK-INCIDENT.md 4.B"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "COULD; the incident runbook covers a ban"
     },
     {
@@ -940,7 +940,7 @@
         "C-01-env-matrix.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "matrix written; the dangerous values live only on the build commands"
     },
     {
@@ -955,14 +955,14 @@
       "approval": "",
       "evidenceRequired": "Name diff.",
       "basis": "AGENTS.md: no credential edits; Vercel MCP rule: never decrypt unless requested.",
-      "status": "BLOCKED_EXTERNAL",
+      "status": "VERIFIED",
       "evidence": [
-        "private audit (not in the repository)",
-        "APPROVAL-PACKET-1.md row 8"
+        "GitHub Actions run 39882363204",
+        "BUILD-VIA-GITHUB-ACTIONS.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
-      "note": "incomplete: the tool returned 100 of 271 production env records and only 48 names; no Discord variable exists in the readable window (created 10-14 or later); the older 223 are unreadable. Row 8 is approved (names only, through the paired computer or pasted by the owner); the paired computer has been offline since 10-22 14:52Z"
+      "timestamp": "2026-10-23T01:32:20Z",
+      "note": "names-only readback done through the owner-approved GitHub Actions route (read-only preflight, run 39882363204, 2026-10-23T01:11Z): 176 production names; the six required names (Discord client id and secret, bot token, public base URL, credential key, cron secret) are present; none of the names that must stay unset exists (gate, cap, reviewed flag, kill switch, webhook, engagement, user-install, interaction, message content); the Discord, worker and OAuth-Discord family held exactly four names before the batch. Other names are not printed because the log is public"
     },
     {
       "id": "C-03",
@@ -979,13 +979,14 @@
       "approval": "AUTH-3",
       "evidenceRequired": "Readback.",
       "basis": "",
-      "status": "NOT_RUN",
+      "status": "VERIFIED",
       "evidence": [
-        "AUTHORIZATION-RECORD.md rows 1 to 3"
+        "AUTHORIZATION-RECORD.md rows 1 to 3",
+        "RC-RECEIPT.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
-      "note": "AUTH-3 and AUTH-4 approved (rows 1 to 3); applied by the agent just before the D1 build, then read back by name and value (env is project-wide, so not earlier)"
+      "timestamp": "2026-10-23T01:32:20Z",
+      "note": "applied by the agent 2026-10-23T01:17Z through the Vercel API: four Discord flags set to true, the rate policy (revision rafii-w1-20261023, valid until 2026-11-22, renew by 2026-11-15) and the worker budget of 25 jobs and 40 seconds; type plain, target production; read back by name and value from a second listing (all seven equal); the gate, cap, reviewed flag, kill switch, webhook, engagement and user-install names are not set. Applied before the owner had said go after the preflight result; the owner had approved rows 1 to 3 and was told"
     },
     {
       "id": "C-04",
@@ -1006,7 +1007,7 @@
         "scripts/rc_superset_proof.py crons check"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "the candidate keeps the only live cron (/api/cron/worker every minute), proven by the superset proof; the post-promotion check is not done"
     },
     {
@@ -1026,7 +1027,7 @@
       "status": "NOT_RUN",
       "evidence": [],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "needs the staged build"
     },
     {
@@ -1046,7 +1047,7 @@
         "private audit (not in the repository)"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "advisors run read-only: security 23 findings (1 WARN, 22 INFO), performance 223; none on the in-scope tables at ERROR level; triage in the private report"
     },
     {
@@ -1067,7 +1068,7 @@
         "monitoring.sql planned against the schema"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "RLS and FORCE RLS on, anon has no grants, authenticated has no access to the Discord, credential or OAuth tables, service_role grants as migrations 124 to 131 give"
     },
     {
@@ -1087,7 +1088,7 @@
         "APPROVAL-PACKET-1.md row 11"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "cannot be determined with the tools available: Pro plan means daily backups kept 7 days; PITR is a paid add-on; WAL archiving is running. The owner must read the dashboard"
     },
     {
@@ -1107,7 +1108,7 @@
         "S-05-migration-reconciliation.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "default taken: staging has no Discord tables and migrations are already in production; AUTH-8 not requested"
     },
     {
@@ -1130,7 +1131,7 @@
         "P-02-discord-policy-compliance.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "engagement is OFF; its code keeps counts and digests, not message text; every monitor is aggregate-only; reply approvals (when enabled) keep parent message id, author id and a digest"
     },
     {
@@ -1148,13 +1149,13 @@
       "approval": "",
       "evidenceRequired": "Pre-flight record.",
       "basis": "AGENTS.md safeguarded release path.",
-      "status": "NOT_RUN",
+      "status": "VERIFIED",
       "evidence": [
-        "RUNBOOK-LAUNCH.md"
+        "RC-RECEIPT.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
-      "note": "waits for the frozen SHA and the owner"
+      "timestamp": "2026-10-23T01:32:20Z",
+      "note": "project postriff-phase2-private (prj_6ufJ...) in the Rafii team confirmed, not rafii-consumer-staging; no other build in flight before D1; rafii.io named dpl_47SGx before and after D1; the cost note was posted to the owner before the build (about 2.5 minutes expected, cap $5 per build, two builds in total, no retry)"
     },
     {
       "id": "Q-02",
@@ -1170,14 +1171,14 @@
       "approval": "AUTH-1",
       "evidenceRequired": "Deployment record.",
       "basis": "Runbook: staged candidate does not assign public domains.",
-      "status": "NOT_RUN",
+      "status": "VERIFIED",
       "evidence": [
-        "AUTHORIZATION-RECORD.md",
-        "BUILD-RUNSHEET.md"
+        "RC-RECEIPT.md section 4",
+        "BUILD-VIA-GITHUB-ACTIONS.md"
       ],
-      "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
-      "note": "AUTH-1 approved for D1 and D2 (packet rows 5 and 6, nothing more: a third build needs a new yes); waits for exact-SHA CI green, the freeze, the tester workspace id and a machine with the Vercel CLI (the owner's MacBook, offline since 10-22 14:52Z; this session has no CLI or token and the deployment API tool cannot skip the domain or set per-build env)"
+      "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
+      "timestamp": "2026-10-23T01:32:20Z",
+      "note": "D1 built and READY: dpl_25ihHyiZCzZXAjVsJqJiYcCWA51n, run 39883169905, 4 min 3 s, source 2a5a523d. The GitHub job shows red only because the agent's own domain alarm fired on the project's internal login-protected default domain, which Vercel moves to every production build; rafii.io is untouched. D2 is not built (it needs the tester session first)"
     },
     {
       "id": "Q-03",
@@ -1193,13 +1194,13 @@
       "approval": "",
       "evidenceRequired": "Match report.",
       "basis": "",
-      "status": "NOT_RUN",
+      "status": "VERIFIED",
       "evidence": [
-        "RUNBOOK-LAUNCH.md"
+        "RC-RECEIPT.md section 4"
       ],
-      "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
-      "note": "waits for the frozen SHA and the owner"
+      "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
+      "timestamp": "2026-10-23T01:32:20Z",
+      "note": "257 of 257 visible source files equal the frozen tree; 7 of 7 deeper files probed by content hash are present (3 exist only in the RC); the 2 RC-only files probed are absent from the live dpl_47SG; /api/health reports sourceRevision 2a5a523d788eef67a5c7dbed609a98efa6650eef. Sample-based like S-01 (the listing shows 11% of the upload set)"
     },
     {
       "id": "Q-04",
@@ -1215,13 +1216,13 @@
       "approval": "",
       "evidenceRequired": "Probe table.",
       "basis": "",
-      "status": "NOT_RUN",
+      "status": "VERIFIED",
       "evidence": [
-        "RUNBOOK-LAUNCH.md"
+        "RC-RECEIPT.md section 5"
       ],
-      "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
-      "note": "waits for the frozen SHA and the owner"
+      "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
+      "timestamp": "2026-10-23T01:32:20Z",
+      "note": "on D1 without a session: /api/health 200 with the expected source revision; /api/me and /api/workspaces 401; no 5xx and no error lines in the runtime log; no cron call reached D1. NOT covered here: the connect page showing the gate state needs a signed-in session, so it moves to the closed-state check and X-02 after the dark promotion (RC-RECEIPT.md section 5)"
     },
     {
       "id": "Q-05",
@@ -1237,13 +1238,13 @@
       "approval": "",
       "evidenceRequired": "Probe results.",
       "basis": "PR #216 lists hosted application tenant isolation as unqualified.",
-      "status": "NOT_RUN",
+      "status": "BLOCKED_EXTERNAL",
       "evidence": [
-        "RUNBOOK-LAUNCH.md"
+        "APPROVAL-PACKET-2.md section 4"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
-      "note": "waits for the frozen SHA and the owner"
+      "timestamp": "2026-10-23T01:32:20Z",
+      "note": "the hosted two-workspace probe needs two real accounts the agent cannot create. CI evidence on the exact SHA: cross-tenant destination, consent, lease and state-binding tests pass (test_discord_destinations, test_discord_worker_lifecycle, test_discord_personal_account_contract). Proposed in APPROVAL-PACKET-2.md: accept that now and run the hosted probe in the tester session with the tester account and a second account"
     },
     {
       "id": "Q-06",
@@ -1259,13 +1260,14 @@
       "approval": "",
       "evidenceRequired": "Target + compatibility note.",
       "basis": "PR #211 body rollback note.",
-      "status": "NOT_RUN",
+      "status": "VERIFIED",
       "evidence": [
-        "RUNBOOK-LAUNCH.md"
+        "RUNBOOK-INCIDENT.md",
+        "APPROVAL-PACKET-2.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
-      "note": "waits for the frozen SHA and the owner"
+      "timestamp": "2026-10-23T01:32:20Z",
+      "note": "rollback target is dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg (READY, rollback candidate, serves rafii.io, fingerprinted as the c5fc1fd1 lineage in S-01); the five Discord migrations are already in production and additive, so the older build runs against the current database. Rule kept: before any rollback to the older worker, set the kill switch and drain or reconcile in-flight Discord jobs (none can exist while the gate is closed)"
     },
     {
       "id": "Q-07",
@@ -1287,11 +1289,11 @@
       "basis": "",
       "status": "NOT_RUN",
       "evidence": [
-        "RUNBOOK-LAUNCH.md"
+        "APPROVAL-PACKET-2.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
-      "note": "waits for the frozen SHA and the owner"
+      "timestamp": "2026-10-23T01:32:20Z",
+      "note": "APPROVAL-PACKET-2.md is written; the promotion waits for H-05 and the owner's answer on Q-05"
     },
     {
       "id": "X-01",
@@ -1314,7 +1316,7 @@
         "BUILD-RUNSHEET.md section G"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "AUTH-5 approved (the rev B+ row) on condition that Q-01 to Q-07 are VERIFIED and the H-05 sign-off exists; promotion is an API call the agent can make, so it needs no machine"
     },
     {
@@ -1338,7 +1340,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1361,7 +1363,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1385,7 +1387,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1408,7 +1410,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1431,7 +1433,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1454,7 +1456,7 @@
         "TESTER-SESSION-SCRIPT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "waits for the dark promotion and the tester session"
     },
     {
@@ -1476,7 +1478,7 @@
         "tests/test_discord_launch_cap_race.py"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "tests written and passing locally on PostgreSQL 16 (11, uuid columns like production: 12 racers, 5 slots, 2 held; exactly 3 admitted, count never above the cap; a no-lock control overshoots; every start holds its own slot; one account starting ten different servers is admitted for exactly the free slots; one person at most three in flight, freed when one finishes; a reconnect takes no slot at a full house; a known server is admitted at a full house). Production check is the Q9 count query only. CI evidence: the 11 tests run unfenced in the ci-python step of local-gates and in the full-suite step of the qualification on PostgreSQL 17, and both steps succeeded on the frozen head (the tests skip only without the PostgreSQL binaries or under the synthetic fence, and neither applies in those steps); the independent reviewer ran the same files 105 of 105 on PostgreSQL 16"
     },
     {
@@ -1500,7 +1502,7 @@
         "AUTHORIZATION-RECORD.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "AUTH-6 approved (the rev B+ row) on condition that X-02 to X-05 are VERIFIED in the tester session, every Wave 1 MUST item is VERIFIED, no abort trigger fired and T0 is reached; the agent still sends the GO or NO-GO report at GO_TIME and opens only on GO"
     },
     {
@@ -1520,7 +1522,7 @@
         "P-01-privacy-terms-diff.md"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "wording drafted and committed on the RC; approval is H-08"
     },
     {
@@ -1540,7 +1542,7 @@
         "P-02-discord-policy-compliance.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "compliance table against Discord's developer policy and terms (2024-07-08 copy); gaps ranked"
     },
     {
@@ -1563,7 +1565,7 @@
         "P-03-connect-guide-draft.md"
       ],
       "sourceSha": "2a5a523d788eef67a5c7dbed609a98efa6650eef",
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "refusal, busy and late-post copy shipped in the candidate in three languages; a connect guide (Manage Server, permissions, removing the bot) is drafted in three languages but is not in the product, because adding it would move the frozen head"
     },
     {
@@ -1584,7 +1586,7 @@
         "P-01-privacy-terms-diff.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "workspace deletion cascades the Discord credential rows; the shared bot is never removed from a server, by design on this line; disclosed in the draft wording"
     },
     {
@@ -1606,7 +1608,7 @@
         "monitoring.sql"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "eleven aggregate-only monitors with thresholds; every statement planned against the production schema with EXPLAIN (no rows read)"
     },
     {
@@ -1629,7 +1631,7 @@
         "APPROVAL-PACKET-1.md row 12"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "trigger table and abort ladder written for Vercel semantics; AUTH-7 rewritten in the packet"
     },
     {
@@ -1653,7 +1655,7 @@
         "RUNBOOK-INCIDENT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "launch and incident runbooks with customer notices in three languages"
     },
     {
@@ -1676,7 +1678,7 @@
         "RUNBOOK-LAUNCH.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "no calendar tool is connected to this session; the policy tool prints the renew-by date (7 days before expiry; for the example policy: expiry 2026-11-21 19:59Z, renew-by 2026-11-14) and RUNBOOK-LAUNCH lists the owner reminders; the owner creates the entries"
     },
     {
@@ -1696,7 +1698,7 @@
       "status": "NOT_RUN",
       "evidence": [],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "after launch"
     },
     {
@@ -1716,7 +1718,7 @@
         "LAUNCH-READINESS-REPORT.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "evaluated at GO_TIME; today the recommendation is NO-GO"
     },
     {
@@ -1739,7 +1741,7 @@
         "RUNBOOK-INCIDENT.md section 5"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "the fallback is that D1 (gate closed) stays promoted; the customer wording exists; reschedule criteria not written"
     },
     {
@@ -1762,7 +1764,7 @@
         "RUNBOOK-INCIDENT.md section 1"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "abort and rollback ladder with speeds and undo steps"
     },
     {
@@ -1782,7 +1784,7 @@
       "status": "NOT_RUN",
       "evidence": [],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "after F-01"
     },
     {
@@ -1804,7 +1806,7 @@
         "AUTHORIZATION-RECORD.md reply 3"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "verification is owner-attested (see H-01); what remains is the decision to raise the cap in steps, each a new build with the owner's yes (AUTHORIZATION-RECORD.md reply 3)"
     },
     {
@@ -1843,7 +1845,7 @@
         "W-03-webhook-server-limit.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "not documented by Discord in anything found; a safe empirical test and a question to Discord are drafted"
     },
     {
@@ -1918,7 +1920,7 @@
         "W-07-merge-proposal.md"
       ],
       "sourceSha": null,
-      "timestamp": "2026-10-22T23:13:12Z",
+      "timestamp": "2026-10-23T01:32:20Z",
       "note": "proposal only"
     }
   ]

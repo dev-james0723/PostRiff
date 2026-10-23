@@ -418,10 +418,11 @@ code, text, args, calls, *_ = build('d2', extra={'FAIL_DEPLOY': '1'})
 check('a failed deploy is not retried, says so, and names the url it created', code != 0 and 'not retried' in text and calls.count('CALL: deploy') == 1 and 'failed1' in text and 'Error: Build failed' in text, text[-500:])
 code, text, *_ = build('d2', extra={'FAIL_INSPECT': '1'})
 check('a failing inspect fails the step instead of passing silently', code != 0 and 'vercel inspect failed' in text)
-for alias, label in (('rafii.io', 'rafii.io'), ('www.rafii.io', 'a subdomain of rafii.io'), ('postriff-phase2-private.vercel.app', 'the project production alias'),
-                     ('postriff-phase2-private-jamesau0723-6572s-projects.vercel.app', 'the project default domain')):
+for alias, label in (('rafii.io', 'rafii.io'), ('www.rafii.io', 'a subdomain of rafii.io'), ('postriff-phase2-private.vercel.app', 'the project public production alias')):
     code, text, *_ = build('d2', extra={'ALIAS_ATTACHED': alias})
-    check(f'{label} attached to the build trips the wire', code != 0 and 'PRODUCTION DOMAIN IS ATTACHED' in text)
+    check(f'{label} attached to the build trips the wire', code != 0 and 'CUSTOMER-FACING DOMAIN IS ATTACHED' in text)
+code, text, *_ = build('d2', extra={'ALIAS_ATTACHED': 'postriff-phase2-private-jamesau0723-6572s-projects.vercel.app'})
+check('the project internal default domain (login-protected) is only noted, as seen on the first real build', code == 0 and 'note: the project internal default domain' in text and 'CUSTOMER-FACING' not in text, text[-300:])
 check('the deployment own url does not trip the wire', build('d2')[0] == 0)
 code, text, *_ = build('d2', extra={'ROUTE_LINE': '  redirects      https://rafii.io/old -> /new'})
 check('a route or redirect line that mentions rafii.io is not an alias and does not trip the wire', code == 0, text[-300:])
