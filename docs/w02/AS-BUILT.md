@@ -185,6 +185,25 @@ through the Supabase pooler: about 20 per post (claim, renewals, seal, completio
 connection churn, not the lane, is likely the largest part of a step's real latency; the pooled factory would remove it
 but is a separate setting.
 
+## Fail-safe behaviour
+
+What each cause does, in the minute cron's tick, in the 12 shards, and on the customer's post [reasoned from the
+code unless marked]. "Frozen path" means the tick is byte-for-byte the `2a5a523d` code [tested offline]; the
+quoted texts are the events and next actions the existing worker writes.
+
+| Cause | Minute tick | Shards | The customer's post | Signal |
+|---|---|---|---|---|
+| Flag off, or the lease protocol off | frozen path: claims and sends Discord as before W-02 | answer `{"enabled": false}` without starting the runtime | sent as before | `status.blocker` `disabled` |
+| Lane budget misconfigured | frozen path, sends as before | 503 `discord_lane_configuration`, nothing claimed | sent as before | shard 503s; `blocker` `configuration` |
+| Rate limits off | frozen path; the hosted runtime turns Discord authorization off, so each claimed post is held and its destination set to `verification_required` [measured offline] | stop at once, `coordinator_unavailable`, nothing claimed | held: "Discord destination, grant, media or rollout verification is unavailable. Nothing was posted."; the destination must be verified again | the preflight fails; WARNING shard lines; `blocker` `coordinator_unavailable` |
+| No coordinator or policy; policy expired or not yet valid | frozen path: each claimed post is released for five minutes, and held once that wait passes its approval | stop at once, `coordinator_unavailable` | later than scheduled ("Await Discord shared rate budget; no POST occurred and this approval remains frozen"), or held ("Discord rate wait outlasts approval; review the frozen destination and approve again") | WARNING shard lines; `blocker` `coordinator_unavailable`; `policyDaysLeft` at or below 0 |
+| Coordinator degraded in one process | leaves Discord to the lane | that process's loops stop, `coordinator_degraded`; other processes' loops send | sent by the healthy loops | WARNING lines from that process; its `blocker` `coordinator_degraded` |
+| Coordinator degraded in every lane process | leaves Discord to the lane | every loop stops, `coordinator_degraded` | waits; once its approval's hour has passed, held when next claimed ("Discord needs a current human approval bound to this exact destination and content") | WARNING lines; `discord.lane.lagging` after five minutes |
+| Operator hold on the policy row | leaves Discord to the lane (it cannot see the hold) | each loop stops before its next claim, `operator_hold` | waits; a post between sealing and sending may be left `uncertain` with nothing sent (Q4) | M6; `operator_hold` lines |
+| Shard crons not reaching the function | leaves Discord to the lane | nothing runs | waits; held after its approval's hour | no lane lines; `discord.lane.lagging` after five minutes |
+| Projection missing | leaves Discord to the lane | stop at once, `schema` | waits; held after its approval's hour | WARNING lines; `discord.lane.lagging` |
+| Embargo, circuit, spent window or invalid-request budget | leaves Discord to the lane | sleep it out, or stop with `rate_wait` | later than scheduled | M4; `rate_wait` lines |
+
 ## Health status
 
 `lane.status(social, now, values=None)` is the lane's health indication: pure and cheap (no database, network or
