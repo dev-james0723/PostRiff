@@ -16,7 +16,7 @@ Verdicts: **OBSERVABLE-INTENDED** (a customer can notice it and an approved deci
 
 ## 0. Status of the findings on `claude/discord-rc2-fixes-20261023` (added there; the findings below are unchanged)
 
-Fixes are on the RC2 fixes branch, which is RC1 + the W-02 lane (`4a776000`) + the commits named here; details,
+Fixes are on the RC2 fixes branch, which is RC1 + the W-02 lane (`820d8c7d`) + the commits named here; details,
 failing-before tests and live-versus-candidate results in `docs/RC2-SHARED-PATH-FIXES.md`.
 
 | Finding | Status | Commit | Guard |

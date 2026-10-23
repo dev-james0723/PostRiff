@@ -8,9 +8,9 @@ found the regressions below; this branch fixes them. Facts first; *inference* ma
 | | |
 |---|---|
 | Branch | `claude/discord-rc2-fixes-20261023` |
-| Base | the W-02 head `150ab4fa` (RC1 `2a5a523d` + the W-02 lane); later merged W-02 `4a776000` (test-only) and the impact branch `9f1946cf` (docs, scripts and tests only) |
+| Base | the W-02 head `150ab4fa` (RC1 `2a5a523d` + the W-02 lane); later merged W-02 `4a776000` (test-only) and `820d8c7d` (RC2-1 in `lane.py`, W-02 tests), and the impact branch `9f1946cf` (docs, scripts and tests only) |
 | Live | `c5fc1fd1` (`dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg`) |
-| Code head tested | `2ca119ad` (everything after it is documentation) |
+| Head tested | `b9b1383b` (the last code fix is `2ca119ad`; after `b9b1383b` only documentation changed) |
 | Method | every fix has tests that fail on `150ab4fa` and pass here; where a behaviour exists on live, the same probe or scenario runs with the live tree (`git archive c5fc1fd1`) and with this tree and the records are compared. No network, no Production access, nothing deployed |
 
 ## Summary
@@ -281,6 +281,20 @@ statement (its pin updated in this branch).
 - Web typecheck, lint and the browser harnesses were not run: this checkout has no `node_modules` (the 34 web unit
   tests that need `typescript`, `react` or other packages fail identically on `150ab4fa` and here).
 
-## Test runs on the code head `2ca119ad`
+## Test runs on `b9b1383b`
 
-Filled from the receipts of the final runs (see the end of this file).
+All on a detached copy of `b9b1383b` (scratch worktree), Python 3.13 venv with psycopg, PostgreSQL 16 binaries, no
+network. Receipts are kept in the session scratchpad, not in the repository.
+
+| Run | Command | Result |
+|---|---|---|
+| Fenced Discord suite, as the qualification workflow runs it | `CI=true PYTHONPATH=scripts/linkedin_test_fence:src:tests RAFII_DISCORD_SYNTHETIC_FENCE=1 python -m unittest discover -s tests -p 'test_discord*.py'` | 577 tests OK, 49 skipped (the real-PostgreSQL tests stand down under the fence); fence receipt: 0 unexpected transport attempts, 0 real provider requests |
+| This branch's suites and the impact suites, real PostgreSQL | `POSTRIFF_PG_BIN=... python -m unittest test_rc2_shared_path_fixes test_rc2_shared_paths_postgres test_customer_impact_shared_paths test_impact_compare test_customer_impact_dependencies` | 63 tests OK, none skipped |
+| Web unit tests | `cd web && node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs` (Node 22, no `node_modules`) | 752 tests, 718 pass, 34 fail; the 34 are the same set as on `150ab4fa` (they need `typescript`, `react` or other packages this checkout lacks) |
+| Full repository discover | `PYTHONPATH=src:tests python -m unittest discover -s tests -p 'test_*.py'` (without `POSTRIFF_PG_BIN`, as the RC1 receipt's 6,141/391 count) | FULL_DISCOVER_RESULT |
+
+Failing-before receipts (each test file copied onto a detached `150ab4fa`, or the live tree, and run there): FB-1, CH-1,
+PR-1 and ENV-1 offline tests (`all-offline-base-150ab4fa*.log`, `env1-base-150ab4fa.log`), the PostgreSQL proof
+(`pg-base-150ab4fa.log`, with the record summary `pg-summary.txt`), the impact guards with `IMPACT_RC_REV=150ab4fa`
+(`impact-guards-on-150ab4fa.log`), the UI-1 web test (3 of 4 fail), the cron guard on `150ab4fa` and on the live tree
+(`cron-guard-base-150ab4fa.log`), and the 404 tests on the 401 head `651e1899` (`pr1-404-on-651e1899.log`).
