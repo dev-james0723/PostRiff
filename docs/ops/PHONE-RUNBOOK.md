@@ -4,7 +4,7 @@ Everything here needs only a phone browser: the **Supabase dashboard SQL editor*
 
 ## The levers, fastest first
 
-1. **Hold** (seconds, no deploy): the `HOLD_ON` statement below. Every Discord request (posts, reads, connects) is refused before it is sent; queued posts wait, nothing is lost. Approvals last an hour, so a hold longer than that means re-approvals. Works only on a build with `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` (and, for login-token refreshes, commit `29bc8ab2` or later).
+1. **Hold** (seconds, no deploy): the `HOLD_ON` statement below. Every new Discord request (posts, reads, connects) is refused before it is sent; queued posts wait, nothing is lost. A post whose send permit was reserved just before the hold can still go out: at most the one step each running loop had in flight (docs/w02/AS-BUILT.md, Turning it off). Approvals last an hour, so a hold longer than that means re-approvals. Works only on a build with `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` (and, for login-token refreshes, commit `29bc8ab2` or later).
 2. **Close new connections only** (seconds): promote the **dark twin** of the serving SHA (its deployment id is in the release record). Existing connections and queued posts keep working.
 3. **Roll back the serving build** (seconds, no rebuild): promote the previous production deployment (below).
 4. **Kill switch** (a build, about 3 minutes, needs the owner's approval): a twin with `POSTRIFF_OAUTH_DISCORD_DISABLED=true`.
