@@ -84,7 +84,8 @@ routes:
 
 At 2 ms the application-row lock is the main latency contributor: reserve p50 153 ms and observe 122 ms at 12
 processes, against 39 and 56 ms alone. It is not a hard ceiling below 25. At 5 ms it is: below 25/s even with 24
-processes and no policy limit.
+processes and no policy limit. Production runs in Vercel iad1 against Supabase us-east-1, which are co-located, so
+2 ms is the plausible case and 5 ms a stress. The real round trip has not been measured.
 
 ## Not yet in this file
 

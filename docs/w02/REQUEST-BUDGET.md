@@ -134,6 +134,49 @@ hold **at send time**, so it runs immediately before the create.
 standard with almost no margin. At the effective 20.8 requests/s it is 14.3 / 27.2 / 28.6, which **fails P50 and
 P95**. With A1/A1' alone, the outcome depends on how in-flight requests are charged (section 1).
 
+The GitHub-hosted S1 showed that a release costs more than its wasted preflight: the released post also loses its
+place in its workspace (section 7.2). That makes 4.1 worth more than its 0.65 requests per post, and leads to 4.1b.
+
+### 4.1b A released-unsent job keeps its place in its workspace (no request saved; the tail)
+
+**What happens today.**
+
+- A claim stamps `lastDispatchedAt = now` on the job it takes (`hosted_worker.py:688`), before the preflight.
+- When the step is then released unsent, the stamp stays. That happens when the create's admission is refused
+  (`rate_delayed`), or the preflight hits a transient error (`preflight_transient`, `discord/worker.py:100-130`).
+- Inside a workspace, jobs are taken by `lastDispatchedAt` ascending (`hosted_worker.py:552`; nothing else reads the
+  field), so a released post sorts behind every never-claimed post of its workspace.
+- A workspace gets one job per claim and one claim per round, so the post loses a round per position. That is 12 to 14
+  minutes per round at S1's pace.
+
+Measured on S1 (section 7.2): the 1,304 posts of the 503 workspaces with a release had a median lateness of 26.6 min,
+p95 39.8 and max 40.7, against 15.3 / 30.6 / 32.6 for the others. Every post later than 32.6 min was among them.
+
+**Candidate.** On a release with reason `rate_delayed` (and `shutdown`), restore the job's `lastDispatchedAt` to its
+value before the claim: 0 for a post never claimed before. For example, `discord_worker.begin` keeps the prior value
+next to the lease, and `release_unsent` puts it back. The job keeps its place; its cooldown (`nextAt = now +
+retry_after`) is unchanged. An equivalent form stamps `lastDispatchedAt` when the job's provider request is actually
+sent (create or read-back) rather than at claim.
+
+**What the stamp defends, and why the candidate still defends it.**
+
+1. **Fairness between tenants is untouched.** The tenant order is the workspace cursor (`hint.last_claimed_at`,
+   `pr_worker_tenants.last_claimed_at` and `discordWorkerCursor`, written at claim, `hosted_worker.py:722-723`), not
+   `lastDispatchedAt`. A released job's workspace still goes to the back of the tenant rotation at its claim, so a busy
+   tenant cannot take more turns than today.
+2. **Rotation inside a workspace is kept where it matters.** The stamp stops one job from being taken again and again
+   while its siblings wait. A `rate_delayed` job cannot do that: it is not due again before its cooldown (the claim
+   skips a job whose `nextAt` is in the future, `hosted_worker.py:568`), and the shared budget, not the job, refused it.
+   A job released for its own transient error keeps today's stamp, so a failing job still rotates behind its siblings.
+   It also still spends one of its `MAX_UNSENT_ATTEMPTS`.
+3. **No request, admission or check changes.** The witness and the grant check run exactly as today when the job is
+   taken again. **Equivalent**, with no saving in requests.
+
+**Effect (inference).** A post released at its first claim is taken at its workspace's next claim, one round later,
+not after all its siblings. In S1 that would bring the 503 workspaces' posts close to the others' figures, so P95 and
+max would approach about 30.6 / 32.6 min instead of 36.8 / 40.7. With 4.1 most releases disappear. 4.1b removes the
+penalty for the ones that remain: a Discord route limit, a coordinator hold, or a lease renewal that fails.
+
 ### 4.2 Claim order: the read-back waits for a full pass over the backlog (customer-visible)
 
 **Fact.** The Discord claim (`hosted_worker.py:57-60`) orders by `hint.last_claimed_at, w.id`: a round robin over
@@ -455,6 +498,9 @@ application row lock, against 39 and 56 ms with one process.
 - **At 5 ms the lock becomes the ceiling:** 20.5/s at 12 processes, 23.2/s at 24, below 25 with no policy at all.
 - So the real database round trip from Vercel to Supabase decides it, and it was not measured. More loops raise the
   ceiling (24 processes: 30.6/s with a Discord answer) at the price of longer queues (reserve p95 614 ms).
+- The live deployment runs in Vercel iad1 and the production Supabase project in us-east-1, which are co-located
+  (fact from the coordinator). That makes the 2 ms case the plausible one and the 5 ms case a stress test. The real
+  round trip, through Supavisor with TLS, remains to be measured on Depot or Production.
 
 ### 7.5 What would move the S1 median (inference from 7.1 to 7.4)
 
@@ -468,5 +514,6 @@ P50 ≈ 2,500 × r / (25 × duty × packing):
 | plus one preflight per sent post (4.1) | 0.98 | 0.84 | about 6.1 | about 12.4 |
 | plus charge-once accounting (4.9) | 0.98 | about 0.95 | about 6.1 | about 10.9 |
 
-P95 and max depend mostly on the release requeue (7.2), which 4.1 removes. The `s1levers` profile (S1 as control,
-S1-lane58, S1-lane70, S1-warm) measures the duty-cycle rows alone. No code changes.
+P95 and max depend mostly on the release requeue (7.2). 4.1 removes most releases; 4.1b removes the requeue for the
+rest. The `s1levers` profile (S1 as control, S1-lane58, S1-lane70, S1-warm) measures the duty-cycle rows alone. No
+code changes.
