@@ -50,6 +50,10 @@ MAX_STEPS = 5000
 # otherwise, or after this many misses in a row, the loop ends and the next cron minute starts a new one.
 IDLE_HORIZON_SECONDS = 10
 MAX_IDLE_MISSES = 6
+# While the flag is on, the minute tick logs one warning when its own Discord report (discord_report: the oldest due,
+# unleased Discord job in its bounded sample) is later than this: shard crons that do not fire or cannot claim, a lane
+# that cannot keep up with a burst, or a minute tick that kept Discord because the lane could not run in its process.
+LAG_WARNING_SECONDS = 300
 _SHARD = re.compile(r'^(0|[1-9][0-9]?)$')
 _GUARDS = ('00:', '10:', '11:', '20:')  # application policy, bot global, bot credential, invalid-request budget
 _OUTLOOK = '''WITH observed AS (SELECT extract(epoch from clock_timestamp())::double precision AS at)
@@ -179,6 +183,26 @@ def blocker(social, now, values=None):
     if not discord_worker.finite(now) or not policy.issued_at <= now < policy.expires_at:
         return 'coordinator_unavailable'  # outside the reviewed policy's validity: the coordinator refuses everything
     return None
+
+
+def warn_if_lagging(result, reason=None):
+    """One WARNING, discord.lane.lagging, when this tick's Discord report shows due work later than the threshold.
+
+    tick() calls it whenever the flag is on, with the readiness verdict it acted on. It reads only the report the tick
+    already made (discordWorker.queue, the existing sample of at most 256 workspaces), so it adds no query, and it
+    logs counts and codes only. Returns whether it warned.
+    """
+    report = result.get('discordWorker') if isinstance(result, dict) else None
+    queue = report.get('queue') if isinstance(report, dict) else None
+    lag = queue.get('oldestEligibleLagSeconds') if isinstance(queue, dict) else None
+    if not discord_worker.finite(lag) or lag <= LAG_WARNING_SECONDS:
+        return False
+    counts = {key: queue[key] for key in ('depth', 'held', 'uncertain', 'deadLetters') if type(queue.get(key)) is int}
+    # No workspace, job, channel, content, credential or lease owner id.
+    logging.getLogger('postriff.request').warning(json.dumps({
+        'event': 'discord.lane.lagging', 'oldestEligibleLagSeconds': round(lag, 1),
+        'thresholdSeconds': LAG_WARNING_SECONDS, 'laneOwnsDiscord': reason is None, 'laneBlocker': reason, **counts}))
+    return True
 
 
 def outlook(lane):

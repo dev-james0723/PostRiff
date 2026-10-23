@@ -9,8 +9,8 @@ read from the code.
 
 | File | Change |
 |---|---|
-| `src/postriff_phase2/discord/lane.py` (new) | The lane: flag and budget parsing, shard parsing, the readiness test (`blocker`), one bounded loop per invocation, the pre-claim coordinator read, the bounded wait for a refused create permit, per-invocation counters and the log line. |
-| `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` only when the lane is on and `lane.blocker()` says it can run in that process (the minute cron then does not claim Discord); `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below). |
+| `src/postriff_phase2/discord/lane.py` (new) | The lane: flag and budget parsing, shard parsing, the readiness test (`blocker`), one bounded loop per invocation, the pre-claim coordinator read, the bounded wait for a refused create permit, per-invocation counters and the log line; the minute cron's lag warning (`warn_if_lagging`). |
+| `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` only when the lane is on and `lane.blocker()` says it can run in that process (the minute cron then does not claim Discord), and with the lane on logs the lag warning from its own report; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below). |
 | `src/postriff_phase2/hosted_app.py` | Route `GET /api/cron/discord-worker/<shard>`: cron secret checked before the runtime starts (as the YouTube lanes); flag read per request; the request log files it under `cron`. |
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. |
@@ -95,11 +95,12 @@ as before and does not claim Discord (`exclude_discord`). "Able to run" is `lane
 lane iteration asks: a valid lane budget, `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED` on, a shared coordinator whose
 reviewed policy is valid now, and no lost observation in that process. It reads no database, so the minute tick cannot
 see an operator hold (the lane stops on it and the tick still leaves Discord alone, which is what a hold asks for) or a
-missing projection (the lane stops with `schema`). Otherwise, and with the flag off, the tick is byte-for-byte the
-frozen code path [measured: the equivalence test runs the frozen `hosted_worker.py` and this one side by side on the
-same inputs and compares every SQL statement and parameter, every Discord request, the final state and the tick
-result; with the flag off, and with the flag on but rate limits off, no coordinator, an expired or not-yet-valid
-policy, a degraded coordinator or a bad lane budget]. With a bad lane budget the frozen path sends as before. In the
+missing projection (the lane stops with `schema`; the lag warning below catches it), nor whether the shard crons fire
+at all. Otherwise, and with the flag off, the tick is byte-for-byte the frozen code path [measured: the equivalence
+test runs the frozen `hosted_worker.py` and this one side by side on the same inputs and compares every SQL statement
+and parameter, every Discord request, the final state and the tick result; with the flag off, and with the flag on but
+rate limits off, no coordinator, an expired or not-yet-valid policy, a degraded coordinator or a bad lane budget; the
+one addition is the lag warning's log line]. With a bad lane budget the frozen path sends as before. In the
 coordinator states it cannot send in the hosted runtime either, but it records that on every post instead of leaving
 them silently scheduled: with rate limits off `runtime_from_environment` turns Discord authorization off, so each
 claimed post is held and its destination set to `verification_required` [measured offline with the frozen tick];
@@ -154,7 +155,8 @@ but is a separate setting.
 | Approval expires in the queue | held for a fresh approval when next claimed (monitor M7) |
 | Coordinator observation fails in a process | that process's provider refuses every later request; its loops stop with `coordinator_degraded`; other processes continue |
 | Database unavailable | the loop's exception is logged and the request returns 500; leases expire and are recovered |
-| Flag on, projection missing | `schema`, nothing claimed (migration 126 is applied in production); the minute cron cannot see it without a query, so it still leaves Discord to the lane |
+| Flag on, projection missing | `schema`, nothing claimed (migration 126 is applied in production); the minute cron cannot see it without a query, so it still leaves Discord to the lane and `discord.lane.lagging` fires after five minutes |
+| Flag on, shard crons not reaching the lane (not registered, 401 from a wrong or short `CRON_SECRET`, 404, Deployment Protection, a platform skip) | no `discord.lane.completed` lines; the minute cron (lane able to run in its process) leaves Discord alone, so posts wait; `discord.lane.lagging` fires after five minutes; after an hour their approvals lapse and they are held when next claimed |
 | Flag on, rate limits off, no coordinator, policy expired or not yet valid, coordinator degraded, or a bad lane budget | the lane cannot run: every loop stops at once with the reason (a bad budget answers 503 `discord_lane_configuration`), and the minute cron of that process keeps the frozen Discord path |
 | Build-level kill switch (`POSTRIFF_OAUTH_DISCORD_DISABLED`) | unchanged: a claimed post is held, as today |
 
@@ -169,10 +171,20 @@ but is a separate setting.
 
 ## What to monitor
 
-The `discord.lane.completed` log lines (sum `posted`, `verified`, `held`, `uncertain`, `rateDelayed`, `leaseLost` per
-minute; any `stoppedBy` other than `idle`, `time_budget` or `rate_wait`), and `docs/w02/monitoring.sql`: M1 oldest due
-lag, M2 leases expired but still owned, M3 busiest second, M4 rate waits, M5 unanswered admissions (Q3), M6 holds on the
-four rows, M7 posts held for an expired approval. The launch monitors Q1 to Q13 still apply.
+The `discord.lane.completed` log lines (12 a minute; sum `posted`, `verified`, `held`, `uncertain`, `rateDelayed`,
+`leaseLost` per minute; any `stoppedBy` other than `idle`, `time_budget` or `rate_wait`), and `docs/w02/monitoring.sql`:
+M1 oldest due lag, M2 leases expired but still owned, M3 busiest second, M4 rate waits, M5 unanswered admissions (Q3),
+M6 holds on the four rows, M7 posts held for an expired approval. The launch monitors Q1 to Q13 still apply.
+
+The minute cron's lag warning, for the failures no lane line reports (a cron that never fires logs nothing): with the
+flag on, every tick reads the Discord report it already makes (`discordWorker.queue`) and logs one
+`discord.lane.lagging` line at WARNING when the oldest due, unleased Discord job is more than 300 seconds late
+(`lane.LAG_WARNING_SECONDS`). Fields, counts and codes only: `oldestEligibleLagSeconds`, `thresholdSeconds`,
+`laneOwnsDiscord`, `laneBlocker` (the readiness reason when the tick kept Discord), `depth`, `held`, `uncertain`,
+`deadLetters`. It adds no query [tested offline: the same statements with and without the warning]. Alert on any such
+line. It also fires while a large burst drains (5,000 posts take about 23 minutes), which is worth knowing too (Q1). It
+is blind where the report is: workspaces outside its sample (the first 256 by id, at most 4,096 Discord jobs) and a
+failed report (`queue.status` `unavailable`); M1 reads the whole projection.
 
 ## Capacity
 

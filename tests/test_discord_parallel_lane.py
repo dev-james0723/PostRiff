@@ -26,7 +26,8 @@ from postriff_phase2.hosted_app import HostedApplication
 from postriff_phase2.hosted_social import HostedSocial
 from postriff_phase2.hosted_worker import PostgresWorker
 from postriff_phase2.social_connectors import DiscordProvider
-from test_discord_publish_authorization import APP, NOW, SyntheticGrants, SyntheticWire, approve, fixture, review
+from test_discord_publish_authorization import (APP, NOW, WORKSPACE, SyntheticGrants, SyntheticWire, approve, fixture,
+                                                review)
 from test_discord_worker_lifecycle import MemoryDatabase
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -297,6 +298,86 @@ class LaneReadiness(unittest.TestCase):
             result = recording_worker(lambda **kw: seen.append(kw) or True, social=SimpleNamespace()).tick()
         self.assertTrue(result['discordParallelLane'], 'the tick follows the readiness test alone')
         self.assertEqual(seen, [{'exclude_youtube': False, 'exclude_discord': True}] * 10)
+
+
+class LagWarning(unittest.TestCase):
+    """With the flag on, the minute tick warns from its own Discord report when due work waits too long."""
+    KEYS = {'event', 'oldestEligibleLagSeconds', 'thresholdSeconds', 'laneOwnsDiscord', 'laneBlocker',
+            'depth', 'held', 'uncertain', 'deadLetters'}
+
+    def setUp(self):
+        for item in (patch.dict(security_holds._INSTALLED, {'readable': True, 'checked': float('-inf')}),
+                     patch('postriff_phase2.billing.require_publishing', return_value=None),
+                     patch('socket.socket.connect', side_effect=AssertionError('Real network forbidden'))):
+            item.start()
+            self.addCleanup(item.stop)
+
+    def tick(self, lag, *, setup=None, environment=ON):
+        report = {'version': 1, 'queue': {'status': 'observed_sample', 'sampled': True, 'workspaceLimit': 256,
+                                          'jobLimit': 4096, 'depth': 7, 'oldestEligibleLagSeconds': lag, 'held': 1,
+                                          'uncertain': 2, 'deadLetters': 0}}
+        if lag is None:
+            report['queue'] = {'status': 'unavailable', 'sampled': True}
+        worker = recording_worker(lambda **kw: False, social=discord_social(**(setup or {})))
+        worker.discord_report = lambda: copy.deepcopy(report)
+        worker.connection_factory = Mock(side_effect=AssertionError('the warning opened a connection'))
+        with patch.dict('os.environ', environment):
+            result = worker.tick()
+        self.assertEqual(result['discordWorker'], report, 'the report is returned unchanged')
+        return result
+
+    def test_the_threshold_is_five_minutes(self):
+        self.assertEqual(lane.LAG_WARNING_SECONDS, 300)
+
+    def test_due_work_later_than_five_minutes_logs_one_warning_with_counts_only(self):
+        with self.assertLogs('postriff.request', 'WARNING') as logged:
+            self.tick(301.0)
+        (record,) = logged.records
+        entry = json.loads(record.getMessage())
+        self.assertEqual(set(entry), self.KEYS)
+        self.assertEqual(entry, {'event': 'discord.lane.lagging', 'oldestEligibleLagSeconds': 301.0,
+                                 'thresholdSeconds': 300, 'laneOwnsDiscord': True, 'laneBlocker': None,
+                                 'depth': 7, 'held': 1, 'uncertain': 2, 'deadLetters': 0})
+
+    def test_at_or_below_five_minutes_or_without_a_report_nothing_is_logged(self):
+        for lag in (300.0, 299.9, 0.0, None):
+            with self.subTest(lag=lag), self.assertNoLogs('postriff.request', 'WARNING'):
+                self.tick(lag)
+
+    def test_with_the_flag_off_the_frozen_tick_never_warns(self):
+        with self.assertNoLogs('postriff.request', 'WARNING'):
+            self.tick(10_000.0, environment={lane.ENV_ENABLED: 'false', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'})
+
+    def test_a_tick_that_kept_discord_says_why_the_lane_could_not_run(self):
+        with self.assertLogs('postriff.request', 'WARNING') as logged:
+            result = self.tick(900.0, setup={'policy': 'expired'})
+        self.assertNotIn('discordParallelLane', result)
+        entry = json.loads(logged.records[-1].getMessage())
+        self.assertEqual((entry['laneOwnsDiscord'], entry['laneBlocker']), (False, 'coordinator_unavailable'))
+
+    def test_the_warning_comes_from_the_report_the_tick_already_makes(self):
+        statements, warnings = {}, {}
+        for late in (10, 700):
+            db = MemoryDatabase(FlagOffIsTheFrozenBase.queue())
+            db.now = NOW + 300 + late
+            worker = PostgresWorker(db.connection, discord_social(db.connection), clock=lambda: db.now,
+                                    worker_id='minute-worker', discord_workers=True)
+            with patch.dict('os.environ', ON, clear=True), self.assertLogs('postriff.request', 'DEBUG') as logged:
+                logging.getLogger('postriff.request').debug('marker')
+                result = worker.tick()
+            self.assertTrue(result['discordParallelLane'])
+            statements[late] = [sql for sql, _ in db.queries]
+            warnings[late] = [record.getMessage() for record in logged.records if 'discord.lane.lagging' in record.getMessage()]
+        self.assertEqual(statements[700], statements[10], 'warning or not, the tick runs the same statements')
+        self.assertEqual(warnings[10], [])
+        (message,) = warnings[700]
+        self.assertEqual(json.loads(message)['oldestEligibleLagSeconds'], 700.0)
+        private = {WORKSPACE, 'minute-worker'}
+        for job in db.state['phase2']['jobs']:
+            target = job['manifest']['discord']['target']
+            private |= {job['id'], job['manifest']['channelId'], target['channelId'], target['guildId']}
+        for value in private:
+            self.assertNotIn(value, message)
 
 
 class Deterministic:

@@ -1318,12 +1318,17 @@ class PostgresWorker:
         from .youtube.fleet import enabled
         fleet_owns_youtube = enabled()
         from .discord import lane
-        if lane.enabled() and lane.blocker(self.social, self.clock()) is None:
-            # W-02: the parallel lane owns Discord while it can run in this process; this tick never claims it then.
-            # Otherwise (rate limits off, no current policy, a degraded coordinator, a bad lane budget) the tick
-            # below keeps the frozen Discord path: the lease protocol makes the two schedulers safe together.
-            result = self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube, exclude_discord=True)
-            result['discordParallelLane'] = True
+        if lane.enabled():
+            reason = lane.blocker(self.social, self.clock())
+            if reason is None:
+                # W-02: the parallel lane owns Discord while it can run in this process; this tick never claims it.
+                result = self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube, exclude_discord=True)
+                result['discordParallelLane'] = True
+            else:
+                # The lane cannot run here (rate limits off, no current policy, a degraded coordinator, a bad lane
+                # budget): keep the frozen Discord path. The lease protocol makes the two schedulers safe together.
+                result = self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
+            lane.warn_if_lagging(result, reason)  # this tick's own report; no query
             return result
         return self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
 
