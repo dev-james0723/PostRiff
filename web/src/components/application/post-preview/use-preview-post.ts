@@ -39,7 +39,7 @@ export function usePreviewPost(manifest: Manifest, timeZone: string): PreviewPos
   return {
     channel: channel?.slug ?? manifest.platform.toLowerCase().replace(/\s+/g, '-'),
     channelName: channel?.name ?? manifest.platform,
-    account: manifest.account,
+    account: manifest.platform === 'Discord' && manifest.senderKind === 'webhook' && manifest.discordSenderName ? manifest.discordSenderName : manifest.account,
     avatarUrl,
     text: manifest.platform === 'YouTube' && typeof manifest.publishOptions?.description === 'string' ? manifest.publishOptions.description : manifest.payload.text,
     ...(manifest.platform === 'YouTube' ? { videoTitle: typeof manifest.publishOptions?.title === 'string' ? manifest.publishOptions.title : undefined,

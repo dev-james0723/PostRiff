@@ -1,6 +1,6 @@
 'use client';
 
-import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
 
 import { publishingSupport } from '@/lib/channels/publishing-support';
 
@@ -383,7 +383,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             </NativeSelect>
             {channel?.platform === 'Discord' && (
               <div className='flex flex-col gap-1.5'>
-                <p className='text-sm' data-discord-sender>{channel.discordConnectionKind === 'webhook' ? discordUiCopy.senderWebhook : discordUiCopy.senderBot}</p>
+                <p className='text-sm' data-discord-sender>{discordSenderLabel(discordUiCopy, channel.discordConnectionKind, channel.discordSenderName)}</p>
                 <p className='text-muted-foreground text-xs' data-discord-timing>{discordUiCopy.scheduleTiming}</p>
                 <Label htmlFor='schedule-discord-destination'>Discord server and channel</Label>
                 <NativeSelect id='schedule-discord-destination' className='w-full [&>select]:h-12' value={discordDestinationId} onChange={(event) => setDiscordDestinationId(event.target.value)}>

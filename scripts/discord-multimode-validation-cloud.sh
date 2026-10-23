@@ -28,4 +28,5 @@ multimode_gate types npm run typecheck
 multimode_gate lint npm run lint
 # The harness creates an isolated loopback app; never attach to personal Chrome.
 multimode_gate browser node tests/discord-multimode-browser.cjs
+multimode_gate sender-name-browser node tests/discord-sender-name-browser.cjs
 exit "$result"

@@ -1,7 +1,7 @@
 'use client';
 
 import { usePreferences } from '@/lib/preferences';
-import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
 import { useLocalTimeZone } from '@/hooks/use-local-time-zone';
 import type { Manifest } from '@/lib/api/types';
 import { MastodonPollDetails } from '@/features/queue/mastodon-poll-details';
@@ -32,7 +32,7 @@ function ResolvedPreview({ manifest, timeZone, scale, className }: ManifestPrevi
   const destination = manifest.discord?.target;
   return <>
     {manifest.platform === 'Discord' && <p className='text-muted-foreground mb-2 text-sm' data-discord-sender>
-      {manifest.senderKind === 'webhook' ? copy.senderWebhook : copy.senderBot}<br />{copy.senderNotice}
+      {discordSenderLabel(copy, manifest.senderKind, manifest.discordSenderName)}<br />{copy.senderNotice}
     </p>}
     {manifest.platform === 'Discord' && <p className='text-muted-foreground mb-2 text-xs' data-discord-frozen-target>
       {destination ? `Frozen target: ${destination.guildName} (${destination.guildId}) · ${destination.channelName} (${destination.channelId})` : 'Legacy Discord approval: a new server and channel preview is required before publication.'}
