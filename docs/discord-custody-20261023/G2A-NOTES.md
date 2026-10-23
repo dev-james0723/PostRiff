@@ -58,6 +58,8 @@ product-wide incident, never as routine hygiene:
 | A-02 | Re-verification checks the authorizer before any Discord request. A gone authorizer flips the card once (`discordAuthorizerGone`) and later passes do nothing. | `reverify_installation`, `_authorizer_gone` |
 | A-03 | Removing a member, a member leaving, or dropping below `manage_connections` disconnects their identities and zeroes their credentials in the same transaction. A manager may disconnect an identity whose authorizer is no longer an active manager. | `disconnect_member`, `hosted._drop_member_discord` |
 | A-05 | Reads that reach Discord are limited to 30/min per member and 120/min per workspace (counted before any request); one read per connection at a time; channel list and re-check answers reused for 45 s (10 s while the connection is unhealthy). Limits are constants at the top of `discord/oauth.py`. | `admit_read`, `read_through` |
+| A-08 | In hosted production (`VERCEL_ENV` or `POSTRIFF_ENVIRONMENT` = production) approvals on with connections off answers 503 on start, callback and the worker grant. Elsewhere that combination stays available: the disposable-database gate `postgres_discord_authorization.py` runs it. | `OAuthService._discord_flags_consistent` |
+| A-09 | The connection pool sets `autocommit = False` before it lends a connection again. | `postgres_pool._reset` |
 | C-03 | Manual drafts: 60,000 characters per save (text length x destinations), 2,000 manual variants and 12 MB of state per workspace, 30 saves/min/workspace. | `manual_drafts.py` |
 | C-05 | At most 30 servers per workspace and 15 per member (a disconnected server still counts). | `DiscordConnections.server_ceiling` |
 
