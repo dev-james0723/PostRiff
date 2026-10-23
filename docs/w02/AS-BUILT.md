@@ -140,7 +140,7 @@ but is a separate setting.
 ## Turning it off
 
 - **Seconds:** the runbook's hold, `UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy'`.
-  Every loop stops before its next claim (one iteration, typically under two seconds) and every Discord request
+  Every loop stops before its next claim (at most the one step it has in flight, seconds) and every Discord request
   everywhere is refused before transport. Lift with `manual_hold = false`. Only on the owner's word, as the runbook says.
 - **Minutes:** a build without the flag (environment changes reach new deployments only), or promote the previous
   deployment. The minute cron then claims Discord again exactly as before, and the shard routes answer
