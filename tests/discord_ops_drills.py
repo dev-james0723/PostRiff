@@ -520,28 +520,35 @@ def d5_cross_tenant(lab):
             for _ in range(12):
                 statuses[refused(lambda: repository.transaction('synthetic-session', a.id).__enter__())] += 1
             clock.at += 60
+        # A fourth minute: one more refusal (its line carries the previous minute's suppressed count) and one from the
+        # Discord code path (DiscordConnections.public_identities, the identities route).
+        statuses[refused(lambda: repository.transaction('synthetic-session', a.id).__enter__())] += 1
         statuses[refused(lambda: discord.public_identities(a.id, 'synthetic-session'))] += 1
         snapshot, alerts = lab.look()
         security = snapshot['security']['instance']
         lines = [json.loads(l) for l in captured.lines if security_signals.EVENT in l]
-        d.step('injected: one member asks for another workspace 36 times over 3 minutes, once on a Discord route', alerts,
+        d.step('injected: one member asks for another workspace 37 times over 4 minutes, once more on a Discord route', alerts,
                statuses=dict(statuses), lines=len(lines), deniedTotal=security['deniedTotal'],
                topActorDenials10m=security['topActorDenials10m'], discord=security['denied']['discord'])
-        d.expect('every refusal is the uniform 403', statuses == Counter({403: 37}), dict(statuses))
-        d.fires(alerts, 'CROSS_TENANT_PROBING', 'page', '37 refusals for one actor in 10 minutes')
+        d.expect('every refusal is the uniform 403', statuses == Counter({403: 38}), dict(statuses))
+        d.fires(alerts, 'CROSS_TENANT_PROBING', 'page', '38 refusals for one actor in 10 minutes')
         d.fires(alerts, 'CROSS_TENANT_DISCORD', 'warn', 'a refusal from the Discord code path')
-        d.expect('one line per actor, family and minute (4 lines for 37 refusals)', len(lines) == 4, len(lines))
+        d.expect('one line per actor, family and minute (5 lines for 38 refusals)', len(lines) == 5, len(lines))
         d.expect('lines carry only family, status, actor key and suppressed',
                  all(set(line) == {'event', 'routeFamily', 'status', 'actorKey', 'suppressed'} for line in lines),
                  sorted({key for line in lines for key in line}))
         text = ' '.join(captured.lines)
         d.expect('no workspace or member id in any line', not any(value in text for value in (a.id, b.id, member)), None)
         fleet = check.parse_logs(captured.lines, 600)
-        alerts_fleet = check.evaluate({**snapshot, 'fleet': fleet, 'security': {}}, THRESHOLDS, now=lab.cluster.now())
+        # A logs-only snapshot: what a check-in that reads only the function logs can see.
+        alerts_fleet = check.evaluate({'version': 1, 'source': 'logs', 'observedAt': snapshot['observedAt'], 'fleet': fleet},
+                                      THRESHOLDS, now=lab.cluster.now())
         d.step('the same refusals read from the log lines only (the check-in path)', alerts_fleet,
-               fleetDenials=fleet['denials']['deniedTotal'], fleetTop=fleet['denials']['topActorDenials10m'])
+               fleetDenials=fleet['denials']['deniedTotal'], fleetTop=fleet['denials']['topActorDenials10m'],
+               note='a line reports the denials suppressed before it, so the newest minute is seen one line late')
         d.fires(alerts_fleet, 'CROSS_TENANT_PROBING', 'page', 'from the log lines alone')
-        recorder = request_metrics.Recorder(clock=clock)
+        d.fires(alerts_fleet, 'CROSS_TENANT_DISCORD', 'warn', 'Discord family from the log lines alone')
+        recorder = request_metrics.Recorder(clock=time.time)
         for _ in range(200):
             recorder.record('GET', '/api/workspaces/%s/discord/identities' % a.id, 403, 0.01)
         recorder.flush(lab.cluster.factory(), dict(recorder.buffer))
@@ -564,7 +571,8 @@ def d5_cross_tenant(lab):
 
 def d6_config_drift(lab):
     d = Drill('D6', 'CONFIG', 'A build without the open settings, the reviewed flag off, the server cap filling')
-    lab.fresh([F.Tenant(0)], 0)
+    lab.fresh([F.Tenant(0)], 1)
+    lab.drain(loops=1)
     _, alerts = lab.look(phase='open')
     d.silent(alerts, 'open build with gate *, cap 10000')
     omitted = {k: v for k, v in VALUES.items() if k not in ('POSTRIFF_DISCORD_CONNECT_WORKSPACES', 'POSTRIFF_DISCORD_GUILD_CAP')}
