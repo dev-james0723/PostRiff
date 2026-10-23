@@ -61,3 +61,12 @@ Known and accepted: the pinned CLI tree includes `tar@7.5.7`, which npm reports 
 2. The agent gives the owner the run link, the request commit (short SHA) and the title. The owner compares them and approves in GitHub.
 3. The agent reads the job log (public, so it is short by design), then checks the result through the Vercel API (project, SHA, target, state, aliases, files), not through the workflow.
 4. D1 and D2 are the only builds (`AUTHORIZATION-RECORD.md`, row 6). A failed build is reported; a third build needs a new yes. The token is revoked by the owner after D2, and the request branches are deleted.
+
+## 8. Version 4 (draft, not reviewed, not used by any run)
+
+Since owner reply 12 (`RELEASE-DEFINITION-v2.md`) the release is the open build, and the dark twin is only a verification step. Two consequences for this route:
+
+- **The "D1 and D2 only" limit in section 7 applies to the frozen head `2a5a523d` and to nothing else.** A new frozen SHA (RC2, W-02 integrated) gets its own builds, each approved by its own packet; the existing approvals do not carry over.
+- **The dark twin's connect gate must admit more than one workspace.** The tester session (G3) and the hosted A/B isolation probe (G4) need the tester workspace and the two throwaway accounts A and B, each with real Discord objects. Version 4 therefore lets the environment secret `TESTER_WORKSPACE_ID` hold **one to five lower-case workspace UUIDs separated by single commas** (preflight prints only the count; the build masks the whole value and every id; a space, an empty item, an upper-case letter, a sixth id, `*` or a line break is refused). `launch_gate.py` already accepts a comma-separated list. The open build (`d2`) is unchanged: gate `*`, the cap, the reviewed flag.
+- Changes: `rc-staged-build.yml` (two regular expressions, one masking loop), `run_tests.py` (165 offline checks now, 27 more than before: gate lists of three and five, eleven odd lists for each of preflight and `d1`). Fingerprint (sha256, first 16 characters): version 4 `d8ce76ffe5c29b80`; the lock file is unchanged (`7dc4bca4d2ed2af5`). `action-validator` and `shellcheck` report nothing.
+- **Status:** written by the captain after the third version was used; it needs the same independent delta review as the earlier versions before any request branch is built from it, and the owner's `TESTER_WORKSPACE_ID` secret must then be set to the list (the agent cannot read or set it).

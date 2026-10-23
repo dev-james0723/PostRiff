@@ -106,7 +106,10 @@ jobs:
           bad() { echo "FAIL $*"; fail=1; }
           if [[ "${VERCEL_TOKEN:-}" =~ ^[A-Za-z0-9_]{16,}$ ]]; then ok 'token: present and well-formed'; else bad 'token: missing, or it holds a space or line break'; echo 'RESULT: at least one check failed'; exit 1; fi
           # Only a yes or no is printed: the value is a secret and the log is public.
-          if [[ "${TESTER_WORKSPACE_ID:-}" =~ ^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$ ]]; then ok 'tester workspace secret: set, UUID shape'; else bad 'tester workspace secret: missing or not a lower-case UUID (it must be an environment SECRET, not a variable)'; fi
+          # The dark twin's connect gate: one lower-case workspace UUID, or up to five separated by single commas (the tester workspace
+          # and the two Q-05 accounts); only the count is printed.
+          uuid='[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}'
+          if [[ "${TESTER_WORKSPACE_ID:-}" =~ ^${uuid}(,${uuid}){0,4}$ ]]; then ok "tester workspace secret: set, UUID shape, $(( $(tr -cd ',' <<< "$TESTER_WORKSPACE_ID" | wc -c) + 1 )) id(s)"; else bad 'tester workspace secret: missing, or not one to five lower-case UUIDs separated by single commas (it must be an environment SECRET, not a variable)'; fi
           if vercel --version 2>&1 | grep -qxF '59.23.2'; then ok 'CLI version is 59.23.2'; else bad 'CLI version is not 59.23.2'; fi
           # In this CLI, --help exits with status 2; any other failure is a failure.
           help="$(vercel deploy --help 2>&1 || [ $? -eq 2 ])" || bad 'deploy --help failed'
@@ -177,8 +180,11 @@ jobs:
           case "$MODE" in
             d1)
               [ -n "${TESTER_WORKSPACE_ID:-}" ] || { echo 'the TESTER_WORKSPACE_ID secret is not set on the environment'; exit 1; }
-              [[ "$TESTER_WORKSPACE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || { echo 'TESTER_WORKSPACE_ID is not a lower-case UUID'; exit 1; }
+              uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+              [[ "$TESTER_WORKSPACE_ID" =~ ^${uuid}(,${uuid}){0,4}$ ]] || { echo 'TESTER_WORKSPACE_ID is not one to five lower-case UUIDs separated by single commas'; exit 1; }
               echo "::add-mask::$TESTER_WORKSPACE_ID"
+              IFS=, read -r -a gate_ids <<< "$TESTER_WORKSPACE_ID"
+              for gate_id in "${gate_ids[@]}"; do echo "::add-mask::$gate_id"; done
               gate="$TESTER_WORKSPACE_ID"; twin=dark ;;
             d2)
               gate='*'; twin=open ;;
