@@ -235,3 +235,51 @@ Question put to the owner (one line to answer):
 **Authorized by this reply and being carried out:** engineering, tests, fixes and independent reviews; the isolated Q-05 work above; RC2 integration preparation and exact-SHA CI of branches; the real-time capacity harness and Depot preparation; the read-only reads named in 3 and 6; written proposals.
 
 **Still NOT authorized (each needs its own explicit approval):** any Production build or promotion; any environment-variable or project-setting change, including persisting the open gate and cap; the full opening; any write to the Production database or Auth; any restore test; raising the 25 requests a second ceiling; any real Discord message outside the earlier approval (at most three, approved account and messages); a Depot run beyond the cost ceiling approved earlier (the packet will state the cost).
+
+## Reply 14, received 2026-10-23 about 04:50Z ("Goal-Driven Autonomous Execution")
+
+> 芝麻開門。繼續 Rafii Discord RC2 Release Qualification，採用 Goal-Driven Autonomous Execution。
+> 我授權你自主安排工程工作、選擇工具、分配 Agents、處理阻塞、驗證結果及保存證據。除真正涉及高風險或未授權操作外，不需要反覆要求我批准普通嘅 Continue、Fix、Verify 或 Run。
+>
+> 1. 更新 Discord 測試環境授權
+> 我正式同意：如果現有 Discord Tester Server 唔足以完成隔離測試，你可以自行建立一個全新、空白、私人 Discord Server。
+> 此授權包括：按實際測試需要建立 Server；建立必要嘅測試 Channels 及基本權限配置；自行決定合理嘅測試隔離結構；保留現有 Tester Server、連接、使用者及資料；將新 Server ID、測試用途及建立結果寫入私人測試紀錄。
+> 不需要先向我請示，但亦不需要為咗用盡授權而建立新 Server。
+> 本授權不包括發送 Discord 訊息、邀請真實用戶、授權新 Bot/App、修改現有 Production Server 或建立付費資源。上述操作若尚未獲獨立授權，仍須取得批准。
+>
+> 2. M-03：自主完成 Supabase 備份審計
+> 目標：建立可信、可重複核實嘅 Backup/PITR Evidence，而唔係一定要我影四張截圖。
+> 你可以自由選擇：Supabase MCP、Management API、已授權 Browser、Supabase CLI、其他安全、有效嘅唯讀方法。自行比較不同方法嘅可用性、效率同證據質量。
+> 需要核實 PITR 啟用狀態、可還原範圍、備份有效性、RPO/RTO 及 Discord 發文重複風險。
+> 如某項無法直接驗證，主動尋找等效證據或替代核實方法；不得將推論當成已驗證結果。
+> 如必須由我操作，先整理成最少步驟，唔好一開始就要求截圖。
+>
+> 3. RC2 其餘工作繼續並行
+> 保留並協調現有五個 Agents，繼續：W-02 Worker Reliability、Degraded Recovery；RC2 Capacity／Load／Fault-injection Testing；Q-05 Hosted Cross-Tenant Isolation；H-07 Monitoring、Alerting、Rollback；Customer Impact／Regression Verification。
+> Agent 可以自行調整測試次序、工具及任務分配，避免重複工作、互相衝突或無必要等待。
+> 可自主完成隔離環境嘅程式修改、測試、模擬、分析、證據收集同修復。
+>
+> 4. 安全及授權邊界
+> 維持目前 NO-GO，但 NO-GO 不代表停止所有工程工作。
+> 以下操作仍需另外批准：Production build、promote、deployment 或 env changes；Production DB/Auth 寫入或還原；真實 Discord 訊息發送；新增費用或付費服務；對外發佈、真實客戶影響；其他不可逆或高風險操作。
+> 無須為普通唯讀查詢、可逆嘅非 Production 修復、隔離測試、既有 Agents 協調反覆請示。
+>
+> 5. 自主處理阻塞
+> 遇到問題時：1. 判斷係工具限制、權限問題、技術問題定係真正需要授權。2. 主動尋找安全替代方法。3. 可以並行處理其他獨立任務。4. 只有超出授權範圍，或所有合理替代方法失敗，先向我提出阻塞。5. 不得繞過身份驗證、權限或安全保護。
+>
+> 6. 交付標準
+> 沿用現有 Authorization Ledger、Release Definition、Evidence Pack。只更新有實際變化嘅內容，避免重複產生文件。
+> 提供：已完成及已驗證結果；未完成項目與證據缺口；可繼續自動修復嘅問題；真正需要我授權嘅事項；更新檔案路徑與 commit SHA；RC2 Release Readiness 結論。
+> 核心原則：最大化安全有效嘅自主執行，最小化人手介入；不要以流程取代成果，也不要以效率為理由突破授權。
+> 繼續工作，直到所有授權範圍內可完成嘅任務均有驗證結果，再報告真正阻塞 Release 嘅問題。
+
+**Reading, by the agent:**
+
+1. **Working mode.** The agent decides the order of work, the tools and the agent assignments, handles blockers itself, verifies, and saves evidence. Ordinary continue, fix, verify and run steps (read-only queries, reversible non-Production fixes, isolated tests, coordination of the existing agents) need no further approval. The state stays NO-GO. The agent reports when everything inside this authorization has a verified result, then lists what really blocks the release.
+2. **Discord test server.** If the existing tester server is not enough for the isolated tests, the agent may create one new, blank, private Discord server, with the test channels and basic permissions it needs, keep the existing tester server, connection, users and data untouched, and write the new server id, purpose and result to the **private** test record (not this public repository). The agent does not create a server just to use the permission. Excluded and still needing a separate approval: sending any Discord message, inviting real users, authorizing a new bot or app, changing the existing Production server, creating any paid resource.
+3. **M-03.** Establish credible, repeatable backup and PITR evidence without defaulting to four screenshots: any safe read-only method (Supabase MCP, Management API, an authorized browser, the CLI, other); compare the methods; verify PITR state, restorable range, backup validity, RPO and RTO, and the risk of duplicate Discord posts after a restore; where something cannot be verified directly, find equivalent evidence or an alternative check and **never record an inference as verified**; if the owner must act, the minimal steps first, no screenshot request up front.
+4. **RC2 work in parallel.** The existing agents (W-02 reliability and degraded recovery; RC2 capacity, load and fault injection; Q-05 hosted cross-tenant isolation; H-07 monitoring, alerting and rollback; customer impact and regression) continue and may re-order their work to avoid duplication, conflicts and idle waiting. The agent may change code in isolated environments, simulate, analyse, collect evidence and repair.
+5. **Boundaries unchanged.** Still needing a separate approval: any Production build, promotion, deployment or environment change; any Production database or Auth write or restore; any real Discord message; any new cost or paid service; any external publication or real customer impact; any other irreversible or high-risk operation. Blockers: classify (tool limit, permission, technical, or truly needing authorization), look for a safe alternative, work on other independent tasks in parallel, raise a blocker only when it is outside the authorization or every reasonable alternative failed, and **never bypass authentication, permissions or security protections**.
+6. **Deliverable.** Reuse the ledger, the release definition and the evidence pack; update only what actually changed; report what is completed and verified, what is unfinished and the evidence gaps, what can still be repaired automatically, what truly needs the owner's authorization, the updated paths and commit SHAs, and an RC2 release-readiness conclusion.
+
+**What this reply does not change:** reply 13 stays in force (capacity standard, release order 5a/5b/5c, Q-05 accounts through the normal sign-up flow only, the three-message limit for real sends, no Production setting changes). It supersedes only the part of reply 13 that said the owner would be asked for four screenshots for M-03 and for a new empty Discord server: the agent tries to establish both itself first.
