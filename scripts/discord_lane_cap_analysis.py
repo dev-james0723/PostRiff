@@ -241,6 +241,56 @@ def grant_custody(ledger):
             'sentPosts': sent}
 
 
+def pacing(window, posts, due, *, active_threshold=5, ceiling=25.0):
+    """How the lane used its request budget while it was creating posts.
+
+    Busy period: first to last create at the mock. A second of it is active when the mock processed at least
+    `active_threshold` requests in it (stragglers of a stopping loop excluded). Duty cycle: active seconds over all
+    seconds of the busy period. Active rate: requests per active second, also as a share of the ceiling. Plateau: from
+    the due time to the first read-back the mock answered (read-backs are served behind creates), or to the last create
+    if no read-back came first; requests per created post in it. Profile: mean requests per second of the minute over
+    the plateau, and the first and last second of the minute averaging at least `active_threshold`."""
+    creates = sorted(p['createdAt'] for p in posts.values() if p['createdAt'] is not None)
+    if len(creates) < 2:
+        return None
+    start, end = creates[0], creates[-1]
+    per_second = Counter(int(math.floor(r['processed'])) for r in window if start <= r['processed'] <= end)
+    seconds = list(range(int(math.floor(start)), int(math.floor(end)) + 1))
+    active = [s for s in seconds if per_second.get(s, 0) >= active_threshold]
+    readbacks = sorted(r['processed'] for r in window if r.get('readback') and r.get('status') == 200)
+    plateau_end = readbacks[0] if readbacks and start < readbacks[0] < end else end
+    in_plateau = [r for r in window if due <= r['processed'] < plateau_end]
+    created_in_plateau = sum(1 for t in creates if due <= t < plateau_end)
+    minutes = max(1e-9, (plateau_end - due) / 60.0)
+    profile = Counter(int(math.floor(r['processed'])) % 60 for r in in_plateau)
+    mean_by_second = {s: profile.get(s, 0) / minutes for s in range(60)}
+    busy_slots = [s for s in range(60) if mean_by_second[s] >= active_threshold]
+    active_rate = (sum(per_second[s] for s in active) / len(active)) if active else None
+    # The same two figures for the plateau alone (the phase that decides the median).
+    plateau_seconds = [s for s in seconds if s < plateau_end]
+    plateau_active = [s for s in plateau_seconds if per_second.get(s, 0) >= active_threshold]
+    plateau_duty = (len(plateau_active) / len(plateau_seconds)) if plateau_seconds else None
+    plateau_rate = (sum(per_second[s] for s in plateau_active) / len(plateau_active)) if plateau_active else None
+    result = {
+        'busyStartAfterDue': start - due, 'busyEndAfterDue': end - due, 'busySeconds': len(seconds),
+        'activeSeconds': len(active), 'dutyCycle': len(active) / len(seconds) if seconds else None,
+        'activeRatePerSecond': active_rate, 'activeRateShareOfCeiling': (active_rate / ceiling) if active_rate else None,
+        'busyRatePerSecond': sum(per_second.values()) / len(seconds) if seconds else None,
+        'plateauEndAfterDue': plateau_end - due, 'plateauRequests': len(in_plateau), 'plateauCreates': created_in_plateau,
+        'plateauRequestsPerCreatedPost': (len(in_plateau) / created_in_plateau) if created_in_plateau else None,
+        'secondOfMinuteActive': [min(busy_slots), max(busy_slots)] if busy_slots else None,
+        'secondOfMinuteMeanRate': {str(s): round(v, 2) for s, v in mean_by_second.items()},
+        'plateauDutyCycle': plateau_duty, 'plateauActiveRatePerSecond': plateau_rate,
+        'plateauActiveRateShareOfCeiling': (plateau_rate / ceiling) if plateau_rate else None}
+    # The lateness this pacing implies for the middle post (inference, not a measurement).
+    if plateau_duty and plateau_rate and result['plateauRequestsPerCreatedPost']:
+        effective = plateau_duty * plateau_rate
+        result['effectiveRatePerSecond'] = effective
+        result['impliedMedianLatenessMinutes'] = (start - due + 0.5 * len(posts) * result['plateauRequestsPerCreatedPost']
+                                                  / effective) / 60.0
+    return result
+
+
 def cron_gap(invocations, period, *, first_minute, last_minute):
     """Per shard: seconds of each cron period in which no loop of that shard was inside its handler."""
     by_shard = defaultdict(list)
@@ -278,7 +328,9 @@ def analyse(run_dir):
     final_states = load_json(os.path.join(run_dir, 'final-states.json'))
     folder = os.path.join(run_dir, 'invocations')
     invocations = []
-    for name in sorted(os.listdir(folder)):
+    # A downloaded artifact may hold invocations.jsonl but not the per-invocation results: the worker figures are then
+    # empty (the receipt says so), everything measured at the mock is unchanged.
+    for name in (sorted(os.listdir(folder)) if os.path.isdir(folder) else []):
         if name.endswith('.json'):
             try:
                 invocations.append(load_json(os.path.join(folder, name)))
@@ -342,6 +394,7 @@ def analyse(run_dir):
     requests_per_verified = (len(window) / verified_mock) if verified_mock else None
     ledger = request_ledger(window, posts)
     custody = grant_custody(ledger)
+    paced = pacing(window, posts, T)
     per_minute = Counter(int((p['createdAt'] - T) // 60) for p in posts.values() if p['createdAt'] is not None)
 
     # Normal load (S0): shares sent within 2, 5 and 15 minutes of each post's own due time.
@@ -485,7 +538,8 @@ def analyse(run_dir):
                     'busiest60sPerSecond': busiest_window([r['processed'] for r in window], 60.0) / 60.0,
                     'busiest300sPerSecond': busiest_window([r['processed'] for r in window], 300.0) / 300.0,
                     'coordinatorAdmissions': extra.get('admissionWindow')},
-        'ledger': ledger, 'grantCustody': custody,
+        'ledger': ledger, 'grantCustody': custody, 'pacing': paced,
+        'invocationResultsPresent': os.path.isdir(folder),
         'requests': {'total': len(window), 'perVerifiedPost': requests_per_verified, 'byRoute': dict(routes),
                      'byStatus': dict(statuses), 'byCredential': dict(credentials), 'injected': dict(injected),
                      'global429': counters.get('global429'), 'route429': counters.get('route429'),
@@ -922,6 +976,32 @@ def receipt(result, verdicts, config, differences, expectations=()):
     lines.append('')
     lines.append('Sustained rate at the mock: busiest 60 s averaged %s requests per second, busiest 300 s %s.' % (
         _fmt(c.get('busiest60sPerSecond')), _fmt(c.get('busiest300sPerSecond'))))
+    pc = result.get('pacing')
+    if pc:
+        active_slots = pc.get('secondOfMinuteActive') or ['n/a', 'n/a']
+        lines.append('')
+        lines.append('Pacing while creating (busy period: first to last create, %s to %s after T):' % (
+            _minutes(pc['busyStartAfterDue']), _minutes(pc['busyEndAfterDue'])))
+        lines.append('')
+        lines.append('- **Busy-period duty cycle %.0f%%:** %d of %d seconds had at least 5 requests (plateau: %.0f%%). In '
+                     'the plateau the lane is active from second %s to second %s of each minute.' % (
+                         100 * (pc['dutyCycle'] or 0), pc['activeSeconds'], pc['busySeconds'],
+                         100 * (pc.get('plateauDutyCycle') or 0), active_slots[0], active_slots[1]))
+        lines.append('- **Active-window rate %s requests/s, %.0f%% of the 25/s ceiling** (plateau: %s requests/s, '
+                     '%.0f%%). The busy-period average is %s requests/s.' % (
+                         _fmt(pc['activeRatePerSecond']), 100 * (pc['activeRateShareOfCeiling'] or 0),
+                         _fmt(pc.get('plateauActiveRatePerSecond')), 100 * (pc.get('plateauActiveRateShareOfCeiling') or 0),
+                         _fmt(pc['busyRatePerSecond'])))
+        lines.append('- **Plateau requests per created post %s:** %d requests and %d creates, from T to %s after T (the '
+                     'first read-back).' % (_fmt(pc['plateauRequestsPerCreatedPost']), pc['plateauRequests'],
+                                            pc['plateauCreates'], _minutes(pc['plateauEndAfterDue'])))
+        lines.append('- Implied median lateness (inference): first create + (posts / 2) x plateau requests per created '
+                     'post / (plateau duty cycle x plateau active rate) = %s.' % _fmt(
+                         pc.get('impliedMedianLatenessMinutes'), 'min'))
+    if not result.get('invocationResultsPresent', True):
+        lines.append('')
+        lines.append('The per-invocation results (`invocations/`) are not in this directory, which is downloaded from '
+                     'an artifact. The worker figures below are empty for that reason; the mock\'s figures are complete.')
     lines.append('')
     ledger = result.get('ledger')
     if ledger:
