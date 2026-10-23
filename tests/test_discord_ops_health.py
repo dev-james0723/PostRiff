@@ -8,6 +8,7 @@ import importlib.util
 import io
 import json
 import re
+import secrets
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,7 +26,8 @@ POLICY_TOOL = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(POLICY_TOOL)
 APP = '123456789012345678'
 NOW = 1_800_000_000.0
-SECRET = 'h' * 24
+SECRET = secrets.token_hex(12)  # synthetic, generated per run (repo rule P2-SEC-CI-04)
+USER_SHAPED = 'prt_' + secrets.token_hex(8)
 WORKSPACE = '3f6c8d2e-1b7a-4c5d-9e8f-0a1b2c3d4e5f'
 LANE_ON = {'POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED': 'true', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}
 
@@ -138,7 +140,7 @@ class Authority(unittest.TestCase):
         return app
 
     def test_missing_wrong_or_user_tokens_never_start_the_runtime(self):
-        for authorization in ('', 'Bearer dev:someone', 'Bearer prt_not-cron-authority', 'Bearer ' + SECRET[:-1],
+        for authorization in ('', 'Bearer dev:someone', 'Bearer ' + USER_SHAPED, 'Bearer ' + SECRET[:-1],
                               SECRET, 'bearer ' + SECRET, 'Bearer ' + SECRET + ' ', 'Bearer é' + SECRET):
             with self.subTest(authorization=authorization):
                 app = self.app()
@@ -146,7 +148,7 @@ class Authority(unittest.TestCase):
                 app._runtime.assert_not_called()
 
     def test_a_short_or_absent_cron_secret_refuses_even_a_matching_bearer(self):
-        for secret in ('', 's' * 15):
+        for secret in ('', secrets.token_hex(8)[:15]):
             with self.subTest(length=len(secret)), patch.dict('os.environ', {'CRON_SECRET': secret}):
                 app = HostedApplication()
                 app._runtime = Mock(side_effect=AssertionError('runtime initialized'))

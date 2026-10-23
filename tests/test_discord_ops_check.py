@@ -4,6 +4,7 @@ import copy
 import importlib.util
 import io
 import json
+import secrets
 import tempfile
 import unittest
 from pathlib import Path
@@ -453,10 +454,11 @@ class CommandLine(unittest.TestCase):
         self.assertEqual((code, report['transitions']['cleared']), (0, ['BACKLOG_LAG']))
 
     def test_a_failed_fetch_is_an_unavailable_snapshot_and_the_bearer_is_never_printed(self):
-        with patch.dict('os.environ', {'DISCORD_OPS_BEARER': 'b' * 32}), patch('sys.stdout', io.StringIO()) as printed:
+        bearer = secrets.token_hex(16)
+        with patch.dict('os.environ', {'DISCORD_OPS_BEARER': bearer}), patch('sys.stdout', io.StringIO()) as printed:
             self.assertEqual(check.main(['fetch', 'http://127.0.0.1:9/api/ops/discord/health', '--timeout', '1']), 0)
         self.assertEqual(json.loads(printed.getvalue()), {'unavailable': True, 'reason': 'unreachable'})
-        self.assertNotIn('b' * 32, printed.getvalue())
+        self.assertNotIn(bearer, printed.getvalue())
         with patch.dict('os.environ', {}, clear=True), patch('sys.stdout', io.StringIO()) as printed:
             check.main(['fetch', 'http://127.0.0.1:9/'])
         self.assertEqual(json.loads(printed.getvalue())['reason'], 'no_bearer')

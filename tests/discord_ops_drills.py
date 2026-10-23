@@ -19,6 +19,7 @@ import logging
 import os
 import platform
 import re
+import secrets
 import subprocess
 import sys
 import threading
@@ -55,7 +56,7 @@ POLICY = _load('discord_rate_policy', ROOT / 'scripts/discord_rate_policy.py')
 THRESHOLDS = check.load_thresholds()
 RUNBOOK = ROOT / 'docs/ops/PHONE-RUNBOOK.md'
 SNAPSHOT_SQL = ROOT / 'docs/ops/discord-ops-snapshot.sql'
-SECRET = 'drill-cron-secret-' + 'x' * 16
+SECRET = secrets.token_hex(17)  # synthetic, generated per run (repo rule P2-SEC-CI-04)
 MIGRATION_060 = ROOT / 'migrations/postriff/060_founder_reliability.sql'
 
 
