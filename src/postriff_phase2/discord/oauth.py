@@ -34,6 +34,11 @@ SETTLE_ATTEMPTS = 3
 # handful of these a minute (open the picker, re-check, refresh), so these limits are far above normal use: a member may
 # make 30 in a minute, a workspace 120. One read per connection is in flight at a time, and a connection's channel list
 # and re-check answer are served from memory for READ_CACHE_SECONDS, so polling cannot multiply Discord traffic.
+# G2E-C-05 / G2E-A-11. Beyond the shared cap, one workspace (and one member) may not hold an unbounded number of servers
+# either: a person who manages many servers could otherwise spend the bot's whole capacity from a single account. A server
+# that was disconnected still holds its slot (the shared bot stays in it), so it still counts here.
+MAX_SERVERS_PER_WORKSPACE = 30
+MAX_SERVERS_PER_MEMBER = 15
 READ_LIMIT_MEMBER = (30, 60)
 READ_LIMIT_WORKSPACE = (120, 60)
 READ_CACHE_SECONDS = 45
@@ -111,6 +116,22 @@ class DiscordConnections:
                     fail('Workspace unavailable.', 404)
                 state = json.loads(row[0]) if isinstance(row[0], str) else copy.deepcopy(row[0])
                 yield cur, state, None
+
+    @staticmethod
+    def server_ceiling(state, actor, guild):
+        """Refuse a NEW server past the per-workspace or per-member ceiling, before any Discord request or cap slot. A
+        server this workspace already holds (a reconnect) is never counted twice."""
+        phase2 = state.get('phase2') or {}
+        cards = [c for c in phase2.get('channels', []) if isinstance(c, dict) and c.get('platform') == 'Discord'
+                 and c.get('discordConnectionKind') != 'webhook']
+        if any(c.get('providerAccountId') == guild for c in cards):
+            return
+        mine = {x.get('id') for x in phase2.get('discordIdentityLinks', []) if isinstance(x, dict) and x.get('authorizedBy') == actor}
+        if (len(cards) >= MAX_SERVERS_PER_WORKSPACE
+                or sum(1 for c in cards if c.get('discordIdentityConnectionId') in mine) >= MAX_SERVERS_PER_MEMBER):
+            raise AlphaError('This workspace already has the largest number of Discord servers Rafii connects '
+                             f'({MAX_SERVERS_PER_WORKSPACE} per workspace, {MAX_SERVERS_PER_MEMBER} per person). '
+                             'Contact support if you need more.', 409, code='discord_server_limit')
 
     def admit_read(self, cur, workspace, member):
         """Throttle a read that reaches Discord. Called inside the transaction that has just proved the caller's role,
@@ -252,10 +273,11 @@ class DiscordConnections:
         if purpose == 'installation':
             if not snowflake(inputs.get('guildId')):
                 fail('Select the exact Discord server to authorize.', 400)
-            with self.local(workspace, token) as (cur, _, actor):
+            with self.local(workspace, token) as (cur, state, actor):
                 # BEFORE the Discord reads below (they used to run first, so a throttled caller still cost Discord requests).
                 throttle(cur, f'oauth-start:{workspace}', 20, 600)
                 self.admit_read(cur, workspace, actor)
+                self.server_ceiling(state, actor, inputs['guildId'])
 
             def manageable():
                 fresh = self._fresh_identity(workspace, token, inputs.get('identityConnectionId'))
