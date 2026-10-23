@@ -1,0 +1,284 @@
+{
+  "recordedAt": "2026-10-19T17:55:47.235084+00:00",
+  "candidateStatus": "SOURCE_IMPLEMENTED_UNQUALIFIED",
+  "goalStatus": "active",
+  "releaseStatus": "NO_GO",
+  "source": {
+    "baseHead": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+    "branch": "codex/discord-personal-account-20261019",
+    "dirty": true,
+    "committedThisSession": false,
+    "pushedThisSession": false,
+    "fingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+    "manifest": "evidence/source-after.json",
+    "manifestSha256": "f14ffed7687d05d9dc29fe9cdf8b28bcb33c66a5dda4444a8d7bc682a1c6d065",
+    "sourceFileCount": 2191,
+    "beforeAfterMatch": true
+  },
+  "checks": [
+    {
+      "id": "test_discord_multimode",
+      "status": "VERIFIED",
+      "execution": "local-synthetic-python",
+      "exitCode": 0,
+      "tests": 20,
+      "seconds": 0.092,
+      "method": "PYTHONPATH=src:tests validation-venv/bin/python -m unittest test_discord_multimode -v",
+      "evidence": "evidence/multimode-final.txt",
+      "logSha256": "d13f76e22ff86774c30aee047df322b47b9ef7bd0e82427bbc3d0529f1ccbce9",
+      "timestamp": "2026-10-19T17:54:33.246165+00:00",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe"
+    },
+    {
+      "id": "test_discord_interactions",
+      "status": "VERIFIED",
+      "execution": "local-synthetic-python",
+      "exitCode": 0,
+      "tests": 12,
+      "seconds": 0.209,
+      "method": "PYTHONPATH=src:tests validation-venv/bin/python -m unittest test_discord_interactions -v",
+      "evidence": "evidence/interactions-final.txt",
+      "logSha256": "56ae3ad2d94953c5e9b4f5c7efb4649e9cf46aac38011b48be21b5228a6edc1e",
+      "timestamp": "2026-10-19T17:54:34.230140+00:00",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe"
+    },
+    {
+      "id": "test_discord_oauth_lifecycle",
+      "status": "VERIFIED",
+      "execution": "local-synthetic-python",
+      "exitCode": 0,
+      "tests": 24,
+      "seconds": 0.031,
+      "method": "PYTHONPATH=src:tests validation-venv/bin/python -m unittest test_discord_oauth_lifecycle -v",
+      "evidence": "evidence/oauth-final.txt",
+      "logSha256": "86670dd3378ab24c880bb05fec9b79e851130088e6195066be6fd966c2daa38f",
+      "timestamp": "2026-10-19T17:54:35.111423+00:00",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe"
+    },
+    {
+      "id": "test_discord_publish_authorization",
+      "status": "VERIFIED",
+      "execution": "local-synthetic-python",
+      "exitCode": 0,
+      "tests": 31,
+      "seconds": 0.041,
+      "method": "PYTHONPATH=src:tests validation-venv/bin/python -m unittest test_discord_publish_authorization -v",
+      "evidence": "evidence/authorization-final.txt",
+      "logSha256": "85b3f1b7ee5b697263d5274e078707ec01bc26e8c4f2e1a88b3cd4d1b01112bf",
+      "timestamp": "2026-10-19T17:54:36.102321+00:00",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe"
+    },
+    {
+      "id": "test_discord_personal_account_contract",
+      "status": "VERIFIED",
+      "execution": "local-synthetic-python",
+      "exitCode": 0,
+      "tests": 6,
+      "seconds": 0.034,
+      "method": "PYTHONPATH=src:tests validation-venv/bin/python -m unittest test_discord_personal_account_contract -v",
+      "evidence": "evidence/personal-contract-final.txt",
+      "logSha256": "b1b6a7d593c06aa169bb5a4f24d92b74eb5a4acdeb44bb72c4e35852b851168d",
+      "timestamp": "2026-10-19T17:54:37.157831+00:00",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe"
+    }
+  ],
+  "blockers": [
+    {
+      "check": "full Discord regression/full web units/typecheck/lint",
+      "status": "NOT_RUN",
+      "classification": "validation_unavailable",
+      "reason": "Local cloud hard guard denied full suite and Node validation before execution. Required jcb test was attempted once and exited2: receipt-lock path outside writable roots. Doctor separately exited2: Depot authentication unavailable. No remote run/job ID exists."
+    },
+    {
+      "check": "running browser390/1280/keyboard/axe",
+      "status": "NOT_RUN",
+      "classification": "validation_unavailable",
+      "reason": "Node/browser cloud routing unavailable as above; new harness retains CI/Linux fence and has not run. No screenshots exist for this source."
+    },
+    {
+      "check": "persistent SQL/RLS/concurrency",
+      "status": "NOT_RUN",
+      "classification": "validation_unavailable",
+      "reason": "Guarded disposable PostgreSQL17 Linux harness prepared; no canonical Linux execution in this session. Migration131 not applied anywhere."
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "A01",
+      "status": "VERIFIED",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "Synthetic identity/OAuth lifecycle and personal contract only; no live grant.",
+      "evidence": [
+        "test_discord_oauth_lifecycle",
+        "test_discord_personal_account_contract"
+      ]
+    },
+    {
+      "id": "A02",
+      "status": "VERIFIED",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "Synthetic public projection/tenant/member/no-secret contract.",
+      "evidence": [
+        "test_discord_personal_account_contract"
+      ]
+    },
+    {
+      "id": "A03",
+      "status": "NOT_RUN",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "New/current React component/browser tests prepared; Node execution unavailable.",
+      "evidence": []
+    },
+    {
+      "id": "A04",
+      "status": "NOT_RUN",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "Official scope-upgrade UI source retained/localized; actual browser/Node gate pending.",
+      "evidence": []
+    },
+    {
+      "id": "A05",
+      "status": "NOT_RUN",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "Callback source localized and context fenced; actual browser gate pending.",
+      "evidence": []
+    },
+    {
+      "id": "A06",
+      "status": "NOT_RUN",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "31 approved-publication and24 OAuth focused regressions pass; full Discord suite unavailable.",
+      "evidence": [
+        "test_discord_publish_authorization",
+        "test_discord_oauth_lifecycle"
+      ]
+    },
+    {
+      "id": "A07",
+      "status": "NOT_RUN",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "Synthetic wrong-kind/tenant/state/subject/revoke/unknown tests pass; persistent SQL/RLS gate not run.",
+      "evidence": [
+        "test_discord_multimode",
+        "test_discord_interactions"
+      ]
+    },
+    {
+      "id": "A08",
+      "status": "BLOCKED_EXTERNAL",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "Fresh real customer OAuth/callback custody not established; prior authorization click not replayed.",
+      "evidence": []
+    },
+    {
+      "id": "A09",
+      "status": "BLOCKED_EXTERNAL",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "No real Discord send/readback; requires current exact content/sender/target/time/digest/count approval.",
+      "evidence": []
+    },
+    {
+      "id": "A10",
+      "status": "BLOCKED_EXTERNAL",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "Real unattended/cancel unproven. Synthetic actual Worker tick/due/cancel/aged/unknown/rate-seal cases pass.",
+      "evidence": [
+        "test_discord_multimode"
+      ]
+    },
+    {
+      "id": "A11",
+      "status": "NOT_RUN",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "Fenced running-browser390/1280/keyboard/axe harness written but unexecuted.",
+      "evidence": []
+    },
+    {
+      "id": "A12",
+      "status": "NOT_RUN",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "93 scoped current-source Python tests plus lower-level AST/locale/diff checks pass. Full web/static/Discord/Linux checks unavailable.",
+      "evidence": [
+        "test_discord_multimode",
+        "test_discord_interactions",
+        "test_discord_oauth_lifecycle",
+        "test_discord_publish_authorization",
+        "test_discord_personal_account_contract"
+      ]
+    },
+    {
+      "id": "A13",
+      "status": "BLOCKED_EXTERNAL",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "No release/deployment/production provenance/rollback qualification performed or self-approved.",
+      "evidence": []
+    },
+    {
+      "id": "A14",
+      "status": "BLOCKED_EXTERNAL",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "Webhook source is wired through existing review/job/Worker/rate/cancel/readback. Synthetic core verified; SQL/browser/provider qualification pending; flagOFF.",
+      "evidence": [
+        "test_discord_multimode"
+      ]
+    },
+    {
+      "id": "A15",
+      "status": "BLOCKED_EXTERNAL",
+      "sourceSha": "0c3e1bf615bce1213d786ce1e8c87e7875701e44",
+      "sourceFingerprint": "422ed0edc113d0d75cc7f8f0cb502f40149feca5cfdf91d33bd20c6649cc88fe",
+      "timestamp": "2026-10-19T17:55:47.235084+00:00",
+      "method": "Signed endpoint/private entry/binding/replay and offline command-config validation implemented. Synthetic core verified; real DB/portal/registered command/install/latency pending; flagOFF. Signed PING verification is separate from qualified useful-command activation.",
+      "evidence": [
+        "test_discord_interactions"
+      ]
+    }
+  ],
+  "boundaries": {
+    "realDiscordMessages": 0,
+    "livePublishingJobs": 0,
+    "liveCommandsRegistered": 0,
+    "hostedMigrationsApplied": 0,
+    "deployments": 0,
+    "newProviderGrants": 0,
+    "extraPaidServices": 0,
+    "productionFlagsChanged": false,
+    "unrelatedProvidersChanged": false,
+    "frozen20261019T0300ZReviewChanged": false,
+    "newModesDefaultOff": true
+  },
+  "limitations": [
+    "Synthetic DB doubles do not certify PostgreSQL persistence, locks, RLS or hosted3s latency.",
+    "UI source and translations are implemented but uncompiled/unexercised in this session.",
+    "Earlier whole-Python macOS renderer failures remain historical unresolved gates; no guards were weakened.",
+    "Root coordinator must independently review/pin and run one approved canonical Linux batch; wrapper is not a mapped/submitted JCB run."
+  ]
+}

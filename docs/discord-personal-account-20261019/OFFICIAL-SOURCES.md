@@ -1,0 +1,8 @@
+# Official protocol sources checked 2026-10-19
+
+- [OAuth2](https://docs.discord.com/developers/topics/oauth2): Discord issuer and authorization-code/PKCE contract; webhook incoming is passthrough resource evidence, not a reason to invent bearer permissions. This candidate versions only new webhook transactions; legacy identity/bot transactions retain their version.
+- [Webhook resource](https://docs.discord.com/developers/resources/webhook): fixed token routes, wait confirmation and known-message readback. Candidate supports text only with mention suppression and automatic embeds suppressed. Thread creation/unarchive, identity overrides and attachments are rejected.
+- [Interactions](https://docs.discord.com/developers/interactions/receiving-and-responding): raw signature/timestamp verification, installation owner/context and ephemeral response. Initial response window is three seconds; this implementation denies a success beyond its internal two-second deadline and does not retain interaction tokens. Hosted latency still requires qualification.
+- [User Install tutorial](https://docs.discord.com/developers/tutorials/developing-a-user-installable-app): separate installation context and command setup. Install link alone is not proof of installation or command availability.
+- [Application commands](https://docs.discord.com/developers/interactions/application-commands): additive command creation contract and returned ID/version; no bulk overwrite or live registration is performed here.
+- [Application resource](https://docs.discord.com/developers/resources/application): public verification key, interactions endpoint and per-installation OAuth defaults validated by offline snapshot tooling. Supplied snapshots are not live readback evidence.

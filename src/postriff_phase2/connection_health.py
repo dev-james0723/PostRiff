@@ -153,6 +153,12 @@ def disconnected_by_customer(view) -> bool:
     return any(isinstance(row, dict) and row.get("evidence") == DISCONNECTED_EVIDENCE for row in (view.get("capabilities") or {}).values())
 
 
+def _view_scopes(view, adapter, adapter_class, capability):
+    if view.get('platform') == 'Discord' and view.get('discordConnectionKind') == 'webhook':
+        return ['webhook.incoming'] if capability in ('publish', 'schedule') else None
+    return required_scopes(adapter, adapter_class, capability)
+
+
 def missing_permissions(view, provider, adapter, adapter_class):
     """Offered capabilities whose scopes this grant lacks: [{capability, scopes}], scopes only for the disclosure."""
     platform, granted = view.get("platform"), list(view.get("scopes") or [])
@@ -160,7 +166,7 @@ def missing_permissions(view, provider, adapter, adapter_class):
     for capability in GRANTABLE:
         if not offered(provider, capability):
             continue
-        required = required_scopes(adapter, adapter_class, capability)
+        required = _view_scopes(view, adapter, adapter_class, capability)
         if not required or _scopes_held(platform, granted, required):
             continue
         if platform == "YouTube":
@@ -173,7 +179,7 @@ def missing_permissions(view, provider, adapter, adapter_class):
 
 def _granted(view, provider, adapter, adapter_class, capability):
     """True when the current grant holds this capability's scopes. Unknown requirements (no adapter class) never count."""
-    required = required_scopes(adapter, adapter_class, capability)
+    required = _view_scopes(view, adapter, adapter_class, capability)
     if required is None:
         return False
     if not required:

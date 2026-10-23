@@ -109,6 +109,20 @@ export default function PrivacyPage() {
         Your use of YouTube is subject to the <a href='https://www.youtube.com/t/terms' className='underline'>YouTube Terms of Service</a>. Google's information practices are explained in the <a href='https://policies.google.com/privacy' className='underline'>Google Privacy Policy</a>.
       </p>
 
+      <h3 id='discord'>Discord</h3>
+      <p>
+        Rafii uses Discord in two separate steps, each with its own Discord consent screen. In the first you link your Discord profile: Discord tells Rafii your user id and display name and, with the server-list permission that adding a bot needs, lets Rafii ask Discord for the servers you belong to so you can pick one. Rafii shows only servers where you can manage the server and does not keep that list. The access and refresh tokens for the link are encrypted before storage. In the second you add Rafii’s bot to one server you manage; Rafii then stores that server’s id and name, the channels you choose (their ids and the names Discord shows) and the permissions the bot holds there.
+      </p>
+      <p>
+        The bot is one shared bot for all Rafii customers. Rafii posts to a Discord channel only the text and image you approve for that exact post, with mentions switched off: it never pings @everyone, @here, roles or people. After posting, Rafii reads back the message it posted to confirm delivery and keeps the message id, its link and the confirmation as your receipt. That is the only reason Rafii holds the read-message-history permission. Rafii does not read other messages in your server, does not send direct messages and does not use Discord’s message-content access. Discord comments and replies are not enabled.
+      </p>
+      <p>
+        Disconnecting Discord in Rafii deletes Rafii’s stored copy of your Discord tokens and stops Rafii from using that connection. It does not ask Discord to revoke the authorization and it does not remove the bot from your server. To end that access on Discord’s side, remove Rafii in your Discord Authorized Apps and remove the bot in your server’s settings. Deleting your Rafii account deletes the same stored data with your workspace; the bot likewise stays in the server until a server manager removes it. Rafii also keeps technical records of its requests to Discord (identifiers, digests, status codes and timing; no message text, tokens or names) to operate and protect the service. There is no deletion schedule for those records yet.
+      </p>
+      <p>
+        Your use of Discord is subject to the <a href='https://discord.com/terms' className='underline'>Discord Terms of Service</a> and the <a href='https://discord.com/privacy' className='underline'>Discord Privacy Policy</a>.
+      </p>
+
       <h2 id='retention'>6. Retention</h2>
       <p>
         For YouTube, the general table below has these exceptions: Inbox comment copies expire 30 days after their last fetch, and cached creator data, including analytics responses, expires at its configured time, no later than 30 days after refresh. Maintenance removes expired comment copies and caches, and downloaded reporting datasets ingested more than 30 days ago. These periods apply to Rafii's working copies; they do not delete the original content on YouTube.

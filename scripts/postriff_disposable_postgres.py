@@ -27,6 +27,14 @@ USER = "postriff_test"
 os.environ.setdefault("LC_ALL", "C")
 
 
+def run_script(script, test_env):
+    # Only the fenced synthetic capacity harness streams its aggregate progress.
+    # Keep other SQL output buffered and preserve subprocess.run cancellation.
+    live = script == 'tests/phase2/postgres_discord_capacity.py'
+    return subprocess.run([sys.executable, str(ROOT / script)], stdout=None if live else subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True, env=test_env)
+
+
 def main(scripts: list[str]) -> int:
     if not scripts or not all((ROOT / script).is_file() for script in scripts):
         print(json.dumps({"status": "validation_unavailable", "cause": "existing regression scripts are required"}))
@@ -76,10 +84,11 @@ def main(scripts: list[str]) -> int:
             subprocess.run([str(PG / "psql"), "-X", dsn, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(ROOT / "tests/phase2/rls.sql")], check=True, stdout=subprocess.DEVNULL, env=test_env)
             for script in scripts:
                 # One cluster, sequential processes, synthetic transports and research disabled.
-                run = subprocess.run([sys.executable, str(ROOT / script)], capture_output=True, text=True, env=test_env)
-                results.append({"script": script, "exit": run.returncode, "stdout": run.stdout[-4000:], "stderr": run.stderr[-4000:]})
+                run = run_script(script, test_env)
+                output = run.stdout or ''
+                results.append({"script": script, "exit": run.returncode, "stdout": output[-4000:], "stderr": run.stderr[-4000:]})
                 print(f"== {script} exit={run.returncode}")
-                print(run.stdout[-4000:])
+                print(output[-4000:])
                 if run.returncode:
                     print(run.stderr[-4000:], file=sys.stderr)
         finally:

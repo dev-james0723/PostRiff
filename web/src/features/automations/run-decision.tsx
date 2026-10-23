@@ -1,5 +1,8 @@
 'use client';
 
+import { usePreferences } from '@/lib/preferences';
+import { discordCopy } from '@/lib/channels/discord-copy';
+
 /**
  * Approve, request changes to, or reject one post of an automation run (`raffi_run_decide`, orchestration §4).
  *
@@ -17,6 +20,7 @@ import { Checkbox } from '@/components/motion/checkbox';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, Surface } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { factsDigest } from '@/features/ideas/use-sources';
 import { ApiError } from '@/lib/api/client';
 import { useSnapshot } from '@/lib/api/hooks';
@@ -69,6 +73,7 @@ export function RunDecisionDialog({ target, onClose, act }: { target: DecisionTa
 }
 
 function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onClose: () => void; act: (action: string, payload: Record<string, unknown>) => Promise<Snapshot> }) {
+  const dc = discordCopy(usePreferences().locale);
   const { run, item, decision, automationName, timeZone } = target;
   const snapshot = useSnapshot();
   const state = snapshot.data?.state;
@@ -78,6 +83,10 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
   const [confirmed, setConfirmed] = useState(false);
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
+  const [destinationId, setDestinationId] = useState(item.destinationId ?? '');
+  const connection = state?.phase2?.channels.find((c) => c.id === item.channelId);
+  const destinations = connection?.discordDestinations?.filter((d) => d.status === 'authorized' && d.authorizationGeneration === connection.discordAuthorizationGeneration) ?? [];
+  const discordTarget = destinations.find((d) => d.id === destinationId);
   const text = TITLES[decision];
   const when = item.publishAt ? runLabel(item.publishAt * 1000, timeZone) : null;
   const edited = variant && typeof item.variantRevision === 'number' && variant.revision !== item.variantRevision;
@@ -95,7 +104,7 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
             ? 'This browser can’t verify the sources for this approval. Try another browser.'
             : null
       : null;
-  const ready = !sending && !blocked && (decision !== 'approve' || (confirmed && digestsReady)) && (decision !== 'revise' || note.trim().length > 0);
+  const ready = !sending && !blocked && (decision !== 'approve' || (confirmed && digestsReady && (item.platform !== 'Discord' || !item.publishAt || Boolean(discordTarget)))) && (decision !== 'revise' || note.trim().length > 0);
 
   async function send() {
     if (!ready) return;
@@ -109,6 +118,7 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
         variantRevision: variant?.revision ?? item.variantRevision ?? null,
         excludedUnknowns: unknowns,
         acknowledgedWarnings: warnings,
+        ...(item.platform === 'Discord' && item.publishAt ? { destinationId, destinationGeneration: discordTarget?.resourceGeneration, publishAt: item.publishAt } : {}),
         sourceUse: rewriteSources.flatMap((s) => (digests?.[s.id] ? [{ sourceId: s.id, factsDigest: digests[s.id] }] : [])),
         ...(note.trim() ? { note: note.trim() } : {})
       });
@@ -140,6 +150,17 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
           <span className='text-muted-foreground'>· {languageLabel(item.language)}</span>
           {when && <span className='text-muted-foreground'>· {when}</span>}
         </p>
+        {item.platform === 'Discord' && item.publishAt && decision === 'approve' && (
+          <div className='flex flex-col gap-2'>
+            <p className='text-sm font-medium'>Exact Discord destination</p>
+            <Select value={destinationId} onValueChange={(value) => { setDestinationId(String(value)); setConfirmed(false); }}>
+              <SelectTrigger aria-label='Discord destination'><SelectValue placeholder='Choose an authorized server and channel' /></SelectTrigger>
+              <SelectContent>{destinations.map((d) => <SelectItem key={d.id} value={d.id}>{d.guildName} · {d.channelName}</SelectItem>)}</SelectContent>
+            </Select>
+            {discordTarget && <p className='text-sm' data-discord-sender>{discordTarget.senderKind === 'webhook' ? dc.senderWebhook : dc.senderBot}</p>}
+            {discordTarget ? <p className='text-muted-foreground text-xs' data-discord-target>{discordTarget.guildName} ({discordTarget.guildId}) · {discordTarget.channelName} ({discordTarget.channelId}) · {when}</p> : <Note>Authorize a Discord channel in Connections before approving this publication.</Note>}
+          </div>
+        )}
         {variant ? (
           <Surface material='paper' radius='control' padding='sm'>
             <p className='rafii-eyebrow mb-1.5'>The exact post</p>

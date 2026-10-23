@@ -14,14 +14,14 @@ def _other_owned(cur, workspace_id, principal):
 def revoke_remote_grants(service, workspace_id):
     """Revoke every live grant of a workspace being deleted; returns the providers that could not be revoked.
 
-    Rafii's one bot in a Discord server or Telegram channel may serve other workspaces too, so it stays while any
-    other unrevoked connection uses it. This workspace never held a personal token there, so nothing of this
-    person's remains to revoke."""
+    A Discord connection does not own the shared server installation. Local
+    account deletion must never remove Rafii's bot from a server. Telegram's
+    existing shared-grant check is retained."""
     pending = []
     with service.connection_factory() as db, db.cursor() as cur:
         cur.execute('SELECT provider,access_ciphertext,key_id,connection_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND revoked_at IS NULL', (workspace_id,))
         credentials = cur.fetchall()
-        shared = {row[3] for row in credentials if service.oauth._shared_elsewhere(cur, workspace_id, row[3], row[0])}
+        shared = {row[3] for row in credentials if row[0] == 'discord' or service.oauth._shared_elsewhere(cur, workspace_id, row[3], row[0])}
     for provider, ciphertext, key_id, connection_id in credentials:
         if connection_id in shared:
             continue

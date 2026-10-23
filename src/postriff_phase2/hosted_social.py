@@ -124,6 +124,9 @@ class HostedSocial:
 
     # --- submit -------------------------------------------------------------------
     def submit(self, manifest, *, dispatch_context=None):
+        if manifest.get('platform') == 'Discord':
+            return {'state': 'held', 'confirmed': 'Discord requires a fenced, destination-bound human approval. Nothing was posted.',
+                    'discordDeliveryEvidence': 'not_sent'}
         if manifest['platform'] == 'Mastodon':
             try:
                 with self.oauth.mastodon_dispatch_fence(manifest['workspaceId'], manifest['channelId']):
@@ -356,32 +359,233 @@ class HostedSocial:
             receipt["url"] = f"https://t.me/{username}/{message['message_id']}"
         return receipt
 
-    def _submit_discord(self, manifest, provider, token):
-        refusal = self._unsupported_media(manifest)
-        if refusal:
-            return refusal
-        session = provider.session(token)
-        channel = session.get("channel")
-        if not channel:
-            return {"state": "held", "confirmed": "Choose a Discord channel for this server first. Nothing was posted."}
-        # enforce_nonce makes Discord return the first message instead of posting again for a repeated nonce.
-        payload = {"content": manifest["payload"]["text"], "allowed_mentions": {"parse": []}, "nonce": str(manifest["idempotencyKey"])[:25], "enforce_nonce": True}
+    def prepare_discord_dispatch(self, manifest, *, read_authorize=None):
+        """Provider checks and immutable media reads outside all worker SQL locks."""
+        from .discord.authorization import grant_matches, wire_content, digest
+        provider = self._provider(manifest)
+        if provider is None or not getattr(provider, 'authorization_v2_enabled', False):
+            raise AlphaError('Discord publishing is paused pending authorization and rollout validation.', 409)
+        grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
+        if not grant_matches(manifest, grant, provider.session(grant['accessToken'])):
+            raise AlphaError('Discord was reconnected or changed. Review the post again.', 409)
+        wire = wire_content(manifest)
+        if digest(wire) != manifest['discord']['wireDigest']:
+            raise AlphaError('The approved Discord payload changed.', 409)
+        if manifest.get('operation') == 'discord.reply' and not callable(read_authorize):
+            raise AlphaError('Discord reply consent must be rechecked before provider reads.', 409)
+        evidence = provider.authorize_destination(grant['accessToken'], manifest['discord']['target'], media=bool(wire['files']), read_authorize=read_authorize)
+        if manifest.get('operation') == 'discord.reply':
+            from .discord.engagement import validate_parent
+            from .discord.message_content import verify as verify_content
+            import time
+            verify_content(provider, manifest['discord']['target'], manifest['engagementReply'], read_authorize, time.time())
+            if not evidence.get('userPermissions', 0) & provider.READ_HISTORY:
+                raise AlphaError('Discord reply history permission changed.', 409)
+            parent = provider._json(provider._bot('GET', f"/channels/{manifest['discord']['target']['channelId']}/messages/{manifest['engagementReply']['parentMessageId']}", read_authorize=read_authorize), dict)
+            validate_parent(manifest, parent)
         image = self._image(manifest)
-        if image:
-            raw, mime, alt = image
-            filename = "image." + {"image/png": "png", "image/gif": "gif", "image/webp": "webp"}.get(mime, "jpg")
-            body, content_type = multipart([("payload_json", json.dumps({**payload, "attachments": [{"id": 0, "filename": filename, "description": alt[:1024]}]}))],
-                                           [("files[0]", filename, mime, raw)])
-            response = provider._bot("POST", f"/channels/{channel}/messages", headers={"Content-Type": content_type}, data=body)
-        else:
-            response = provider._bot("POST", f"/channels/{channel}/messages", body=payload)
-        message_id = str(response.get("body", {}).get("id", "")) if isinstance(response.get("body"), dict) else ""
-        if response.get("status") == 200 and message_id.isdigit():
-            return {"state": "provider_accepted", "reference": f"{channel}/{message_id}", "confirmed": "Discord created the message; read-back pending"}
-        early = self._classify_status(response.get("status"), response.get("body"), "Discord")
-        if early:
-            return early
-        return _uncertain("No conclusive Discord create response; do not resubmit")
+        if image and (hashlib.sha256(image[0]).hexdigest() != wire['files'][0]['sha256']
+                      or len(image[0]) != wire['files'][0]['bytes']):
+            raise AlphaError('The Discord attachment bytes changed after approval. Nothing was posted.', 409)
+        return {'grant': grant, 'evidence': evidence, 'image': image,
+                'wireDigest': digest(wire), 'manifestDigest': digest(manifest)}
+
+    def reserve_discord_send(self, manifest, *, job=None, workspace_id=None, worker_id=None):
+        """Reserve cross-worker capacity outside SQL before sealing the durable intent."""
+        from .discord.rate_limits import RateCoordinatorUnavailable, publish_binding
+        provider = self._provider(manifest)
+        if provider is None or not getattr(provider, 'authorization_v2_enabled', False):
+            raise RateCoordinatorUnavailable()
+        if not getattr(provider, 'rate_v1_enabled', False):
+            return None  # only the historical feature-off synthetic path
+        binding = publish_binding(job, workspace_id, worker_id)
+        channel = manifest['discord']['target']['channelId']
+        if manifest.get('senderKind') == 'webhook':
+            from .discord.webhooks import path, require_enabled
+            require_enabled(provider)
+            grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
+            session = provider.session(grant['accessToken'])
+            from .discord.authorization import grant_matches
+            if not grant_matches(manifest, grant, session):
+                raise AlphaError('Discord webhook grant changed.', 409)
+            return provider.rate_limiter.reserve('POST', path(session, execute=True),
+                identity=provider._rate_identity('webhook', session['secret']), binding=binding,
+                valid_until=min(job['leaseUntil'], manifest['expiresAt']))
+        return provider.admit_bot_request('POST', f'/channels/{channel}/messages', binding=binding,
+                                         valid_until=min(job['leaseUntil'],manifest['expiresAt']))
+
+    def discord_read_attempt_limit(self):
+        provider = self.providers.get('discord')
+        policy = getattr(getattr(provider,'rate_limiter',None),'policy',None)
+        return policy.read_attempts if policy is not None else 1
+
+    def submit_discord_authorized(self, manifest, dispatch):
+        """Private worker entry point. An ordinary submit cannot reach Discord POST."""
+        provider = self._provider(manifest)
+        if provider is None:
+            return {'state': 'held', 'confirmed': 'Discord transport is unavailable. Nothing was posted.', 'discordDeliveryEvidence': 'not_sent'}
+        return self._submit_discord(manifest, provider, dispatch['grant']['accessToken'], dispatch)
+
+    def _submit_discord(self, manifest, provider, token, dispatch=None):
+        from .discord.authorization import grant_matches, wire_content, digest, snowflake
+        from .discord.rate_limits import Permit, RateDelayed, UnconsumedPublishPermit
+        if (not dispatch or not getattr(provider, 'authorization_v2_enabled', False)
+                or (getattr(provider, 'rate_v1_enabled', False)
+                    and (not isinstance(dispatch.get('ratePermit'), Permit)
+                         or not dispatch['ratePermit'].binding_hash
+                         or not callable(dispatch.get('rateAuthorize'))))
+                or dispatch.get('manifestDigest') != digest(manifest)
+                or dispatch.get('wireDigest') != manifest.get('discord', {}).get('wireDigest')
+                or dispatch.get('intent', {}).get('manifestDigest') != digest(manifest)
+                or dispatch.get('intent', {}).get('publicationId') != manifest.get('discord', {}).get('publicationId')
+                or not grant_matches(manifest, dispatch.get('grant', {}), provider.session(token))):
+            return {'state': 'held', 'confirmed': 'Discord dispatch authorization is missing or stale. Nothing was posted.', 'discordDeliveryEvidence': 'not_sent'}
+        target = manifest['discord']['target']
+        channel = target['channelId']
+        wire = wire_content(manifest)
+        # Discord dedupes nonces only over a recent window. Durable Rafii intents
+        # block a fresh POST after an ambiguous result, including beyond that window.
+        payload = {'content': wire['content'], 'allowed_mentions': wire['allowed_mentions'],
+                   'nonce': hashlib.sha256(manifest['idempotencyKey'].encode()).hexdigest()[:25], 'enforce_nonce': True}
+        if 'message_reference' in wire:
+            payload['message_reference'] = wire['message_reference']
+        image = dispatch.get('image')
+        rate_arguments = {'rate_permit':dispatch.get('ratePermit'), 'rate_binding':dispatch.get('rateBinding'),
+                          'rate_intent_id':dispatch['intent']['id'], 'rate_authorize':dispatch.get('rateAuthorize')}
+        try:
+            if manifest.get('senderKind') == 'webhook':
+                from .discord.webhooks import request
+                response = request(provider, 'POST', provider.session(token),
+                    body={'content': wire['content'], 'allowed_mentions': wire['allowed_mentions'], 'flags': wire['flags']}, **rate_arguments)
+            elif image:
+                raw, mime, _alt = image
+                file = wire['files'][0]
+                if hashlib.sha256(raw).hexdigest() != file['sha256'] or len(raw) != file['bytes']:
+                    return {'state': 'held', 'confirmed': 'Discord attachment changed. Nothing was posted.', 'discordDeliveryEvidence': 'not_sent'}
+                attachment = {k: file[k] for k in ('id', 'filename', 'description')}
+                body, content_type = multipart([('payload_json', json.dumps({**payload, 'attachments': [attachment]}))],
+                                               [('files[0]', file['filename'], mime, raw)])
+                response = provider._bot('POST', f'/channels/{channel}/messages', headers={'Content-Type': content_type}, data=body, **rate_arguments)
+            else:
+                response = provider._bot('POST', f'/channels/{channel}/messages', body=payload, **rate_arguments)
+        except UnconsumedPublishPermit:
+            raise  # Only the fenced worker can verify and archive unsent intent.
+        except RateDelayed:
+            # No HTTP call occurred, but the P0 intent was already sealed.
+            # Keep it for manual reconciliation rather than make another POST.
+            return {'state': 'uncertain', 'confirmed': 'Discord reserved rate slot expired after sealing. No POST was started; manual review required before any fresh approval.', 'discordDeliveryEvidence': 'uncertain'}
+        except Exception:
+            return {'state': 'uncertain', 'confirmed': 'Discord delivery is uncertain. Reconcile before any further publication.', 'discordDeliveryEvidence': 'uncertain'}
+        body = response.get('body') if isinstance(response.get('body'), dict) else {}
+        message_id = str(body.get('id', ''))
+        if response.get('status') == 200 and snowflake(message_id):
+            receipt = {'reference': f'{channel}/{message_id}',
+                       'url': f"https://discord.com/channels/{target['guildId']}/{channel}/{message_id}",
+                       'discordDeliveryEvidence': 'accepted'}
+            if manifest.get('senderKind') == 'webhook':
+                from .discord.webhooks import message_matches
+                if not message_matches(body, manifest, message_id):
+                    return {**receipt, 'state': 'uncertain', 'confirmed': 'Discord webhook receipt differs from approval. Do not resubmit.'}
+                return {**receipt, 'state': 'provider_accepted', 'confirmed': 'Discord webhook created the approved message; read-back pending.'}
+            if (body.get('channel_id') != channel or body.get('content') != wire['content']
+                    or (body.get('author') or {}).get('id') != target['botUserId']
+                    or ('message_reference' in wire and not self._discord_reply_reference_matches(body, manifest))):
+                return {**receipt, 'state': 'uncertain', 'confirmed': 'Discord returned a message with unexpected identity, destination or text. Review the receipt; do not resubmit.'}
+            return {**receipt, 'state': 'provider_accepted', 'confirmed': 'Discord created the approved channel message; read-back pending'}
+        status = response.get('status')
+        if status == 429:
+            # Shared cooldown is recorded by DiscordProvider; the POST was
+            # attempted, so P0 never silently resubmits this publication.
+            return {'state': 'held', 'discordDeliveryEvidence': 'rejected',
+                    'discordRateLimited': True,
+                    'confirmed': 'Discord returned HTTP 429. The shared cooldown was recorded; this approved publication will not be automatically reposted.'}
+        if status in (400, 401, 403, 404):
+            return {'state': 'failed' if status == 400 else 'held', 'discordDeliveryEvidence': 'rejected',
+                    'confirmed': 'Discord rejected the message before acceptance. Restore permission or review configuration and approve again.'}
+        return {'state': 'uncertain', 'confirmed': 'No conclusive Discord create response; reconcile without resubmitting.', 'discordDeliveryEvidence': 'uncertain'}
+
+    @staticmethod
+    def _discord_reply_reference_matches(body, manifest):
+        reference = body.get('message_reference')
+        target = manifest['discord']['target']
+        return (isinstance(reference, dict) and reference.get('type', 0) == 0
+                and reference.get('message_id') == manifest['engagementReply']['parentMessageId']
+                and reference.get('channel_id') == target['channelId']
+                and reference.get('guild_id', target['guildId']) == target['guildId']
+                and body.get('type') == 19)
+
+    def reconcile_discord(self, manifest, job, *, read_authorize=None):
+        """Only GET a known message in the original channel; never use the default."""
+        from .discord.authorization import SCHEMA, wire_content, digest, snowflake
+        from .discord.rate_limits import RateDelayed, ReadAdmissionDelayed
+        frozen = manifest.get('discord') or {}
+        target = frozen.get('target') or {}
+        reference = job.get('providerReference')
+        if frozen.get('schema') != SCHEMA or not isinstance(reference, str):
+            return _uncertain('The original Discord target or message ID is missing. Manual reconciliation required; do not resubmit.')
+        channel, separator, message_id = reference.partition('/')
+        if not separator or channel != target.get('channelId') or not snowflake(message_id):
+            return _uncertain('The Discord receipt does not match the approved channel. Do not resubmit.')
+        provider = self.providers.get('discord')
+        if (not provider or provider.client_id != target.get('applicationId')
+                or not getattr(provider, 'execution_enabled', True)):
+            return _uncertain('The original Discord application is unavailable. Keep the receipt for manual review.')
+        try:
+            if manifest.get('operation') == 'discord.reply':
+                if not callable(read_authorize) or read_authorize() is not True:
+                    raise AlphaError('Discord reply read consent is unavailable.', 409)
+                grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
+                evidence = provider.authorize_destination(grant['accessToken'], target, read_authorize=read_authorize)
+                if not evidence.get('userPermissions', 0) & provider.READ_HISTORY:
+                    raise AlphaError('Discord history permission changed.', 409)
+            if manifest.get('senderKind') == 'webhook':
+                from .discord.webhooks import request, verify, message_matches
+                from .discord.authorization import grant_matches
+                grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
+                session = provider.session(grant['accessToken'])
+                if not grant_matches(manifest, grant, session):
+                    return _uncertain('The original webhook authorization changed. Keep the receipt; do not resubmit.')
+                verify(provider, session)
+                response = request(provider, 'GET', session, message=message_id)
+                if (digest(wire_content(manifest)) != frozen['wireDigest'] or response.get('status') != 200
+                        or not message_matches(response.get('body'), manifest, message_id)):
+                    return _uncertain('Discord webhook read-back differs from the approved sender, target, text or mention policy.')
+                return {'state': 'verified', 'reference': reference, 'verification': 'provider_lookup',
+                        'url': f"https://discord.com/channels/{target['guildId']}/{channel}/{message_id}",
+                        'confirmed': 'Discord webhook message read back with exact sender, channel and text.', 'discordDeliveryEvidence': 'accepted'}
+            if provider._bot_identity(read_authorize=read_authorize) != target.get('botUserId'):
+                return _uncertain('Discord bot identity changed; keep the original receipt for review.')
+            response = provider._bot('GET', f'/channels/{channel}/messages/{message_id}', read_authorize=read_authorize)
+            if read_authorize is not None and read_authorize() is not True:
+                raise AlphaError('Discord reply read consent changed during lookup.', 409)
+            body = response.get('body') if isinstance(response.get('body'), dict) else {}
+            wire = wire_content(manifest)
+            if (digest(wire) != frozen['wireDigest'] or response.get('status') != 200
+                    or body.get('id') != message_id or body.get('channel_id') != channel
+                    or (body.get('author') or {}).get('id') != target['botUserId']
+                    or (body.get('author') or {}).get('bot') is not True
+                    or body.get('content') != wire['content'] or body.get('mention_everyone') is not False
+                    or body.get('mentions') != [] or body.get('mention_roles') != []
+                    or ('message_reference' in wire and not self._discord_reply_reference_matches(body, manifest))):
+                return _uncertain('Discord read-back did not match the approved message, author, channel and mention policy.')
+            # Discord attachment metadata does not prove the original byte hash.
+            # Keep media receipts pending rather than overstating verification.
+            if wire['files'] or body.get('attachments') != []:
+                return {**_uncertain('Discord media delivery needs byte-level reconciliation; do not resubmit.'), 'reference': reference}
+            return {'state': 'verified', 'reference': reference, 'verification': 'provider_lookup',
+                    'url': f"https://discord.com/channels/{target['guildId']}/{channel}/{message_id}",
+                    'confirmed': 'Discord read-back matched the approved text, bot, channel and mention policy.', 'discordDeliveryEvidence': 'accepted'}
+        except RateDelayed as error:
+            # A denied GET cannot undo an existing create receipt. Resume only
+            # this exact lookup, preserving the message ID and frozen target.
+            import math
+            return {'state': 'provider_accepted', 'reference': reference,
+                    'confirmed': 'Discord message receipt retained; awaiting shared capacity for the exact read-back. Do not resubmit.',
+                    'discordDeliveryEvidence': 'accepted', 'discordReadDeferred': True,
+                    'discordReadAdmissionDenied': isinstance(error, ReadAdmissionDelayed),
+                    'retryAfterSeconds': max(1, math.ceil(error.retry_after_seconds))}
+        except (AlphaError, KeyError, TypeError, ValueError):
+            return _uncertain('Discord receipt lookup is unavailable. Keep the original message ID; do not resubmit.')
 
     def _submit_x(self, manifest, provider, token):
         refusal = self._unsupported_media(manifest)
@@ -489,15 +693,8 @@ class HostedSocial:
                     result['url'] = url
                 return result
             return _uncertain("Mastodon read-back did not match the exact approved post")
-        if platform == "Discord":
-            channel, _, message_id = reference.partition("/")
-            response = provider._bot("GET", f"/channels/{channel}/messages/{message_id}")
-            body = response.get("body") if isinstance(response.get("body"), dict) else {}
-            session = provider.session(token)
-            if response.get("status") == 200 and body.get("content") == text and str(body.get("channel_id")) == channel == str(session.get("channel")):
-                return {"state": "verified", "reference": reference, "url": f"https://discord.com/channels/{session['guild']}/{channel}/{message_id}",
-                        "confirmed": "Discord read-back matched the approved text and channel", "verification": "provider_lookup"}
-            return _uncertain("Discord read-back did not match the exact approved message")
+        if platform == 'Discord':
+            return self.reconcile_discord(manifest, {**(job or {}), 'providerReference': reference})
         if platform == "X":
             # Every X read is billed: after a few inconclusive checks, stop reading and leave it to a person.
             if (job or {}).get("checks", 0) > self.X_RECONCILE_LIMIT:
@@ -923,6 +1120,8 @@ class HostedSocial:
 
     # --- reconcile ----------------------------------------------------------------
     def reconcile(self, manifest, job):
+        if manifest.get('platform') == 'Discord':
+            return self.reconcile_discord(manifest, job)
         provider = self._provider(manifest)
         if provider is None:
             return _uncertain("Provider reconciliation is unavailable; do not resubmit")
