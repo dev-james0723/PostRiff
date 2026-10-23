@@ -20,11 +20,12 @@ import os
 import threading
 import time
 import unittest
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import discord_lane_fixture as F
 from postriff_phase2.discord import worker as discord_worker
-from postriff_phase2.discord.rate_limits import SharedPostgresBudget
+from postriff_phase2.discord.rate_limits import RateDelayed, SharedPostgresBudget
 
 SETTLED = ('verified', 'held', 'uncertain', 'failed', 'canceled')  # nothing more happens without a person
 FROZEN_SOURCE = F.ROOT / 'tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt'
@@ -359,9 +360,10 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         # Each claim moves its workspace to the back of the due order, also when the attempt is then deferred, and
         # a workspace with a post never attempted is due. So one loop's first fourteen claims are two rounds over
         # all seven workspaces in id order: every small tenant's two posts are attempted while the busy one's
-        # thirty have had two attempts. This is the selection's order, whatever the runner's speed.
+        # thirty have had two attempts. This is the selection's order, whatever the runner's speed. A post released
+        # because of the shared budget and claimed again at once (F2) is the same turn, so it counts once.
         ids = [tenant.id for tenant in tenants]
-        self.assertEqual([workspace for workspace, _ in claims[:14]], ids + ids, 'two full rounds come first')
+        self.assertEqual([workspace for workspace, _ in self.turns(claims)[:14]], ids + ids, 'two full rounds come first')
 
     def assert_busy_first(self, tenants, claims):
         # Ordered by id alone, one loop takes the lowest-id workspace while it has a due post, and a post never
@@ -1437,6 +1439,208 @@ class ParallelLaneOnPostgres(unittest.TestCase):
             lane_worker.claim(discord_only=True)
         self.assertEqual(lane_worker.discord_stats['quarantined'], F.discord_lane.MAX_QUARANTINES_PER_CLAIM)
         self.assertEqual(self.wire.calls, [])
+
+    # (n) a release the shared budget caused keeps the post's queue position (F2) ------------------------------------
+
+    # One-minute application windows and a three-second permit life: only the releases a test injects are caused by
+    # the shared budget. With the reviewed one-second window a permit also ends by itself between the reserve and the
+    # seal now and then, which F2 treats the same way and a fixed claim order would have to allow for.
+    SLOW_BUDGET = dict(capacity=2000, app_window_seconds=60, permit_ttl_seconds=3)
+
+    def queue_of_three(self):
+        """Three workspaces in claim order, one loop: the first has two due posts (A1, A2), the others one each (B1,
+        C1). Returns the tenants, the posts' ids as a dict and the worker."""
+        tenants = sorted((F.Tenant(n) for n in range(3)), key=lambda tenant: tenant.id)
+        states = F.seed(self.cluster, tenants[:1], 2)
+        F.seed(self.cluster, tenants[1:], 1)
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, **self.SLOW_BUDGET)
+        a1, a2 = (job['id'] for job in states[tenants[0].id]['phase2']['jobs'])
+        (b1,), (c1,) = ([job_id for (ws, job_id) in F.jobs(self.cluster) if ws == tenant.id] for tenant in tenants[1:])
+        return {'A1': a1, 'A2': a2, 'B1': b1, 'C1': c1}, F.base_worker(self.cluster, self.hosted)
+
+    @contextmanager
+    def refusing(self, where, post, error, *, times=1):
+        """The post's first `times` attempts are refused at `where` the way the shared budget refuses them: a create
+        permit it cannot get (reserve), a permit that ended before its intent was sealed (seal) or before it was used
+        (consume: the step is slow, the permit's life ends, and the coordinator's own check refuses)."""
+        left = [times]
+
+        def now(job_id):
+            if job_id == post and left[0] > 0:
+                left[0] -= 1
+                return True
+            return False
+        if where == 'reserve':
+            real = self.hosted.reserve_discord_send
+
+            def reserve(manifest, **kwargs):
+                if now(kwargs['job']['id']):
+                    raise error
+                return real(manifest, **kwargs)
+            with patch.object(self.hosted, 'reserve_discord_send', reserve):
+                yield
+        elif where == 'seal':
+            real = SharedPostgresBudget.seal
+
+            def seal(limiter, cur, permit, binding, intent_id, valid_until):
+                if now(binding['publicationId']):
+                    raise error
+                return real(limiter, cur, permit, binding, intent_id, valid_until)
+            with patch.object(SharedPostgresBudget, 'seal', seal):
+                yield
+        else:
+            assert where == 'consume', where
+            real = SharedPostgresBudget.consume
+
+            def consume(limiter, permit, method, path, *, binding=None, intent_id=None, authorize=None):
+                if now(binding['publicationId']):
+                    time.sleep(self.SLOW_BUDGET['permit_ttl_seconds'] + .3)
+                return real(limiter, permit, method, path, binding=binding, intent_id=intent_id, authorize=authorize)
+            with patch.object(SharedPostgresBudget, 'consume', consume):
+                yield
+
+    @staticmethod
+    def turns(claims):
+        """The claims with each immediate repeat of the same post taken out: a retry that kept its place is the same
+        turn again, so what is left is the order in which workspaces were served."""
+        return [claim for index, claim in enumerate(claims) if index == 0 or claim != claims[index - 1]]
+
+    def post(self, post_id):
+        return next(job for (_, job_id), job in F.jobs(self.cluster).items() if job_id == post_id)
+
+    def test_a_post_the_shared_budget_released_is_claimed_again_before_anything_else(self):
+        """The 5,000-post run: a create permit that ended unused sent its post behind its never-claimed sibling and its
+        workspace to the back of the round (median re-claim delay 729 s). Now the retry is the very next claim."""
+        for where, error in (('reserve', RateDelayed(2.0, scope='application')),
+                             ('seal', RateDelayed(.05, cause='permit_expired')),
+                             ('consume', None)):
+            with self.subTest(where):
+                self.cluster.reset()
+                posts, worker = self.queue_of_three()
+                with self.refusing(where, posts['A1'], error):
+                    self.drain(worker, 1, seconds=90)
+                claims = [job_id for _, job_id in self.claim_order()]
+                self.assertEqual(claims[:2], [posts['A1']] * 2, 'A1 again at once')
+                self.assertEqual([self.names(posts, job_id) for job_id in self.turns(claims)[:4]], ['A1', 'B1', 'C1', 'A2'],
+                                 'and the round goes on in order')
+                self.assertEqual(self.post(posts['A1'])['discordPositionRestores'], 1)
+                self.assertEqual(sorted({job['state'] for job in F.jobs(self.cluster).values()}), ['verified'])
+                self.assertEqual(self.wire.duplicates(), 0)
+                self.assertEqual(len(self.wire.creates[F.nonce(self.post(posts['A1']))]), 1, 'sent once, after the retry')
+
+    @staticmethod
+    def names(posts, job_id):
+        return next(name for name, wanted in posts.items() if wanted == job_id)
+
+    def test_control_the_old_penalty_sends_the_released_post_behind_its_sibling_and_the_round(self):
+        # What the same release did before: the claim's stamps stayed, so the retry waits for the round and for A2.
+        posts, worker = self.queue_of_three()
+        with patch.object(F.discord_lane.LaneWorker, '_discord_rate_released', lambda *args, **kwargs: None):
+            with self.refusing('reserve', posts['A1'], RateDelayed(2.0, scope='application')):
+                self.drain(worker, 1, seconds=90)
+        claims = [job_id for _, job_id in self.claim_order()]
+        self.assertEqual([self.names(posts, job_id) for job_id in claims[:5]], ['A1', 'B1', 'C1', 'A2', 'A1'])
+        self.assertNotIn('discordPositionRestores', self.post(posts['A1']))
+
+    def test_a_release_caused_by_one_tenants_resource_keeps_its_penalty(self):
+        """Otherwise workspaces sharing a full channel could take their turn over and over."""
+        causes = (('a learned channel window', 'reserve', RateDelayed(.2, scope='learned_route')),
+                  ('an unknown route', 'reserve', RateDelayed(.2, scope='unknown_route')),
+                  ('the cold-route probe', 'reserve', RateDelayed(.2, scope='discovery')),
+                  ('a guild-scoped embargo', 'reserve', RateDelayed(.2, scope='embargo')),
+                  ('a provider 429', 'reserve', RateDelayed(.2, cause='provider_429')),
+                  ('a window about to end', 'reserve', RateDelayed(.2, cause='window_expiring', scope='permit')),
+                  ('an embargo that blocked the permit', 'seal', RateDelayed(.2, cause='permit_blocked', scope='embargo')))
+        for name, where, error in causes:
+            with self.subTest(name):
+                self.cluster.reset()
+                posts, worker = self.queue_of_three()
+                with self.refusing(where, posts['A1'], error):
+                    self.drain(worker, 1, seconds=90)
+                claims = [job_id for _, job_id in self.claim_order()]
+                self.assertNotEqual(claims[1], posts['A1'], 'not claimed again at once')
+                self.assertEqual([self.names(posts, job_id) for job_id in claims[:4]], ['A1', 'B1', 'C1', 'A2'],
+                                 'the penalty: behind the round and its sibling')
+                self.assertNotIn('discordPositionRestores', self.post(posts['A1']))
+                self.assertEqual(sorted({job['state'] for job in F.jobs(self.cluster).values()}), ['verified'])
+
+    def test_a_transient_preflight_failure_keeps_its_penalty(self):
+        posts, worker = self.queue_of_three()
+        real, seen = self.hosted.prepare_discord_dispatch, []
+
+        def prepare(manifest, **kwargs):
+            if manifest['discord']['publicationId'] == posts['A1'] and not seen:
+                seen.append(1)
+                raise TimeoutError('synthetic preflight timeout')
+            return real(manifest, **kwargs)
+        with patch.object(self.hosted, 'prepare_discord_dispatch', prepare):
+            self.drain(worker, 1, seconds=90)
+        claims = [job_id for _, job_id in self.claim_order()]
+        self.assertEqual([self.names(posts, job_id) for job_id in claims[:5]], ['A1', 'B1', 'C1', 'A2', 'A1'])
+        self.assertNotIn('discordPositionRestores', self.post(posts['A1']))
+
+    def test_the_position_is_kept_three_times_for_one_post_and_then_the_penalty_applies(self):
+        posts, worker = self.queue_of_three()
+        with self.refusing('reserve', posts['A1'], RateDelayed(2.0, scope='application'), times=4):
+            self.drain(worker, 1, seconds=90)
+        claims = [job_id for _, job_id in self.claim_order()]
+        self.assertEqual([self.names(posts, job_id) for job_id in claims[:8]], ['A1', 'A1', 'A1', 'A1', 'B1', 'C1', 'A2', 'A1'],
+                         'three retries kept the place; the fourth release cost the turn')
+        self.assertEqual(self.post(posts['A1'])['discordPositionRestores'], 3)
+        self.assertEqual(sorted({job['state'] for job in F.jobs(self.cluster).values()}), ['verified'])
+
+    def fair_queue(self):
+        """The fairness queue with a smaller busy workspace (8 posts, first by id) and six of two posts each."""
+        tenants = sorted((F.Tenant(n) for n in range(7)), key=lambda tenant: tenant.id)
+        F.seed(self.cluster, tenants[:1], 8)
+        F.seed(self.cluster, tenants[1:], 2)
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, **self.SLOW_BUDGET)
+        return tenants, F.base_worker(self.cluster, self.hosted)
+
+    def expire_every_fourth_permit(self, injected):
+        real = SharedPostgresBudget.seal
+        count = [0]
+
+        def seal(limiter, cur, permit, binding, intent_id, valid_until):
+            count[0] += 1
+            if count[0] % 4 == 0:
+                injected.append((binding['publicationId'], len(self.claim_order())))
+                raise RateDelayed(.05, cause='permit_expired')
+            return real(limiter, cur, permit, binding, intent_id, valid_until)
+        return patch.object(SharedPostgresBudget, 'seal', seal)
+
+    def test_permit_expiries_do_not_change_the_rotation_or_any_workspaces_share_of_the_work(self):
+        """The busy-workspace fairness run with every fourth create permit ending unused. Each such release is
+        retried at once, and taking those retries out leaves the round-robin order untouched: a restored turn is
+        the same claim again, not an extra one, so no tenant completes more work than without the expiries."""
+        tenants, worker = self.fair_queue()
+        injected = []
+        with self.expire_every_fourth_permit(injected):
+            self.drain(worker, 1, seconds=90)
+        claims = self.claim_order()
+        self.assertGreaterEqual(len(injected), 4, 'the expiries happened')
+        for post, claimed_so_far in injected:
+            self.assertEqual(claims[claimed_so_far][1], post, 'the retry is the very next claim')
+        self.assert_rotation(tenants, claims)
+        self.assertEqual(sorted({job['state'] for job in F.jobs(self.cluster).values()}), ['verified'])
+        self.assertEqual(self.wire.duplicates(), 0)
+        shares = {tenant.id: sum(1 for creates in self.wire.creates.values() if creates and creates[0][1] == tenant.channel)
+                  for tenant in tenants}
+        self.assertEqual(shares, {tenants[0].id: 8, **{tenant.id: 2 for tenant in tenants[1:]}})
+
+    def test_control_without_the_restore_the_same_expiries_cost_every_released_post_its_turn(self):
+        tenants, worker = self.fair_queue()
+        injected = []
+        with patch.object(F.discord_lane.LaneWorker, '_discord_rate_released', lambda *args, **kwargs: None):
+            with self.expire_every_fourth_permit(injected):
+                self.drain(worker, 1, seconds=90)
+        claims = self.claim_order()
+        early = [(post, claimed_so_far) for post, claimed_so_far in injected if claimed_so_far < 12]  # others still due
+        self.assertGreaterEqual(len(early), 2)
+        for post, claimed_so_far in early:
+            self.assertNotEqual(claims[claimed_so_far][1], post, 'the retry waits behind the other workspaces')
 
 
 if __name__ == '__main__':

@@ -14,6 +14,7 @@ invalid-request budget) is slept out instead of claiming work that cannot be sen
 soon. It never extends an approval, a lease or a permit, never retries a create, and stops admitting steps early
 enough that the last one ends inside the function's time limit.
 """
+import copy
 import json
 import logging
 import math
@@ -66,6 +67,9 @@ LAG_WARNING_SECONDS = 300
 # not a document but the claim code itself, and raises as before.
 QUARANTINE_SECONDS = 300
 MAX_QUARANTINES_PER_CLAIM = 2
+# A post the shared budget released unsent (the application window spent, or a create permit that ended unused) keeps
+# its place in the queue, at most this many times; after that the release costs the turn as it always did.
+MAX_POSITION_RESTORES = 3
 SHAPE_ERRORS = (AttributeError, IndexError, KeyError, TypeError, ValueError)
 _SHARD = re.compile(r'^(0|[1-9][0-9]?)$')
 _GUARDS = ('00:', '10:', '11:', '20:')  # application policy, bot global, bot credential, invalid-request budget
@@ -83,7 +87,7 @@ _CLAIMABLE = '''SELECT extract(epoch from clock_timestamp())::double precision,m
     WHERE next_at IS NOT NULL AND last_claimed_at<=extract(epoch from clock_timestamp())::double precision'''
 COUNTERS = ('steps', 'claimed', 'posted', 'verified', 'held', 'uncertain', 'rateDelayed', 'leaseLost', 'recoveries',
             'retries', 'deadLetters', 'claimMisses', 'rejected', 'notSent', 'uncertainCreates', 'rateWaits', 'idleWaits',
-            'permitWaits', 'quarantined')
+            'permitWaits', 'quarantined', 'positionsKept')
 _QUARANTINED = [0]  # workspaces this process has set aside since it started; a count, never an identifier
 _QUARANTINE_LOCK = threading.Lock()
 
@@ -169,9 +173,10 @@ class LaneWorker(PostgresWorker):
                          on_verified=getattr(base, 'on_verified', None),
                          worker_binding=getattr(base, 'worker_binding', None), discord_workers=True)
         self.environment = values  # what this invocation was started with, for blocker()
-        self.lane_counts = dict.fromkeys(('posted', 'verified', 'rejected', 'notSent', 'uncertainCreates'), 0)
+        self.lane_counts = dict.fromkeys(('posted', 'verified', 'rejected', 'notSent', 'uncertainCreates', 'positionsKept'), 0)
         self.discord_stats['quarantined'] = 0
         self._examining = None  # the workspace the claim is reading, so a failure of its document can be pinned on it
+        self._before = None  # that workspace's queue position as the claim found it (see _discord_rate_released)
 
     def _discord_candidates(self, cur):
         """The inherited selection, except that a workspace set aside (see claim) is not offered again until its
@@ -182,6 +187,11 @@ class LaneWorker(PostgresWorker):
             if discord_worker.finite(until) and until > self.clock():
                 continue
             self._examining = row[0]
+            phase2 = row[2].get('phase2') if isinstance(row[2], dict) else None
+            jobs = phase2.get('jobs') if isinstance(phase2, dict) else None
+            self._before = {'workspace': row[0], 'cursor': copy.deepcopy(cursor),
+                            'dispatched': {job['id']: job.get('lastDispatchedAt') for job in jobs
+                                           if isinstance(job, dict) and 'id' in job} if isinstance(jobs, list) else {}}
             yield row
             self._examining = None  # only reached when the claim went on to the next candidate
 
@@ -197,9 +207,14 @@ class LaneWorker(PostgresWorker):
         if not options.get('discord_only') or scoped:
             return super().claim(**options)
         for attempt in range(MAX_QUARANTINES_PER_CLAIM + 1):
-            self._examining = None
+            self._examining = self._before = None
             try:
-                return super().claim(**options)
+                selected = super().claim(**options)
+                before = self._before
+                if selected and not selected.get('reconciliation') and before and before['workspace'] == selected['workspaceId']:
+                    selected['positionBefore'] = {'cursor': before['cursor'],
+                                                  'lastDispatchedAt': before['dispatched'].get(selected['job'].get('id'))}
+                return selected
             except SHAPE_ERRORS as error:
                 workspace = self._examining
                 if workspace is None or attempt == MAX_QUARANTINES_PER_CLAIM:
@@ -208,6 +223,35 @@ class LaneWorker(PostgresWorker):
                     self._quarantine(workspace, error)
                 except Exception:
                     raise error from None  # it could not be set aside: the failure stays what it was
+
+    def _discord_rate_released(self, state, job, claimed, now, *, scope, cause):
+        """F2: a post released unsent because of the shared budget keeps its place in the queue.
+
+        A claim stamps the post's lastDispatchedAt and the workspace's rotation cursor before the preflight, so a
+        release used to send the post behind its never-claimed siblings and its workspace to the back of the round
+        (median re-claim delay 729 s in the 5,000-post run, for the 25 percent of workspaces it hit). When the cause
+        is system-wide (the application window was spent, or a create permit ended unused) both stamps are put back
+        as the claim found them and the retry is due at once. Causes that are one tenant's resource (a learned or
+        unknown route or channel window, an embargo, a provider 429), and a transient preflight, keep the penalty:
+        otherwise workspaces sharing a full channel could take their turn over and over. At most
+        MAX_POSITION_RESTORES times per post, whatever else bounds its retries. Ordering metadata only: no
+        authorization, lease or intent changes."""
+        before = claimed.get('positionBefore')
+        if (not before or job.get('state') != 'scheduled' or not (scope == 'application' or cause == 'permit_expired')
+                or job.get('discordPositionRestores', 0) >= MAX_POSITION_RESTORES):
+            return
+        phase2 = state['phase2']
+        if before['cursor'] is None:
+            phase2.pop(discord_worker.CURSOR, None)
+        else:
+            phase2[discord_worker.CURSOR] = copy.deepcopy(before['cursor'])
+        if before['lastDispatchedAt'] is None:
+            job.pop('lastDispatchedAt', None)
+        else:
+            job['lastDispatchedAt'] = before['lastDispatchedAt']
+        job['nextAt'] = job[discord_worker.KEY]['rateDelayedUntil'] = now
+        job['discordPositionRestores'] = job.get('discordPositionRestores', 0) + 1
+        self.lane_counts['positionsKept'] += 1
 
     def _quarantine(self, workspace_id, error):
         """Put the workspace behind every other one for QUARANTINE_SECONDS: its rotation cursor is dated that far ahead

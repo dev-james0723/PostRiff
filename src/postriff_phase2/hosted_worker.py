@@ -273,7 +273,12 @@ class PostgresWorker:
                 self.discord_stats['renewals'] += 1
             return allowed
 
-    def release_discord_unsent(self, claimed, *, reason='shutdown', retry_after_seconds=None, rate_cause=None):
+    def _discord_rate_released(self, state, job, claimed, now, *, scope, cause):
+        """Called in a release's own transaction, after the post went back to scheduled for a rate wait and before the
+        document is written, with the denial's scope kind and cause. Nothing here: the lane's worker decides whether
+        the post keeps its queue position (discord/lane.py)."""
+
+    def release_discord_unsent(self, claimed, *, reason='shutdown', retry_after_seconds=None, rate_cause=None, rate_scope=None):
         """Only the current owner can release a proven pre-intent operation."""
         with self.connection_factory() as db, db.cursor() as cur:
             cur.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (claimed['workspaceId'],))
@@ -297,6 +302,8 @@ class PostgresWorker:
             if job.get('cancelRequested'):
                 status = 'canceled'
             self._event(job, status, 'Proven unsent Discord operation released: ' + reason, at=now)
+            if reason == 'rate_delayed':
+                self._discord_rate_released(state, job, claimed, now, scope=rate_scope, cause=rate_cause)
             cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
                         (json.dumps(state), claimed['workspaceId'], revision))
             if cur.rowcount != 1:
@@ -1039,6 +1046,7 @@ class PostgresWorker:
                                 if error.rate_cause == 'permit_blocked' else
                                 'Discord rate permit expired before intent; frozen approval waits without a POST', at=now)
                     self.discord_stats['rateDelays'] += 1
+                    self._discord_rate_released(state, job, claimed, now, scope=error.rate_scope_kind, cause=error.rate_cause)
                 else:
                     self._event(job,'held','Discord pre-intent permit recovery limit reached; nothing was posted',at=now)
                     job['leaseOwner'],job['leaseUntil'] = None,0
@@ -1145,6 +1153,7 @@ class PostgresWorker:
             self._event(job, status, ('A Discord embargo blocked the sealed permit before it was consumed; no POST was '
                                       'started; intent archived before safe rate wait') if blocked else
                         'Expired Discord permit was never consumed; intent archived before safe rate wait', at=now)
+            self._discord_rate_released(state, job, claimed, now, scope=error.rate_scope_kind, cause=error.rate_cause)
             cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
                 (json.dumps(state), claimed['workspaceId'], revision))
             if cur.rowcount != 1:
@@ -1236,7 +1245,7 @@ class PostgresWorker:
                     self.release_discord_unsent(
                         claimed, reason='rate_delayed',
                         retry_after_seconds=getattr(error, 'retry_after_seconds', 300),
-                        rate_cause=getattr(error,'rate_cause',None))
+                        rate_cause=getattr(error,'rate_cause',None), rate_scope=getattr(error,'rate_scope_kind',None))
                     return True
                 if managed and discord_worker.transient_preflight(error):
                     self.release_discord_unsent(claimed, reason='preflight_transient')

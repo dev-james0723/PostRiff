@@ -1023,7 +1023,7 @@ class Quarantine(unittest.TestCase):
             worker._examining = WORKSPACE
             if len(calls) <= len(errors):
                 raise errors[len(calls) - 1]
-            return 'claimed'
+            return {'workspaceId': WORKSPACE, 'job': {'id': 'claimed'}, 'reconciliation': True}
         return patch.object(PostgresWorker, '_claim', claim), calls
 
     def test_a_failure_reading_a_document_sets_that_workspace_aside_and_the_claim_goes_on(self):
@@ -1031,7 +1031,7 @@ class Quarantine(unittest.TestCase):
             with self.subTest(error=type(error).__name__):
                 replaced, calls = self.failing_claim([error])
                 with replaced, patch.object(lane.LaneWorker, '_quarantine') as quarantine:
-                    self.assertEqual(self.worker.claim(discord_only=True), 'claimed')
+                    self.assertEqual(self.worker.claim(discord_only=True)['job']['id'], 'claimed')
                 self.assertEqual(len(calls), 2, 'the claim ran again')
                 quarantine.assert_called_once_with(WORKSPACE, error)
 
@@ -1107,6 +1107,114 @@ class Quarantine(unittest.TestCase):
         self.assertEqual(claimed['workspaceId'], WORKSPACE)
         self.assertNotIn('quarantinedUntil', self.db.state['phase2'][hosted_worker.discord_worker.CURSOR],
                          'the first normal claim clears the mark')
+
+
+class PositionKept(unittest.TestCase):
+    """F2: a release the shared budget caused puts the claim's stamps back. The cross-workspace order, with real
+    rotation, is in test_discord_parallel_lane_postgres.py (section n); here the rule on one document."""
+    CURSOR = hosted_worker.discord_worker.CURSOR
+
+    def setUp(self):
+        for item in (patch.dict(security_holds._INSTALLED, {'readable': True, 'checked': float('-inf')}),
+                     patch('postriff_phase2.billing.require_publishing', return_value=None),
+                     patch('socket.socket.connect', side_effect=AssertionError('Real network forbidden'))):
+            item.start()
+            self.addCleanup(item.stop)
+        self.db = MemoryDatabase(FlagOffIsTheFrozenBase.queue())
+        self.base = PostgresWorker(self.db.connection, discord_social(self.db.connection), clock=lambda: NOW + 301,
+                                   worker_id='minute-worker', discord_workers=True)
+        self.worker = lane.LaneWorker(self.base, 0)
+
+    def jobs(self):
+        return self.db.state['phase2']['jobs']
+
+    def released(self, worker=None, *, scope='application', cause='rate_budget', reason='rate_delayed', seconds=2.0):
+        """Claim the first due post and release it unsent, the way step() does for a refused permit."""
+        worker = worker or self.worker
+        claimed = worker.claim(discord_only=True)
+        self.assertEqual(claimed['workspaceId'], WORKSPACE)
+        self.assertTrue(worker.release_discord_unsent(claimed, reason=reason, retry_after_seconds=seconds,
+                                                      rate_cause=cause, rate_scope=scope))
+        return claimed
+
+    def test_a_spent_application_window_or_an_unused_permit_puts_the_stamps_back_and_the_retry_is_due_at_once(self):
+        for name, scope, cause in (('application window', 'application', 'rate_budget'),
+                                   ('permit ended before the seal', 'unknown', 'permit_expired'),
+                                   ('permit ended before use', 'permit', 'permit_expired')):
+            with self.subTest(name):
+                self.setUp()
+                claimed = self.released(scope=scope, cause=cause)
+                self.assertEqual(claimed['positionBefore'], {'cursor': None, 'lastDispatchedAt': None})
+                job = next(job for job in self.jobs() if job['id'] == claimed['job']['id'])
+                self.assertEqual((job['state'], job['leaseOwner']), ('scheduled', None))
+                self.assertNotIn('lastDispatchedAt', job, 'as the claim found it')
+                self.assertNotIn(self.CURSOR, self.db.state['phase2'], 'the workspace turn is back too')
+                self.assertEqual((job['nextAt'], job['discordWorker']['rateDelayedUntil']), (self.db.now, self.db.now))
+                self.assertEqual(job['discordPositionRestores'], 1)
+                self.assertEqual(self.worker.lane_counts['positionsKept'], 1)
+                again = self.worker.claim(discord_only=True)
+                self.assertEqual(again['job']['id'], claimed['job']['id'], 'the same post is the very next claim')
+
+    def test_the_values_the_claim_found_are_the_values_that_come_back(self):
+        self.db.state['phase2'][self.CURSOR] = {'version': 1, 'lastClaimedAt': 123.5}
+        self.jobs()[0]['lastDispatchedAt'] = 77.0
+        self.released()
+        self.assertEqual(self.jobs()[0]['lastDispatchedAt'], 77.0)
+        self.assertEqual(self.db.state['phase2'][self.CURSOR], {'version': 1, 'lastClaimedAt': 123.5})
+
+    def test_a_release_one_tenants_resource_caused_keeps_the_claims_stamps(self):
+        for scope, cause in (('learned_route', 'rate_budget'), ('unknown_route', 'rate_budget'), ('discovery', 'rate_budget'),
+                             ('embargo', 'rate_budget'), ('embargo', 'permit_blocked'), ('unknown', 'provider_429'),
+                             ('permit', 'window_expiring'), (None, None)):
+            with self.subTest(scope=scope, cause=cause):
+                self.setUp()
+                claimed = self.released(scope=scope, cause=cause, seconds=2.0)
+                job = next(job for job in self.jobs() if job['id'] == claimed['job']['id'])
+                self.assertEqual(job['lastDispatchedAt'], self.db.now, 'the penalty')
+                self.assertEqual(self.db.state['phase2'][self.CURSOR], {'version': 1, 'lastClaimedAt': self.db.now})
+                self.assertEqual(job['nextAt'], self.db.now + 2.0)
+                self.assertNotIn('discordPositionRestores', job)
+                self.assertEqual(self.worker.lane_counts['positionsKept'], 0)
+
+    def test_a_release_that_is_not_a_rate_wait_keeps_the_claims_stamps(self):
+        for reason in ('preflight_transient', 'shutdown'):
+            with self.subTest(reason):
+                self.setUp()
+                claimed = self.released(reason=reason, scope='application', cause='permit_expired')
+                job = next(job for job in self.jobs() if job['id'] == claimed['job']['id'])
+                self.assertEqual(job['lastDispatchedAt'], self.db.now)
+                self.assertNotIn('discordPositionRestores', job)
+
+    def test_the_position_is_kept_for_three_releases_of_a_post_and_then_it_is_not(self):
+        for number in range(1, lane.MAX_POSITION_RESTORES + 1):
+            claimed = self.released()
+            job = next(job for job in self.jobs() if job['id'] == claimed['job']['id'])
+            self.assertEqual((job['discordPositionRestores'], 'lastDispatchedAt' in job), (number, False))
+        self.assertEqual(lane.MAX_POSITION_RESTORES, 3)
+        claimed = self.released()
+        job = next(job for job in self.jobs() if job['id'] == claimed['job']['id'])
+        self.assertEqual((job['discordPositionRestores'], job['lastDispatchedAt']), (3, self.db.now), 'the fourth costs the turn')
+        self.assertEqual(self.db.state['phase2'][self.CURSOR], {'version': 1, 'lastClaimedAt': self.db.now})
+        self.assertEqual(self.worker.lane_counts['positionsKept'], 3)
+
+    def test_a_release_that_ends_in_a_hold_or_a_cancellation_changes_no_stamp(self):
+        # The rate wait outlasts the approval: the post is held, and a held post has no place in a queue.
+        claimed = self.worker.claim(discord_only=True)
+        self.assertTrue(self.worker.release_discord_unsent(claimed, reason='rate_delayed', retry_after_seconds=10 ** 7,
+                                                           rate_cause='rate_budget', rate_scope='application'))
+        job = next(job for job in self.jobs() if job['id'] == claimed['job']['id'])
+        self.assertEqual(job['state'], 'held')
+        self.assertEqual(job['lastDispatchedAt'], self.db.now)
+        self.assertNotIn('discordPositionRestores', job)
+
+    def test_only_the_lane_worker_keeps_the_position_the_minute_workers_release_is_the_frozen_one(self):
+        claimed = self.base.claim(discord_only=True)
+        self.assertNotIn('positionBefore', claimed)
+        self.assertTrue(self.base.release_discord_unsent(claimed, reason='rate_delayed', retry_after_seconds=2.0,
+                                                         rate_cause='rate_budget', rate_scope='application'))
+        job = next(job for job in self.jobs() if job['id'] == claimed['job']['id'])
+        self.assertEqual(job['lastDispatchedAt'], self.db.now)
+        self.assertNotIn('discordPositionRestores', job)
 
 
 if __name__ == '__main__':

@@ -10,15 +10,15 @@ read from the code.
 | File | Change |
 |---|---|
 | `src/postriff_phase2/discord/lane.py` (new) | The lane: flag and budget parsing, shard parsing, the readiness test (`blocker`), one bounded loop per invocation, the pre-claim coordinator read, the bounded wait for a refused create permit, per-invocation counters and the log line; the minute cron's lag warning (`warn_if_lagging`); the health status (`status`); the worker's guard for a document it cannot read (`LaneWorker.claim`). |
-| `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` only when the lane is on and the static part of `lane.blocker()` says it can run (the minute cron then does not claim Discord), and with the lane on adds the health status (`discordLaneStatus`) and logs the lag warning from its own report and, when the lane owns Discord, the projection; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below). After review: the seal path and the unsent-permit recovery also release a permit an embargo or hold blocked before it was used ("A permit an embargo blocks before it is used"). |
+| `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` only when the lane is on and the static part of `lane.blocker()` says it can run (the minute cron then does not claim Discord), and with the lane on adds the health status (`discordLaneStatus`) and logs the lag warning from its own report and, when the lane owns Discord, the projection; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below). After review: the seal path and the unsent-permit recovery also release a permit an embargo or hold blocked before it was used ("A permit an embargo blocks before it is used"); the three releases for a rate wait call a hook that does nothing here and that the lane's worker uses to keep a post's place ("A release the shared budget caused keeps its place"). |
 | `src/postriff_phase2/discord/rate_limits.py`, `src/postriff_phase2/social_connectors.py` | After review, at the coordinator's request: `seal()` and `consume()` refuse a reserved or sealed permit that an embargo or hold blocked, before any transport, as `permit_blocked` (with the embargo's remaining time), `confirm_blocked_publish()` proves such an intent unsent from its admission row, and the sender turns that refusal into the same pre-transport signal as an expired unconsumed permit ("A permit an embargo blocks before it is used", below). |
 | `src/postriff_phase2/hosted_app.py` | Route `GET /api/cron/discord-worker/<shard>`: cron secret checked before the runtime starts (as the YouTube lanes); flag read per request; the request log files it under `cron`. |
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
-| `tests/test_discord_parallel_lane.py` (new) | 77 offline tests (run under the synthetic fence). |
+| `tests/test_discord_parallel_lane.py` (new) | 84 offline tests (run under the synthetic fence). |
 | `tests/test_discord_worker_lifecycle.py` | Its in-memory database double answers the lane's projection due probe. |
-| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 48 real-PostgreSQL tests and their fixture; skipped under the fence. |
+| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 55 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
 | `docs/w02/*` (new) | This file, the corrected plan, open questions, monitors, simulation results. |
 
@@ -133,7 +133,7 @@ time [simulated]. It adds a new path that can multiply invocations, which the co
      misses or when nothing is due soon.
 5. One log line, `discord.lane.completed`: shard, `stoppedBy`, elapsed seconds and counts only (claimed, posted,
    verified, held, uncertain, rateDelayed, leaseLost, recoveries, retries, deadLetters, claimMisses, rejected, notSent,
-   uncertainCreates, rateWaits, idleWaits, permitWaits, quarantined). No workspace, job, channel, content or lease owner id. An
+   uncertainCreates, rateWaits, idleWaits, permitWaits, quarantined, positionsKept). No workspace, job, channel, content or lease owner id. An
    exception is logged with its class name only and re-raised, so the request returns 500 with its failure site.
 
 The one behavioural addition inside a step: when the create permit is refused because the application window is spent,
@@ -191,6 +191,7 @@ leaves Discord to the lane, and only its own loops stop.
 | One database connection per loop at a time | sequential transactions, none held across HTTP | `test_each_loop_holds_one_database_connection_at_a_time` |
 | The last step ends inside the function limit | admission deadline, budget capped at 90 s (a larger setting is clamped) | offline `test_no_budget_can_outlast_the_function_limit_with_one_step_in_flight`, `test_a_budget_above_ninety_seconds_is_clamped_to_ninety`, `test_a_configured_120_seconds_runs_for_90`, `test_no_step_starts_after_the_budget_...` |
 | One malformed job document stops only its own workspace | the lane's claim pins a failure of reading a document on the workspace being read and sets it aside for 300 s (its rotation cursor dated ahead), then goes on | `test_a_job_document_the_claim_cannot_read_stops_only_its_own_workspace`, `test_a_workspace_set_aside_is_skipped_until_its_window_ends_and_a_repaired_document_is_claimed_again`, `test_the_malformed_shapes_the_claim_already_handles_never_reach_the_guard`, `test_a_failure_in_every_workspace_is_the_claim_code_not_a_document_and_still_raises`; offline `Quarantine` |
+| A release the shared budget caused does not cost the tenant its turn, and no tenant gets more work for it | the post's `lastDispatchedAt` and the workspace cursor are put back, the retry is due at once, at most 3 times per post, system-wide causes only | `test_a_post_the_shared_budget_released_is_claimed_again_before_anything_else`, `test_permit_expiries_do_not_change_the_rotation_or_any_workspaces_share_of_the_work`, `test_the_position_is_kept_three_times_for_one_post_and_then_the_penalty_applies`; a tenant's own resource keeps the penalty: `test_a_release_caused_by_one_tenants_resource_keeps_its_penalty`, `test_a_transient_preflight_failure_keeps_its_penalty`; controls: `test_control_the_old_penalty_...`, `test_control_without_the_restore_...`; offline `PositionKept` |
 | Flag off, or on with the lane unable to run, is the frozen behaviour | flag read as the exact string; one readiness test (`lane.blocker`) for the tick (its static part) and the lane (the full rule); equivalence with `2a5a523d` | offline `FlagOffIsTheFrozenBase`, `LaneReadiness`, `ExistingTick` |
 
 How the PostgreSQL tests stay off the runner's clock (an early CI run failed the id-ordered fairness control with 19
@@ -275,6 +276,37 @@ shows the same lag); a document that stays broken is found again every 300 s, on
 this process's events since it started, other processes count their own. The guard is the lane's worker only, so the
 minute cron's frozen Discord path (flag off, or the lane unable to run) keeps the old behaviour and
 `FlagOffIsTheFrozenBase` stays true byte for byte.
+
+## A release the shared budget caused keeps its place
+
+A claim stamps the post's `lastDispatchedAt` and the workspace's rotation cursor before the preflight. A post released
+unsent because a create permit ended unused used to go behind its never-claimed siblings, and its workspace to the back of
+the round, though it had completed nothing: in the 5,000-post run [independent review of the capacity receipt] 503 of 2,000
+workspaces were hit, a released post's median re-claim delay was 729 s, and those workspaces' posts were 26.6 minutes late
+against 15.3 for the others.
+
+When the denial is system-wide (the application window was spent: `rate_scope_kind` `application`; or a create permit
+ended unused: `rate_cause` `permit_expired`, before the seal or sealed and not consumed) the lane's worker
+(`LaneWorker._discord_rate_released`, called by the three rate releases in their own transaction) puts both stamps back as the
+claim found them (kept in memory from the candidate it read, never stored) and makes the retry due at once. Restoring only one
+of the two does almost nothing [reviewer's model: the workspace's next claim takes a due read-back and spends the turn], so
+both are restored. At most `MAX_POSITION_RESTORES` (3) times per post (`discordPositionRestores` on the job, counted per
+invocation as `positionsKept`); the retries stay bounded as before (`ratePermitRetries` at most 8, `rateReadRetries` under 3).
+A release that one tenant's resource caused keeps today's penalty: a learned or unknown route or channel window, the cold-route
+probe, an embargo (also one that blocked a permit), a provider 429, a window about to end, and a transient preflight failure;
+otherwise workspaces sharing a full channel could take their turn over and over. So does a post that is held or canceled by
+the release. The base worker's hook does nothing, so the minute cron's frozen path is unchanged.
+
+Why this is fair [reasoned; the rotation and shares measured in `test_permit_expiries_do_not_change_the_rotation_or_any_workspaces_share_of_the_work`]:
+1. The round robin gives each tenant one claim per round while others wait: it bounds a tenant's share of *completed* work.
+   A claim released unsent completed none and spent shared admissions, so counting it as the tenant's turn charged the tenant
+   for a system event, and a random quarter of the tenants carried the system's failure.
+2. A restored turn is the same claim again, not an extra one. A tenant still completes at most one create per round while
+   others wait; the retry is the claim that was released, bounded as above, and other tenants lose at most that retried claim,
+   whose cost was spent anyway. With every fourth create permit ending unused, taking the immediate retries out leaves the
+   round-robin order and every workspace's number of posts as without the expiries.
+3. Only ordering metadata changes. `lastDispatchedAt` orders a workspace's jobs at claim; the cursor orders workspaces and feeds
+   the projection. No approval, lease, intent, permit or check changes.
 
 ## Fail-safe behaviour
 
