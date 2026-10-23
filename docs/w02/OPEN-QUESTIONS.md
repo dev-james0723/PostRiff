@@ -26,7 +26,11 @@ window until someone reviews it (its documented conservative rule). Effects: one
 lost per dead request; on a route whose limits were not learned yet (the first request to that route for that server or
 channel) the route's single probe stays spent, so later posts to that channel wait unsent until review; a dead create
 also leaves its job 'uncertain' for manual reconciliation [measured: tests (a), the cold-route test]. Nothing is ever
-sent twice. There is no reviewed procedure to release such a row today. More concurrent loops mean more requests in
+sent twice. That wait is not idle [measured, rollback run]: every claim of such a post is refused and released for
+about a second (the unknown-route window), by the minute cron and by lane loops alike, and each churn adds three events
+to the job (113 claims in 60 s for two posts, with the minute cron ticking every 0.2 s), so the job's history and the
+workspace row grow, and every churn writes the workspace, until the admission is reviewed. There is no reviewed
+procedure to release such a row today. More concurrent loops mean more requests in
 flight at any instant, so W-02 raises the exposure. Options: a reviewed operator procedure (monitor M5 finds the rows);
 or an automatic release of unanswered reads after a fixed age (a read that left two minutes ago cannot still be using a
 one-second window), creates only after their job is reconciled. This is a coordinator change and needs the coordinator's

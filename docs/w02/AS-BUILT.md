@@ -16,7 +16,7 @@ read from the code.
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
 | `tests/test_discord_parallel_lane.py` (new) | 66 offline tests (run under the synthetic fence). |
-| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 24 real-PostgreSQL tests and their fixture; skipped under the fence. |
+| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 34 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
 | `docs/w02/*` (new) | This file, the corrected plan, open questions, monitors, simulation results. |
 
@@ -203,6 +203,26 @@ quoted texts are the events and next actions the existing worker writes.
 | Shard crons not reaching the function | leaves Discord to the lane | nothing runs | waits; held after its approval's hour | no lane lines; `discord.lane.lagging` after five minutes |
 | Projection missing | leaves Discord to the lane | stop at once, `schema` | waits; held after its approval's hour | WARNING lines; `discord.lane.lagging` |
 | Embargo, circuit, spent window or invalid-request budget | leaves Discord to the lane | sleep it out, or stop with `rate_wait` | later than scheduled | M4; `rate_wait` lines |
+
+Recovery, measured on real PostgreSQL (`test_discord_parallel_lane_postgres.py`, section (i)): with rate limits off,
+an expired policy or no coordinator the shards claim nothing and the minute cron does what the rows above say; once the
+configuration is repaired, the lane creates every post still inside its approval exactly once and never sends a held
+one (with rate limits off every post was already held, so nothing is sent). A gap of minutes without shard crons logs
+`discord.lane.lagging` every minute (`laneOwnsDiscord` true) while nothing is sent; when the crons return the backlog
+drains exactly once and fairly, and the warning stops. A policy that expires mid-run stops every loop
+(`coordinator_unavailable`); nothing is claimed or created after it, and renewal resumes, leaving at most the step each
+loop had in flight for review (refused at the seal it is held, refused at the create it is uncertain with nothing
+sent; in two characterization runs every such step was released instead, and sent after renewal).
+
+Rollback, measured the same way (section (j)): turning the flag off on a new build while old lane invocations still
+run, with one post leased by a loop that died mid-step, lets the frozen minute cron and the old loops work side by
+side; the dead lease is recovered once, as provably unsent, after it expires, and every post is created exactly once.
+Rolling back to the frozen `2a5a523d` worker itself while a lane worker id holds a lease: that worker leaves the
+workspace alone while the lease lives, then recovers the post only as unsent (sent once), or, when the post has a
+sealed intent or Discord already accepted it, marks it uncertain and never creates it again. Turning the flag off
+and on again keeps every post exactly once (off: the shards answer disabled and the minute cron sends; on: the
+minute cron claims no Discord). The operator hold stops every loop within its iteration: no loop claims more than
+once after the hold, every create after it was claimed before it, and lifting the hold resumes exactly once.
 
 ## Health status
 
