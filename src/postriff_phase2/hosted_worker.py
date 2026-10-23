@@ -1227,7 +1227,9 @@ class PostgresWorker:
                 if managed and discord_worker.transient_preflight(error):
                     self.release_discord_unsent(claimed, reason='preflight_transient')
                     return True
-                self.complete(claimed, {'state': 'held', 'confirmed': 'Discord destination, grant, media or rollout verification is unavailable. Nothing was posted.',
+                switched_off = getattr(error, 'code', None) == 'discord_sender_names_disabled'
+                self.complete(claimed, {'state': 'held', 'confirmed': ('Discord custom sender names are switched off; nothing was posted.' if switched_off
+                                                                         else 'Discord destination, grant, media or rollout verification is unavailable. Nothing was posted.'),
                                         'discordDeliveryEvidence': 'not_sent'})
                 return True
         if claimed.get('linkedinForward'):

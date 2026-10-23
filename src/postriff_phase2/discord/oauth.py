@@ -103,6 +103,18 @@ class DiscordConnections:
         from .sender_names import SenderNames
         return SenderNames(self, workspace, token, connection).set(body)
 
+    def nickname_contenders(self, cur, workspace, connection, guild):
+        """How many OTHER live bot installations of this server exist (any workspace). A count, never an identifier.
+
+        The bot's nickname is one value per server, but any workspace whose authorizer manages the server can hold an
+        installation of it. Rafii therefore writes that nickname only while this installation is the server's only live
+        one: for two workspaces to both pass this check, each would have to commit its installation row after the other's
+        check, which is impossible because a connection is only editable once its own row exists. The check runs in the
+        final guard immediately before the provider write. Revoked rows (disconnect, identity loss) do not count.
+        """
+        cur.execute("SELECT count(*) FROM public.pr_encrypted_credentials WHERE provider='discord' AND provider_account_id=%s AND 'bot' = ANY(scopes) AND revoked_at IS NULL AND NOT (workspace_id=%s AND connection_id=%s)", (guild, workspace, connection))
+        return int(cur.fetchone()[0])
+
     def read_credential(self, cur, workspace, connection):
         cur.execute("SELECT access_ciphertext,key_id,refresh_ciphertext,extract(epoch from access_expires_at),authorization_generation::text,scopes,provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='discord' AND revoked_at IS NULL FOR NO KEY UPDATE", (workspace, connection))
         row = cur.fetchone()

@@ -4,6 +4,7 @@ All transport and custody are synthetic; this never contacts Discord or a DB.
 """
 import copy
 import json
+import os
 import unittest
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -155,6 +156,11 @@ class SettingsHarness:
         self.s.validate_installation = Mock()
         self.s.reverify_installation = Mock()
         self.s.reverify_webhook = Mock()
+        # POSTs refresh only the linked identity (never the connection's verified state); no other workspace shares
+        # the server unless a test says so (the real count is proven against PostgreSQL elsewhere).
+        self.s._fresh_identity = Mock()
+        self.other_installations = 0
+        self.s.nickname_contenders = lambda *_: self.other_installations
         self.s.adapter.webhook_v1_enabled = True
         self.wire = HookWire() if kind == 'webhook' else SyntheticWire()
         def transport(method, url, **kwargs):
@@ -169,9 +175,9 @@ class SettingsHarness:
             response = self.wire(method, url, **kwargs)
             if path == f'/guilds/{GUILD}':
                 response['body']['roles'] = [
-                    {'id': GUILD, 'permissions': str((1 << 10) | (1 << 11))},
-                    {'id': '11223344', 'permissions': str(self.user_permissions)},
-                    {'id': '22334455', 'permissions': str(self.bot_permissions)},
+                    {'id': GUILD, 'permissions': str((1 << 10) | (1 << 11)), 'position': 0},
+                    {'id': '11223344', 'permissions': str(self.user_permissions), 'position': 5},
+                    {'id': '22334455', 'permissions': str(self.bot_permissions), 'position': 2},
                 ]
             if path == f'/guilds/{GUILD}/members/{USER}':
                 response['body']['roles'] = ['11223344']
@@ -190,7 +196,9 @@ class SettingsHarness:
     def call(self, case, operation, *args):
         method = getattr(self.s, operation, None)
         case.assertTrue(callable(method), 'Discord customer sender-name settings are missing')
-        with patch('postriff_phase2.hosted.audit'):
+        with patch('postriff_phase2.hosted.audit'), patch('postriff_phase2.hosted.throttle'), \
+                patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true',
+                                        'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}):
             return method(WORKSPACE, 'synthetic-session', self.channel['id'], *args)
 
 
@@ -317,7 +325,9 @@ class SenderSettings(unittest.TestCase):
         h = SettingsHarness('bot')
         h.channel['discordSenderEdit'] = {'id': 'expired-edit', 'name': 'Old', 'expiresAt': NOW - 1}
         replacement = {'id': 'new-edit', 'name': 'New', 'expiresAt': NOW + 120}
-        h.s.reverify_installation.side_effect = lambda *_args, **_kwargs: h.channel.update(discordSenderEdit=replacement)
+        # The replacement appears while the recovery read is in flight (a settings page no longer reverifies the
+        # connection, so the race is injected at the provider read itself).
+        h.after_read = lambda: h.channel.update(discordSenderEdit=replacement)
         with self.assertRaises(AlphaError): h.call(self, 'sender_profile')
         self.assertEqual(h.channel['discordSenderEdit'], replacement)
 

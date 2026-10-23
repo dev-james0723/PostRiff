@@ -779,8 +779,11 @@ def _decide(state: dict, root: dict, payload: dict, actor: str, now: float) -> d
             resource = discord_destination(state, channel, selected_id)
             if payload.get('destinationId') != selected_id or payload.get('destinationGeneration') != resource['resourceGeneration']:
                 raise AlphaError('The Discord destination changed. Review it again.', 409)
-            if resource.get('senderKind') == 'webhook' and payload.get('discordSenderName') != channel.get('discordSenderName'):
-                raise AlphaError('The webhook sender name changed. Review it again.', 409)
+            if resource.get('senderKind') == 'webhook':
+                from .discord.sender_names import frozen_webhook_name
+                # Compare with what a review would freeze now (nothing while the feature is off), not the raw setting.
+                if payload.get('discordSenderName') != frozen_webhook_name(channel):
+                    raise AlphaError('The webhook sender name changed. Review it again.', 409)
             binding = campaign_binding(state, channel, variant, selected_id, item['publishAt'], task['schedule']['timeZone'], now)
             item['destinationId'] = selected_id
             item['decision'].update(discord=binding['discord'], timing=binding['timing'])
