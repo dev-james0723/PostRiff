@@ -908,11 +908,13 @@ def receipt(result, verdicts, config, differences, expectations=()):
                          custody.get('identityChecks', 0), custody.get('sentPosts', 0), custody.get('state')))
         lines.append('')
         per = (lambda n: _fmt(n / ledger['verifiedPosts']) if ledger['verifiedPosts'] else 'n/a')
-        lines.append('%d requests for %d sent and %d verified posts: %s per verified post, of which essential %s '
-                     '(the ideal real path is 7: one grant check, four permission-witness reads, the create, the '
-                     'read-back) and overhead %s.' % (
+        per_sent = (lambda n: _fmt(n / ledger['sentPosts']) if ledger['sentPosts'] else 'n/a')
+        lines.append('%d requests for %d sent and %d verified posts: %s per verified post (%s per sent post). Essential '
+                     '(the ideal real path, 7 per post once every sent post is verified: one grant check, four '
+                     'permission-witness reads and the create per sent post, one read-back per verified post): %d; '
+                     'overhead: %d, %s per sent post.' % (
                          ledger['total'], ledger['sentPosts'], ledger['verifiedPosts'], per(ledger['total']),
-                         per(ledger['essential']), per(ledger['overhead'])))
+                         per_sent(ledger['total']), ledger['essential'], ledger['overhead'], per_sent(ledger['overhead'])))
         lines.append('')
         lines.append('| Route class | Credential | Ideal per post | Requests | 2xx | 429 (organic) | injected | other status '
                      '| Per verified post | Beyond ideal | Below ideal |')
@@ -928,10 +930,10 @@ def receipt(result, verdicts, config, differences, expectations=()):
                  'answered429': 'answered 429 by the mock (organic)', 'injectedFailures': 'injected by the scenario',
                  'otherStatus': 'other non-2xx answers', 'extraCreates': 'creates beyond one per sent post',
                  'extraReadbacks': 'read-backs beyond one per verified post', 'otherRoutes': 'other routes'}
-        lines.append('| Overhead | Requests | Per verified post |')
-        lines.append('|---|---|---|')
+        lines.append('| Overhead | Requests | Per verified post | Per sent post |')
+        lines.append('|---|---|---|---|')
         for key, count in ledger['overheadBuckets'].items():
-            lines.append('| %s | %d | %s |' % (names[key], count, per(count)))
+            lines.append('| %s | %d | %s | %s |' % (names[key], count, per(count), per_sent(count)))
         lines.append('')
         split, passes = ledger['extraPreflightSplit'], ledger['preflightPassesPerSentPostOnePostWorkspaces']
         lines.append('Preflight reads beyond the ideal, by workspace: %d in repeated passes for posts that were sent, %d '
