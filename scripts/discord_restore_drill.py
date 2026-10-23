@@ -97,18 +97,19 @@ class App:
         return F.run_lanes(self.worker, loops, seconds=seconds)
 
     def drain(self, loops=4, rounds=8, seconds=30):
-        """Lane rounds until a round claims nothing (every loop idle, held or waiting)."""
+        """Lane rounds until a round changes nothing: no claim, or claims that neither create, verify, hold nor
+        mark anything uncertain (a read-back waiting on the coordinator is re-claimed without progress)."""
         summary = Counter()
         stopped = Counter()
         for _ in range(rounds):
             results, failures = self.lanes(loops, seconds)
             if failures:
                 raise RuntimeError('lane loop failed: %r' % (failures[:1],))
-            claimed = sum(r['counters']['claimed'] for r in results)
+            progress = sum(r['counters'][k] for r in results for k in ('posted', 'verified', 'held', 'uncertain', 'deadLetters'))
             for r in results:
                 summary.update({k: v for k, v in r['counters'].items() if v})
                 stopped[r['stoppedBy']] += 1
-            if claimed == 0:
+            if not progress:
                 break
         return {'counters': dict(summary), 'stoppedBy': dict(stopped)}
 
@@ -187,7 +188,21 @@ def outcome(cluster, wire, truth, groups, *, since):
             per_tenant[key[0]] += new
     for row in by_group.values():
         total.update(row)
+    traces = {}
+    for key, job in sorted(jobs.items(), key=lambda item: (groups.get(item[0][0], 'other'), item[1]['nextAt'])):
+        group = groups.get(key[0], 'other')
+        if group == 'main':
+            continue
+        nonce = F.nonce(job)
+        traces.setdefault(group, []).append({
+            'state': job['state'], 'createsBefore': truth.get(nonce, 0), 'createsNow': after.get(nonce, 0),
+            'intents': len(job.get('discordDispatchIntents') or []), 'reference': bool(job.get('providerReference')),
+            'verification': (job.get('verification') or {}).get('method'),
+            'reconciliation': (job.get(T.MARKER) or {}).get('reason') or (job.get(T.MARKER) or {}).get('decision'),
+            'events': [e['state'] + ': ' + e['message'][:90] for e in job.get('events', [])
+                       if e.get('execution') in ('hosted-worker', T.EXECUTION)][-4:]})
     return {'groups': {g: dict(sorted(r.items())) for g, r in sorted(by_group.items())},
+            'traces': traces,
             'total': dict(sorted(total.items())),
             'tenantsWithDuplicates': len(per_tenant),
             'duplicatesPerTenant': sorted(Counter(per_tenant.values()).items())}
@@ -806,6 +821,56 @@ def phase_reconscale(work, args):
     return result
 
 
+# --- summary ---------------------------------------------------------------------------------------------------------
+
+def summary(results):
+    """The counts the drill record quotes, as plain lines (`--summary results.json`)."""
+    lines = []
+    def scenario(label, data):
+        if not isinstance(data, dict) or 'outcome' not in data:
+            lines.append('%s: %s' % (label, (data or {}).get('error', 'missing') if isinstance(data, dict) else data))
+            return
+        total = data['outcome']['total']
+        lines.append('%s: posts %d, sent before the restore point or in the rewound interval %d, duplicates %d, '
+                     'first sends %d, sent exactly once overall %d, never sent %d, final states %s' % (
+                         label, total.get('posts', 0), total.get('sentBefore', 0), total.get('duplicates', 0),
+                         total.get('firstSends', 0), total.get('sentOnceTotal', 0), total.get('neverSent', 0),
+                         {k[6:]: v for k, v in total.items() if k.startswith('state:')}))
+        lines.append('   tenants with duplicates %d, duplicates per tenant %s' % (
+            data['outcome']['tenantsWithDuplicates'], data['outcome']['duplicatesPerTenant']))
+        for group, row in data['outcome']['groups'].items():
+            lines.append('   %-20s %s' % (group, {k: v for k, v in row.items() if v}))
+        if 'reconcileApply' in data:
+            for key in ('reconcileDryRun', 'reconcileApply', 'reconcileAgain'):
+                item = data[key]
+                lines.append('   %s: decisions %s reasons %s write %s requests %s seconds %s' % (
+                    key, item['decisions'], item['reasons'], item.get('write'), item['discordRequests'], item['seconds']))
+            lines.append('   under hold: %s' % data['underHold'])
+            lines.append('   decisions by group: %s' % data['decisionsByGroup'])
+        lines.append('   product: %s' % {k: data['product'][k] for k in ('states', 'protectionEvents', 'verifiedBy')})
+        if 'nonceDeduplicated' in data:
+            lines.append('   nonce-deduplicated answers: %d' % data['nonceDeduplicated'])
+        lines.append('   restore: %s; facts before any worker: %s' % (data['restore'], data['restoredFacts']))
+    core = results.get('core', {})
+    if 'firstTimeline' in core:
+        lines.append('first timeline: %s' % {k: core['firstTimeline'][k] for k in (
+            'tenants', 'posts', 'createsInDiscord', 'statesInOriginal', 'restorePoint', 'firstSend', 'intervalEnd',
+            'sendSeconds', 'archive', 'holdInOriginal')})
+    for name in ('A', 'A2', 'B'):
+        scenario('core ' + name, core.get(name))
+    mid = results.get('midrun', {})
+    if mid:
+        lines.append('midrun: restore point %s, creates before it %s of %s' % (
+            mid.get('restorePoint'), mid.get('createsBeforePoint'), mid.get('createsInFirstTimeline')))
+        for name in ('A', 'B'):
+            scenario('midrun ' + name, mid.get(name))
+    for name in ('holdrow', 'liveswap', 'timing', 'reconscale'):
+        if name in results:
+            lines.append('%s: %s' % (name, json.dumps(results[name], default=str)[:4000]))
+    lines.append('seconds per phase: %s' % results.get('seconds'))
+    return '\n'.join(lines)
+
+
 # --- main --------------------------------------------------------------------------------------------------------------
 
 def main(argv=None):
@@ -824,7 +889,11 @@ def main(argv=None):
     parser.add_argument('--wal-segsize', type=int, default=16)
     parser.add_argument('--scale-posts', type=int, default=1000)
     parser.add_argument('--keep', action='store_true')
+    parser.add_argument('--summary', help='print the summary of an earlier results file and exit')
     args = parser.parse_args(argv)
+    if args.summary:
+        print(summary(json.loads(Path(args.summary).read_text())))
+        return 0
     if not R.available():
         print('needs PostgreSQL server binaries (POSTRIFF_PG_BIN) and psycopg', file=sys.stderr)
         return 2
