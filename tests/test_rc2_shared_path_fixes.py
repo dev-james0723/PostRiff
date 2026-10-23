@@ -17,6 +17,7 @@ import inspect
 import json
 import logging
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -34,6 +35,11 @@ import postriff_alpha.domain  # noqa: E402,F401
 import postriff_phase2.hosted_app  # noqa: E402,F401
 LIVE_REV = os.environ.get('RC2_LIVE_REV', 'c5fc1fd10350f3142ec6f34b2c373139e85abb39')
 PROBE_TIMEOUT = 300
+
+
+def synthetic():
+    """A credential-shaped value made for this run (rule P2-SEC-CI-04: no literal credential, no scanner exception)."""
+    return 'synthetic-' + secrets.token_hex(12)
 
 
 def _rev(rev):
@@ -221,7 +227,7 @@ class ChannelsReadAddsNoTransaction(unittest.TestCase):
         state = initial_phase2_state(self.WORKSPACE, self.ACTOR, 'Rafii member', 'studio', 1_800_000_000.0, execution='hosted-candidate')
         if links is not None:
             state['phase2']['discordIdentityLinks'] = links
-        discord = DiscordProvider('123456789012345678', 'synthetic-secret', 'synthetic.bot.token', 'https://app.rafii.invalid',
+        discord = DiscordProvider('123456789012345678', synthetic(), synthetic(), 'https://app.rafii.invalid',
                                   transport=lambda *a, **k: self.fail('no Discord request on a Channels read'))
         discord.connections_v2_enabled = connections_v2
         repository = _CountingRepository(state, self.ACTOR)
@@ -359,10 +365,10 @@ class PoolSettingsNeverTakeTheApiDown(unittest.TestCase):
         if warned is not None:  # absent before the fix
             warned.clear()
             self.addCleanup(warned.clear)
-        self.env = {'POSTRIFF_DATABASE_URL': 'postgresql://synthetic:synthetic@127.0.0.1:1/none?sslmode=disable',
+        self.env = {'POSTRIFF_DATABASE_URL': 'postgresql://127.0.0.1:1/none?sslmode=disable',  # never connected
                     'POSTRIFF_SUPABASE_URL': 'https://abcdefghijklmnopqrst.supabase.co',
-                    'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': 'sb_publishable_' + 'x' * 30,
-                    'POSTRIFF_SUPABASE_SECRET_KEY': 'sb_secret_' + 'y' * 30,
+                    'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': synthetic(),
+                    'POSTRIFF_SUPABASE_SECRET_KEY': synthetic(),
                     'POSTRIFF_CREDENTIAL_KEY': CredentialVault.generate_key(),
                     'POSTRIFF_PUBLIC_BASE_URL': 'https://app.rafii.invalid'}
 
@@ -416,7 +422,7 @@ class CronAuthorizationRefusesNonAsciiHeaders(unittest.TestCase):
     values, which raises TypeError for non-ASCII text (a WSGI header carries raw bytes as latin-1): an unauthenticated
     request answered 500 with an ERROR line. Like the W-02 shard route, a non-ASCII header or secret is now refused 401.
     Pre-existing on live; found by the independent review."""
-    SECRET = 'c' * 32
+    SECRET = synthetic()
 
     def call(self, app, path, authorization):
         import io
@@ -456,7 +462,7 @@ class CronAuthorizationRefusesNonAsciiHeaders(unittest.TestCase):
         agent_tasks, worker, reached = self.apps()
         for app, path in ((agent_tasks, '/api/cron/agent-tasks'), (worker, '/api/cron/worker')):
             with self.subTest(path=path):
-                self.assertEqual(self.call(app, path, 'Bearer wrong-secret-0123456789abcdef')[0], 401)
+                self.assertEqual(self.call(app, path, 'Bearer ' + synthetic())[0], 401)
         self.assertEqual(self.call(worker, '/api/cron/worker', 'Bearer ' + self.SECRET)[0], 409, 'the right secret reaches the tick')
         self.assertEqual(reached, ['worker'])
         with patch('postriff_phase2.agent_runtime_v2.task_engine.cron.tick', return_value={'status': 'ok'}), \

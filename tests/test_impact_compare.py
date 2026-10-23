@@ -11,6 +11,7 @@ import contextlib
 import io
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -244,18 +245,24 @@ server.serve_forever()
 '''
 
 
+# Credential-shaped values are generated once per test process (rule P2-SEC-CI-04: no literal credential, no scanner
+# exception); both builds get the same ones.
+SYNTHETIC = {name: 'synthetic-' + secrets.token_hex(12) for name in ('publishable', 'secret', 'cron', 'discord', 'bot')}
+CREDENTIAL_KEY = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+
+
 def offline_environment(policy):
     """Fake, offline values only: the database port is closed and the Supabase host is never contacted without a token."""
     return {'PATH': '/usr/bin:/bin', 'HOME': tempfile.gettempdir(), 'PYTHONDONTWRITEBYTECODE': '1',
-            'POSTRIFF_DATABASE_URL': 'postgresql://impact:impact@127.0.0.1:1/impact?connect_timeout=1',
+            'POSTRIFF_DATABASE_URL': 'postgresql://127.0.0.1:1/impact?connect_timeout=1',
             'POSTRIFF_SUPABASE_URL': 'https://impactfixture.supabase.co',
-            'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': 'sb_publishable_' + 'x' * 24,
-            'POSTRIFF_SUPABASE_SECRET_KEY': 'sb_secret_' + 'y' * 24,
-            'POSTRIFF_CREDENTIAL_KEY': base64.urlsafe_b64encode(b'k' * 32).decode(),
-            'POSTRIFF_PUBLIC_BASE_URL': 'https://app.impact.invalid', 'CRON_SECRET': 'c' * 32, 'VERCEL_ENV': 'production',
+            'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': SYNTHETIC['publishable'],
+            'POSTRIFF_SUPABASE_SECRET_KEY': SYNTHETIC['secret'],
+            'POSTRIFF_CREDENTIAL_KEY': CREDENTIAL_KEY,
+            'POSTRIFF_PUBLIC_BASE_URL': 'https://app.impact.invalid', 'CRON_SECRET': SYNTHETIC['cron'], 'VERCEL_ENV': 'production',
             'POSTRIFF_OAUTH_DISCORD_CLIENT_ID': '123456789012345678',
-            'POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET': 'synthetic-discord-client-secret-0001',
-            'POSTRIFF_DISCORD_BOT_TOKEN': 'synthetic-discord-bot-token-000000000001',
+            'POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET': SYNTHETIC['discord'],
+            'POSTRIFF_DISCORD_BOT_TOKEN': SYNTHETIC['bot'],
             # The seven variables Production carries since 2026-10-23 (values as approved; the policy is generated).
             'POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED': 'true', 'POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED': 'true',
             'POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED': 'true', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true',
@@ -319,7 +326,7 @@ class RealBuilds(unittest.TestCase):
         """RC2 only (the route does not exist before W-02, and asking an older build would send the cron secret as a session)."""
         if not (Path(self.tmp) / 'rc' / 'src' / 'postriff_phase2' / 'discord' / 'lane.py').exists():
             self.skipTest('this candidate has no W-02 lane')
-        request = urllib.request.Request(self.bases['rc'] + '/api/cron/discord-worker/0', headers={'Authorization': 'Bearer ' + 'c' * 32})
+        request = urllib.request.Request(self.bases['rc'] + '/api/cron/discord-worker/0', headers={'Authorization': 'Bearer ' + SYNTHETIC['cron']})
         with urllib.request.urlopen(request, timeout=20) as response:
             body = json.load(response)
         self.assertEqual((body['enabled'], body['processed'], body['status']['blocker']), (False, 0, 'disabled'))

@@ -18,6 +18,7 @@ import io
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -120,7 +121,8 @@ def pdfs(directory):
     (d / '04-bad-xref.pdf').write_bytes(good.replace(b'0000000009 00000 n', b'0000000999 00000 n', 1))
     (d / '05-truncated.pdf').write_bytes(good[: len(good) // 2])
     writer = PdfWriter(clone_from=PdfReader(io.BytesIO(pdf(['Secret text']))))
-    writer.encrypt(user_password='', owner_password='owner-pass', algorithm='RC4-128')
+    # Generated (rule P2-SEC-CI-04); the readers open it with the empty user password.
+    writer.encrypt(user_password='', owner_password='synthetic-' + secrets.token_hex(12), algorithm='RC4-128')
     buffer = io.BytesIO()
     writer.write(buffer)
     (d / '06-encrypted.pdf').write_bytes(buffer.getvalue())
