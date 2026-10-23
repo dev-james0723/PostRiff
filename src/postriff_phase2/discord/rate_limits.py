@@ -390,15 +390,16 @@ class SharedPostgresBudget:
         return min(100000, max(cap + 1, cap * (math.ceil((span + MAX_PERMIT_SECONDS) / span) + 1)))
 
     def _window_state(self, cur, cap, window, at=None):
-        """The database clock (or `at`) and what the application window needs, in ONE statement.
+        """The database clock (or the instant `at`) and what the application window holds then, in ONE statement.
 
-        The sliding window must look at the admissions while the application row is held, and every statement under
-        that lock lengthens the time every other request waits for it (the coordinator's row lock bounds the whole
-        system). The clock is read there anyway, so the admissions that still occupy a slot ride along: the exact
-        ceiling costs no round trip. An admission occupies a slot from the moment it can reach Discord, its `sent_at`
-        (a read is sent when it is admitted, a create when its permit is consumed), else from its reservation, for one
-        span. Older ones that may still reach Discord keep a slot too (`held`): a permit not yet used or expired, and a
-        request sent but never answered, for _horizon at most.
+        It must be a statement of its own, started after the application row's lock was granted: in READ COMMITTED a
+        statement keeps the snapshot it began with, so one that waited for the lock cannot see the admission the previous
+        holder committed meanwhile (reading it in the lock statement admitted 18 in a second at a cap of 10).
+
+        An admission occupies a slot from the moment it can reach Discord, its `sent_at` (a read is sent when it is
+        admitted, a create when its permit is consumed), else from its reservation, for one span. Older ones that may
+        still reach Discord keep a slot too (`held`): a permit not yet used or expired, and a request sent but never
+        answered, for _horizon at most. Returns (now, {cap, window, held, occupied}).
         """
         span, horizon = self._span(window) + SLOT_EPSILON, self._horizon(window)
         clock, lead = ('clock_timestamp()', ()) if at is None else ('to_timestamp(%s::double precision)', (at,))
@@ -467,7 +468,17 @@ class SharedPostgresBudget:
             result['30:' + _digest(identity.auth_key + ':' + major)] = ('discovery', 1, p.unknown_window_seconds)
         return result
 
-    def _locked(self, cur, keys, *, shared_keys=()):
+    _COLUMNS = '''scope_key,kind,limit_count,remaining,window_seconds,extract(epoch from reset_at)::double precision,
+                extract(epoch from blocked_until)::double precision,extract(epoch from circuit_until)::double precision,error_streak,manual_hold,
+                observation_seq,policy_revision,extract(epoch from policy_expires_at)::double precision,
+                learned,extract(epoch from fresh_after)::double precision'''
+    _FIELDS = ('kind','cap','left','window','reset','blocked','circuit','streak','hold','seq','policy','policyExpires','learned','freshAfter')
+
+    def _locked(self, cur, keys, *, shared_keys=(), fresh=None):
+        """Seed, then lock, every scope row; return {key: row}.
+
+        `fresh`, when given, is filled with the keys this very transaction created: such a row has no admission yet,
+        so there is nothing to count or lock for it."""
         ordered = sorted(keys)
         if not ordered:
             raise RateCoordinatorUnavailable()
@@ -487,11 +498,10 @@ class SharedPostgresBudget:
                 clock_timestamp(),source.policy_revision,source.policy_expires_at
             FROM scope_seed AS source
             WHERE NOT EXISTS(SELECT 1 FROM {STATE} AS existing WHERE existing.scope_key=source.scope_key)
-            ORDER BY source.scope_key COLLATE "C" ON CONFLICT(scope_key) DO NOTHING''',tuple(parameters))
-        columns = '''scope_key,kind,limit_count,remaining,window_seconds,extract(epoch from reset_at)::double precision,
-                extract(epoch from blocked_until)::double precision,extract(epoch from circuit_until)::double precision,error_streak,manual_hold,
-                observation_seq,policy_revision,extract(epoch from policy_expires_at)::double precision,
-                learned,extract(epoch from fresh_after)::double precision'''
+            ORDER BY source.scope_key COLLATE "C" ON CONFLICT(scope_key) DO NOTHING RETURNING scope_key''',tuple(parameters))
+        if fresh is not None:
+            fresh.update(row[0] for row in cur.fetchall())
+        columns = self._COLUMNS
         shared = sorted(shared_keys)
         if shared:
             if (not set(shared) < set(ordered) or '00:'+self.application_key not in shared
@@ -521,12 +531,31 @@ class SharedPostgresBudget:
         if (len(values) != len(ordered) or any(len(value) != 15 for value in values)
                 or [value[0] for value in values] != ordered):
             raise RateCoordinatorUnavailable()
-        fields = ('kind','cap','left','window','reset','blocked','circuit','streak','hold','seq','policy','policyExpires','learned','freshAfter')
-        rows = {value[0]:dict(zip(fields,value[1:])) for value in values}
+        rows = {value[0]:dict(zip(self._FIELDS,value[1:])) for value in values}
         expected = {'00:':'policy','10:':'global','11:':'credential','20:':'invalid','40:':'resource'}
         if any(rows[key]['kind'] != expected[key[:3]] for key in shared):
             raise RateCoordinatorUnavailable()
         return rows
+
+    def _changed(self, rows, ordered, previous, forward):
+        """The scopes whose stored state differs from `previous`, in lock order: the only ones worth writing.
+
+        Reservation still locks and validates every scope. Avoid rewriting unchanged guards (and their updated_at
+        index) while holding app00. Compare all stored fields, including policy renewal; never infer immutability
+        merely from a scope's kind or nullable capacity."""
+        if sorted(previous) != ordered:
+            raise RateCoordinatorUnavailable()
+        fields = ('cap','left','window','reset','blocked','circuit','streak',
+                  'hold','seq','policy','policyExpires','learned','freshAfter')
+        changed = []
+        for key in ordered:
+            effective = dict(rows[key])
+            if forward:
+                effective['policy'] = self.policy.revision
+                effective['policyExpires'] = max(effective['policyExpires'],self.policy.expires_at)
+            if any(effective[field] != previous[key][field] for field in fields):
+                changed.append(key)
+        return changed
 
     def _store_batch(self, cur, rows, *, locked_keys, forward=True, previous=None):
         ordered = sorted(locked_keys)
@@ -535,25 +564,18 @@ class SharedPostgresBudget:
         if not ordered or sorted(rows) != ordered:
             raise RateCoordinatorUnavailable()
         if previous is not None:
-            if sorted(previous) != ordered:
-                raise RateCoordinatorUnavailable()
-            # Reservation still locks and validates every scope. Avoid rewriting
-            # unchanged guards (and their updated_at index) while holding app00.
-            # Compare all stored fields, including policy renewal; never infer
-            # immutability merely from a scope's kind or nullable capacity.
-            fields = ('cap','left','window','reset','blocked','circuit','streak',
-                      'hold','seq','policy','policyExpires','learned','freshAfter')
-            changed = []
-            for key in ordered:
-                effective = dict(rows[key])
-                if forward:
-                    effective['policy'] = self.policy.revision
-                    effective['policyExpires'] = max(effective['policyExpires'],self.policy.expires_at)
-                if any(effective[field] != previous[key][field] for field in fields):
-                    changed.append(key)
-            ordered = changed
+            ordered = self._changed(rows, ordered, previous, forward)
             if not ordered:
                 return
+        cte, update, parameters = self._store_parts(rows, ordered, forward)
+        cur.execute(f'WITH {cte} {update}',parameters)
+        changed = cur.fetchall()
+        if (cur.rowcount != len(ordered) or len(changed) != len(ordered) or any(len(value) != 1 for value in changed)
+                or sorted(value[0] for value in changed) != ordered):
+            raise RateCoordinatorUnavailable()
+
+    def _store_parts(self, rows, ordered, forward):
+        """The statement that writes the state of the scopes `ordered`, as (CTE, UPDATE ... RETURNING scope_key, params)."""
         parameters = []
         for key in ordered:
             row = rows[key]
@@ -564,18 +586,15 @@ class SharedPostgresBudget:
         values = ','.join(['(%s::integer,%s::integer,%s::double precision,to_timestamp(%s::double precision),to_timestamp(%s::double precision),'
             'to_timestamp(%s::double precision),%s::integer,%s::boolean,%s::bigint,%s::text,to_timestamp(%s::double precision),'
             '%s::boolean,to_timestamp(%s::double precision),%s::text)'] * len(ordered))
-        cur.execute(f'''WITH scope_store(limit_count,remaining,window_seconds,reset_at,blocked_until,circuit_until,error_streak,
-            manual_hold,observation_seq,policy_revision,policy_expires_at,learned,fresh_after,scope_key) AS MATERIALIZED (VALUES {values})
-            UPDATE {STATE} AS target SET limit_count=source.limit_count,remaining=source.remaining,window_seconds=source.window_seconds,
+        cte = f'''scope_store(limit_count,remaining,window_seconds,reset_at,blocked_until,circuit_until,error_streak,
+            manual_hold,observation_seq,policy_revision,policy_expires_at,learned,fresh_after,scope_key) AS MATERIALIZED (VALUES {values})'''
+        update = f'''UPDATE {STATE} AS target SET limit_count=source.limit_count,remaining=source.remaining,window_seconds=source.window_seconds,
             reset_at=source.reset_at,blocked_until=source.blocked_until,circuit_until=source.circuit_until,error_streak=source.error_streak,
             manual_hold=source.manual_hold,observation_seq=source.observation_seq,policy_revision=source.policy_revision,
             policy_expires_at=source.policy_expires_at,learned=source.learned,fresh_after=source.fresh_after,
             revision=target.revision+1,updated_at=clock_timestamp() FROM scope_store AS source
-            WHERE target.scope_key=source.scope_key RETURNING target.scope_key''',tuple(parameters))
-        changed = cur.fetchall()
-        if (cur.rowcount != len(ordered) or len(changed) != len(ordered) or any(len(value) != 1 for value in changed)
-                or sorted(value[0] for value in changed) != ordered):
-            raise RateCoordinatorUnavailable()
+            WHERE target.scope_key=source.scope_key RETURNING target.scope_key'''
+        return cte, update, tuple(parameters)
 
     def _span(self, window):
         """How long an admission occupies a slot of the application window: the window and its headroom."""
@@ -628,7 +647,7 @@ class SharedPostgresBudget:
             raise RateCoordinatorUnavailable()
         return values
 
-    def _roll(self, cur, key, row, now, *, forward=True):
+    def _roll(self, cur, key, row, now, *, forward=True, fresh=False):
         if forward and row['policy'] != self.policy.revision and row['kind'] in ('policy','invalid','discovery'):
             # A new reviewed policy can tighten immediately, not refill mid-window.
             cap, window = {'policy':(self.policy.app_capacity,self.policy.app_window_seconds),
@@ -653,8 +672,9 @@ class SharedPostgresBudget:
                 # request from this new window must establish its real reset.
                 raise RateCoordinatorUnavailable()
             # An unobserved request carries into this window only while it can still reach Discord (_horizon).
+            # A row this transaction has just created has no admission yet: nothing to count, nothing to lock.
             pending = (self._pending(cur,key,now,since=now-self._horizon(row['window']))
-                       if row['kind'] != 'invalid' else 0)
+                       if row['kind'] != 'invalid' and not fresh else 0)
             row['left'] = max(0,row['cap']-pending)
             if learned and row['left'] > 0:
                 row['freshAfter'],row['reset'] = now,self.policy.expires_at
@@ -694,7 +714,7 @@ class SharedPostgresBudget:
         span = self._span(window) + SLOT_EPSILON
         if (reading['cap'], reading['window']) != (cap, window):
             # a reviewed policy changed the cap or window just now: the reading answered for the old ones
-            _now, reading = self._window_state(cur, cap, window, at=now)
+            _now, reading = self._window_state(cur, cap, window, now)
         slots = cap - reading['held']
         row['left'], row['reset'] = 0, now + window  # resolution alone can free a slot: poll once per window
         if slots <= 0:
@@ -708,7 +728,8 @@ class SharedPostgresBudget:
             return occupied[0] + span if occupied else now + span
         return None
 
-    def _insert(self, cur, permit, route, major, bucket, keys, binding, *, read_sent=False):
+    def _insert_parts(self, permit, route, major, bucket, keys, binding, read_sent):
+        """The admission's INSERT ... SELECT, to be run after a `reservation_clock` CTE: (statement, params)."""
         if read_sent and (permit.method != 'GET' or binding is not None or permit.binding_hash is not None):
             raise RateCoordinatorUnavailable()
         read_columns = ',state,sent_at' if read_sent else ''
@@ -725,9 +746,37 @@ class SharedPostgresBudget:
              permit.method,permit.path_key,route,major,bucket,sorted(keys),binding is not None,permit.binding_hash,
              *(binding.get(k) if binding else None for k in ('workspaceId','publicationId','manifestDigest','authorizationDigest',
                   'approvalDigest','workerKey','leaseKey','channelKey')),permit.expires_at,permit.expires_at)
+        return insert, parameters
+
+    def _insert(self, cur, permit, route, major, bucket, keys, binding, *, read_sent=False):
+        insert, parameters = self._insert_parts(permit, route, major, bucket, keys, binding, read_sent)
         cur.execute('WITH reservation_clock AS MATERIALIZED (SELECT clock_timestamp() AS at) '+insert,parameters)
         if cur.rowcount != 1:
             raise RateDelayed(.05,cause='permit_expired',scope='permit')
+
+    def _store_and_insert(self, cur, rows, keys, previous, permit, route, major, bucket, binding, read_sent):
+        """Write the changed scope states and the admission in ONE statement: one round trip under the application lock.
+
+        Both are data-modifying parts of the same statement, so they succeed or fail together exactly as the two
+        statements did inside the transaction. The admission is not inserted if its permit already expired (the clock is
+        read here, after the lock waits): the caller rolls everything back. The statement answers with the keys it
+        wrote, checked against the keys that had to be written."""
+        ordered = sorted(keys)
+        if not ordered or sorted(rows) != ordered:
+            raise RateCoordinatorUnavailable()
+        changed = self._changed(rows, ordered, previous, True)
+        if not changed:
+            return self._insert(cur, permit, route, major, bucket, keys, binding, read_sent=read_sent)
+        cte, update, stored = self._store_parts(rows, changed, True)
+        insert, admitted = self._insert_parts(permit, route, major, bucket, keys, binding, read_sent)
+        cur.execute(f'''WITH {cte}, written AS ({update}),
+            reservation_clock AS MATERIALIZED (SELECT clock_timestamp() AS at)
+            {insert} RETURNING (SELECT array_agg(scope_key ORDER BY scope_key COLLATE "C") FROM written)''',(*stored,*admitted))
+        if cur.rowcount != 1:
+            raise RateDelayed(.05,cause='permit_expired',scope='permit')
+        written = cur.fetchone()
+        if not written or len(written) != 1 or written[0] != changed:
+            raise RateCoordinatorUnavailable()
 
     def reserve_read(self, method, path, *, identity):
         """Authorize one GET atomically with its debit, committed before I/O.
@@ -761,13 +810,16 @@ class SharedPostgresBudget:
         with self._transaction() as cur:
             bucket, _seq = self._map(cur,identity,route,major)
             keys = self._keys(identity,route,major,bucket)
-            rows = self._locked(cur,keys)
+            # The application row is held from this statement to the commit: one statement reads the clock (wall time
+            # after lock waits) and the application window, one writes the result, then the commit.
+            fresh = set()
+            rows = self._locked(cur,keys,fresh=fresh)
             previous = {key:dict(row) for key,row in rows.items()}
-            now, reading = self._reading(cur,rows['00:'+self.application_key])  # wall time after lock waits
+            now, reading = self._reading(cur,rows['00:'+self.application_key])
             wait, wait_scope = 0.0, 'unknown'
             filled_reset = None
             for key,row in rows.items():
-                self._roll(cur,key,row,now)
+                self._roll(cur,key,row,now,fresh=key in fresh)
                 if row['hold']:
                     raise RateCoordinatorUnavailable()
                 if row['kind'] == 'policy':
@@ -802,19 +854,31 @@ class SharedPostgresBudget:
                     row['left'] -= 1
                     if row['kind'] == 'policy' and filled_reset is not None:
                         row['reset'] = filled_reset  # stored for readers: when the full window frees its next slot
-            self._store_batch(cur,rows,locked_keys=keys,previous=previous)
             permit = Permit(str(uuid.uuid4()),self.application_key,method,_digest(path),identity,binding_hash(binding),expiry)
-            self._insert(cur,permit,route,major,bucket,keys,binding,read_sent=read_sent)
+            self._store_and_insert(cur,rows,keys,previous,permit,route,major,bucket,binding,read_sent)
         return permit
 
-    def _admission(self, cur, permit):
-        cur.execute(f'''SELECT request_seq,application_key,auth_key,credential_key,credential_kind,method,path_key,
+    def _admission(self, cur, permit, *, clock=False):
+        """Lock the permit's admission row and check it is this permit's; with clock=True also return the database
+        clock read in the SAME statement, after the row lock was granted: (row, now). Observation holds scope locks
+        while it does this, so every statement saved here shortens the time other requests wait for them."""
+        columns = '''request_seq,application_key,auth_key,credential_key,credential_kind,method,path_key,
             route_key,major_key,bucket_key,scope_keys,binding_hash,state,intent_id,extract(epoch from expires_at)::double precision,
-            extract(epoch from reserved_at)::double precision
-            FROM {ADMISSIONS} WHERE id=%s::uuid FOR UPDATE''', (permit.id,))
+            extract(epoch from reserved_at)::double precision'''
+        if clock:
+            cur.execute(f'''WITH adm AS MATERIALIZED (SELECT {columns} FROM {ADMISSIONS} WHERE id=%s::uuid FOR UPDATE),
+                tick AS MATERIALIZED (SELECT clock_timestamp() AS at FROM adm)
+                SELECT adm.*,extract(epoch from tick.at)::double precision FROM adm CROSS JOIN tick''', (permit.id,))
+        else:
+            cur.execute(f'SELECT {columns} FROM {ADMISSIONS} WHERE id=%s::uuid FOR UPDATE', (permit.id,))
         value = cur.fetchone()
         if not value:
             raise RateCoordinatorUnavailable()
+        now = None
+        if clock:
+            value, now = value[:-1], value[-1]
+            if not valid_number(now):
+                raise RateCoordinatorUnavailable()
         row = dict(zip(('seq','application','auth','credential','kind','method','path','route','major','bucket','keys',
                         'binding','state','intent','expires','reserved'),value))
         if (row['application'] != self.application_key or permit.application_key != self.application_key
@@ -822,7 +886,7 @@ class SharedPostgresBudget:
                 or row['kind'] != permit.identity.kind or row['method'] != permit.method or row['path'] != permit.path_key
                 or row['binding'] != permit.binding_hash or abs(row['expires']-permit.expires_at) > .000002):
             raise RateCoordinatorUnavailable()
-        return row
+        return (row, now) if clock else row
 
     def seal(self, cur, permit, binding, intent_id, valid_until):
         """Called only in the existing workspace transaction; no scope locks."""
@@ -977,16 +1041,16 @@ class SharedPostgresBudget:
             rows = self._locked(cur,keys,shared_keys=shared_keys) if shared_keys else self._locked(cur,keys)
             previous = {key:dict(row) for key,row in rows.items()}
             immutable_guards = {key:dict(rows[key]) for key in shared_keys}
+            admission, now = self._admission(cur,permit,clock=True)   # one statement: the row lock, then the clock
             if shared_keys:
-                guard_now = self._policy(cur,forward=False)
-                if (any(row['hold'] or max(row['blocked'] or 0,row['circuit'] or 0)>guard_now for row in rows.values())
+                # Decided on the same clock as the rest of the observation, after the admission row is held: the shared
+                # path is abandoned by rollback, which releases that row and every SHARE lock together.
+                if (any(row['hold'] or max(row['blocked'] or 0,row['circuit'] or 0)>now for row in rows.values())
                         or any(row['kind'] == 'discovery' for row in rows.values())
                         or any(row['kind'] != 'route' or not row['learned'] for key,row in rows.items() if key not in shared_keys)):
                     raise _ExclusiveObservationRequired()
-            admission = self._admission(cur,permit)
             if admission['state'] != 'sent':
                 raise RateCoordinatorUnavailable()  # duplicate observation cannot reset a circuit
-            now = self._policy(cur,forward=False)
             seq = admission['seq']
             limit,left,after,absolute = (seconds(headers.get(name)) for name in
                 ('x-ratelimit-limit','x-ratelimit-remaining','x-ratelimit-reset-after','x-ratelimit-reset'))
@@ -1112,12 +1176,14 @@ class SharedPostgresBudget:
             self._store_batch(cur,mutable_rows,locked_keys=set(keys)-set(shared_keys),forward=False,
                               previous={key:previous[key] for key in mutable_rows})
             if new_bucket and seq >= seen:
-                cur.execute(f'''UPDATE {ROUTES} SET bucket_key=%s,observation_seq=%s,updated_at=clock_timestamp()
-                    WHERE auth_key=%s AND route_key=%s AND major_key=%s''', (new_bucket,seq,permit.identity.auth_key,*meta))
                 alias_key = '50:' + _digest(permit.identity.auth_key + ':' + new_bucket + ':' + meta[1])
-                cur.execute(f'''UPDATE {ADMISSIONS} SET bucket_key=%s,scope_keys=array_append(scope_keys,%s)
+                # The mapping row and the admissions that join the new alias, in one statement (two tables, no row twice).
+                cur.execute(f'''WITH routed AS (UPDATE {ROUTES} SET bucket_key=%s,observation_seq=%s,updated_at=clock_timestamp()
+                    WHERE auth_key=%s AND route_key=%s AND major_key=%s RETURNING 1)
+                    UPDATE {ADMISSIONS} SET bucket_key=%s,scope_keys=array_append(scope_keys,%s)
                     WHERE auth_key=%s AND route_key=%s AND major_key=%s AND state IN ('reserved','sealed','sent','uncertain')
-                    AND NOT scope_keys @> ARRAY[%s]::text[]''', (new_bucket,alias_key,permit.identity.auth_key,*meta,alias_key))
+                    AND NOT scope_keys @> ARRAY[%s]::text[]''',
+                    (new_bucket,seq,permit.identity.auth_key,*meta,new_bucket,alias_key,permit.identity.auth_key,*meta,alias_key))
             cur.execute(f'''UPDATE {ADMISSIONS} SET state=%s,status_code=%s,rate_scope=%s,outcome_at=clock_timestamp()
                 WHERE id=%s::uuid AND state='sent' ''',
                 ('uncertain' if transport_failure else 'observed',classification['status'],classification['scope'],permit.id))

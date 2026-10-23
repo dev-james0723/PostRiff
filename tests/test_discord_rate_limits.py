@@ -5,6 +5,7 @@ real SQL/locks. No credentials, real provider, sockets or capacity claims.
 """
 import copy
 import json
+import math
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -79,11 +80,11 @@ class MemoryLedger:
             row=self.maps.get(tuple(params))
             self.result=[tuple(row)] if row is not None else []
         elif sql.startswith('WITH scope_seed('):
-            ordered=[];self.rowcount=0
+            ordered=[];self.rowcount=0;self.result=[]
             for index in range(0,len(params),7):
                 key,kind,cap,left,window,revision,_expires=params[index:index+7];ordered.append(key)
                 if key not in self.states:
-                    self.rowcount+=1
+                    self.rowcount+=1;self.result.append((key,))   # RETURNING scope_key: the rows this insert created
                     self.states[key]=dict(kind=kind,cap=cap,left=left,window=window,reset=self.now,
                         blocked=None,circuit=None,streak=0,hold=False,seq=0,policy=revision,policyExpires=_expires,learned=False,freshAfter=None)
             self.scope_calls.append(('seed',tuple(ordered)))
@@ -99,18 +100,26 @@ class MemoryLedger:
             elif self.lock_fault=='duplicate':self.result=[self.result[0]]+self.result[:-1]
             elif self.lock_fault=='reordered':self.result.reverse()
         elif sql.startswith('WITH scope_store('):
+            inserted = 'INSERT INTO public.pr_discord_request_admissions' in sql   # the reservation's one write statement
+            store, admission = (params[:-23], params[-23:]) if inserted else (params, ())
             ordered=[];self.result=[]
-            for index in range(0,len(params),14):
-                cap,left,window,reset,blocked,circuit,streak,hold,seq,revision,_expiry,learned,fresh_after,key=params[index:index+14]
+            for index in range(0,len(store),14):
+                cap,left,window,reset,blocked,circuit,streak,hold,seq,revision,_expiry,learned,fresh_after,key=store[index:index+14]
                 ordered.append(key)
                 if key in self.states:
                     self.states[key].update(cap=cap,left=left,window=window,reset=reset,blocked=blocked,
                         circuit=circuit,streak=streak,hold=hold,seq=seq,policy=revision,policyExpires=_expiry,learned=learned,freshAfter=fresh_after)
                     self.result.append((key,))
             self.scope_calls.append(('store',tuple(ordered)));self.rowcount=len(self.result)
-            if self.store_fault=='count':self.rowcount-=1
+            if self.store_fault=='count':
+                self.rowcount-=1
+                if inserted:self.result=self.result[:-1]
             elif self.store_fault=='key':self.result[0]=('99:'+'0'*64,)
             elif self.store_fault=='duplicate':self.result=[self.result[0]]+self.result[:-1]
+            if inserted:   # the statement answers with the keys it wrote, array_agg(scope_key ORDER BY scope_key)
+                written=sorted(key for key, in self.result)
+                self.admit(sql,admission)
+                if self.rowcount == 1:self.result=[(written,)]
         elif sql.startswith('WITH locked_pending AS MATERIALIZED'):
             bounded='coalesce(sent_at,reserved_at)' in sql
             key,since,now=params if bounded else (params[0],None,params[1])
@@ -126,35 +135,22 @@ class MemoryLedger:
                  r['state'] in ('reserved','sealed') and r['expires']>now)]
             self.result=[(len(pending),sum(alias not in r['keys'] for r in pending))]
         elif sql.startswith('WITH tick AS MATERIALIZED'):
-            # the clock and, with it, the application window's inputs (_window_state); `to_timestamp` names the instant
+            # the clock (or the instant a reservation names) and the application window's inputs there (_window_state)
             explicit = 'to_timestamp(%s::double precision) AS at' in sql
             at, (key, span, band, horizon, _key, scan, _span) = (params[0], params[1:]) if explicit else (None, params)
             moment = at if explicit else self.workspace.now if self.workspace else self.now
-            held = sum(r['application'] == key and self.wire_time(r) <= moment - span and (
-                r['state'] in ('reserved', 'sealed') and r['expires'] > moment or
-                r['state'] in ('sent', 'uncertain') and r['expires'] > moment - band and self.wire_time(r) > moment - horizon)
-                for r in self.admissions.values())
-            newest = sorted((r for r in self.admissions.values() if r['application'] == key), key=lambda r: -r['seq'])[:scan]
-            self.result = [(moment, held, [self.wire_time(r) for r in newest if self.wire_time(r) > moment - span])]
+            held, occupied = self.window_inputs(moment, key, span, band, horizon, scan)
+            self.result = [(moment, held, occupied)]
         elif sql.startswith('WITH reservation_clock AS MATERIALIZED'):
-            self.now+=self.insert_delay
-            moment=self.workspace.now if self.workspace else self.now
-            if params[-1]<=moment:
-                self.rowcount=0;return
-            self.serial+=1
-            names=('id','application','auth','credential','kind','method','path','route','major','bucket','keys',
-                'publish','binding','workspace','publication','manifest','authorization','approval','worker','lease','channel','expires')
-            row=dict(zip(names,params[:-1]));row.update(seq=self.serial,state='sent' if ',state,sent_at)' in sql else 'reserved',intent=None,reserved=moment,
-                sent=moment if ',state,sent_at)' in sql else None)
-            if row['publish'] and any(r['binding']==row['binding'] for r in self.admissions.values()):
-                raise ValueError('Duplicate synthetic binding')
-            self.admissions[row['id']]=row
-        elif sql.startswith('SELECT request_seq,application_key'):
+            self.result=[];self.admit(sql,params)
+        elif sql.startswith('SELECT request_seq,application_key') or sql.startswith('WITH adm AS MATERIALIZED'):
             self.now+=self.admission_lock_delay
             if self.workspace:self.workspace.now+=self.admission_lock_delay
             r=self.admissions.get(params[0])
             if r:self.result=[tuple(r[k] for k in ('seq','application','auth','credential','kind','method','path',
                 'route','major','bucket','keys','binding','state','intent','expires','reserved'))]
+            if r and sql.startswith('WITH adm AS MATERIALIZED'):   # the clock, read after the row lock (_admission, clock=True)
+                self.result=[self.result[0]+(self.workspace.now if self.workspace else self.now,)]
         elif sql.startswith('SELECT route_key,major_key'):
             r=self.admissions.get(params[0]);self.result=[(r['route'],r['major'])] if r else []
         elif sql.startswith('SELECT scope_keys'):
@@ -162,6 +158,9 @@ class MemoryLedger:
         elif sql.startswith('UPDATE public.pr_discord_route_buckets'):
             bucket,seq,auth,route,major=params;self.maps[(auth,route,major)]=[bucket,seq]
         elif 'SET bucket_key=' in sql:
+            if sql.startswith('WITH routed AS'):   # the mapping row and the admissions that join the alias, in one statement
+                bucket,seq,auth,route,major,*params=params
+                self.maps[(auth,route,major)]=[bucket,seq]
             bucket,key,auth,route,major,_key=params
             for r in self.admissions.values():
                 if (r['auth'],r['route'],r['major'])==(auth,route,major) and r['state'] in ('reserved','sealed','sent','uncertain') and key not in r['keys']:
@@ -189,6 +188,29 @@ class MemoryLedger:
             self.rowcount=int(r['state'] in ('reserved','sent','uncertain') and not r['publish'] and r['method']=='PATCH' and r['route']==route)
             if self.rowcount:r.update(state='observed',status=None,scope='unknown')
         else:raise AssertionError('Unrecognized synthetic SQL contract: '+sql[:110])
+    def admit(self,sql,params):
+        """INSERT INTO the admissions ... FROM reservation_clock WHERE expiry>clock (_insert_parts); rowcount 0 if expired."""
+        self.now+=self.insert_delay
+        moment=self.workspace.now if self.workspace else self.now
+        if params[-1]<=moment:
+            self.rowcount=0;self.result=[];return
+        self.rowcount=1
+        self.serial+=1
+        names=('id','application','auth','credential','kind','method','path','route','major','bucket','keys',
+            'publish','binding','workspace','publication','manifest','authorization','approval','worker','lease','channel','expires')
+        row=dict(zip(names,params[:-1]));row.update(seq=self.serial,state='sent' if ',state,sent_at)' in sql else 'reserved',intent=None,reserved=moment,
+            sent=moment if ',state,sent_at)' in sql else None)
+        if row['publish'] and any(r['binding']==row['binding'] for r in self.admissions.values()):
+            raise ValueError('Duplicate synthetic binding')
+        self.admissions[row['id']]=row
+    def window_inputs(self,at,key,span,band,horizon,scan):
+        """(held, occupied wire times) for an application at `at`, as _window_state and _locked state them."""
+        held=sum(r['application']==key and self.wire_time(r)<=at-span and (
+            r['state'] in ('reserved','sealed') and r['expires']>at or
+            r['state'] in ('sent','uncertain') and r['expires']>at-band and self.wire_time(r)>at-horizon)
+            for r in self.admissions.values())
+        newest=sorted((r for r in self.admissions.values() if r['application']==key),key=lambda r:-r['seq'])[:scan]
+        return held,[self.wire_time(r) for r in newest if self.wire_time(r)>at-span]
     @staticmethod
     def wire_time(row):return row['sent'] if row.get('sent') is not None else row['reserved']  # coalesce(sent_at,reserved_at)
     unobserved_at=wire_time
