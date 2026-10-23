@@ -2,6 +2,7 @@
 
 import { usePreferences } from '@/lib/preferences';
 import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
+import { DiscordMessagePreview } from '@/features/channels/discord-message-preview';
 
 /**
  * Approve, request changes to, or reject one post of an automation run (`raffi_run_decide`, orchestration §4).
@@ -73,7 +74,8 @@ export function RunDecisionDialog({ target, onClose, act }: { target: DecisionTa
 }
 
 function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onClose: () => void; act: (action: string, payload: Record<string, unknown>) => Promise<Snapshot> }) {
-  const dc = discordCopy(usePreferences().locale);
+  const { locale } = usePreferences();
+  const dc = discordCopy(locale);
   const { run, item, decision, automationName, timeZone } = target;
   const snapshot = useSnapshot();
   const state = snapshot.data?.state;
@@ -171,6 +173,21 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
           </Surface>
         ) : (
           <p className='text-muted-foreground text-sm'>This draft isn’t available.</p>
+        )}
+        {item.platform === 'Discord' && variant && decision === 'approve' && (
+          <DiscordMessagePreview
+            kind={discordTarget?.senderKind === 'webhook' || connection?.discordConnectionKind === 'webhook' ? 'webhook' : 'bot'}
+            name={connection?.discordSenderName ?? null}
+            nameSource={connection?.discordSenderName ? (connection.discordConnectionKind === 'webhook' ? 'saved' : 'observed') : 'unknown'}
+            text={variant.text}
+            publishAt={item.publishAt ? new Date(item.publishAt * 1000) : null}
+            timeZone={timeZone}
+            copy={dc}
+            locale={locale}
+            heading={dc.previewHeading}
+            headingLevel='h3'
+            compact
+          />
         )}
         {edited && <Note>Edited after Rafii wrote it. You’re deciding on the text as it is now.</Note>}
         {variant?.proposedUpdate && <Note>A newer version is waiting in Queue → Drafts. This decision covers the text shown here.</Note>}

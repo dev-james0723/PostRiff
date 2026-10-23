@@ -2,6 +2,8 @@
 
 import { usePreferences } from '@/lib/preferences';
 import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
+import { DiscordMessagePreview } from '@/features/channels/discord-message-preview';
+import { cn } from '@/lib/utils';
 import { useLocalTimeZone } from '@/hooks/use-local-time-zone';
 import type { Manifest } from '@/lib/api/types';
 import { MastodonPollDetails } from '@/features/queue/mastodon-poll-details';
@@ -28,8 +30,11 @@ export function ManifestPreview({ manifest, timeZone, scale, className }: Manife
 
 function ResolvedPreview({ manifest, timeZone, scale, className }: ManifestPreviewProps & { timeZone: string }) {
   const post = usePreviewPost(manifest, timeZone);
-  const copy = discordCopy(usePreferences().locale);
+  const { locale } = usePreferences();
+  const copy = discordCopy(locale);
   const destination = manifest.discord?.target;
+  const webhook = manifest.senderKind === 'webhook';
+  const discordMedia = post.media.flatMap((item) => (item.kind === 'image' && item.status === 'ready' && item.url ? [{ url: item.url, alt: item.alt }] : []));
   return <>
     {manifest.platform === 'Discord' && <p className='text-muted-foreground mb-2 text-sm' data-discord-sender>
       {discordSenderLabel(copy, manifest.senderKind, manifest.discordSenderName)}<br />{copy.senderNotice}
@@ -37,6 +42,26 @@ function ResolvedPreview({ manifest, timeZone, scale, className }: ManifestPrevi
     {manifest.platform === 'Discord' && <p className='text-muted-foreground mb-2 text-xs' data-discord-frozen-target>
       {destination ? `Frozen target: ${destination.guildName} (${destination.guildId}) · ${destination.channelName} (${destination.channelId})` : 'Legacy Discord approval: a new server and channel preview is required before publication.'}
     </p>}
-    <PostPreview post={post} scale={scale} className={className} />
+    {manifest.platform === 'Discord' ? (
+      // Drawn as Discord lays out a message, with the APP tag and the sender the post will really show; a bot's name
+      // is its shared server nickname, which an approval cannot freeze, so a bot post never shows a per-post name.
+      <DiscordMessagePreview
+        kind={webhook ? 'webhook' : 'bot'}
+        name={webhook ? manifest.discordSenderName ?? null : null}
+        nameSource={webhook && manifest.discordSenderName ? 'saved' : 'unknown'}
+        text={manifest.payload.text}
+        publishAt={post.publishAt}
+        timeZone={timeZone}
+        media={discordMedia}
+        copy={copy}
+        locale={locale}
+        heading={copy.previewHeading}
+        headingLevel='h4'
+        compact
+        className={cn('w-full max-w-[22rem]', className)}
+      />
+    ) : (
+      <PostPreview post={post} scale={scale} className={className} />
+    )}
   </>;
 }

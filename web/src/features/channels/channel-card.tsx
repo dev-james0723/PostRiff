@@ -444,7 +444,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
 
       {channel.platform === 'Mastodon' && canManage && !disconnected && <MastodonAccountControls connectionId={channel.id} account={channel.account} />}
       <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
-        {channel.platform === 'Discord' && channel.discordConnectionKind && canManage && !disconnected && <DiscordSenderNameControl channel={channel} />}
+        {channel.platform === 'Discord' && channel.discordConnectionKind && canManage && !disconnected && <DiscordSenderNameControl channel={channel} provider={provider} />}
         {channel.platform === 'Discord' && !disconnected && <DiscordEngagementPanel channel={channel} />}
         {canManage && channel.platform === 'Instagram' && channel.capabilities.analytics?.level === 'Direct' && (
           <StatefulButton

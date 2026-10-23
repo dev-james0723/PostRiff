@@ -1478,6 +1478,8 @@ export interface Capability {
 
 export interface ChannelView {
   discordSenderName?: string | null;
+  /** Epoch seconds when `discordSenderName` was last read from Discord (bot nicknames; UI-NEEDS 3.4). */
+  discordSenderObservedAt?: number | null;
   discordEngagement?: { implemented: boolean; enabled: boolean };
   defaultDestinationId?: string | null;
   discordDestinations?: DiscordDestination[];
@@ -1516,11 +1518,28 @@ export interface DiscordSenderProfile {
   maxLength: number;
   fingerprint: string;
   state: 'verified';
+  /**
+   * Whether this person can change the name now, and if not why (docs/sender-name/UI-NEEDS.md 3.2). A profile without
+   * it is editable, which is what the current backend sends. `reason` is one of the stable names in
+   * `lib/channels/discord-sender-name.ts`; an unknown one renders as the generic failure, never as a guessed cause.
+   */
+  availability?: { editable: boolean; reason?: string; retryAt?: number };
+  /** Where `name` was read from: the connection's saved setting, or Discord itself. */
+  nameSource?: 'saved' | 'discord';
+  /** Epoch seconds of the read behind `name`. */
+  checkedAt?: number;
+}
+
+/** Provider-level switches for customer sender names (UI-NEEDS 3.3); absent means "find out on open". */
+export interface DiscordSenderNameModes {
+  webhook?: { enabled: boolean; reason?: string };
+  bot?: { enabled: boolean; reason?: string };
 }
 
 export interface ProviderView {
   discordConnectionsV2?: boolean;
   discordModes?: DiscordModes;
+  discordSenderNames?: DiscordSenderNameModes;
   /** Whether THIS workspace may start a Discord connection (launch gate); existing connections are unaffected. */
   discordAccess?: { status: 'open' | 'closed'; reason?: string; capped?: boolean };
   /** Restricted server-side Pinterest pilot; never a public release gate. */
