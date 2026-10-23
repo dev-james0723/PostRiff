@@ -158,6 +158,12 @@ def frozen_webhook_name(channel, values=None):
     return validate_name(channel['discordSenderName'], 'webhook')
 
 
+def fingerprint_of(stamp, name):
+    """64 hex: the first half binds the Rafii-side state (cheap to recheck before any Discord read), the second the name
+    the person saw (for a bot nickname, what Discord reported)."""
+    return digest(['rafii-state', stamp])[:32] + digest(['shown-name', name])[:32]
+
+
 def _rules(kind):
     return {'minLength': 1, 'maxLength': LIMITS[kind], 'lengthUnit': 'codepoints', 'surroundingSpace': False,
             'forbiddenCharacters': list(_FORBIDDEN), 'reservedWords': True, 'singleSpacesOnly': True}
@@ -177,6 +183,8 @@ def _above(guild, person_roles, bot_roles, user):
 
 
 class SenderNames:
+    denied = None
+
     def __init__(self, connections, workspace, token, connection):
         if token is None:
             fail('Sign in to manage Discord sender names.', 401, code='unauthenticated')
@@ -286,16 +294,9 @@ class SenderNames:
             return PENDING_SECONDS
         return max(0, math.ceil(expires - self.s.oauth.clock()))
 
-    def observe(self, *, reconcile=False, writing=False):
-        names_on, nickname_on = names_enabled(), nickname_enabled()
-        with self.s.local(self.workspace, self.token) as (cur, state, actor):
-            channel, first, _ = self.custody(cur, state, actor, fresh=False, require_authorizer=False)
-            self._limit(cur, 'post' if writing else 'get', f'{self.workspace}:{self.connection}', 6 if writing else 12)
-            claim = copy.deepcopy(channel.get('discordSenderEdit'))
-            saved = channel.get('discordSenderName')
-            stale = not writing and self._stale_session(actor)
-        kind = 'webhook' if first['kind'] == 'webhook' else 'bot'
-        authorizing = first['_authorizing']
+    @staticmethod
+    def policy_reasons(kind, authorizing, names_on, nickname_on):
+        """Reasons known without Discord: the switches and who the authorizing member is."""
         reasons = []
         if not names_on:
             reasons.append({'code': 'sender_names_disabled'})
@@ -303,6 +304,18 @@ class SenderNames:
             reasons.append({'code': 'bot_nickname_disabled'})
         if not authorizing:
             reasons.append({'code': 'not_authorizing_member'})
+        return reasons
+
+    def observe(self, *, reconcile=False, writing=False):
+        names_on, nickname_on = names_enabled(), nickname_enabled()
+        with self.s.local(self.workspace, self.token) as (cur, state, actor):
+            channel, first, first_stamp = self.custody(cur, state, actor, fresh=False, require_authorizer=False)
+            self._limit(cur, 'post' if writing else 'get', f'{self.workspace}:{self.connection}', 6 if writing else 12)
+            claim = copy.deepcopy(channel.get('discordSenderEdit'))
+            saved = channel.get('discordSenderName')
+            stale = not writing and self._stale_session(actor)
+        kind = 'webhook' if first['kind'] == 'webhook' else 'bot'
+        reasons = self.policy_reasons(kind, first['_authorizing'], names_on, nickname_on)
         if reasons:
             # Answered without Discord: nothing here needs a provider read, and none is made on behalf of a refusal.
             if writing:
@@ -311,7 +324,7 @@ class SenderNames:
                 reasons.append({'code': 'edit_pending', 'retryAfterSeconds': self._pending_seconds(claim)})
             if stale:
                 reasons.append({'code': 'session_reverification_required'})
-            return self._profile(kind, first, None, saved, None, None, reasons, names_on, nickname_on), first, None
+            return self._profile(kind, first, first_stamp, saved, None, None, reasons, names_on, nickname_on), first, first_stamp
         if claim and (not reconcile or not isinstance(claim, dict)
                       or type(claim.get('expiresAt')) not in (int, float)
                       or self.s.oauth.clock() < claim['expiresAt']):
@@ -411,13 +424,16 @@ class SenderNames:
             source = 'none' if observed is None else 'observed_nickname' if member_nick else 'bot_username'
             external = observed is not None and saved is not None and observed != saved
         shown = effective if effective is not None else (saved or '')
+        # A webhook's name part is the saved setting (Rafii-side, no Discord read needed); a bot nickname's is the
+        # nickname Discord reported, so a native rename makes an older form stale.
+        name_part = (saved or '') if kind == 'webhook' else (observed if observed is not None else (saved or ''))
         return {'contractVersion': CONTRACT_VERSION, 'connectionId': self.connection, 'senderKind': kind,
                 'scope': 'connection' if kind == 'webhook' else 'server', 'guildId': envelope['guild'],
                 'state': 'verified', 'maxLength': LIMITS[kind], 'rules': _rules(kind),
                 'name': shown, 'effectiveName': effective, 'nameSource': source,
                 'savedName': saved,
                 'observedName': observed, 'observedAt': observed_at, 'externalChange': external,
-                'fingerprint': digest([stamp or 'no-provider-read:' + self.connection, shown]),
+                'fingerprint': fingerprint_of(stamp, name_part),
                 'feature': {'senderNames': names_on, 'botNickname': nickname_on},
                 'editable': not reasons, 'unavailable': reasons,
                 'preview': {'currentDisplayName': effective, 'badge': 'APP',
@@ -431,20 +447,36 @@ class SenderNames:
         return profile
 
     def write_guard(self, stamp, claim_id):
-        with self.s.local(self.workspace, self.token) as (cur, state, actor):
-            channel, envelope, current = self.custody(cur, state, actor)
-            claim = channel.get('discordSenderEdit') or {}
-            if current != stamp or claim.get('id') != claim_id or self.s.oauth.clock() >= claim.get('expiresAt', 0):
-                fail()
-            # Last check before the provider write: the switches, and that no other Rafii workspace can have appeared
-            # as a second writer of this server's shared nickname.
-            if not names_enabled():
-                unavailable([{'code': 'sender_names_disabled'}])
-            if not nickname_enabled():
-                unavailable([{'code': 'bot_nickname_disabled'}])
-            if self.s.nickname_contenders(cur, self.workspace, self.connection, envelope['guild']):
-                unavailable([{'code': 'nickname_authority_other_workspace'}])
+        """The last check before the provider write. A refusal here is known unsent: transport has not been reached."""
+        try:
+            with self.s.local(self.workspace, self.token) as (cur, state, actor):
+                channel, envelope, current = self.custody(cur, state, actor)
+                claim = channel.get('discordSenderEdit') or {}
+                if current != stamp or claim.get('id') != claim_id or self.s.oauth.clock() >= claim.get('expiresAt', 0):
+                    fail()
+                # The switches, and that no other Rafii workspace can have appeared as a second writer of this
+                # server's shared nickname since the preflight.
+                if not names_enabled():
+                    unavailable([{'code': 'sender_names_disabled'}])
+                if not nickname_enabled():
+                    unavailable([{'code': 'bot_nickname_disabled'}])
+                if self.s.nickname_contenders(cur, self.workspace, self.connection, envelope['guild']):
+                    unavailable([{'code': 'nickname_authority_other_workspace'}])
+        except AlphaError as refused:
+            self.denied = refused
+            raise
         return True
+
+    def release_claim(self, claim_id):
+        """Retire a claim whose write is known unsent (the guard refused, or Discord definitely refused it)."""
+        try:
+            with self.s.local(self.workspace, self.token) as (cur, state, actor):
+                channel, _, _ = self.custody(cur, state, actor, fresh=False)
+                if (channel.get('discordSenderEdit') or {}).get('id') == claim_id:
+                    channel.pop('discordSenderEdit', None)
+                    self.s.save_state(cur, self.workspace, state)
+        except Exception:
+            pass   # the claim then simply runs to its deadline and a later read reconciles it
 
     def set(self, body):
         if (not isinstance(body, dict) or set(body) - {'name', 'fingerprint', 'confirmed', 'sharedServerConfirmed'}
@@ -452,9 +484,14 @@ class SenderNames:
             fail('Review and confirm the sender name before saving.', 400, code='discord_sender_name_unconfirmed')
         self._workspace_limit('post')
         with self.s.local(self.workspace, self.token) as (cur, state, actor):
-            _, first, _ = self.custody(cur, state, actor, fresh=False, require_authorizer=False)
+            _, first, first_stamp = self.custody(cur, state, actor, fresh=False, require_authorizer=False)
             self.s.oauth.repository.assert_fresh(self.token, actor)
         kind = 'webhook' if first['kind'] == 'webhook' else 'bot'
+        policy = self.policy_reasons(kind, first['_authorizing'], names_enabled(), nickname_enabled())
+        if policy:
+            unavailable(policy)
+        if not body['fingerprint'].startswith(digest(['rafii-state', first_stamp])[:32]):
+            fail()      # stale Rafii-side state: refused before any Discord read
         name = validate_name(body.get('name'), kind)
         if kind == 'bot' and body.get('sharedServerConfirmed') is not True:
             fail('Confirm that this bot nickname is shared by everyone in this server.', 400,
@@ -482,20 +519,30 @@ class SenderNames:
                     channel['discordSenderEdit'].update(rateAdmissionId=permit.id, rateExpiresAt=permit.expires_at)
                     self.s.save_state(cur, self.workspace, state)
                     _, _, stamp = self.custody(cur, state, actor)
+            self.denied = None
             try:
                 response = self.s.adapter._bot('PATCH', f'/guilds/{envelope["guild"]}/members/@me',
                     body={'nick': name}, write_authorize=lambda: self.write_guard(stamp, claim_id), write_admitted=admitted)
-            except Exception:
+            except Exception as caught:
+                if caught is self.denied:
+                    self.release_claim(claim_id)   # the final guard refused: nothing reached Discord
+                    raise
                 fail('Discord did not confirm the nickname change. Wait two minutes, then reload its current value.', 409,
                      code='discord_sender_edit_pending', retryAfterSeconds=PENDING_SECONDS)
             member = response.get('body')
+            if isinstance(response.get('status'), int) and 400 <= response['status'] < 500:
+                self.release_claim(claim_id)       # a definite refusal (permission, rate limit): the nickname is unchanged
+                fail('Discord refused the nickname change. Reload to check the permissions before trying again.', 409,
+                     code='discord_sender_write_unconfirmed')
             if (response.get('status') != 200 or not isinstance(member, dict)
                     or (member.get('user') or {}).get('id') != envelope['botUserId'] or member.get('nick') != name):
-                fail('Discord did not confirm the new nickname. Reload to check its current value before trying again.')
+                fail('Discord did not confirm the new nickname. Reload to check its current value before trying again.', 409,
+                     code='discord_sender_write_unconfirmed')
             observed = self.s.adapter._json(self.s.adapter._bot('GET',
                 f'/guilds/{envelope["guild"]}/members/{envelope["botUserId"]}', read_authorize=lambda: self.guard(stamp)), dict)
             if (observed.get('user') or {}).get('id') != envelope['botUserId'] or observed.get('nick') != name:
-                fail('The server nickname changed during verification. Reload before trying again.')
+                fail('The server nickname changed during verification. Reload before trying again.', 409,
+                     code='discord_sender_write_unconfirmed')
         from ..hosted import audit
         with self.s.local(self.workspace, self.token) as (cur, state, actor):
             channel, _, current = self.custody(cur, state, actor)
