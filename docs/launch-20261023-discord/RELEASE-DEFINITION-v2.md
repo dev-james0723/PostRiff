@@ -78,6 +78,8 @@ The benchmark above is a release test for an extreme spike. What customers are p
 
 Above 250 posts due in a minute the lane drains at the policy rate, fairly across workspaces, and the benchmark numbers apply instead (the customer-facing copy already says a burst of scheduled posts can run late). The capacity harness has a normal-load scenario (S0: 100 and 250 posts a minute for 20 minutes) that measures these figures before the owner adopts them.
 
+**Correction after the first measurements (Release Captain, 2026-10-23 07:30Z; this draft is not adopted by the owner).** The figure of 250 was derived from "about 4 posts a second at six requests per post", which assumed the ceiling is fully usable and the path costs six requests. Measured on a GitHub-hosted runner (tree `d80d6eaf`): the real path costs 7 requests (6.7 per created post while the backlog drains), the lane works about 77% of each minute and uses about 85% of the ceiling while working, so the lane sustains about 2.4 creates a second (about 146 a minute). **S0-100 passes (100% within 2 minutes); S0-250 fails (27.3% / 59.0% / 95.5% within 2 / 5 / 15 minutes against 95 / 99 / 100).** With the equivalent package the independent reviewer's model gives about 205 a minute at best. Until the package is measured, the supportable promise is a normal load of about 100 posts due a minute across all customers; 250 stays a measured capacity figure, not a promise. The owner decides which figure to adopt; this is not a change to the accepted spike standard (5,000 posts due in one minute: median 12, p95 25, maximum 40 minutes), which is not lowered.
+
 ## 5. Answers recorded from the owner (reply 12)
 
 | Item | Decision | What remains |
