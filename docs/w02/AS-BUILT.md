@@ -84,7 +84,7 @@ any due work. The route accepts shards 0 to 31.
 | | K cron shards (built) | Self-chaining dispatcher (not built) |
 |---|---|---|
 | Concurrency | fixed K per minute; bounded by configuration | grows with the queue; needs its own global counter to bound it |
-| Cost when idle | K invocations a minute (about 17,000 a day at K = 12), each answers in milliseconds with the flag off and runs three short queries with it on | one invocation a minute |
+| Cost when idle | K invocations a minute (about 17,000 a day at K = 12), each answers in milliseconds with the flag off; with it on, one connection for one statement when nothing is due (none when the lane cannot run) | one invocation a minute |
 | Failure | a lost or failed invocation is replaced next minute | a broken chain waits for the next cron minute; a bug can fan out without bound |
 | Moving parts | none new: the platform's scheduler | authenticated HTTP calls from the function to its own deployment URL (Deployment Protection, URL discovery, a bypass secret), chain-depth fencing |
 | Throughput | up to 50 of every 60 seconds per loop | continuous |
@@ -97,7 +97,18 @@ time [simulated]. It adds a new path that can multiply invocations, which the co
 1. Route: cron secret (before any runtime or database work), shard check, flag check. Off: `{"enabled": false}`.
 2. A fresh worker instance with its own lease owner id (`discord-lane-<shard>-<random>`) and its own counters, sharing
    the process's connection factory, provider, approval checks and completion hooks.
-3. The projection table (migration 126, applied in production) must exist, or the loop stops with `schema`.
+3. A first look before any claim. The readiness test `lane.blocker()` on this process's clock, with no database: a lane
+   that cannot run stops here with its reason and its WARNING line, every minute. Then one statement on one
+   connection: the database clock and the soonest `next_at` in the projection (migration 126, applied in production;
+   without the table the loop stops with `schema`), and the readiness test again on that clock. If nothing is due
+   within 10 seconds the invocation stops (`idle`) before the coordinator read and before any claim [measured: one
+   connection and one statement, where it used to open four connections for seven statements;
+   `test_an_idle_shard_opens_one_connection_for_one_statement`]. The loop claims only through the projection's due
+   rows (`due_workspaces_sql`, a row whose `next_at` has passed), so this skips nothing it could have claimed: work
+   that becomes due later is taken by the next minute's invocations, as before when a loop stopped `idle` after a
+   claim miss. When it stops here, the coordinator's hold and embargo are not read (there is nothing to send), so an
+   idle shard reports `idle` where it would have said `operator_hold`; the health status, which reads no database,
+   and the minute tick's lag warning are unchanged.
 4. Loop until the budget, the step backstop, or a stop condition:
    - the readiness test `lane.blocker()` (the minute tick asks its static part, below), with this process's clock
      and then the database clock: rate limits off, or no coordinator, or a policy outside its validity stops the loop
