@@ -618,7 +618,7 @@ def phase_liveswap(work, args):
         base_dir = work / ('swap-' + variant)
         shutil.rmtree(base_dir, ignore_errors=True)
         tenants = [F.Tenant(500 + n) for n in range(args.swap_tenants)]
-        trickle = [F.Tenant(600 + n) for n in range(12)]
+        trickle = [F.Tenant(600 + n) for n in range(30)]
         everyone = tenants + trickle
         port = R.free_port()
         c0 = R.ArchivedCluster(base_dir / 'c0', port=port, archive=base_dir / 'archive').start()
@@ -700,11 +700,14 @@ def phase_liveswap(work, args):
                               'startedDuringDowntime' if started[by_message[e['id']]] < back else 'startedAfterBack'
                               for e in duplicates if e['id'] in by_message)
             records = list(cron.invocations.values())
+            survivors = [n for n, r in cron.invocations.items() if r['started'] < swap_started and r.get('ended', float('inf')) > back]
+            survivor_creates = [note for note in cron.notes if note['invocation'] in survivors and note['at'] > back]
             results[variant] = {
                 'posts': len(tenants), 'trickle': len(trickle), 'firstTimelineCreates': first_creates,
                 'restore': report, 'downSeconds': round(back - swap_started, 2),
                 'holdSecondsAfterBack': round(held_at - back, 2), 'hold': hold, 'createsAfterSwap': dict(after),
                 'duplicates': len(duplicates), 'duplicatesBySender': dict(senders),
+                'loopsAliveAcrossTheSwap': len(survivors), 'theirCreatesAfterBack': len(survivor_creates),
                 'invocations': {'startedBeforeSwap': summarize([r for r in records if r['started'] < swap_started], swap_started),
                                 'startedDuringDowntime': summarize([r for r in records if swap_started <= r['started'] < back], swap_started),
                                 'startedAfterBack': summarize([r for r in records if r['started'] >= back], swap_started)},
