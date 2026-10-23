@@ -1,0 +1,100 @@
+# INERT DRAFT for human review. Not a workflow: it lives under docs/, has a .txt suffix, and nothing reads it.
+# To use it, a person copies it to .depot/workflows/ (or .github/workflows/) on a branch of their choosing,
+# reviews the cost line below, and dispatches it by hand. It deploys nothing, reads no secret, and reaches no
+# network beyond package installation and the repository checkout.
+#
+# What it runs: scripts/discord_lane_capacity_run.py (branch claude/discord-w02-capacity-20261023) against the exact
+# SHA under test, one scenario per job so the matrix runs in parallel on separate machines. Two database variants:
+#   local-pooler  PostgreSQL 17 (PGDG packages, the same install as consumer-ready.yml) behind the harness's own
+#                 transaction pooler (the variant exercised in the sandbox, docs/w02/RESULTS-SANDBOX.md);
+#   pgbouncer     PostgreSQL 17 behind a real PgBouncer in transaction mode, the harness relay adding the network
+#                 latency in front of it (this variant was NOT exercised in the sandbox: no PgBouncer there).
+#
+# Cost (to be approved by the owner before any dispatch; AUTHORIZATION-RECORD row 9 covered only the older Stage A at
+# a 4.32 USD ceiling): about 15 scenario jobs, 15 to 85 minutes each, on 8-core runners. Multiply by the runner's
+# per-minute price before approving; the release profile is roughly 9 runner-hours in total.
+
+name: Rafii W-02 Discord lane capacity (G5)
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Exact 40-character SHA of the W-02 / RC2 tree under test
+        required: true
+      baseline_sha:
+        description: Frozen RC1 SHA for the baseline scenario
+        required: true
+        default: 2a5a523d788eef67a5c7dbed609a98efa6650eef
+      database:
+        description: local-pooler or pgbouncer
+        required: true
+        default: local-pooler
+      db_latency_ms:
+        description: Emulated database round trip in ms (Vercel iad1 to the Supabase us-east-1 pooler)
+        required: true
+        default: '2'
+permissions:
+  contents: read
+jobs:
+  capacity:
+    runs-on: depot-ubuntu-24.04-8
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [smoke, S1, S2, S0-100, S0-250, baseline, F429, F5xx, Fcrash, Fdb, Fexpiry, Fstall, Fflip, Nmisroute, Ndup, Nceiling]
+    env:
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Check out the harness branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: claude/discord-w02-capacity-20261023
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Exact tree under test, detached (read only)
+        run: |
+          set -euo pipefail
+          sha='${{ matrix.scenario == 'baseline' && inputs.baseline_sha || inputs.sha }}'
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'need an exact 40-character SHA' >&2; exit 64; }
+          git fetch --no-tags origin "$sha"
+          git worktree add --detach "$RUNNER_TEMP/under-test" "$sha"
+          test "$(git -C "$RUNNER_TEMP/under-test" rev-parse HEAD)" = "$sha"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - name: The tree's own pinned Python dependencies
+        run: python -m pip install -r "$RUNNER_TEMP/under-test/requirements.txt"
+      - name: PostgreSQL 17 from its signed official repository (and PgBouncer when asked)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17 postgresql-contrib-17 || sudo apt-get install -y postgresql-17
+          if [ '${{ inputs.database }}' = pgbouncer ]; then sudo apt-get install -y pgbouncer; fi
+      - name: Run the scenario
+        run: |
+          set -euo pipefail
+          extra=()
+          if [ '${{ inputs.database }}' = pgbouncer ]; then extra+=(--pooler pgbouncer --pgbouncer-bin /usr/sbin/pgbouncer); fi
+          uptime
+          nice -n 10 python scripts/discord_lane_capacity_run.py run --scenario '${{ matrix.scenario }}' \
+            --source-tree "$RUNNER_TEMP/under-test" --out "$RUNNER_TEMP/capacity" --label 'depot-${{ inputs.database }}' \
+            --db-latency-ms '${{ inputs.db_latency_ms }}' "${extra[@]}"
+          uptime
+      - name: Keep the receipt and the raw evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: capacity-${{ matrix.scenario }}-${{ inputs.database }}
+          path: |
+            ${{ runner.temp }}/capacity/**/RECEIPT.md
+            ${{ runner.temp }}/capacity/**/result.json
+            ${{ runner.temp }}/capacity/**/config.json
+            ${{ runner.temp }}/capacity/**/mock/mock-summary.json
+            ${{ runner.temp }}/capacity/**/mock/mock-requests.jsonl
+            ${{ runner.temp }}/capacity/**/samples.jsonl
+            ${{ runner.temp }}/capacity/**/pooler-final.json
+            ${{ runner.temp }}/capacity/**/database-final.json
+          retention-days: 30
