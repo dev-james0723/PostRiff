@@ -9,13 +9,13 @@ read from the code.
 
 | File | Change |
 |---|---|
-| `src/postriff_phase2/discord/lane.py` (new) | The lane: flag and budget parsing, shard parsing, the readiness test (`blocker`), one bounded loop per invocation, the pre-claim coordinator read, the bounded wait for a refused create permit, per-invocation counters and the log line; the minute cron's lag warning (`warn_if_lagging`). |
-| `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` only when the lane is on and the static part of `lane.blocker()` says it can run (the minute cron then does not claim Discord), and with the lane on logs the lag warning from its own report; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below). |
+| `src/postriff_phase2/discord/lane.py` (new) | The lane: flag and budget parsing, shard parsing, the readiness test (`blocker`), one bounded loop per invocation, the pre-claim coordinator read, the bounded wait for a refused create permit, per-invocation counters and the log line; the minute cron's lag warning (`warn_if_lagging`); the health status (`status`). |
+| `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` only when the lane is on and the static part of `lane.blocker()` says it can run (the minute cron then does not claim Discord), and with the lane on adds the health status (`discordLaneStatus`) and logs the lag warning from its own report; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below). |
 | `src/postriff_phase2/hosted_app.py` | Route `GET /api/cron/discord-worker/<shard>`: cron secret checked before the runtime starts (as the YouTube lanes); flag read per request; the request log files it under `cron`. |
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
-| `tests/test_discord_parallel_lane.py` (new) | 61 offline tests (run under the synthetic fence). |
+| `tests/test_discord_parallel_lane.py` (new) | 66 offline tests (run under the synthetic fence). |
 | `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 24 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
 | `docs/w02/*` (new) | This file, the corrected plan, open questions, monitors, simulation results. |
@@ -184,6 +184,30 @@ cron's one. With the production factory (`POSTRIFF_DB_POOL_ENABLED` not `true`) 
 through the Supabase pooler: about 20 per post (claim, renewals, seal, completion, and two per Discord request). That
 connection churn, not the lane, is likely the largest part of a step's real latency; the pooled factory would remove it
 but is a separate setting.
+
+## Health status
+
+`lane.status(social, now, values=None)` is the lane's health indication: pure and cheap (no database, network or
+secret; codes, numbers and booleans only), version 1, a shape kept stable for a protected health route and monitors
+[tested offline: shape, each cause, purity]. It is in the minute cron's result whenever the flag is on
+(`discordLaneStatus`, next to `discordParallelLane`), in every shard answer (`status`, which the
+`discord.lane.completed` line also carries), and callable directly.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `version` | integer | 1 |
+| `enabled` | boolean | the flag and the Discord worker lease protocol are on (`lane.enabled()`) |
+| `ready` | boolean | the lane runs in this process now (`blocker` is null) |
+| `blocker` | string or null | why not: `disabled`, `configuration`, `coordinator_unavailable`, or `coordinator_degraded` (this process only); the full rule of `lane.blocker()` |
+| `maxSeconds` | number or null | one invocation's time budget after clamping (at most 90); null when the budget is misconfigured |
+| `maxSteps` | integer or null | one invocation's step backstop; null when misconfigured |
+| `shards` | integer | cron entries, 12 |
+| `policyDaysLeft` | number or null | days until the reviewed policy expires, two decimals, negative once expired; null when no policy is visible (no coordinator, or the flag-off shard answer, which starts no runtime) |
+
+In the minute cron's result `discordParallelLane` says whether that tick left Discord to the lane (the static causes)
+and `discordLaneStatus.blocker` what stops the lane in that process (the full rule): with only that process degraded
+the first is true and the second `coordinator_degraded`. A misconfigured budget makes the shard answer a 503 error,
+which carries no status.
 
 ## Failure modes
 

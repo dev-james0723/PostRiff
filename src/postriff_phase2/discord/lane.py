@@ -101,8 +101,10 @@ def shard(text):
     return int(text)
 
 
-def disabled(number):
-    return {'version': 1, 'lane': 'discord', 'enabled': False, 'shard': number, 'processed': 0}
+def disabled(number, values=None):
+    # Answered without the runtime: status() sees no provider, so policyDaysLeft is None here.
+    return {'version': 1, 'lane': 'discord', 'enabled': False, 'shard': number, 'processed': 0,
+            'status': status(None, time.time(), values)}
 
 
 class PacedSocial:
@@ -196,6 +198,30 @@ def blocker(social, now, values=None, *, process_state=True):
     return None
 
 
+def status(social, now, values=None):
+    """This process's lane health at `now`: a stable, documented shape (version 1) for the minute cron's report, the
+    shard answers and a protected health route. Pure and cheap: no database, network or secret; codes, numbers and
+    booleans only.
+
+    enabled: the flag and the lease protocol (enabled()). ready: the lane runs here now. blocker: why not, the full
+    rule for this process ('disabled', 'configuration', 'coordinator_unavailable', 'coordinator_degraded'), or None.
+    maxSeconds, maxSteps: the invocation budget after clamping, None when misconfigured. shards: the cron entries.
+    policyDaysLeft: days until the reviewed policy expires (negative once expired, two decimals), None when no policy
+    is visible to the caller.
+    """
+    values = os.environ if values is None else values
+    on = enabled(values)
+    try:
+        seconds, steps = limits(values)
+    except AlphaError:
+        seconds = steps = None
+    reason = blocker(social, now, values) if on else 'disabled'
+    policy = getattr(getattr(_discord(social), 'rate_limiter', None), 'policy', None)
+    days = round((policy.expires_at - now) / 86400, 2) if policy is not None and discord_worker.finite(now) else None
+    return {'version': 1, 'enabled': on, 'ready': reason is None, 'blocker': reason, 'maxSeconds': seconds,
+            'maxSteps': steps, 'shards': SHARDS, 'policyDaysLeft': days}
+
+
 def warn_if_lagging(result, reason=None):
     """One WARNING, discord.lane.lagging, when this tick's Discord report shows due work later than the threshold.
 
@@ -271,7 +297,7 @@ def run(worker, number, values=None, *, started=None, request_id=None, sleep=tim
     """One bounded loop. `started` is the request's own start, so cold-start setup counts against the budget."""
     values = os.environ if values is None else values
     if not enabled(values):
-        return disabled(number)
+        return disabled(number, values)
     seconds, max_steps = limits(values)
     started = monotonic() if started is None else started
     deadline = started + seconds
@@ -336,6 +362,7 @@ def run(worker, number, values=None, *, started=None, request_id=None, sleep=tim
                   'elapsedSeconds': round(monotonic() - started, 3), 'processed': counts['claimed'],
                   'budget': {'maxSeconds': seconds, 'maxSteps': max_steps}, 'counters': counts,
                   'waitedSeconds': {key: round(value, 3) for key, value in waited.items()},
+                  'status': status(lane.social, lane.clock(), values),  # as the invocation ends
                   **({'error': error} if error else {})}
         # Counts and reasons only: no workspace, job, channel, content or credential.
         quiet = stopped in ('time_budget', 'step_budget', 'idle', 'rate_wait', 'operator_hold')

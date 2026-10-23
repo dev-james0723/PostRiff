@@ -157,7 +157,10 @@ class CronRoute(unittest.TestCase):
             app = self.app()
             result = invoke(app, '3', 'Bearer ' + self.SECRET)
         self.assertEqual(result, {'status': 200, 'body': {'version': 1, 'lane': 'discord', 'enabled': False,
-                                                         'shard': 3, 'processed': 0}})
+                                                         'shard': 3, 'processed': 0, 'status': {
+                                                             'version': 1, 'enabled': False, 'ready': False,
+                                                             'blocker': 'disabled', 'maxSeconds': 50.0, 'maxSteps': 600,
+                                                             'shards': 12, 'policyDaysLeft': None}}})
         app._runtime.assert_not_called()
 
     def test_unknown_shards_and_methods_are_not_routes(self):
@@ -339,6 +342,7 @@ class LaneReadiness(unittest.TestCase):
                 self.assertEqual((result['stoppedBy'], result['processed'], result['counters']['steps']), (reason, 0, 0))
                 self.assertEqual(len(statements), 1, 'no claim and no coordinator read')
                 self.assertEqual((entry['event'], entry['stoppedBy']), ('discord.lane.completed', reason))
+                self.assertEqual((result['status']['ready'], result['status']['blocker']), (False, reason))
 
     def test_a_shard_with_a_misconfigured_budget_answers_503_and_claims_nothing(self):
         with self.assertRaises(AlphaError) as refused:
@@ -358,13 +362,78 @@ class LaneReadiness(unittest.TestCase):
             self.assertEqual(seen.count({'discord_only': True}), 5)
             shard, statements, _ = self.run_shard(discord_social())
         self.assertEqual(shard['stoppedBy'], 'coordinator_unavailable')
-        self.assertEqual(asked, [(NOW, False), (NOW, True)],
-                         'the same function: the tick asks its static part, the shard its full rule')
+        # The same function: the tick decides on its static part; the tick's health status, the shard's pre-claim
+        # check and the shard's health status ask the full rule.
+        self.assertEqual(asked, [(NOW, False), (NOW, True), (NOW, True), (NOW, True)])
         seen.clear()
         with patch.object(lane, 'blocker', lambda social, now, values=None, **scope: None), patch.dict('os.environ', ON):
             result = recording_worker(lambda **kw: seen.append(kw) or True, social=SimpleNamespace()).tick()
         self.assertTrue(result['discordParallelLane'], 'the tick follows the readiness test alone')
         self.assertEqual(seen, [{'exclude_youtube': False, 'exclude_discord': True}] * 10)
+
+
+class HealthStatus(unittest.TestCase):
+    """lane.status(): a stable, pure health indication in the minute cron's report and every shard answer."""
+    SHAPE = {'version': int, 'enabled': bool, 'ready': bool, 'blocker': (str, type(None)),
+             'maxSeconds': (float, type(None)), 'maxSteps': (int, type(None)), 'shards': int,
+             'policyDaysLeft': (float, type(None))}
+
+    def test_the_shape_is_stable_and_documented(self):
+        value = lane.status(discord_social(), NOW, ON)
+        self.assertEqual(value, {'version': 1, 'enabled': True, 'ready': True, 'blocker': None, 'maxSeconds': 50.0,
+                                 'maxSteps': 600, 'shards': 12, 'policyDaysLeft': 1.0})
+        for name, setup, _ in NOT_READY + (DEGRADED,):
+            for values in (ON, {}, {**ON, lane.ENV_SECONDS: 'x'}):
+                with self.subTest(name, values=values):
+                    other = lane.status(discord_social(**setup), NOW, values)
+                    self.assertEqual(set(other), set(self.SHAPE))
+                    for key, kinds in self.SHAPE.items():
+                        self.assertIsInstance(other[key], kinds, key)
+        documented = (ROOT / 'docs/w02/AS-BUILT.md').read_text()
+        for key in self.SHAPE:
+            self.assertIn('`%s`' % key, documented)
+
+    def test_it_names_each_cause(self):
+        cases = [(name, setup, ON, reason) for name, setup, reason in NOT_READY + (DEGRADED,)]
+        cases += [('flag off', {}, {}, 'disabled'), ('lease protocol off', {}, {lane.ENV_ENABLED: 'true'}, 'disabled'),
+                  ('lane budget misconfigured', {}, {**ON, lane.ENV_SECONDS: '4'}, 'configuration')]
+        for name, setup, values, reason in cases:
+            with self.subTest(name):
+                value = lane.status(discord_social(**setup), NOW, values)
+                self.assertEqual((value['ready'], value['blocker']), (False, reason))
+                self.assertEqual(value['enabled'], reason != 'disabled')
+        self.assertEqual(lane.status(discord_social(), NOW, {**ON, lane.ENV_SECONDS: '4'})['maxSeconds'], None)
+        self.assertEqual(lane.status(discord_social(), NOW, {**ON, lane.ENV_SECONDS: '120'})['maxSeconds'], 90.0)
+        self.assertEqual(lane.status(discord_social(policy='expired'), NOW, ON)['policyDaysLeft'], -2.0)
+        self.assertEqual(lane.status(discord_social(policy='future'), NOW, ON)['policyDaysLeft'], 2.0)
+        self.assertIsNone(lane.status(discord_social(policy=None), NOW, ON)['policyDaysLeft'])
+        self.assertIsNone(lane.status(None, NOW, ON)['policyDaysLeft'])
+        self.assertIsNone(lane.status(discord_social(), float('nan'), ON)['policyDaysLeft'])
+
+    def test_it_is_pure_and_holds_no_secret(self):
+        # discord_social()'s coordinator fails the test if it opens a connection; the fence refuses any network.
+        value = json.dumps([lane.status(discord_social(**setup), NOW, ON) for _, setup, _ in NOT_READY + (DEGRADED,)])
+        for secret in ('synthetic-secret', 'synthetic-bot', APP):
+            self.assertNotIn(secret, value)
+
+    def test_the_minute_report_carries_it_whenever_the_flag_is_on(self):
+        for name, setup, owned, reason in (('ready', {}, True, None), ('policy expired', {'policy': 'expired'}, False,
+                                           'coordinator_unavailable'), (DEGRADED[0], DEGRADED[1], True, DEGRADED[2])):
+            with self.subTest(name), patch.dict('os.environ', ON):
+                social = discord_social(**setup)
+                result = recording_worker(lambda **kw: False, social=social).tick()
+                self.assertEqual(result.get('discordParallelLane', False), owned)
+                self.assertEqual(result['discordLaneStatus'], lane.status(social, NOW))
+                self.assertEqual(result['discordLaneStatus']['blocker'], reason)
+        with patch.dict('os.environ', {lane.ENV_ENABLED: 'false', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}):
+            result = recording_worker(lambda **kw: False, social=discord_social()).tick()
+        self.assertNotIn('discordLaneStatus', result, 'the flag-off tick result stays the frozen one')
+
+    def test_every_shard_answer_carries_it(self):
+        self.assertEqual(lane.disabled(5, {})['status']['blocker'], 'disabled')
+        result = FakeLane(steps=[False]).run()
+        self.assertEqual(set(result['status']), set(self.SHAPE))
+        self.assertTrue(result['status']['enabled'])
 
 
 class LagWarning(unittest.TestCase):
@@ -517,10 +586,18 @@ class FlagOffIsTheFrozenBase(unittest.TestCase):
         base = self.trace(self.Base, environment, state, setup)
         current = self.trace(PostgresWorker, environment, state, setup)
         self.assertGreater(len(base['sql']), 10)
+        # With the flag on, each tick result also carries the health indication: the one added key, checked on its
+        # own; every SQL statement, request, state, stat and other result field is still compared byte for byte.
+        statuses = [result.pop('discordLaneStatus', None) for result in current['results']]
+        if lane.enabled(environment):
+            self.assertTrue(all(isinstance(value, dict) and value['enabled'] for value in statuses), statuses)
+        else:
+            self.assertEqual(statuses, [None] * 3, 'the flag-off tick result is byte for byte the base')
         for key in ('sql', 'http', 'state', 'results', 'stats'):
             with self.subTest(key=key):
                 self.assertEqual(json.dumps(current[key], sort_keys=True, default=repr),
                                  json.dumps(base[key], sort_keys=True, default=repr))
+        base['statuses'] = statuses
         return base
 
     def test_flag_unset_matches_the_base_exactly(self):
@@ -542,12 +619,15 @@ class FlagOffIsTheFrozenBase(unittest.TestCase):
 
     def test_flag_on_but_the_lane_unable_to_run_matches_the_base_exactly(self):
         environment = {'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true', lane.ENV_ENABLED: 'true'}
-        for name, setup, _ in NOT_READY:
+        for name, setup, reason in NOT_READY:
             with self.subTest(name):
                 base = self.assert_same(environment, setup)
                 self.assertGreater(base['stats']['claims'], 0, 'the frozen tick claimed Discord work')
+                self.assertEqual({(s['ready'], s['blocker']) for s in base['statuses']}, {(False, reason)},
+                                 'the report says why the lane is not running')
         with self.subTest('lane budget misconfigured'):
-            self.assert_same({**environment, lane.ENV_SECONDS: 'x'}, {})
+            base = self.assert_same({**environment, lane.ENV_SECONDS: 'x'}, {})
+            self.assertEqual({(s['ready'], s['blocker']) for s in base['statuses']}, {(False, 'configuration')})
 
     def test_control_flag_on_and_the_lane_able_to_run_changes_the_trace(self):
         environment = {'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true', lane.ENV_ENABLED: 'true'}
@@ -718,7 +798,8 @@ class TheLoop(unittest.TestCase):
         fake = FakeLane()
         with fake.patched():
             result = lane.run(object(), 4, {lane.ENV_ENABLED: 'true'})
-        self.assertEqual(result, lane.disabled(4))
+        self.assertEqual(result, lane.disabled(4, {lane.ENV_ENABLED: 'true'}))
+        self.assertEqual(result['status']['blocker'], 'disabled')
         self.assertEqual(fake.started, [])
 
     def test_every_invocation_has_its_own_lease_owner(self):
