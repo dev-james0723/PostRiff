@@ -204,6 +204,20 @@ def request_reader(fix):
     code, out, values = fix.read_request({**good, 'profile': 'baseline', 'pools': '20'}, 'claude/discord-capacity-run-baseline-b1')
     check('a baseline request is one job and carries the frozen tree', code == 0 and json.loads(values.get('matrix', '[]')) == [
         {'scenario': 'baseline', 'pool': 20}] and values.get('baseline') == rc, out[-400:])
+    code, out, values = fix.read_request({**good, 'profile': 's1levers', 'pools': '20'}, 'claude/discord-capacity-run-s1levers-d1')
+    check('an s1levers request is S1 as control plus the three lever variants', code == 0 and json.loads(values.get('matrix', '[]')) == [
+        {'scenario': name, 'pool': 20} for name in ('S1', 'S1-lane58', 'S1-lane70', 'S1-warm')], out[-400:])
+    # Every scenario a profile names must exist in the harness (a typo would only show on the runner).
+    named = set()
+    for line in step('plan', 'Read the request')['run'].splitlines():
+        match = re.match(r"\s*[a-z0-9]+\) scenarios='([^']*)' ;;", line)
+        if match:
+            named.update(match.group(1).split())
+    harness = subprocess.run([sys.executable, '-B', os.path.join(HERE, '..', '..', '..', 'scripts', 'discord_lane_capacity_run.py'),
+                              'scenarios'], capture_output=True, text=True)
+    known = {line.split()[0] for line in harness.stdout.splitlines() if line.strip() and not line.startswith('profile ')}
+    check('every scenario a profile names exists in the harness', harness.returncode == 0 and (named - {'lockbench'}) <= known,
+          repr(sorted(named - {'lockbench'} - known)) + harness.stderr[-300:])
     bad = [
         ('a short tree SHA', {**good, 'sha': 'abc'}, 'claude/discord-capacity-run-s1-t'),
         ('an upper-case tree SHA', {**good, 'sha': 'A' * 40}, 'claude/discord-capacity-run-s1-t'),

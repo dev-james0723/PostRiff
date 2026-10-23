@@ -502,7 +502,8 @@ def analyse(run_dir):
 
     kills = extra.get('kills') or []
     result = {
-        'version': 2, 'scenario': config['scenario'], 'label': config['label'], 'sourceTree': config['sourceTree'],
+        'version': 2, 'scenario': config['scenario'], 'judgeAs': (config.get('settings') or {}).get('judge_as') or config['scenario'],
+        'label': config['label'], 'sourceTree': config['sourceTree'],
         'sourceSha': config['sourceSha'], 'harnessSha': config.get('harnessSha'), 'dueAt': T,
         'informationOnly': config.get('informationOnly'),
         'posts': len(posts), 'workspaces': len(by_workspace), 'endReason': config.get('endReason'),
@@ -591,7 +592,8 @@ def judge(result, standard):
     rows = []
     for measure in all_measures(standard):
         applies, excluded = measure.get('appliesTo'), measure.get('notFor') or []
-        if (applies and result['scenario'] not in applies) or result['scenario'] in excluded:
+        scenario = result.get('judgeAs') or result['scenario']  # an S1 variant is judged as S1
+        if (applies and scenario not in applies) or scenario in excluded:
             rows.append({**measure, 'value': None, 'verdict': 'NOT APPLICABLE'})
             continue
         value = _value(result, measure['path'])

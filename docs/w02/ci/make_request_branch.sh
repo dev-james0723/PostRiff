@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Build one capacity-run request branch: an orphan commit holding only the workflow, capacity/REQUEST.json and a
 # vercel.json that keeps Git deployments off. Nothing in it is secret; the run uses synthetic data only.
-# usage: make_request_branch.sh <smoke|s0|s1|s2|faults|release|lockbench|baseline> <suffix> <tree sha> <harness sha> [options] [--push]
+# usage: make_request_branch.sh <smoke|s0|s1|s2|faults|release|lockbench|baseline|s1levers> <suffix> <tree sha> <harness sha> [options] [--push]
 #   (lockbench: only the shared request coordinator under K processes; --pools gives the pool size, --latency is unused)
 #   (baseline: the frozen minute worker on the --baseline tree, default RC1, for its posts per minute)
+#   (s1levers: S1 as control, then S1 with the lane loop budget at 58 s and 70 s, and S1 with warm invocations)
 #   --pools 20          one to four pool sizes of 15 to 120, comma separated (default 20)
 #   --latency 2         database round trip in ms, 0 to 99.9 (default 2)
 #   --baseline <sha>    frozen tree for the baseline scenario (default RC1 2a5a523d...)
 # Without --push nothing leaves this machine; the commit and branch name are printed.
 set -euo pipefail
-profile="${1:?profile: smoke, s0, s1, s2, faults, release, lockbench or baseline}"
+profile="${1:?profile: smoke, s0, s1, s2, faults, release, lockbench, baseline or s1levers}"
 suffix="${2:?a short lower-case suffix}"
 sha="${3:?the 40 hex SHA of the tree under test}"
 harness="${4:?the 40 hex SHA of the harness commit (branch claude/discord-w02-capacity-20261023)}"
@@ -27,7 +28,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option: $1"; exit 2 ;;
   esac
 done
-[[ "$profile" =~ ^(smoke|s0|s1|s2|faults|release|lockbench|baseline)$ ]] || { echo 'profile must be smoke, s0, s1, s2, faults, release, lockbench or baseline'; exit 2; }
+[[ "$profile" =~ ^(smoke|s0|s1|s2|faults|release|lockbench|baseline|s1levers)$ ]] || { echo 'profile must be smoke, s0, s1, s2, faults, release, lockbench, baseline or s1levers'; exit 2; }
 [[ "$suffix" =~ ^[a-z0-9]{1,12}$ ]] || { echo 'suffix must be 1 to 12 lower-case letters or digits'; exit 2; }
 for value in "$sha" "$harness" "$baseline"; do
   [[ "$value" =~ ^[0-9a-f]{40}$ ]] || { echo 'every SHA must be 40 lower-case hex characters'; exit 2; }

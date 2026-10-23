@@ -66,7 +66,7 @@ BASE = dict(workspaces=2000, posts=5000, hot_posts=0, per_minute=0, minutes=0, d
             cron_period=60, cron_jitter=(0.0, 1.0), max_duration=300, invocation_mode='cold',
             lead_seconds=90, max_run_minutes=75, fixed_run_minutes=None, stall_detect_minutes=10,
             stall=None, flag_off=None, kills=None, kill_at_create=0, lock_injection=None, misroute_every=0,
-            expiry_in_minutes=None, injections=None, seed_processes=4, expect=())
+            expiry_in_minutes=None, injections=None, seed_processes=4, judge_as=None, expect=())
 
 SCENARIOS = {
     'smoke': dict(workspaces=10, posts=30, cron_period=20, lane_max_seconds=15, shards=4, lead_seconds=10,
@@ -76,6 +76,23 @@ SCENARIOS = {
                   expect=('all_verified', 'no_duplicates', 'no_late_sends', 'isolation', 'clean_workers')),
     'S1': dict(description='5,000 posts due in the same minute, spread over 2,000 workspaces (standard section 4).',
                expect=('standard', 'isolation', 'clean_workers')),
+    # S1 with one lever moved at a time; judged against section 4 as S1 is. No code or policy change: the loop budget
+    # is the existing POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS (the lane clamps it at 90), warm is how the
+    # invocation is started.
+    'S1-lane58': dict(lane_max_seconds=58, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
+                      description='S1 with each lane loop budgeted 58 s instead of 50 (POSTRIFF_DISCORD_PARALLEL_WORKER_'
+                                  'MAX_SECONDS=58): the duty-cycle lever alone. A loop now stops about when the next '
+                                  "minute's loop of the same shard starts, so the idle end of each minute shrinks "
+                                  'without two loops per shard.'),
+    'S1-lane70': dict(lane_max_seconds=70, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
+                      description='S1 with each lane loop budgeted 70 s (POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS=70): '
+                                  "each loop overlaps the next minute's loop of the same shard for about 10 to 15 s, so "
+                                  'the cold start of a minute is covered by the previous loop: duty cycle near 100%, plus '
+                                  'the effect of up to 24 concurrent loops on the coordinator.'),
+    'S1-warm': dict(invocation_mode='warm', judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
+                    description='S1 with every invocation warm: the runtime is built before the cron time, as on a '
+                                'reused instance, so the start of each minute loses only the claim, not the cold build. '
+                                'Loop budget 50 s as in S1.'),
     'S2': dict(hot_posts=3000, max_run_minutes=80,
                description='The same 5,000 posts, one hot workspace holding 3,000 and 2,000 spread over 1,999 '
                            'workspaces (fairness).', expect=('standard', 'isolation', 'clean_workers')),
@@ -1227,7 +1244,7 @@ def differences(result, config):
     ]
     if config.get('sourceDirty'):
         items.insert(0, 'The source tree had uncommitted changes: this receipt does not describe a commit.')
-    if result['scenario'] not in ('S1', 'S2', 'S3'):
+    if (result.get('judgeAs') or result['scenario']) not in ('S1', 'S2', 'S3'):
         items.append('Scenario %s is not the section 4 stress scenario; section 4 PASS/FAIL lines are NOT APPLICABLE '
                      'unless listed.' % result['scenario'])
     return items
