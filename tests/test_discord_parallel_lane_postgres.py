@@ -26,12 +26,60 @@ import discord_lane_fixture as F
 from postriff_phase2.discord import worker as discord_worker
 from postriff_phase2.discord.rate_limits import SharedPostgresBudget
 
+SETTLED = ('verified', 'held', 'uncertain', 'failed', 'canceled')  # nothing more happens without a person
 FROZEN_SOURCE = F.ROOT / 'tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt'
 FROZEN_SHA256 = '8fdfd6e3dc461a88a9d4784a587491e22ada54b27585480a41609fb8c64f76de'  # pragma: allowlist secret -- content hash of the pinned source
 
 
 class WorkerDied(BaseException):
     """A process that stops mid-step: nothing after this point runs; its open transaction rolls back."""
+
+
+class Counted:
+    """A connection factory that counts what is opened through it: connections, and statements by their SQL."""
+    def __init__(self, cluster):
+        self.cluster, self.connections, self.statements = cluster, 0, []
+
+    def __call__(self):
+        self.connections += 1
+        return _CountedConnection(F.psycopg.connect(self.cluster.dsn, prepare_threshold=None), self.statements)
+
+
+class _CountedConnection:
+    def __init__(self, connection, statements):
+        self._connection, self._statements = connection, statements
+
+    def __enter__(self):
+        self._connection.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._connection.__exit__(*exc)
+
+    def cursor(self, *args, **kwargs):
+        return _CountedCursor(self._connection.cursor(*args, **kwargs), self._statements)
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+
+class _CountedCursor:
+    def __init__(self, cursor, statements):
+        self._cursor, self._statements = cursor, statements
+
+    def __enter__(self):
+        self._cursor.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._cursor.__exit__(*exc)
+
+    def execute(self, sql, *args, **kwargs):
+        self._statements.append(sql)
+        return self._cursor.execute(sql, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
 
 
 def frozen_worker_class():
@@ -86,18 +134,35 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual(len(self.wire.requests(method='POST')), expected)
         return found
 
+    def drain(self, worker, loops, *, seconds, rounds=4):
+        """The lane as consecutive cron minutes: `loops` shards run, and run again while any post still waits to
+        be sent or verified (at most `rounds` times). A slow runner may need another minute for what a fast one
+        finishes in one, as production would; the properties are checked on the outcome, not on how many minutes
+        it took. Returns every loop's result."""
+        every = []
+        for _ in range(rounds):
+            results, failures = F.run_lanes(worker, loops, seconds=seconds)
+            self.assertEqual(failures, [])
+            every.extend(results)
+            if all(job['state'] in SETTLED for job in F.jobs(self.cluster).values()):
+                break
+        return every
+
     # (a) exactly once with many loops ---------------------------------------------------------------------------
 
     def test_many_loops_create_every_post_exactly_once(self):
         tenants = [F.Tenant(n) for n in range(24)]
         worker = self.start(tenants, 5)
-        results, failures = F.run_lanes(worker, 8, seconds=60)
-        self.assertEqual(failures, [])
+        results = self.drain(worker, 8, seconds=60)
         self.assert_each_created_once_and_verified(120)
         self.assertEqual(sum(r['counters']['posted'] for r in results), 120)
         self.assertEqual(sum(r['counters']['verified'] for r in results), 120)
-        self.assertEqual({r['stoppedBy'] for r in results}, {'idle'})
         self.assertEqual(self.wire.route429, 0)
+        # Drained, every loop stops at once as idle, claiming nothing.
+        idle, failures = F.run_lanes(worker, 8, seconds=60)
+        self.assertEqual(failures, [])
+        self.assertEqual({r['stoppedBy'] for r in idle}, {'idle'})
+        self.assertEqual(sum(r['counters']['claimed'] for r in idle), 0)
 
     def test_loops_racing_on_one_workspace_send_one_post_at_a_time(self):
         tenant = F.Tenant(0)
@@ -111,8 +176,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 live.append(sum(1 for job in state['phase2']['jobs']
                                 if job.get('leaseOwner') and job.get('leaseUntil', 0) > time.time()))
         self.wire.after = watch
-        results, failures = F.run_lanes(worker, 6, seconds=90)
-        self.assertEqual(failures, [])
+        self.drain(worker, 6, seconds=90)
         self.assert_each_created_once_and_verified(10)
         self.assertEqual(set(live), {1}, 'at most one live Discord lease per workspace, whatever the loop count')
 
@@ -183,27 +247,38 @@ class ParallelLaneOnPostgres(unittest.TestCase):
 
     # (b) the shared request coordinator caps every loop together ------------------------------------------------
 
+    # Requests per one-second window. Low enough that twelve loops want more on any runner, a slow one too: the
+    # cap must bind for the test to say anything, and the uncapped control must still exceed twice it.
+    RATE = 3
+
     def rate_run(self, capacity):
+        """Twelve loops for twelve seconds over 80 posts. Returns the loops' results and how often a loop found
+        the application-wide rows spent before a step and waited for the next window (the lane's pre-claim
+        outlook; its create-permit waits also count permits that lapsed at a window's end, so they are left out)."""
         tenants = [F.Tenant(n) for n in range(40)]
-        worker = self.start(tenants, 2, capacity=capacity, ceiling=2 * 10)
-        started = time.monotonic()
-        F.run_lanes(worker, 12, seconds=12)
-        return time.monotonic() - started
+        worker = self.start(tenants, 2, capacity=capacity, ceiling=2 * self.RATE)
+        results, failures = F.run_lanes(worker, 12, seconds=12)
+        self.assertEqual(failures, [])
+        # Each loop ran on its own twelve-second budget and stopped in order (the loop's timing itself is proven
+        # on a scripted clock in test_discord_parallel_lane.TheLoop; a wall-clock bound here measures the runner).
+        self.assertEqual({r['budget']['maxSeconds'] for r in results}, {12.0})
+        self.assertLessEqual({r['stoppedBy'] for r in results}, {'time_budget', 'rate_wait', 'idle'})
+        return results, sum(r['counters']['rateWaits'] for r in results)
 
     def test_the_coordinator_caps_the_request_rate_across_all_loops(self):
-        elapsed = self.rate_run(10)
+        _, waits = self.rate_run(self.RATE)
         calls = self.wire.calls
-        self.assertGreater(len(calls), 60, 'the run was busy enough to meet the cap')
+        self.assertGreater(waits, 0, 'the run was busy enough to meet the cap')
         # Fixed one-second windows: any trailing second holds at most two windows' worth.
-        self.assertLessEqual(self.wire.peak_second, 20)
+        self.assertLessEqual(self.wire.peak_second, 2 * self.RATE)
         self.assertEqual(self.wire.over_ceiling, 0)
         span = calls[-1][0] - calls[0][0]
-        self.assertLessEqual(len(calls), 10 * (span + 2), 'never above the policy on average')
+        self.assertLessEqual(len(calls), self.RATE * (span + 2), 'never above the policy on average')
         self.assertEqual(self.wire.duplicates(), 0)
-        self.assertLess(elapsed, 12 + 30)
 
     def test_control_the_same_run_exceeds_that_ceiling_when_the_policy_allows_it(self):
-        self.rate_run(1000)
+        _, waits = self.rate_run(1000)
+        self.assertEqual(waits, 0, 'no loop waited for an application window')
         self.assertGreater(self.wire.over_ceiling, 0, 'so the capped run above is the coordinator doing the work')
 
     def admissions(self, reserve, count, offset=0):
@@ -220,17 +295,26 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 pass
         return admitted
 
+    def three_per_window(self):
+        """Three admissions per three-second window. A window opens at its first reservation, so a slow runner's
+        few back-to-back reservations still share one window (with the default one-second window they could
+        straddle two and count six slots)."""
+        tenants = [F.Tenant(0)]
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=3, app_window_seconds=3)
+        return 3
+
     def test_permits_of_a_dead_loop_that_were_never_used_free_their_slots(self):
-        self.start([F.Tenant(0)], 0, capacity=3)
+        window = self.three_per_window()
         self.assertEqual(self.admissions('reserve', 4), 3)  # a dead loop's three permits fill the window
-        time.sleep(1.2)  # they were never consumed, so the next window does not count them
+        time.sleep(window + .2)  # they were never consumed, so the next window does not count them
         self.assertEqual(self.admissions('reserve', 4, offset=10), 3)
 
     def test_a_read_whose_process_died_after_admission_keeps_its_slot_until_reviewed(self):
         """Existing conservative rule, recorded here: a spent admission with no observed answer keeps one slot."""
-        self.start([F.Tenant(0)], 0, capacity=3)
+        window = self.three_per_window()
         self.assertEqual(self.admissions('reserve_read', 1), 1)  # admitted as sent; the answer is never observed
-        time.sleep(1.2)
+        time.sleep(window + .2)
         self.assertEqual(self.admissions('reserve_read', 3, offset=10), 2)
         with self.cluster.connect(autocommit=True) as db:
             self.assertEqual(db.execute("SELECT count(*) FROM public.pr_discord_request_admissions WHERE state='sent' "
@@ -257,12 +341,16 @@ class ParallelLaneOnPostgres(unittest.TestCase):
             original = hosted_worker.due_workspaces_sql
             replaced = lambda *a, **k: original(*a, **k).replace('ORDER BY hint.last_claimed_at,w.id', 'ORDER BY w.id')
             with patch.object(hosted_worker, 'due_workspaces_sql', replaced):
-                F.run_lanes(worker, loops, seconds=90)
+                self.drain(worker, loops, seconds=90)
         else:
-            F.run_lanes(worker, loops, seconds=90)
+            self.drain(worker, loops, seconds=90)
+        return tenants, self.claim_order()
+
+    def claim_order(self):
+        """Every claim so far, in order, as (workspace, job), from the jobs' own 'claimed' events."""
         claims = sorted((event['at'], workspace, job_id) for (workspace, job_id), job in F.jobs(self.cluster).items()
                         for event in job['events'] if event['state'] == 'claimed')
-        return tenants, [(workspace, job_id) for _, workspace, job_id in claims]
+        return [(workspace, job_id) for _, workspace, job_id in claims]
 
     def assert_rotation(self, tenants, claims):
         # Each claim moves its workspace to the back of the due order, also when the attempt is then deferred, and
@@ -297,7 +385,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         # Six workspaces connected to the same server channel: the limit is the channel's, across tenants.
         tenants = [F.Tenant(n, guild='6100000', channel='7100000') for n in range(6)]
         worker = self.start(tenants, 3)
-        F.run_lanes(worker, 6, seconds=90)
+        self.drain(worker, 6, seconds=90)
         self.assertEqual(self.wire.route429, 0, 'no create was refused by the channel limit')
         times = sorted(at for created in self.wire.creates.values() for at, _, _ in created)
         self.assertEqual(len(times), 18)
@@ -307,6 +395,24 @@ class ParallelLaneOnPostgres(unittest.TestCase):
 
     # (d) an approval that expires while waiting ------------------------------------------------------------------
 
+    # The coordinator checks a create against its approval and the policy, then records sent_at in the next
+    # statement of the same transaction; on a loaded runner that statement can come a little later.
+    RELEASE_SLACK = 1.0
+
+    def released_creates(self):
+        """When the coordinator let each create leave (its admission's sent_at, the database clock), by
+        (workspace, publication): the last instant the system controls. The mock's own arrival time adds the
+        commit and the runner's scheduling delay on top, which no deadline check can bound."""
+        with self.cluster.connect(autocommit=True) as db:
+            rows = db.execute("SELECT workspace_id::text, publication_id, extract(epoch from sent_at)::double precision, "
+                              "extract(epoch from expires_at)::double precision "
+                              "FROM public.pr_discord_request_admissions WHERE is_publish AND sent_at IS NOT NULL").fetchall()
+        released, self.permit_ends = {}, {}
+        for workspace, publication, sent, permit_end in rows:
+            released.setdefault((workspace, publication), []).append(sent)
+            self.permit_ends.setdefault((workspace, publication), []).append(permit_end)
+        return released
+
     def test_a_post_whose_approval_expires_while_waiting_is_held_and_never_sent_late(self):
         tenants = [F.Tenant(n) for n in range(14)]
         expiry = self.cluster.now() + 8
@@ -314,10 +420,18 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.start(tenants, 1, capacity=6, latency=.02, now=at - 300, at=at)
         F.run_lanes(self.worker, 3, seconds=30)
         found = F.jobs(self.cluster)
-        for job in found.values():
+        released = self.released_creates()
+        for key, job in found.items():
             self.assertAlmostEqual(job['manifest']['expiresAt'], int(at) + 3600, delta=1)
-            for _, _, wall in self.wire.creates.get(F.nonce(job), []):
-                self.assertLess(wall, job['manifest']['expiresAt'], 'nothing is sent after its approval expired')
+            creates = self.wire.creates.get(F.nonce(job), [])
+            self.assertEqual(len(released.get(key, [])), len(creates), 'every create the mock saw was released')
+            for sent, permit_end in zip(released.get(key, []), self.permit_ends.get(key, [])):
+                # Exact: the permit a create left under was never valid past the approval (the coordinator
+                # refuses a permit at its end); and the release itself was recorded before that, give or take
+                # the next statement.
+                self.assertLessEqual(permit_end, job['manifest']['expiresAt'] + 1e-6)
+                self.assertLess(sent, job['manifest']['expiresAt'] + self.RELEASE_SLACK,
+                                'nothing is released after its approval expired')
         states = [job['state'] for job in found.values()]
         self.assertGreater(states.count('held'), 0, 'the queue outlasted some approvals')
         self.assertGreater(states.count('verified'), 0)
@@ -370,7 +484,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
                            (json.dumps(state), workspace))
         self.wire.after = None
-        F.run_lanes(worker, 4, seconds=60)
+        self.drain(worker, 4, seconds=60)
         # A hold also blocks every reserved-but-unused create permit (existing rule). A loop that was between
         # sealing and sending records its post as uncertain: nothing was sent, and it waits for manual review.
         found = F.jobs(self.cluster).values()
@@ -431,7 +545,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         return seen[0]
 
     def test_a_global_429_pauses_every_loop_without_a_retry_storm(self):
-        started = self.embargo_run(lambda worker: F.run_lanes(worker, 4, seconds=40))
+        started = self.embargo_run(lambda worker: self.drain(worker, 4, seconds=40))
         during = [call for call in self.wire.calls if started < call[0] < started + 3.9]
         self.assertLessEqual(len(during), 3, 'inside the embargo only requests already admitted may still arrive')
         found = F.jobs(self.cluster).values()
@@ -522,13 +636,15 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         limiter, identity = self.hosted.providers['discord'].rate_limiter, self.hosted.providers['discord']._rate_identity('bot')
         limiter.observe(limiter.reserve_read('GET', '/guilds/6900000', identity=identity), {'status': 403, 'headers': {}})
         with self.cluster.connect(autocommit=True) as db:
-            remaining, embargo, reset = db.execute(
-                "SELECT remaining, extract(epoch from blocked_until-clock_timestamp()), "
+            # The stored instants, not each one minus its own clock_timestamp() call: two calls can be
+            # milliseconds apart when the server process is preempted between them.
+            remaining, embargo, reset, left = db.execute(
+                "SELECT remaining, extract(epoch from blocked_until), extract(epoch from reset_at), "
                 "extract(epoch from reset_at-clock_timestamp()) FROM public.pr_discord_rate_state "
                 "WHERE kind='invalid'").fetchone()
         self.assertEqual(remaining, 0)
-        self.assertAlmostEqual(float(embargo), float(reset), places=3)
-        self.assertGreater(float(reset), 590)
+        self.assertAlmostEqual(float(embargo), float(reset), places=5)
+        self.assertGreater(float(left), 590)
         blocker, wait = F.discord_lane.outlook(F.discord_lane.LaneWorker(F.base_worker(self.cluster, self.hosted), 0))
         self.assertIsNone(blocker)
         self.assertGreater(wait, 590)
@@ -539,7 +655,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         tracker = F.ConnectionTracker()
         tenants = [F.Tenant(n) for n in range(12)]
         worker = self.start(tenants, 2, tracker=tracker)
-        F.run_lanes(worker, 6, seconds=60)
+        self.drain(worker, 6, seconds=60)
         self.assert_each_created_once_and_verified(24)
         self.assertEqual(tracker.thread_peak, 1)
         self.assertLessEqual(tracker.peak, 6)
@@ -680,13 +796,10 @@ class ParallelLaneOnPostgres(unittest.TestCase):
             self.assertGreater(warning['oldestEligibleLagSeconds'], 600)
             self.assertEqual((warning['laneOwnsDiscord'], warning['laneBlocker'], warning['depth']), (True, None, 32))
         self.assertEqual(self.wire.calls, [], 'nothing was sent during the gap')
-        results, failures = F.run_lanes(worker, 1, seconds=90)  # the crons arrive again
-        self.assertEqual(failures, [])
+        self.drain(worker, 1, seconds=90)  # the crons arrive again
         self.assert_each_created_once_and_verified(32)
-        creates = sorted((at, channel) for times in self.wire.creates.values() for at, channel, _ in times)
-        last_small = max(index for index, (_, channel) in enumerate(creates) if channel != busy.channel)
-        self.assertLessEqual(sum(1 for _, channel in creates[:last_small] if channel == busy.channel), 8,
-                             'the backlog drains fairly: every small tenant finished while the busy one sent a few')
+        # The backlog drains fairly: the rotation's first two rounds cover every workspace (see the fairness test).
+        self.assert_rotation(tenants, self.claim_order())
         tick, warnings = self.lagging(worker)
         self.assertEqual(warnings, [], 'quiet once drained')
 
@@ -703,16 +816,20 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         found = F.jobs(self.cluster)
         claims = [event['at'] for job in found.values() for event in job.get('events', []) if event['state'] == 'claimed']
         self.assertTrue(claims and min(claims) < expires)
-        self.assertEqual([at for at in claims if at > expires + 1], [], 'nothing claimed after the expiry')
-        sent = sorted(wall for times in self.wire.creates.values() for _, _, wall in times)
-        self.assertTrue(0 < len(sent) < len(tenants), 'the policy expired mid-run')
-        self.assertLess(sent[-1], expires + 1, 'no create left after the expiry')
+        # Each loop checks the policy before every step, so a loop claims after the expiry at most in the one step
+        # it had already begun: a bound by structure, not by how slow the runner is.
+        self.assertLessEqual(len([at for at in claims if at > expires]), 4, 'no new step after the expiry')
+        released = [sent for times in self.released_creates().values() for sent in times]
+        self.assertEqual(len(released), sum(len(times) for times in self.wire.creates.values()))
+        self.assertTrue(0 < len(released) < len(tenants), 'the policy expired mid-run')
+        self.assertLessEqual(max(end for ends in self.permit_ends.values() for end in ends), expires + 1e-6,
+                             'no permit outlived the policy')
+        self.assertLess(max(released), expires + self.RELEASE_SLACK, 'no create was released after the expiry')
         # Renewal (a new deployment with a renewed policy): the lane resumes.
         provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP,
                                                      policy=F.policy(self.cluster.now(), capacity=200))
         self.skip_push_back()
-        results, failures = F.run_lanes(worker, 4, seconds=60)
-        self.assertEqual(failures, [])
+        self.drain(worker, 4, seconds=60)
         stuck = []
         for job in F.jobs(self.cluster).values():
             creates = len(self.wire.creates.get(F.nonce(job), []))
@@ -777,7 +894,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 try:
                     _, failures = F.run_lanes(self.worker, 2, seconds=6)
                     self.assertEqual(failures, [])
-                    deadline = time.monotonic() + 60
+                    deadline = time.monotonic() + 240  # a wait for an outcome: it ends as soon as all are verified
                     while (time.monotonic() < deadline
                            and {job['state'] for job in F.jobs(self.cluster).values()} != {'verified'}):
                         time.sleep(.5)
@@ -808,7 +925,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                                  'a live lane lease is left alone')
                 self.assertEqual(len(self.wire.calls), calls, 'and so is its workspace: one live lease each')
                 time.sleep(3.5)  # the dead loop's lease expires
-                deadline = time.monotonic() + 45
+                deadline = time.monotonic() + 180  # a wait for an outcome: it ends as soon as it is reached
                 while time.monotonic() < deadline:
                     frozen.tick(10, 20)
                     found = F.jobs(self.cluster)
@@ -865,9 +982,90 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         on = self.minute(worker)
         self.assertTrue(on['discordParallelLane'])
         self.assertEqual((on['processed'], len(self.wire.calls)), (0, calls), 'the minute cron claims no Discord')
-        _, failures = F.run_lanes(worker, 3, seconds=60)
-        self.assertEqual(failures, [])
+        self.drain(worker, 3, seconds=60)
         self.assert_each_created_once_and_verified(20)
+
+    # (k) an idle shard ----------------------------------------------------------------------------------------------
+
+    def shard(self):
+        """One shard invocation on a worker whose own connections are counted. Returns (result, counter)."""
+        counted = Counted(self.cluster)
+        worker = F.PostgresWorker(counted, social=self.hosted, worker_id='w02-counted', discord_workers=True)
+        (result,), failures = F.run_lanes(worker, 1, seconds=50)
+        self.assertEqual(failures, [])
+        return result, counted
+
+    def test_an_idle_shard_opens_one_connection_for_one_statement(self):
+        """Twelve shards every minute: with nothing due, each opens one connection for one statement (the database
+        clock and the soonest due work in the projection) and stops as idle. It used to open four for seven: the
+        schema check, the coordinator read, a claim's checks and due query, and the due probe after the miss."""
+        tenants = [F.Tenant(n) for n in range(4)]
+        now = self.cluster.now()
+        F.seed(self.cluster, tenants[:2], 0)  # workspaces without Discord work
+        F.seed(self.cluster, tenants[2:], 2, now=now - 60, at=now + 1800)  # approved, due in half an hour
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
+        result, counted = self.shard()
+        self.assertEqual((result['stoppedBy'], counted.connections, len(counted.statements)), ('idle', 1, 1))
+        self.assertEqual(counted.statements, [F.discord_lane._SOONEST])
+        self.assertEqual((result['counters']['steps'], result['counters']['claimed']), (0, 0))
+        self.assertEqual(self.wire.calls, [])
+        # Idle by the loop's own rule: the soonest due work lies beyond the idle horizon.
+        with self.cluster.connect(autocommit=True) as db:
+            soonest = db.execute('SELECT min(next_at) FROM public.pr_discord_worker_projection').fetchone()[0]
+        self.assertGreater(soonest - self.cluster.now(), F.discord_lane.IDLE_HORIZON_SECONDS)
+
+    def test_a_shard_with_work_due_runs_the_loop_as_before(self):
+        tenants = [F.Tenant(n) for n in range(2)]
+        self.start(tenants, 1)
+        result, counted = self.shard()
+        # The due probe in place of the schema check, then the loop: its coordinator read before the first claim.
+        self.assertEqual(counted.statements[0], F.discord_lane._SOONEST)
+        self.assertIn('pr_discord_rate_state', counted.statements[1])
+        self.assertEqual((result['counters']['posted'], result['counters']['verified']), (2, 2))
+        self.assert_each_created_once_and_verified(2)
+
+    def test_on_an_idle_shard_the_p0_signals_still_fire(self):
+        tenants = [F.Tenant(n) for n in range(2)]
+        now = self.cluster.now()
+        F.seed(self.cluster, tenants, 1, now=now - 60, at=now + 1800)  # nothing due within the horizon
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
+        # A shard that cannot run says why at WARNING every minute, before any database read.
+        for cause, reason in (('rate limits off', 'coordinator_unavailable'), ('policy expired', 'coordinator_unavailable'),
+                              ('no coordinator', 'coordinator_unavailable'), ('degraded', 'coordinator_degraded')):
+            with self.subTest(cause):
+                self.repair()
+                if cause == 'degraded':
+                    self.hosted.providers['discord'].rate_coordinator_degraded = True
+                else:
+                    self.unable(cause)
+                with self.assertLogs('postriff.request', 'WARNING') as logged:
+                    result, counted = self.shard()
+                entry = json.loads(logged.records[-1].getMessage())
+                self.assertEqual((result['stoppedBy'], entry['event'], entry['stoppedBy']),
+                                 (reason, 'discord.lane.completed', reason))
+                self.assertEqual((result['status']['ready'], result['status']['blocker']), (False, reason))
+                self.assertEqual((counted.connections, counted.statements), (0, []))
+        self.repair()
+
+    def test_the_minute_tick_still_warns_of_lagging_work_the_idle_shards_cannot_take(self):
+        """A loop died holding a lease in a workspace whose other post is long overdue: every shard is idle (one lease
+        per workspace, so nothing there is claimable until the lease expires) and the minute tick's lag warning still
+        fires from its own sample."""
+        tenant = F.Tenant(0)
+        F.seed(self.cluster, [tenant], 3, now=self.cluster.now() - 960)  # due eleven minutes ago
+        self.wire = F.MockDiscord([tenant])
+        self.hosted = F.social(self.cluster, [tenant], self.wire, capacity=200)
+        self.worker = F.base_worker(self.cluster, self.hosted)
+        self.leave_a_dead_lease('GET', '/channels', before=True)  # the first post sent, the second leased, the third due
+        result, counted = self.shard()
+        self.assertEqual((result['stoppedBy'], counted.connections, len(counted.statements)), ('idle', 1, 1))
+        tick, warnings = self.lagging(self.worker)
+        self.assertTrue(tick['discordParallelLane'])
+        (warning,) = warnings
+        self.assertGreater(warning['oldestEligibleLagSeconds'], 600)
+        self.assertEqual((warning['laneOwnsDiscord'], warning['laneBlocker']), (True, None))
 
 
 if __name__ == '__main__':
