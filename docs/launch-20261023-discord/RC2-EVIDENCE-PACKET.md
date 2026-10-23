@@ -1,6 +1,6 @@
 # RC2 EVIDENCE PACKET (living; state: **NO-GO**)
 
-Started 2026-10-23 about 04:45Z under owner reply 13 ("continue engineering until a complete RC2 release evidence packet exists, then submit the Production operations that need my approval"). It is updated at every stage with commit SHA, test receipts, PASS/FAIL, remaining risks and blockers. A line without a receipt is NOT RUN, never PASS. Nothing in Production has been built, promoted or changed for RC2. Rollback target for any future promotion: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (the build serving `rafii.io` today).
+Started 2026-10-23 about 04:40Z under owner reply 13 ("continue engineering until a complete RC2 release evidence packet exists, then submit the Production operations that need my approval"). It is updated at every stage with commit SHA, test receipts, PASS/FAIL, remaining risks and blockers. A line without a receipt is NOT RUN, never PASS. Nothing in Production has been built, promoted or changed for RC2. Rollback target for any future promotion: `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg` (the build serving `rafii.io` today).
 
 ## 0. Identity
 
@@ -54,4 +54,4 @@ To be written as an exact numbered list in Packet 3 once sections 1 and 2 are gr
 
 ## 6. Change log
 
-- 2026-10-23 04:45Z skeleton created from the state after owner reply 13.
+- 2026-10-23 04:40Z skeleton created from the state after owner reply 13.
