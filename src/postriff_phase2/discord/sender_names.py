@@ -91,14 +91,14 @@ def assert_sendable(manifest, values=None):
 # Letters of other scripts that render like Latin ones: a compact subset of the Unicode confusables data, applied only
 # to the reserved-word comparison. Full-width and compatibility forms are folded by NFKD.
 _HOMOGLYPHS = str.maketrans({
-    'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'х': 'x', 'у': 'y',
-    'і': 'i', 'ј': 'j', 'ѕ': 's', 'ԁ': 'd', 'ӏ': 'l', 'ɡ': 'g', 'к': 'k',
-    'т': 't', 'н': 'h', 'м': 'm', 'в': 'b', 'г': 'r', 'ı': 'i', 'ł': 'l',
-    'ø': 'o', 'đ': 'd', 'ο': 'o', 'ν': 'v', 'ι': 'i', 'ρ': 'p', 'κ': 'k',
-    'τ': 't', 'α': 'a', 'ε': 'e',
+    '\U00000430': 'a', '\U00000435': 'e', '\U0000043e': 'o', '\U00000440': 'p', '\U00000441': 'c', '\U00000445': 'x', '\U00000443': 'y',
+    '\U00000456': 'i', '\U00000458': 'j', '\U00000455': 's', '\U00000501': 'd', '\U000004cf': 'l', '\U00000261': 'g', '\U0000043a': 'k',
+    '\U00000442': 't', '\U0000043d': 'h', '\U0000043c': 'm', '\U00000432': 'b', '\U00000433': 'r', '\U00000131': 'i', '\U00000142': 'l',
+    '\U000000f8': 'o', '\U00000111': 'd', '\U000003bf': 'o', '\U000003bd': 'v', '\U000003b9': 'i', '\U000003c1': 'p', '\U000003ba': 'k',
+    '\U000003c4': 't', '\U000003b1': 'a', '\U000003b5': 'e',
 })
 # Characters that render as nothing (or as blank space) although they are letters or symbols.
-_BLANKS = frozenset('ᅟᅠㅤﾠ⠀឴឵͏᠎')
+_BLANKS = frozenset('\U0000115f\U00001160\U00003164\U0000ffa0\U00002800\U000017b4\U000017b5\U0000034f\U0000180e')
 _RESERVED_PARTS = ('discord', 'clyde', 'rafii', 'postriff')   # Discord's own webhook rule, plus the product's names
 _RESERVED_WHOLE = ('everyone', 'here')                         # Discord's reserved whole names
 _FORBIDDEN = ('@', '#', ':', '```', '<', '>')                  # Discord's username substrings, plus mention/emoji syntax
@@ -126,7 +126,7 @@ def name_problem(name, kind):
     if len(name) > limit or len(name.encode('utf-16-le')) // 2 > limit:
         return 'too_long'
     categories = [unicodedata.category(c) for c in name]
-    if any(c.startswith('C') for c in categories) or ' ' in name or ' ' in name:
+    if any(c.startswith('C') for c in categories) or '\U00002028' in name or '\U00002029' in name:
         return 'control_or_format'
     if '  ' in name or any(c.startswith('Z') and ch != ' ' for c, ch in zip(categories, name)):
         return 'spacing'
