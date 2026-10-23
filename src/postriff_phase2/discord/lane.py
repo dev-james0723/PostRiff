@@ -8,10 +8,11 @@ Loops may overlap each other, the existing /api/cron/worker (which leaves Discor
 on and blocker() says the lane can run in its process; otherwise it keeps the frozen Discord path) and a person's own
 "post now" nudge. That overlap is safe by the lease protocol; keeping Discord to one scheduler is a preference.
 
-The loop only adds waiting. Before each claim it reads the coordinator's application-wide rows without locks: an
-operator hold (manual_hold) stops it, an embargo or a spent window is slept out instead of claiming work that cannot
-be sent, and it stops when no work is due soon. It never extends an approval, a lease or a permit, never retries a
-create, and stops admitting steps early enough that the last one ends inside the function's time limit.
+The loop only adds waiting. Before each claim it asks blocker() and reads the coordinator's application-wide rows
+without locks: an operator hold (manual_hold) stops it, an embargo or a spent budget (the application window or the
+invalid-request budget) is slept out instead of claiming work that cannot be sent, and it stops when no work is due
+soon. It never extends an approval, a lease or a permit, never retries a create, and stops admitting steps early
+enough that the last one ends inside the function's time limit.
 """
 import json
 import logging

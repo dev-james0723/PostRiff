@@ -46,7 +46,7 @@ Q1).
 |---|---|---|
 | 1 | A Discord-only route looping up to about 4 minutes per invocation; a dispatcher that starts 12 to 16 when work is due and chains a successor | **Changed.** Built K = 12 cron shards (`/api/cron/discord-worker/<n>`), each a 50-second loop (cap 90 s), no dispatcher and no chaining (AS-BUILT.md compares the two). Four-minute loops started every minute would overlap about four deep per shard, multiplying concurrency and connections without adding budget. The lane needed one more change the plan did not foresee: at a saturated budget, refused create permits wasted their four preflight reads (with that wait off, 25 per second produced far fewer posts; CAPACITY-SIMULATION.md), so a refused create permit now waits for the next window, at most one second. |
 | 1 | Budget limits raised for that lane only | Done: its own flag and budget variables, bounded so a step admitted at the deadline still ends inside 300 s. |
-| 1 | Tests on PostgreSQL that two workers never send one post twice | Done, and more (AS-BUILT.md, 21 real-PostgreSQL tests). |
+| 1 | Tests on PostgreSQL that two workers never send one post twice | Done, and more (AS-BUILT.md, 24 real-PostgreSQL tests). |
 | 1 | Capacity run with the mock set to 50 requests a second (approval row 9, owner's Depot) | Not run (a later, separately approved step). Note for it: 50 per 1-second window exceeded 50 in a trailing second in the local run. |
 | 2 | Random offset of up to two minutes on the scheduled time, said in the schedule dialog | Not built (Phase 1b, needs product copy). |
 | 3 | Prepare before the minute | Not built. The preflight is four of the six requests; doing it before the minute would move them out of the burst but they still count against the same budget. |

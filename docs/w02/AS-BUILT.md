@@ -15,8 +15,8 @@ read from the code.
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
-| `tests/test_discord_parallel_lane.py` (new) | 41 offline tests (run under the synthetic fence). |
-| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 21 real-PostgreSQL tests and their fixture; skipped under the fence. |
+| `tests/test_discord_parallel_lane.py` (new) | 59 offline tests (run under the synthetic fence). |
+| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 24 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
 | `docs/w02/*` (new) | This file, the corrected plan, open questions, monitors, simulation results. |
 
@@ -33,6 +33,37 @@ checks, the sender or the launch gate.
 
 A misconfigured budget (under 5 seconds, not a number, or steps out of range) answers 503 `discord_lane_configuration`
 and claims nothing; the minute cron then keeps Discord (`configuration`).
+
+Prerequisites. The lane runs only with all of these; while any is missing the shard loops claim nothing. The minute
+cron keeps Discord when one of the first four is missing (or its process's coordinator is degraded); it cannot see
+the last three, which is what the lag warning is for:
+
+- `POSTRIFF_DISCORD_WORKER_V1_ENABLED` on: the lease protocol the lane uses. Without it the lane flag has no effect.
+- `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` (exact string): the shared coordinator that admits every request.
+  Without it the loops stop with `coordinator_unavailable`, and the hosted runtime also turns Discord authorization
+  off, so the minute cron holds each due Discord post and asks for its destination to be verified again (today's
+  behaviour with rate limits off). The preflight fails this combination.
+- A reviewed policy in `POSTRIFF_DISCORD_RATE_POLICY` that is valid now (`issued_at` to `expires_at`, at most 31 days;
+  judge and renew it with `scripts/discord_rate_policy.py`). Outside it every Discord request is refused.
+- A valid lane budget (above).
+- `CRON_SECRET` of at least 16 ASCII characters (the preflight asks for 32): the shard routes answer 401 to anything
+  else before any work.
+- The 12 cron entries reaching the function: registered from `vercel.json` on the production deployment, not stopped
+  by Deployment Protection, answering 200. A cron that never runs logs nothing; the lag warning is the signal.
+- Migration 126's projection (applied in production), or the loops stop with `schema`.
+
+Rollout order (each deployment is a separately approved release step under the on-demand deployment policy):
+
+1. Deploy a build with the lane flag off. The 12 shards answer `{"enabled": false}` without starting the runtime:
+   12 `request.completed` lines a minute with route `cron` and status 200.
+2. Confirm `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` and a policy that is not expired (and not about to be), with
+   the preflight's `discord-parallel-lane` check and `scripts/discord_rate_policy.py`.
+3. Set `POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED=true` and redeploy (environment changes reach new deployments only).
+4. Confirm 12 `discord.lane.completed` lines a minute, `stoppedBy` `idle`, `time_budget` or `rate_wait`; the minute
+   cron's result shows `discordParallelLane: true`; no `discord.lane.lagging` lines.
+5. To stop fast: the operator hold on the policy row (Turning it off, below). Every loop stops before its next claim;
+   the minute cron cannot see the hold and keeps leaving Discord alone, so posts wait.
+6. To stop fully: redeploy, or promote the previous build, with the flag off.
 
 Time limit [reasoned, tested offline]: `api/index.py` may run 300 s (`vercel.json`). One step admitted just before the
 deadline may still make seven Discord requests at the transport's 20-second timeout plus its transactions (160 s
@@ -162,7 +193,7 @@ but is a separate setting.
 | Coordinator observation fails in a process | that process's provider refuses every later request; its loops stop with `coordinator_degraded`; other processes continue |
 | Database unavailable | the loop's exception is logged and the request returns 500; leases expire and are recovered |
 | Flag on, projection missing | `schema`, nothing claimed (migration 126 is applied in production); the minute cron cannot see it without a query, so it still leaves Discord to the lane and `discord.lane.lagging` fires after five minutes |
-| Flag on, shard crons not reaching the lane (not registered, 401 from a wrong or short `CRON_SECRET`, 404, Deployment Protection, a platform skip) | no `discord.lane.completed` lines; the minute cron (lane able to run in its process) leaves Discord alone, so posts wait; `discord.lane.lagging` fires after five minutes; after an hour their approvals lapse and they are held when next claimed |
+| Flag on, shard crons not reaching the lane (not registered, a 401, a 404, Deployment Protection, a platform skip; a `CRON_SECRET` under 16 characters fails the minute cron's own route too) | no `discord.lane.completed` lines; the minute cron (lane able to run in its process) leaves Discord alone, so posts wait; `discord.lane.lagging` fires after five minutes; after an hour their approvals lapse and they are held when next claimed |
 | Flag on, rate limits off, no coordinator, policy expired or not yet valid, coordinator degraded, or a bad lane budget | the lane cannot run: every loop stops at once with the reason (a bad budget answers 503 `discord_lane_configuration`), and the minute cron of that process keeps the frozen Discord path |
 | Build-level kill switch (`POSTRIFF_OAUTH_DISCORD_DISABLED`) | unchanged: a claimed post is held, as today |
 
@@ -200,8 +231,24 @@ second, which extrapolates to about 23 minutes for 5,000 posts due at once [the 
 same budget gives about 8 minutes, at one about 4 [simulated]. These need the owner's capacity run against the real
 platform before any claim is made to customers.
 
+## Known limits, not changed
+
+- The pre-claim read sees the coordinator's stored rows. A new reviewed policy that lowers a capacity in the middle of
+  a window is applied by the coordinator inside each reservation and rolled back with the refusal, so until that
+  window resets the read says go while every first read is refused, and the loops release the posts they claim for
+  the rest of the window, as the old loop does (at most one second on the application row; on the invalid-request row
+  up to its window, 600 s by default) [reasoned]. Mirroring that recalculation in the lane would copy coordinator
+  internals; left to the coordinator's reviewer.
+- With the YouTube fleet on, the minute cron's claim (the `exclude_youtube` branch of `_claim`) runs the engine's
+  invalidation over every non-YouTube job of a workspace it locks, Discord jobs included and without
+  `_invalidate_owned`'s filter (which also leaves out jobs bound to another deployment), so it can still hold a
+  scheduled, approved or claimed Discord job whose approval, channel or entitlement changed (it never claims or
+  sends one). The same in `2a5a523d`; W-02 changes nothing about it [reasoned].
+
 ## Not done
 
 Phase 1b (scheduled-time jitter) is not started. Not run: the owner's Depot capacity run, any hosted build, the
-exact-SHA CI workflow on this branch, an independent review. Not changed on purpose: requests per post, the coordinator's
-handling of unanswered admissions, the hold's effect on sealed permits, the step order (Q2 to Q4, Q12).
+exact-SHA CI workflow on this branch. An independent review's findings are addressed (the readiness test, the lag
+warning, the invalid-budget wait, the 90-second cap, the preflight check); that fix set has not been reviewed again.
+Not changed on purpose: requests per post, the coordinator's handling of unanswered admissions, the hold's effect on
+sealed permits, the step order (Q2 to Q4, Q12).
