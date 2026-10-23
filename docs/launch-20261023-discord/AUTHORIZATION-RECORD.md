@@ -112,3 +112,9 @@ Question put to the owner (one line to answer):
 **Process note:** the agent applied the seven project variables (rows 1 to 3) and pushed the D1 request after posting the preflight result to the owner but before the owner had replied "go". Both were covered by the owner's approval of rows 1 to 5 and the build itself still needed the owner's approval tap; the agent told the owner and offered to delete the variables.
 
 **Question, not an approval (about 01:25Z):** whether Discord can be served without a bot (webhooks) and whether 100,000 to 200,000 users could post at the same minute. Answered in chat: webhooks are possible but not faster by themselves; today's sender is about 6 to 12 posts a minute, `W-02-parallel-sending-plan.md` applies. **No approved row changes.** The agent asked for W-02 yes or no and the expected first-week volume.
+
+## Reply 11, received 2026-10-23 about 02:05Z
+
+> 做
+
+**Reading, by the agent:** the owner's answer to "W-02 yes or no" (parallel Discord sending, `W-02-parallel-sending-plan.md`). It starts **engineering only**: a new branch `claude/discord-w02-parallel-20261023` from the frozen head, in its own worktree, behind a flag that is off by default, with tests and an in-process capacity simulation. It does **not** approve any build, deployment, environment change, promotion, merge or pull request. The frozen release candidate and its approvals are untouched. Everything the work needs afterwards is a separate yes: a new freeze and exact-SHA CI, an independent review, the owner-run Depot capacity run (packet row 9), a new approval packet and new builds (the current approvals cover D1 and D2 of `2a5a523d` only). It does **not** answer decisions 1 to 6 of `APPROVAL-PACKET-2.md` (H-05, the Q-05 waiver, H-07, M-03, the tester assets, T0 and GO_TIME), and those remain open; the expected first-week volume was not given.
