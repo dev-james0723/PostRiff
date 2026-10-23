@@ -411,18 +411,26 @@ def scenario_procedure(timeline, name, target, *, interval_end=None):
 def decisions_by_group(decisions, groups):
     table = defaultdict(Counter)
     for item in decisions:
-        table[groups.get(item['workspaceId'], 'other')][item['decision'] + ':' + item['reason']] += 1
+        table[groups.get(item['workspaceId'], 'other')][item['decision'] + ':' + str(item['reason'] or '-')] += 1
     return {g: dict(sorted(c.items())) for g, c in sorted(table.items())}
 
 
-def phase_core(work, args):
+def guarded(result, name, function, *args, **kwargs):
+    """Run one scenario; keep its result or its error, so one failure does not lose the others."""
+    try:
+        result[name] = function(*args, **kwargs)
+    except Exception as error:
+        result[name] = {'error': '%s: %s' % (type(error).__name__, error), 'trace': traceback.format_exc()[-3000:]}
+        log('scenario failed: ' + name, error=str(error)[:300])
+
+
+def phase_core(work, args, result):
     timeline = Timeline(work / 'core', tenants=args.tenants, posts=args.posts, edges=True, loops=args.loops)
-    first = timeline.run()
-    result = {'firstTimeline': first}
-    result['A'] = scenario_hazard(timeline, 'core-A', timeline.t_restore)
-    result['A2'] = scenario_hazard(timeline, 'core-A2', timeline.t_restore, nonce_window=900)
-    result['B'] = scenario_procedure(timeline, 'core-B', timeline.t_restore)
-    return result, timeline
+    result['firstTimeline'] = timeline.run()
+    guarded(result, 'A', scenario_hazard, timeline, 'core-A', timeline.t_restore)
+    guarded(result, 'A2', scenario_hazard, timeline, 'core-A2', timeline.t_restore, nonce_window=900)
+    guarded(result, 'B', scenario_procedure, timeline, 'core-B', timeline.t_restore)
+    return timeline
 
 
 def phase_midrun(timeline, args):
@@ -431,8 +439,8 @@ def phase_midrun(timeline, args):
     middle = len(main) // 2
     target = (main[middle - 1] + main[middle]) / 2
     result = {'restorePoint': R.iso(target), 'createsBeforePoint': middle, 'createsInFirstTimeline': len(main)}
-    result['A'] = scenario_hazard(timeline, 'mid-A', target)
-    result['B'] = scenario_procedure(timeline, 'mid-B', target)
+    guarded(result, 'A', scenario_hazard, timeline, 'mid-A', target)
+    guarded(result, 'B', scenario_procedure, timeline, 'mid-B', target)
     return result
 
 
@@ -766,7 +774,8 @@ def main(argv=None):
             log('phase ' + phase)
             try:
                 if phase == 'core':
-                    results['core'], timeline = phase_core(work, args)
+                    results['core'] = {}
+                    timeline = phase_core(work, args, results['core'])
                 elif phase in ('midrun', 'holdrow'):
                     if timeline is None:
                         raise RuntimeError(phase + ' needs the core phase first')

@@ -342,7 +342,8 @@ def plan(views, channels, owned, *, restore_point, interval_end, bot_id, skew=5.
             if sealed:
                 decision, reason = 'left', 'sealed_no_message'
             elif view['state'] == 'held':
-                decision, reason = 'left', 'held_no_message'
+                decision, reason = 'left', ('already_held_' + view['marker']['reason']
+                                            if (view['marker'] or {}).get('reason') else 'held_no_message')
             elif could_have_been_sent(view, restore_point, interval_end, skew):
                 # It may have been sent and then deleted by a moderator: Discord cannot show that.
                 decision, reason = 'ambiguous', 'due_in_interval_not_found'
