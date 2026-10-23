@@ -155,6 +155,60 @@ class LatenessComesFromTheMock(unittest.TestCase):
         self.assertEqual(analysis.judge(result, standard)[0]['verdict'], 'NOT MEASURED')
 
 
+class RequestLedger(unittest.TestCase):
+    """The ledger must add up, separate the ideal path from overhead, and see a repeated preflight."""
+
+    @staticmethod
+    def preflight(world, index):
+        bot = {'authorization': 'Bot ' + mock.BOT_TOKEN}
+        user = {'authorization': 'Bearer ' + mock.bearer(index)}
+        guild = mock.guild_id(index)
+        return [world.handle('GET', '/oauth2/@me', user, None)[3],
+                world.handle('GET', '/guilds/%s' % guild, bot, None)[3],
+                world.handle('GET', '/guilds/%s/members/%s' % (guild, mock.BOT), bot, None)[3],
+                world.handle('GET', '/guilds/%s/members/%s' % (guild, mock.user_id(index)), bot, None)[3],
+                world.handle('GET', '/guilds/%s/channels' % guild, bot, None)[3]]
+
+    def test_the_ledger_adds_up_and_counts_a_repeated_preflight(self):
+        world = mock.World(workspaces=4)
+        log = []
+        log += self.preflight(world, 0)                      # post 0: one pass
+        log += self.preflight(world, 1) + self.preflight(world, 1)  # post 1: a released step, then a second pass
+        log += self.preflight(world, 2)                      # post 2: preflight only, never sent
+        log.append(world.handle('GET', '/users/@me', {'authorization': 'Bot ' + mock.BOT_TOKEN}, None)[3])
+        log.append(world.handle('GET', '/oauth2/applications/@me', {'authorization': 'Bot ' + mock.BOT_TOKEN}, None)[3])
+        for index in (0, 1):
+            _, _, body, record = create(world, index, 'w%d-p0' % index, 'n%d' % index)
+            log.append(record)
+            log.append(world.handle('GET', '/channels/%s/messages/%s' % (mock.channel_id(index), body['id']),
+                                    {'authorization': 'Bot ' + mock.BOT_TOKEN}, None)[3])
+        manifest = [{'index': n, 'workspace': 'w%d' % n, 'post': 'w%d-p0' % n, 'nonce': 'n%d' % n, 'due': 0.0,
+                     'expiresAt': 3600.0} for n in range(3)]
+        posts, _ = analysis.per_post(manifest, log)
+        ledger = analysis.request_ledger(log, posts)
+        self.assertEqual((ledger['sentPosts'], ledger['verifiedPosts']), (2, 2))
+        self.assertEqual(ledger['total'], len(log))
+        self.assertEqual(ledger['essential'], 14, 'two posts on the ideal path of 7')
+        self.assertEqual(ledger['essential'] + sum(ledger['overheadBuckets'].values()), ledger['total'])
+        self.assertEqual(ledger['overheadBuckets']['botIdentity'], 2)
+        self.assertEqual(ledger['overheadBuckets']['extraPreflight'], 10, 'one repeated pass and one unsent post')
+        self.assertEqual(ledger['extraPreflightSplit'], {'repeatedPassesForSentPosts': 5, 'forPostsNeverSent': 5,
+                                                         'unattributed': 0, 'attributedTotal': 10})
+        self.assertEqual(ledger['preflightPassesPerSentPostOnePostWorkspaces'], {'1': 1, '2': 1})
+        self.assertEqual(analysis.grant_custody(ledger)['state'], 'real path')
+
+    def test_a_missing_grant_check_is_named_on_the_receipt(self):
+        ledger = {'rows': [], 'sentPosts': 3}
+        self.assertEqual(analysis.grant_custody(ledger)['state'], 'below one per sent post')
+
+    def test_trailing_and_calendar_peaks(self):
+        times = [10.0 + 0.04 * n for n in range(25)] + [11.0 + 0.01 * n for n in range(5)]
+        self.assertEqual(analysis.peak_calendar_second(times), 25)
+        # (11.03 - 1, 11.03] holds 24 of the first window and 4 of the second: two windows of at most 25 share it.
+        self.assertEqual(analysis.peak_trailing(times, 1.0), 28, 'a span of (t-1, t] can hold both windows')
+        self.assertEqual(analysis.peak_trailing([0.0, 1.0], 1.0), 1, 'the span is half open, as the mock counts')
+
+
 @unittest.skipIf(FENCED, 'the synthetic transport fence refuses any database but the guarded runner\'s')
 @unittest.skipUnless(LIVE, 'needs PostgreSQL server binaries (POSTRIFF_PG_BIN) and psycopg')
 class LiveSmoke(unittest.TestCase):
