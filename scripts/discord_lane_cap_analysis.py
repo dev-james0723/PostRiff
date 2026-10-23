@@ -648,7 +648,7 @@ def expectations(result, config, standard):
         ban_posts = [p for p in posts.values() if p['index'] in ban_guilds]
         ban_dupes = sum(max(0, len(p['creates']) - 1) for p in ban_posts)
         _line(rows, 'f429_ban_page', 'A ban page (HTML 429) holds that route; nothing is duplicated; its posts wait',
-              None if not ban else ban_dupes == 0,
+              None if not ban or not ban_guilds else ban_dupes == 0,  # no server named: nothing to follow
               '%d ban pages on %d servers; their %d posts: %s; duplicates %d' % (
                   len(ban), len(ban_guilds), len(ban_posts), dict(Counter(states.get(p['post'], '?') for p in ban_posts)), ban_dupes),
               'no duplicate; posts unsent or held until an operator lifts the hold')
