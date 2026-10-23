@@ -1330,9 +1330,14 @@ class PostgresWorker:
                 # The lane cannot run anywhere (rate limits off, no current policy, a bad lane budget): keep the
                 # frozen Discord path. The lease protocol makes the two schedulers safe together.
                 result = self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
-            # Health indication (this process's full rule), and the lag warning from this tick's own report; no query.
+            # Health indication (this process's full rule), and the lag warning: this tick's own report (a sample of
+            # 256 workspaces) and, when the lane owns Discord, the projection's oldest due work (every workspace, one
+            # indexed statement). A tick that kept Discord runs the frozen path's statements only.
             result['discordLaneStatus'] = lane.status(self.social, self.clock())
-            lane.warn_if_lagging(result, reason)
+            if reason is None:
+                lane.warn_if_lagging(result, reason, lane.projected_lag(self))
+            else:
+                lane.warn_if_lagging(result, reason)
             return result
         return self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
 

@@ -316,15 +316,22 @@ one whose wait outlasts its approval: `discord_worker.release_unsent` sets the s
 `discordWorker.queue.held` count every held post in their samples.
 
 The minute cron's lag warning, for the failures no lane line reports (a cron that never fires logs nothing): with the
-flag on, every tick reads the Discord report it already makes (`discordWorker.queue`) and logs one
-`discord.lane.lagging` line at WARNING when the oldest due, unleased Discord job is more than 300 seconds late
-(`lane.LAG_WARNING_SECONDS`). Fields, counts and codes only: `oldestEligibleLagSeconds`, `thresholdSeconds`,
+flag on, every tick logs one `discord.lane.lagging` line at WARNING when due Discord work is more than 300 seconds late
+(`lane.LAG_WARNING_SECONDS`), or when it could not see the queue. It reads two sources. The Discord report the tick
+already makes (`discordWorker.queue`) samples the first 256 workspaces by id (at most 4,096 Discord jobs); its
+`oldestEligibleLagSeconds` is the oldest due, unleased job there, and when the report fails its status is
+`unavailable`. When the lane owns Discord the tick also reads the projection's oldest due work, every workspace, in one
+indexed statement (`lane.projected_lag`, the shards' own due probe): `projectedLagSeconds`. A tick that kept Discord
+(the lane cannot run anywhere) runs only the frozen path's statements and does not read the projection. The line
+fires when either lag passes the threshold, when the report is `unavailable`, or when the lane owns Discord and the
+projection cannot be read, and says which: `report` (`sample` or `unavailable`) and `projection` (`read`,
+`unreadable`, or `not_read` when the tick kept Discord). Other fields, counts and codes only: `thresholdSeconds`,
 `laneOwnsDiscord`, `laneBlocker` (the readiness reason when the tick kept Discord; null, with `laneOwnsDiscord` true,
 when only the tick's own process has a degraded coordinator, whose shard lines then say `coordinator_degraded`),
-`depth`, `held`, `uncertain`, `deadLetters`. It adds no query [tested offline: the same statements with and without the
-warning]. Alert on any such line. It also fires while a large burst drains (5,000 posts take about 23 minutes), which
-is worth knowing too (Q1). It is blind where the report is: workspaces outside its sample (the first 256 by id, at
-most 4,096 Discord jobs) and a failed report (`queue.status` `unavailable`); M1 reads the whole projection.
+`depth`, `held`, `uncertain`, `deadLetters` [tested on PostgreSQL: 300 workspaces with the only due post outside the
+sample, and a report that fails]. The projection's lag counts a post waiting for manual reconciliation (`uncertain`)
+as due, as the report does, and it does not know which deployment a post is bound to. Alert on any such line. It also
+fires while a large burst drains (5,000 posts take about 23 minutes), which is worth knowing too (Q1).
 
 ## Capacity
 

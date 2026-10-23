@@ -36,18 +36,19 @@ class WorkerDied(BaseException):
 
 
 class Counted:
-    """A connection factory that counts what is opened through it: connections, and statements by their SQL."""
-    def __init__(self, cluster):
-        self.cluster, self.connections, self.statements = cluster, 0, []
+    """A connection factory that counts what is opened through it: connections, and statements by their SQL. A
+    statement for which `refuse(sql)` is true raises instead of running (a failing query, on the real database)."""
+    def __init__(self, cluster, refuse=None):
+        self.cluster, self.connections, self.statements, self.refuse = cluster, 0, [], refuse or (lambda sql: False)
 
     def __call__(self):
         self.connections += 1
-        return _CountedConnection(F.psycopg.connect(self.cluster.dsn, prepare_threshold=None), self.statements)
+        return _CountedConnection(F.psycopg.connect(self.cluster.dsn, prepare_threshold=None), self)
 
 
 class _CountedConnection:
-    def __init__(self, connection, statements):
-        self._connection, self._statements = connection, statements
+    def __init__(self, connection, counter):
+        self._connection, self._counter = connection, counter
 
     def __enter__(self):
         self._connection.__enter__()
@@ -57,15 +58,15 @@ class _CountedConnection:
         return self._connection.__exit__(*exc)
 
     def cursor(self, *args, **kwargs):
-        return _CountedCursor(self._connection.cursor(*args, **kwargs), self._statements)
+        return _CountedCursor(self._connection.cursor(*args, **kwargs), self._counter)
 
     def __getattr__(self, name):
         return getattr(self._connection, name)
 
 
 class _CountedCursor:
-    def __init__(self, cursor, statements):
-        self._cursor, self._statements = cursor, statements
+    def __init__(self, cursor, counter):
+        self._cursor, self._counter = cursor, counter
 
     def __enter__(self):
         self._cursor.__enter__()
@@ -75,7 +76,9 @@ class _CountedCursor:
         return self._cursor.__exit__(*exc)
 
     def execute(self, sql, *args, **kwargs):
-        self._statements.append(sql)
+        self._counter.statements.append(sql)
+        if self._counter.refuse(sql):
+            raise RuntimeError('synthetic statement failure')
         return self._cursor.execute(sql, *args, **kwargs)
 
     def __getattr__(self, name):
@@ -1048,6 +1051,41 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 self.assertEqual((result['status']['ready'], result['status']['blocker']), (False, reason))
                 self.assertEqual((counted.connections, counted.statements), (0, []))
         self.repair()
+
+    # (l) the lag warning sees every workspace -----------------------------------------------------------------------
+
+    def fill(self, count):
+        """`count` workspaces with no Discord work whose ids sort before every synthetic tenant's, so the minute
+        tick's report (a sample of the first 256 workspaces by id) is full of them."""
+        with self.cluster.connect(autocommit=True) as db:
+            for number in range(1, count + 1):
+                db.execute('INSERT INTO public.pr_workspaces(id,revision,state) VALUES(%s,1,%s::jsonb)',
+                           ('00000000-0000-4000-8000-%012d' % number, json.dumps({'phase2': {'jobs': []}})))
+
+    def test_the_lag_warning_sees_due_work_beyond_the_reports_sample(self):
+        tenant = F.Tenant(0)
+        self.fill(299)  # 300 workspaces in all; the only Discord post is in the last by id
+        F.seed(self.cluster, [tenant], 1, now=self.cluster.now() - 960)  # due eleven minutes ago
+        self.wire = F.MockDiscord([tenant])
+        self.hosted = F.social(self.cluster, [tenant], self.wire, capacity=200)
+        tick, warnings = self.lagging(F.base_worker(self.cluster, self.hosted))
+        self.assertTrue(tick['discordParallelLane'])
+        self.assertEqual(tick['discordWorker']['queue']['oldestEligibleLagSeconds'], 0.0, 'outside the sample')
+        (warning,) = warnings
+        self.assertGreater(warning['projectedLagSeconds'], 600)
+        self.assertEqual((warning['projection'], warning['report'], warning['laneOwnsDiscord']), ('read', 'sample', True))
+        self.assertEqual(self.wire.calls, [], 'the tick itself still leaves Discord to the lane')
+
+    def test_a_queue_report_that_fails_is_a_warning(self):
+        self.start([F.Tenant(0)], 1)  # due now: nothing lags
+        broken = Counted(self.cluster, refuse=lambda sql: sql.lstrip().startswith('WITH sample AS MATERIALIZED'))
+        worker = F.PostgresWorker(broken, social=self.hosted, worker_id='w02-broken-report', discord_workers=True)
+        tick, warnings = self.lagging(worker)
+        self.assertEqual(tick['discordWorker']['queue']['status'], 'unavailable')
+        (warning,) = warnings
+        self.assertEqual((warning['report'], warning['oldestEligibleLagSeconds'], warning['projection']),
+                         ('unavailable', None, 'read'))
+        self.assertLess(warning['projectedLagSeconds'], 300)
 
     def test_the_minute_tick_still_warns_of_lagging_work_the_idle_shards_cannot_take(self):
         """A loop died holding a lease in a workspace whose other post is long overdue: every shard is idle (one lease
