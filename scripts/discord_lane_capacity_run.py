@@ -52,6 +52,7 @@ import discord_lane_cap_cluster as cluster_tools  # noqa: E402
 import discord_lane_cap_mock as mock_tools  # noqa: E402
 
 STANDARD = HARNESS / 'docs/w02/capacity-standard.json'
+ACTIVE = []
 PRESPAWN_SECONDS = 8.0
 
 # --- scenarios -----------------------------------------------------------------------------------------------------
@@ -90,7 +91,7 @@ SCENARIOS = {
     'baseline': dict(lane=False, fixed_run_minutes=10,
                      description='The frozen minute worker (lane flag off) on the S1 data for 10 minutes: its real '
                                  'Discord posts per minute.', expect=('baseline', 'no_duplicates', 'no_late_sends', 'isolation')),
-    'F429': dict(workspaces=1000, posts=1000, max_run_minutes=25, stall_detect_minutes=6,
+    'F429': dict(workspaces=1000, posts=1000, max_run_minutes=12, stall_detect_minutes=4,
                  injections=[{'kind': 'global429', 'at': 1.5, 'seconds': 1.0, 'retryAfter': 5},
                              {'kind': 'global429', 'at': 3.0, 'seconds': 1.0, 'retryAfter': 3},
                              {'kind': 'route429', 'route': 'POST /channels/{id}/messages', 'after': 2.0, 'count': 5,
@@ -577,61 +578,76 @@ class Harness:
         return layout
 
     def seed(self):
+        """Phase 1 connects every workspace in parallel processes; then T is chosen from the measured rate so that it
+        lies the lead time after seeding; phase 2 approves the posts for T."""
         s = self.s
         layout = self.plan()
         posts = sum(len(d) for _, d in layout)
         hot = max((len(d) for _, d in layout), default=0)
         workers = max(1, min(s['seed_processes'], len(layout)))
-        estimate = 15 + (len(layout) * 0.7 + posts * 0.01) / workers + (hot ** 2) * 5e-6 + (hot * 0.01)
-        now = time.time()
-        expiry_seam = s['expiry_in_minutes'] is not None
-        lead = s['lead_seconds']
         period = s['cron_period']
-        if expiry_seam:
-            # Approvals expire `expiry_in_minutes` after the run's first cron: scheduled an hour earlier, approved by
-            # the seeder's own clock set back accordingly (the tested code runs on the real clock).
-            first = math.ceil((now + estimate * 1.6 + lead) / period) * period
-            T = first + 60 * s['expiry_in_minutes'] - 3600
-            T = math.floor(T / 60) * 60
-            clock_offset = (T - 300) - now
-            self.first_cron_floor = first
-        else:
-            granularity = 60 if period >= 60 else period
-            T = math.ceil((now + estimate * 1.6 + lead) / granularity) * granularity
-            clock_offset = 0.0
-            self.first_cron_floor = None
-        self.T = T
-        self.reference = self.first_cron_floor if expiry_seam else T
-        deadline = self.reference - max(10, lead * 0.3)
-        plan = {'workspacesTotal': self.workspace_count(), 'runTag': self.dir.name, 'deadline': deadline,
-                'clockOffset': clock_offset,
-                'workspaces': [[index, [T + offset for offset in offsets]] for index, offsets in layout]}
-        (self.dir / 'seed-plan.json').write_text(json.dumps(plan))
-        self.config.update(dueAt=T, dueAtIso=now_iso(T), referenceAt=self.reference, seedEstimateSeconds=round(estimate, 1),
-                           seededWorkspaces=len(layout), seededPosts=posts, hotPosts=s['hot_posts'],
-                           seedClockOffsetSeconds=clock_offset)
-        self.log('seeding %d posts in %d workspaces with %d processes (estimate %.0f s); T = %s%s' % (
-            posts, len(layout), workers, estimate, now_iso(T),
-            ' (approval expiry seam: expiry at %s)' % now_iso(T + 3600) if expiry_seam else ''))
+        lead = s['lead_seconds']
+        expiry_seam = s['expiry_in_minutes'] is not None
         started = time.time()
+        connect_deadline = started + 600 + len(layout) * 2.0 / workers
+        plan = {'workspacesTotal': self.workspace_count(), 'runTag': self.dir.name, 'deadline': connect_deadline + 900,
+                'workspaces': [[index, offsets] for index, offsets in layout]}
+        plan_path = self.dir / 'seed-plan.json'
+        plan_path.write_text(json.dumps(plan))
+        self.log('seeding %d posts in %d workspaces with %d processes: connecting' % (posts, len(layout), workers))
         processes = []
         for part in range(workers):
             out = self.dir / ('seed-%d.jsonl' % part)
             argv = [sys.executable, '-I', '-B', str(self.scripts / 'discord_lane_cap_seed.py'),
                     '--source-tree', str(self.tree), '--admin-dsn', self.admin_dsn, '--env', str(self.env_seed),
-                    '--plan', str(self.dir / 'seed-plan.json'), '--out', str(out), '--slice', '%d/%d' % (part, workers)]
+                    '--plan', str(plan_path), '--out', str(out), '--slice', '%d/%d' % (part, workers)]
             processes.append((self.start_child(argv, name='seed-%d' % part), out))
+        while not all(Path(str(out) + '.connected').exists() for _, out in processes):
+            for process, _ in processes:
+                if process.poll() is not None and process.returncode:
+                    raise RuntimeError('a seeding process failed while connecting; see %s' % self.dir)
+            if time.time() > connect_deadline:
+                raise RuntimeError('seeding could not connect the workspaces in time')
+            time.sleep(0.5)
+        connected = time.time()
+        estimate = 10 + posts * 0.006 / workers + (hot ** 2) * 5e-6 + hot * 0.02
+        now = time.time()
+        if expiry_seam:
+            # Approvals expire `expiry_in_minutes` after the run's first cron: scheduled an hour earlier and approved
+            # by the seeder's own clock set back accordingly (the tested code runs on the real clock).
+            first = math.ceil((now + estimate * 2 + lead) / period) * period
+            T = math.floor((first + 60 * s['expiry_in_minutes'] - 3600) / 60) * 60
+            clock_offset = (T - 300) - now
+            self.first_cron_floor = first
+        else:
+            granularity = 60 if period >= 60 else period
+            T = math.ceil((now + estimate * 2 + lead) / granularity) * granularity
+            clock_offset = 0.0
+            self.first_cron_floor = None
+        self.T = T
+        self.reference = self.first_cron_floor if expiry_seam else T
+        deadline = self.reference - max(8, lead * 0.25)
+        due_path = Path(str(plan_path) + '.due')
+        due_path.write_text(json.dumps({'due': T, 'clockOffset': clock_offset, 'deadline': deadline}))
+        self.config.update(dueAt=T, dueAtIso=now_iso(T), referenceAt=self.reference,
+                           seedConnectSeconds=round(connected - started, 1), seedScheduleEstimateSeconds=round(estimate, 1),
+                           seededWorkspaces=len(layout), seededPosts=posts, hotPosts=s['hot_posts'],
+                           seedClockOffsetSeconds=clock_offset)
+        self.log('connected %d workspaces in %.0f s; T = %s%s' % (
+            len(layout), connected - started, now_iso(T),
+            ' (approval expiry seam: approvals expire at %s)' % now_iso(T + 3600) if expiry_seam else ''))
         for process, _ in processes:
             while process.poll() is None:
-                if time.time() > deadline + 30:
+                if time.time() > deadline + 20:
                     raise RuntimeError('seeding overran T; rerun with a larger --lead-seconds')
-                time.sleep(0.5)
+                time.sleep(0.25)
             if process.returncode:
                 raise RuntimeError('a seeding process failed; see %s' % self.dir)
         with open(self.dir / 'seed-manifest.jsonl', 'w') as manifest:
             for _, out in processes:
                 manifest.write(Path(out).read_text())
                 Path(out).unlink()
+                Path(str(out) + '.connected').unlink()
         done = time.time()
         rows = analysis.load_jsonl(self.dir / 'seed-manifest.jsonl')
         if len(rows) != posts or len({r['nonce'] for r in rows}) != posts:
@@ -647,9 +663,9 @@ class Harness:
         if counted != posts:
             raise RuntimeError('the database holds %d scheduled Discord jobs, expected %d' % (counted, posts))
         self.config.update(seedingSeconds=round(done - started, 1), seedingEndedAt=done,
-                           leadSecondsActual=round(T - done, 1), discordCredentials=credentials)
+                           leadSecondsActual=round(self.reference - done, 1), discordCredentials=credentials)
         self.log('seeded in %.0f s: %d scheduled jobs, %d Discord credentials; lead to T %.0f s' % (
-            done - started, counted, credentials, T - done))
+            done - started, counted, credentials, self.reference - done))
 
     # -- the cron emulator --------------------------------------------------------------------------------------
 
@@ -886,6 +902,9 @@ class Harness:
             time.sleep(5)
             self.reap()
             now = time.time()
+            if getattr(self, 'end_requested', False):
+                reason = 'ended early on request (SIGUSR1)'
+                break
             jobs = self.latest_jobs
             stats = self.mock_stats()
             signature = (json.dumps(jobs, sort_keys=True), (stats or {}).get('counters', {}).get('requests'))
@@ -1184,6 +1203,11 @@ def overrides_from(args):
         values['cron_jitter'] = (low, high)
     if getattr(args, 'information_only', False):
         values['information_only'] = True
+    for item in getattr(args, 'set', None) or []:
+        key, _, raw = item.partition('=')
+        if key not in BASE:
+            raise SystemExit('--set: unknown setting %s' % key)
+        values[key] = json.loads(raw)  # e.g. --set 'stall=[0,4]' --set 'kills=[1,2]' (a scaled-down validation)
     return values
 
 
@@ -1197,7 +1221,11 @@ def run_one(args, name):
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     run_dir = Path(args.out) / ('%s-%s-%s' % (stamp, name, (args.label or 'run').replace(' ', '_')))
     harness = Harness(args, settings, name, run_dir)
-    result = harness.run()
+    ACTIVE.append(harness)
+    try:
+        result = harness.run()
+    finally:
+        ACTIVE.remove(harness)
     print(json.dumps({'event': 'run.done', 'dir': str(run_dir), 'scenario': name,
                       'verdicts': [(v['id'], v['verdict']) for v in result.get('verdicts', [])],
                       'expectations': [(e['id'], e['verdict']) for e in result.get('expectations', [])]}), flush=True)
@@ -1263,6 +1291,7 @@ def main(argv=None):
         p.add_argument('--lane', choices=('on', 'off'))
         p.add_argument('--cron-jitter', help='LOW:HIGH seconds of cron delivery delay (default 0:1)')
         p.add_argument('--information-only', action='store_true')
+        p.add_argument('--set', action='append', help="override any scenario setting with JSON, e.g. --set 'stall=[0,4]'")
     run = sub.add_parser('run', help='run one scenario')
     run.add_argument('--scenario', required=True, choices=sorted(SCENARIOS))
     common(run)
@@ -1292,6 +1321,11 @@ def main(argv=None):
     def interrupted(signum, frame):
         raise KeyboardInterrupt()
     signal.signal(signal.SIGTERM, interrupted)
+
+    def end_early(signum, frame):  # stop the crons now, then collect and analyse what ran
+        for harness in list(ACTIVE):
+            harness.end_requested = True
+    signal.signal(signal.SIGUSR1, end_early)
     os.makedirs(args.out, exist_ok=True)
     if args.command == 'run':
         run_one(args, args.scenario)

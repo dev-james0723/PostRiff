@@ -244,6 +244,13 @@ class World:
         if not self.injections:
             return None
         route = route_class(method, path)
+        is_create = method == 'POST' and route == 'POST /channels/{id}/messages'
+        if is_create:
+            # Every injected create names its post, so the analysis can follow it.
+            content = (body or {}).get('content') if isinstance(body, dict) else None
+            mark = POST_MARK.search(content or '')
+            record.update(nonce=(body or {}).get('nonce') if isinstance(body, dict) else None,
+                          post=mark.group(1) if mark else None)
         rule = self._rule(('global429',), route, now) if kind == 'bot' else None
         if rule is not None:
             record.update(injected='global429', global429=True)
@@ -253,16 +260,10 @@ class World:
         rule = self._rule(('route429', 'html429', 'create500', 'createTimeout', 'holdCreate'), route, now)
         if rule is None:
             return None
-        is_create = method == 'POST' and route == 'POST /channels/{id}/messages'
         if rule['kind'] in ('create500', 'createTimeout', 'holdCreate') and not is_create:
             return None
         rule['used'] += 1
         record['injected'] = rule['kind']
-        if is_create:
-            content = (body or {}).get('content') if isinstance(body, dict) else None
-            mark = POST_MARK.search(content or '')
-            record.update(nonce=(body or {}).get('nonce') if isinstance(body, dict) else None,
-                          post=mark.group(1) if mark else None)
         if rule['kind'] == 'route429':
             retry = float(rule.get('retryAfter', 3))
             return 429, {'x-ratelimit-bucket': 'injected-' + route.split()[1].replace('/', '-').strip('-'),

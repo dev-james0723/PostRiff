@@ -230,7 +230,7 @@ def main(argv=None):
     parser.add_argument('--source-tree', required=True)
     parser.add_argument('--admin-dsn', required=True)
     parser.add_argument('--env', required=True, help='JSON file with the application environment (seeding policy)')
-    parser.add_argument('--plan', required=True, help='JSON file: {"due": T, "workspaces": [[index, posts], ...]}')
+    parser.add_argument('--plan', required=True, help='JSON file: {"workspaces": [[index, [offsets from T]], ...]}')
     parser.add_argument('--out', required=True)
     parser.add_argument('--slice', default='0/1')
     args = parser.parse_args(argv)
@@ -242,20 +242,30 @@ def main(argv=None):
                     run_tag=plan['runTag'])
     mine = [item for position, item in enumerate(plan['workspaces']) if position % parts == part]
     started = time.time()
-    done = posts = 0
+    # Phase 1: every workspace and its Discord connection (the slow part; no due time is needed for it).
+    fixtures = [(seeder.connect(index), offsets) for index, offsets in mine]
+    connected = time.time()
+    Path(args.out + '.connected').write_text(json.dumps({'workspaces': len(fixtures), 'seconds': connected - started}))
+    # Phase 2: the harness picks T once every slice is connected, then the posts are approved for it.
+    due_file = Path(args.plan + '.due')
+    while not due_file.exists():
+        if time.time() > plan['deadline']:
+            raise SystemExit('no due time arrived from the harness')
+        time.sleep(0.2)
+    due = json.loads(due_file.read_text())
+    posts = 0
     with open(args.out + '.tmp', 'w') as handle:
-        for index, dues in mine:
-            fixture = seeder.connect(index)
-            for record in seeder.schedule(fixture, dues, clock_offset=plan.get('clockOffset') or 0.0):
+        for fixture, offsets in fixtures:
+            for record in seeder.schedule(fixture, [due['due'] + offset for offset in offsets],
+                                          clock_offset=due.get('clockOffset') or 0.0):
                 handle.write(json.dumps(record, separators=(',', ':')) + '\n')
                 posts += 1
-            done += 1
-            if time.time() > plan['deadline']:
+            if time.time() > due['deadline']:
                 raise SystemExit('seeding overran its deadline (T minus the lead time); rerun with a larger --lead')
     os.replace(args.out + '.tmp', args.out)
-    print(json.dumps({'event': 'seed.slice_done', 'slice': args.slice, 'workspaces': done, 'posts': posts,
-                      'seconds': round(time.time() - started, 1), 'seedingRequests': seeder.transport.calls}),
-          flush=True)
+    print(json.dumps({'event': 'seed.slice_done', 'slice': args.slice, 'workspaces': len(fixtures), 'posts': posts,
+                      'connectSeconds': round(connected - started, 1), 'scheduleSeconds': round(time.time() - connected, 1),
+                      'seedingRequests': seeder.transport.calls}), flush=True)
     return 0
 
 

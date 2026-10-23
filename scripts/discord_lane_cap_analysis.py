@@ -445,6 +445,7 @@ def expectations(result, config, standard):
                   rate, verified / minutes, minutes, '%.1f' % (5000 / rate / 60) if rate else 'n/a'), '6 to 12 per minute')
     if 'f429' in wanted:
         injected = [r for r in window if r.get('injected')]
+        by_nonce_post = {p['nonce']: p['post'] for p in posts.values()}
         storm, resumed = [], []
         for rule in config.get('mockInjections') or []:
             if rule['kind'] != 'global429':
@@ -465,11 +466,12 @@ def expectations(result, config, standard):
         _line(rows, 'f429_recovery', 'Creates resume after each embargo', None if not resumed else all(r is not None and r < 60 for r in resumed),
               'seconds from the end of each embargo to the next create: %s' % [None if r is None else round(r, 1) for r in resumed],
               'within 60 s')
-        create_hits = [r for r in injected if r.get('injected') == 'route429' and r.get('route') == CREATE and r.get('post')]
-        hit_posts = sorted({r['post'] for r in create_hits})
+        # A create answered 429 (global window or route) is held for review and never resent (existing rule).
+        create_hits = [r for r in injected if r.get('injected') in ('route429', 'global429') and r.get('route') == CREATE]
+        hit_posts = sorted({r.get('post') or by_nonce_post.get(r.get('nonce')) for r in create_hits} - {None})
         resent = [p for p in hit_posts if len(posts[p]['creates']) > 0 or posts[p]['createAttempts'] > 1]
         held = [p for p in hit_posts if states.get(p) == 'held']
-        _line(rows, 'f429_create_held', 'A post whose create got a 429 is held and never resent (existing rule)',
+        _line(rows, 'f429_create_held', 'A post whose create got a 429 (global window or route) is held and never resent (existing rule)',
               None if not hit_posts else (not resent and len(held) == len(hit_posts)),
               '%d hit; %d held; %d sent again' % (len(hit_posts), len(held), len(resent)), 'all held, none resent')
         ban = [r for r in injected if r.get('injected') == 'html429']
