@@ -363,7 +363,7 @@ def plan(views, channels, owned, *, restore_point, interval_end, bot_id, skew=5.
         if view['reference'] or view['receiptReferences']:
             by_text.setdefault((view['channelId'], view['textDigest']), set()).update(
                 r.split('/', 1)[1] for r in [view['reference'], *view['receiptReferences']] if isinstance(r, str) and '/' in r)
-    claimed = set(claimants)
+    claimed = set(claimants) | {m['id'] for found in near.values() for m in found}
     orphans = duplicates = 0
     for channel, history in channels.items():
         for message in history['messages']:

@@ -357,7 +357,11 @@ def scenario_hazard(timeline, name, target, *, nonce_window=None):
         wire.nonce_window = nonce_window
         if timeline.edges:
             wait_until(cluster, timeline.expiring_at + 3600 + 1)  # the expiring approvals end before the resume
-        run = App(cluster, timeline.tenants, wire).drain(timeline.loops)
+        app = App(cluster, timeline.tenants, wire)
+        run = [app.drain(timeline.loops)]
+        if timeline.edges and timeline.later_at > cluster.now():
+            wait_until(cluster, timeline.later_at + 1)  # so the posts never sent before are covered too
+            run.append(app.drain(timeline.loops))
         result = {'restore': restore, 'restoredFacts': facts, 'lane': run,
                   'outcome': outcome(cluster, wire, timeline.truth, timeline.groups, since=wire.inherited),
                   'product': protections(cluster),
