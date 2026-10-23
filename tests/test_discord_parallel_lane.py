@@ -144,11 +144,42 @@ class CronRoute(unittest.TestCase):
         self.assertEqual([entry['route'] for entry in logged], ['cron'])
 
 
-def recording_worker(step, *, discord=True):
+def coordinator(provider, connection_factory=lambda: None, *, rate_limits=True, policy='current', degraded=False,
+                at=NOW):
+    """Leave `provider` as runtime_from_environment and OAuthService would: rate limits on or off, a reviewed policy
+    current at `at` (or expired, not yet valid, or absent), this process's coordinator healthy or degraded."""
+    provider.rate_v1_enabled = rate_limits
+    provider.rate_limiter = None if policy is None else SharedPostgresBudget(connection_factory, APP, policy=json.dumps(
+        POLICY_TOOL.build({'current': at, 'expired': at - 3 * 86400, 'future': at + 86400}[policy], days=1)))
+    provider.rate_coordinator_degraded = degraded
+    return provider
+
+
+def discord_social(connection_factory=None, **setup):
+    provider = DiscordProvider(APP, 'synthetic-secret', 'synthetic-bot', 'https://rafii.example.invalid',
+                               transport=SyntheticWire(), production_reviewed=True)
+    provider.authorization_v2_enabled = True
+    factory = connection_factory or Mock(side_effect=AssertionError('the readiness test opened a connection'))
+    return HostedSocial(SyntheticGrants(), {'discord': coordinator(provider, factory, **setup)})
+
+
+# Every configuration in which a shard loop refuses to run, with the reason it stops with.
+NOT_READY = (
+    ('rate limits off', {'rate_limits': False, 'policy': None}, 'coordinator_unavailable'),
+    ('rate limits off with a policy', {'rate_limits': False}, 'coordinator_unavailable'),
+    ('no shared coordinator', {'policy': None}, 'coordinator_unavailable'),
+    ('policy expired', {'policy': 'expired'}, 'coordinator_unavailable'),
+    ('policy not valid yet', {'policy': 'future'}, 'coordinator_unavailable'),
+    ('coordinator degraded in this process', {'degraded': True}, 'coordinator_degraded'),
+)
+
+
+def recording_worker(step, *, discord=True, social=None):
     instance = object.__new__(PostgresWorker)
     instance._stopping = False
     instance._ensure_lifecycle = lambda: None
-    instance.social = SimpleNamespace()
+    instance.social = SimpleNamespace() if social is None else social
+    instance.clock = lambda: NOW
     instance.discord_workers = discord
     instance.discord_report = lambda: {}
     instance.step = step
@@ -156,10 +187,10 @@ def recording_worker(step, *, discord=True):
 
 
 class ExistingTick(unittest.TestCase):
-    def test_with_the_lane_on_the_minute_tick_never_claims_discord(self):
+    def test_with_the_lane_on_and_able_to_run_the_minute_tick_never_claims_discord(self):
         seen = []
         with patch.dict('os.environ', ON):
-            result = recording_worker(lambda **kw: seen.append(kw) or True).tick()
+            result = recording_worker(lambda **kw: seen.append(kw) or True, social=discord_social()).tick()
         self.assertEqual(result['processed'], 10)
         self.assertTrue(result['discordParallelLane'])
         self.assertEqual(seen, [{'exclude_youtube': False, 'exclude_discord': True}] * 10)
@@ -167,7 +198,7 @@ class ExistingTick(unittest.TestCase):
     def test_with_the_lane_on_and_the_youtube_fleet_on_both_stay_excluded(self):
         seen = []
         with patch.dict('os.environ', {**ON, 'POSTRIFF_YOUTUBE_FLEET_ENABLED': '1', 'POSTRIFF_YOUTUBE_CREATOR_ENABLED': '1'}):
-            recording_worker(lambda **kw: seen.append(kw) or False).tick()
+            recording_worker(lambda **kw: seen.append(kw) or False, social=discord_social()).tick()
         self.assertEqual(seen, [{'exclude_youtube': True, 'exclude_discord': True}])
 
     def test_with_the_lane_off_the_tick_still_alternates_its_two_lanes(self):
@@ -176,6 +207,96 @@ class ExistingTick(unittest.TestCase):
             result = recording_worker(lambda **kw: seen.append(kw) or True).tick()
         self.assertNotIn('discordParallelLane', result)
         self.assertEqual(seen.count({'discord_only': True}), 5)
+
+    def test_with_the_lane_on_but_unable_to_run_here_the_tick_keeps_discord(self):
+        cases = [(name, ON, setup) for name, setup, _ in NOT_READY]
+        cases.append(('lane budget misconfigured', {**ON, lane.ENV_SECONDS: '4'}, {}))
+        for name, environment, setup in cases:
+            seen = []
+            with self.subTest(name), patch.dict('os.environ', environment):
+                result = recording_worker(lambda **kw: seen.append(kw) or True, social=discord_social(**setup)).tick()
+                self.assertNotIn('discordParallelLane', result)
+                self.assertEqual(result['processed'], 10)
+                self.assertEqual(seen.count({'discord_only': True}), 5, 'the minute worker still runs Discord steps')
+
+
+class LaneReadiness(unittest.TestCase):
+    """One readiness test decides both who sends Discord in the minute tick and whether a shard loop runs."""
+    def test_the_readiness_test_names_why_the_lane_cannot_run(self):
+        self.assertIsNone(lane.blocker(discord_social(), NOW, {}))
+        for name, setup, reason in NOT_READY:
+            with self.subTest(name):
+                self.assertEqual(lane.blocker(discord_social(**setup), NOW, {}), reason)
+        self.assertEqual(lane.blocker(discord_social(), NOW, {lane.ENV_SECONDS: 'x'}), 'configuration')
+        self.assertEqual(lane.blocker(SimpleNamespace(), NOW, {}), 'coordinator_unavailable')
+        self.assertEqual(lane.blocker(hosted_worker.DisabledHostedSocial(), NOW, {}), 'coordinator_unavailable')
+        policy = discord_social().providers['discord'].rate_limiter.policy
+        self.assertIsNone(lane.blocker(discord_social(), policy.issued_at, {}))
+        for edge in (policy.expires_at, policy.issued_at - .001, float('nan'), None):
+            with self.subTest(edge=edge):
+                self.assertEqual(lane.blocker(discord_social(), edge, {}), 'coordinator_unavailable')
+
+    @staticmethod
+    def projection_only(statements):
+        """A database that answers only the lane's schema check: any claim or coordinator read fails the test."""
+        @contextmanager
+        def factory():
+            class Cursor:
+                def execute(self, sql, params=()):
+                    statements.append(sql)
+                    assert sql == "SELECT to_regclass('public.pr_discord_worker_projection')", sql
+
+                def fetchone(self):
+                    return ('pr_discord_worker_projection',)
+
+            class Connection:
+                def cursor(self):
+                    return contextmanager(lambda: (yield Cursor()))()
+            yield Connection()
+        return factory
+
+    def run_shard(self, social, values=ON):
+        statements = []
+        base = PostgresWorker(self.projection_only(statements), social=social, clock=lambda: NOW,
+                              worker_id='minute', discord_workers=True)
+        with patch.object(lane.LaneWorker, 'step', side_effect=AssertionError('a shard claimed work')), \
+                self.assertLogs('postriff.request', 'WARNING') as logged:
+            result = lane.run(base, 1, values, started=0.0, sleep=Mock(side_effect=AssertionError('slept')),
+                              monotonic=lambda: 0.0)
+        return result, statements, json.loads(logged.records[-1].getMessage())
+
+    def test_a_shard_that_cannot_run_claims_nothing_and_says_why(self):
+        for name, setup, reason in NOT_READY:
+            with self.subTest(name):
+                result, statements, entry = self.run_shard(discord_social(**setup))
+                self.assertEqual((result['stoppedBy'], result['processed'], result['counters']['steps']), (reason, 0, 0))
+                self.assertEqual(len(statements), 1, 'no claim and no coordinator read')
+                self.assertEqual((entry['event'], entry['stoppedBy']), ('discord.lane.completed', reason))
+
+    def test_a_shard_with_a_misconfigured_budget_answers_503_and_claims_nothing(self):
+        with self.assertRaises(AlphaError) as refused:
+            lane.run(object(), 1, {**ON, lane.ENV_SECONDS: '4'})
+        self.assertEqual((refused.exception.status, refused.exception.code), (503, 'discord_lane_configuration'))
+
+    def test_the_minute_tick_and_the_shard_loop_ask_the_same_readiness_test(self):
+        asked = []
+
+        def verdict(social, now, values=None):
+            asked.append(now)
+            return 'coordinator_degraded'
+        seen = []
+        with patch.object(lane, 'blocker', verdict), patch.dict('os.environ', ON):
+            result = recording_worker(lambda **kw: seen.append(kw) or True, social=discord_social()).tick()
+            self.assertNotIn('discordParallelLane', result)
+            self.assertEqual(seen.count({'discord_only': True}), 5)
+            shard, statements, _ = self.run_shard(discord_social())
+        self.assertEqual(shard['stoppedBy'], 'coordinator_degraded')
+        self.assertEqual(asked, [NOW, NOW], 'one question from the tick and one from the shard, same function')
+        seen.clear()
+        with patch.object(lane, 'blocker', lambda social, now, values=None: None), patch.dict('os.environ', ON):
+            result = recording_worker(lambda **kw: seen.append(kw) or True, social=SimpleNamespace()).tick()
+        self.assertTrue(result['discordParallelLane'], 'the tick follows the readiness test alone')
+        self.assertEqual(seen, [{'exclude_youtube': False, 'exclude_discord': True}] * 10)
 
 
 class Deterministic:
@@ -222,11 +343,13 @@ class FlagOffIsTheFrozenBase(unittest.TestCase):
             approve(engine, state, review(engine, state, channel, draft))
         return state
 
-    def trace(self, cls, environment, state):
+    def trace(self, cls, environment, state, setup=None):
         db, wire = MemoryDatabase(copy.deepcopy(state)), SyntheticWire()
         provider = DiscordProvider(APP, 'synthetic-secret', 'synthetic-bot', 'https://rafii.example.invalid',
                                    transport=wire, production_reviewed=True)
         provider.authorization_v2_enabled = True
+        if setup is not None:
+            coordinator(provider, db.connection, **setup)
         social = HostedSocial(SyntheticGrants(), {'discord': provider})
         with patch.dict('os.environ', environment, clear=True), Deterministic():
             worker = cls(db.connection, social, clock=lambda: NOW + 301, worker_id='trace-worker')
@@ -234,9 +357,10 @@ class FlagOffIsTheFrozenBase(unittest.TestCase):
         return {'sql': db.queries, 'http': wire.calls, 'state': db.state, 'results': results,
                 'stats': worker.discord_stats}
 
-    def assert_same(self, environment):
+    def assert_same(self, environment, setup=None):
         state = self.queue()
-        base, current = self.trace(self.Base, environment, state), self.trace(PostgresWorker, environment, state)
+        base = self.trace(self.Base, environment, state, setup)
+        current = self.trace(PostgresWorker, environment, state, setup)
         self.assertGreater(len(base['sql']), 10)
         for key in ('sql', 'http', 'state', 'results', 'stats'):
             with self.subTest(key=key):
@@ -256,13 +380,32 @@ class FlagOffIsTheFrozenBase(unittest.TestCase):
     def test_flag_on_without_the_worker_protocol_matches_the_base_exactly(self):
         self.assert_same({lane.ENV_ENABLED: 'true'})
 
-    def test_control_flag_on_changes_the_trace(self):
+    def test_flag_on_with_rate_limits_off_matches_the_base_exactly(self):
+        # The lane cannot run without the coordinator, so the minute tick keeps sending Discord as the base does.
+        base = self.assert_same({'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true', lane.ENV_ENABLED: 'true'})
+        self.assertTrue(any(call[0] == 'POST' for call in base['http']), 'the run reached a Discord create')
+
+    def test_flag_on_but_the_lane_unable_to_run_matches_the_base_exactly(self):
+        environment = {'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true', lane.ENV_ENABLED: 'true'}
+        for name, setup, _ in NOT_READY:
+            with self.subTest(name):
+                base = self.assert_same(environment, setup)
+                self.assertGreater(base['stats']['claims'], 0, 'the frozen tick claimed Discord work')
+        with self.subTest('lane budget misconfigured'):
+            self.assert_same({**environment, lane.ENV_SECONDS: 'x'}, {})
+
+    def test_control_flag_on_and_the_lane_able_to_run_changes_the_trace(self):
         environment = {'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true', lane.ENV_ENABLED: 'true'}
         state = self.queue()
-        base, current = self.trace(self.Base, environment, state), self.trace(PostgresWorker, environment, state)
-        self.assertTrue(any(call[0] == 'POST' for call in base['http']))
-        self.assertEqual(current['http'], [], 'the minute tick leaves Discord to the lane')
-        self.assertEqual({job['state'] for job in current['state']['phase2']['jobs']}, {'scheduled'})
+        base = self.trace(self.Base, environment, state, {})
+        current = self.trace(PostgresWorker, environment, state, {})
+        self.assertGreater(base['stats']['claims'], 0, 'the frozen tick claims Discord')
+        self.assertEqual(current['stats']['claims'], 0, 'the minute tick leaves Discord to the lane')
+        self.assertEqual(current['http'], [])
+        jobs = current['state']['phase2']['jobs']
+        self.assertEqual({job['state'] for job in jobs}, {'scheduled'})
+        self.assertFalse([job for job in jobs if job.get('attempts')])
+        self.assertTrue(all(result['discordParallelLane'] for result in current['results']))
 
 
 class FakeLane:
@@ -435,7 +578,7 @@ class Outlook(unittest.TestCase):
         self.provider.rate_limiter = SharedPostgresBudget(self.factory, APP,
                                                           policy=json.dumps(build(self.now - 100, days=1)))
         self.worker = SimpleNamespace(social=SimpleNamespace(providers={'discord': self.provider}),
-                                      connection_factory=self.factory)
+                                      connection_factory=self.factory, clock=lambda: self.now)
 
     @contextmanager
     def factory(self):

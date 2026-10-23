@@ -4,8 +4,9 @@ Cron shards call /api/cron/discord-worker/<shard> every minute (vercel.json). Ea
 the existing Discord-only worker step under its own lease owner id: workspace rows are claimed FOR UPDATE SKIP LOCKED,
 one job per claim and at most one live Discord lease per workspace, the lease owner and lease id are rechecked at every
 step, every Discord request is admitted by the shared PostgreSQL coordinator, and an intent is sealed before any POST.
-Loops may overlap each other, the existing /api/cron/worker (which leaves Discord to this lane while the flag is on)
-and a person's own "post now" nudge.
+Loops may overlap each other, the existing /api/cron/worker (which leaves Discord to this lane only while the flag is
+on and blocker() says the lane can run in its process; otherwise it keeps the frozen Discord path) and a person's own
+"post now" nudge. That overlap is safe by the lease protocol; keeping Discord to one scheduler is a preference.
 
 The loop only adds waiting. Before each claim it reads the coordinator's application-wide rows without locks: an
 operator hold (manual_hold) stops it, an embargo or a spent window is slept out instead of claiming work that cannot
@@ -127,12 +128,13 @@ class PacedSocial:
 
 class LaneWorker(PostgresWorker):
     """One invocation's own lease owner and counters. Every claim, check and send is the inherited code."""
-    def __init__(self, base, number, *, sleep=time.sleep, monotonic=time.monotonic):
+    def __init__(self, base, number, *, sleep=time.sleep, monotonic=time.monotonic, values=None):
         super().__init__(base.connection_factory, social=PacedSocial(base.social, sleep=sleep, monotonic=monotonic),
                          clock=base.clock,
                          worker_id='discord-lane-%d-%s' % (number, uuid.uuid4().hex),
                          on_verified=getattr(base, 'on_verified', None),
                          worker_binding=getattr(base, 'worker_binding', None), discord_workers=True)
+        self.environment = values  # what this invocation was started with, for blocker()
         self.lane_counts = dict.fromkeys(('posted', 'verified', 'rejected', 'notSent', 'uncertainCreates'), 0)
 
     def complete(self, claimed, result):
@@ -147,34 +149,59 @@ class LaneWorker(PostgresWorker):
         return super().complete(claimed, result)
 
 
-def _provider(lane):
-    providers = getattr(lane.social, 'providers', None)
+def _discord(social):
+    providers = getattr(social, 'providers', None)
     return providers.get('discord') if isinstance(providers, dict) else None
 
 
+def blocker(social, now, values=None):
+    """Why the lane cannot run in this process at `now` (epoch seconds), or None when it can.
+
+    The one readiness test. tick() asks it (process clock) before it leaves Discord to the lane, and every lane
+    iteration asks it before claiming (process clock, then the database clock the coordinator itself refuses by), so
+    the minute worker never hands Discord to loops that would refuse to run. Pure: no database, network or clock of
+    its own; it reads the given environment (the lane budget, as the shard route does), this process's Discord
+    provider and `now`. It cannot see whether the shard crons fire at all; warn_if_lagging covers that.
+    """
+    try:
+        limits(values)
+    except AlphaError:
+        return 'configuration'  # every shard answers 503 discord_lane_configuration and claims nothing
+    provider = _discord(social)
+    limiter = getattr(provider, 'rate_limiter', None)
+    policy = getattr(limiter, 'policy', None)
+    if provider is None or not getattr(provider, 'rate_v1_enabled', False) or limiter is None or policy is None:
+        # POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED off, or no shared coordinator with a reviewed policy.
+        return 'coordinator_unavailable'
+    if getattr(provider, 'rate_coordinator_degraded', False):
+        # This process lost track of an observation; every later request here is refused before transport.
+        return 'coordinator_degraded'
+    if not discord_worker.finite(now) or not policy.issued_at <= now < policy.expires_at:
+        return 'coordinator_unavailable'  # outside the reviewed policy's validity: the coordinator refuses everything
+    return None
+
+
 def outlook(lane):
-    """(blocker or None, seconds to wait) from the coordinator's own rows, read without locks.
+    """(blocker or None, seconds to wait) from blocker() and the coordinator's own rows, read without locks.
 
     Advisory only: every request is still admitted, or refused, by the coordinator itself. The scope keys come from
     the coordinator's own derivation, so this read and its reservations look at the same rows.
     """
-    provider = _provider(lane)
-    limiter = getattr(provider, 'rate_limiter', None)
-    policy = getattr(limiter, 'policy', None)
-    if provider is None or not getattr(provider, 'rate_v1_enabled', False) or limiter is None or policy is None:
-        return 'coordinator_unavailable', 0.0
-    if getattr(provider, 'rate_coordinator_degraded', False):
-        # This process lost track of an observation; every later request here is refused before transport.
-        return 'coordinator_degraded', 0.0
+    values = getattr(lane, 'environment', None)
+    reason = blocker(lane.social, lane.clock(), values)
+    if reason:
+        return reason, 0.0
+    provider = _discord(lane.social)
     marker = '0' * 64
-    keys = sorted(key for key in limiter._keys(provider._rate_identity('bot'), marker, marker, marker)
+    keys = sorted(key for key in provider.rate_limiter._keys(provider._rate_identity('bot'), marker, marker, marker)
                   if key[:3] in _GUARDS)
     with lane.connection_factory() as db, db.cursor() as cur:
         cur.execute(_OUTLOOK, (keys,))
         rows = cur.fetchall()
     now = rows[0][0] if rows else None
-    if not discord_worker.finite(now) or not policy.issued_at <= now < policy.expires_at:
-        return 'coordinator_unavailable', 0.0
+    reason = blocker(lane.social, now, values)  # at a policy's edges the coordinator's clock decides
+    if reason:
+        return reason, 0.0
     wait = 0.0
     for _, key, kind, hold, remaining, reset, blocked, circuit in rows:
         if key is None:
@@ -212,7 +239,7 @@ def run(worker, number, values=None, *, started=None, request_id=None, sleep=tim
     started = monotonic() if started is None else started
     deadline = started + seconds
     rng = rng or random.Random()
-    lane = LaneWorker(worker, number, sleep=sleep, monotonic=monotonic)
+    lane = LaneWorker(worker, number, sleep=sleep, monotonic=monotonic, values=values)
     counts = dict.fromkeys(COUNTERS, 0)
     waited = {'rate': 0.0, 'idle': 0.0}
     stopped, error, misses = None, None, 0
