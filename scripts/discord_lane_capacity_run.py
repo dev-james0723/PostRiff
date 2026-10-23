@@ -851,16 +851,21 @@ class Harness:
         seen = 0
         while not self.stop.is_set():
             now = time.time()
-            if kills and now >= self.reference + 60 * kills[0]:
-                kills.pop(0)
+            # A random kill lands 20 s into its minute (a loop is then mid-flight, never between two cron minutes);
+            # if no lane process is inside its handler it keeps trying for 30 s, then it is recorded as missed.
+            if kills and now >= self.reference + 60 * kills[0] + 20:
                 candidates = [(n, i) for n, i in self.alive(lane_only=True) if now > i['scheduled']]
                 if candidates:
+                    kills.pop(0)
                     name, item = rng.choice(candidates)
                     item['process'].kill()
                     record = {'kind': 'random', 'name': name, 'pid': item['process'].pid, 'at': now}
                     self.kills.append(record)
                     self.event(event='killed', reason='injected_random', **record)
                     self.log('crash injector: SIGKILL %s (random)' % name)
+                elif now >= self.reference + 60 * kills[0] + 50:
+                    self.kills.append({'kind': 'random_missed', 'minute': kills.pop(0), 'at': now})
+                    self.log('crash injector: no lane process alive for the random kill; recorded as missed')
             if s['kill_at_create'] and announcements.exists():
                 lines = announcements.read_text().splitlines()
                 for line in lines[seen:]:

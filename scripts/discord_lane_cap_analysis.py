@@ -740,7 +740,7 @@ def expectations(result, config, standard):
         _line(rows, 'fcrash_kills', 'The planned SIGKILLs were delivered', len(done) >= planned,
               '%d delivered (%d random, %d during a create), %d missed' % (
                   len(done), sum(1 for k in done if k['kind'] == 'random'), sum(1 for k in done if k['kind'] == 'at_create'),
-                  sum(1 for k in kills if k.get('kind') == 'at_create_missed')), '%d' % planned)
+                  sum(1 for k in kills if k.get('kind') in ('at_create_missed', 'random_missed'))), '%d' % planned)
         verified_or_uncertain = sum(1 for p in posts if states.get(p) in ('verified', 'uncertain'))
         uncertain = sum(1 for p in posts if states.get(p) == 'uncertain')
         _line(rows, 'fcrash_outcome', 'Every post verified, or uncertain only where a kill hit a sealed send',
