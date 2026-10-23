@@ -388,6 +388,7 @@ class Timeline:
         self.c0.stop('fast')
         self.truth = creates(wire)
         self.wire = wire
+        self.jobs_final = jobs  # the original database's job states at the end (for restore points)
         self.states = Counter(j['state'] for j in jobs.values())
         report = {'tenants': len(self.tenants), 'posts': len(jobs), 'baseBackupSeconds': round(backup_seconds, 2),
                   'restorePoint': R.iso(self.t_restore), 'firstSend': R.iso(self.first_send),
@@ -485,6 +486,8 @@ def guarded(result, name, function, *args, **kwargs):
 def phase_core(work, args, result):
     timeline = Timeline(work / 'core', tenants=args.tenants, posts=args.posts, edges=not args.no_edges, loops=args.loops)
     result['firstTimeline'] = timeline.run()
+    if args.skip_core_scenarios:
+        return timeline
     guarded(result, 'A', scenario_hazard, timeline, 'core-A', timeline.t_restore)
     if not args.skip_a2:
         guarded(result, 'A2', scenario_hazard, timeline, 'core-A2', timeline.t_restore, nonce_window=900)
@@ -500,6 +503,18 @@ def phase_midrun(timeline, args):
     result = {'restorePoint': R.iso(target), 'createsBeforePoint': middle, 'createsInFirstTimeline': len(main)}
     guarded(result, 'A', scenario_hazard, timeline, 'mid-A', target)
     guarded(result, 'B', scenario_procedure, timeline, 'mid-B', target)
+    # A restore point between the moderator-deleted post's claim and its sealed intent: at that point a worker holds
+    # its lease and has not sealed yet, the lease runs past the interval end, the post was then sent and deleted.
+    if timeline.edges:
+        deleted = timeline.edge['deleted']
+        job = next(j for (w, _), j in timeline.jobs_final.items() if w == deleted.id)
+        claimed = [e['at'] for e in job.get('events', []) if e['state'] == 'claimed']
+        sealed = [i['at'] for i in job.get('discordDispatchIntents') or []]
+        if claimed and sealed and sealed[0] > claimed[-1]:
+            lease_target = (claimed[-1] + sealed[0]) / 2
+            result['leasedRestorePoint'] = {'restorePoint': R.iso(lease_target), 'claimToSealSeconds': round(sealed[0] - claimed[-1], 3)}
+            guarded(result, 'leaseA', scenario_hazard, timeline, 'lease-A', lease_target)
+            guarded(result, 'leaseB', scenario_procedure, timeline, 'lease-B', lease_target)
     return result
 
 
@@ -904,8 +919,11 @@ def summary(results):
     if mid:
         lines.append('midrun: restore point %s, creates before it %s of %s' % (
             mid.get('restorePoint'), mid.get('createsBeforePoint'), mid.get('createsInFirstTimeline')))
-        for name in ('A', 'B'):
-            scenario('midrun ' + name, mid.get(name))
+        for name in ('A', 'B', 'leaseA', 'leaseB'):
+            if name in mid:
+                scenario('midrun ' + name, mid.get(name))
+        if 'leasedRestorePoint' in mid:
+            lines.append('leased restore point: %s' % mid['leasedRestorePoint'])
     for name in ('holdrow', 'liveswap', 'timing', 'reconscale'):
         if name in results:
             lines.append('%s: %s' % (name, json.dumps(results[name], default=str)[:4000]))
@@ -932,6 +950,7 @@ def main(argv=None):
     parser.add_argument('--scale-posts', type=int, default=1000)
     parser.add_argument('--no-edges', action='store_true', help='main tenants only (the scale run)')
     parser.add_argument('--skip-a2', action='store_true', help='skip the nonce-window variant of scenario A')
+    parser.add_argument('--skip-core-scenarios', action='store_true', help='build the first timeline only (for midrun)')
     parser.add_argument('--keep', action='store_true')
     parser.add_argument('--summary', help='print the summary of an earlier results file and exit')
     args = parser.parse_args(argv)
