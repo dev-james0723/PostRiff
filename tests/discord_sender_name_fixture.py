@@ -26,8 +26,9 @@ SECOND_USER = '4242425'
 
 class Tenant:
     """One workspace with one webhook connection (or one bot installation) and its own server, channel and webhook."""
-    def __init__(self, index, name=None, *, kind='webhook'):
+    def __init__(self, index, name=None, *, kind='webhook', now=None):
         self.index, self.kind, self.name = index, kind, name
+        self.now = NOW if now is None else now
         self.workspace = str(uuid.uuid5(uuid.NAMESPACE_DNS, f'sn-tenant-{index}.example.invalid'))
         self.guild, self.channel = str(6100000 + index), str(7100000 + index)
         self.hook = str(8100000 + index)
@@ -40,7 +41,7 @@ class Tenant:
     def patched(self):
         stack = [patch.object(P, 'WORKSPACE', self.workspace), patch.object(P, 'GUILD', self.guild),
                  patch.object(P, 'FIRST', self.channel), patch.object(P, 'SECOND', str(int(self.channel) + 500000)),
-                 patch.object(P, 'GENERATION', self.generation)]
+                 patch.object(P, 'GENERATION', self.generation), patch.object(P, 'NOW', self.now)]
         return _Stack(stack)
 
     def build(self, *, text='Synthetic sender-name post'):
@@ -54,32 +55,35 @@ class Tenant:
             auth.register_destination(state, channel, {
                 'senderKind': 'webhook', 'credentialKind': 'webhook', 'webhookId': self.hook, 'applicationId': APP,
                 'linkedUserId': USER, 'guildId': self.guild, 'channelId': self.channel, 'guildName': self.guild,
-                'channelName': self.channel, 'kind': 'webhook'}, self.generation, ACTOR, NOW)
+                'channelName': self.channel, 'kind': 'webhook'}, self.generation, ACTOR, self.now)
         else:
             channel.update(discordConnectionKind='installation', qualification='server_verified', evidenceSource='live_provider')
             channel['discordDestinations'] = []
             auth.register_destination(state, channel, {
                 'applicationId': APP, 'botUserId': BOT, 'linkedUserId': USER, 'guildId': self.guild,
                 'channelId': self.channel, 'guildName': self.guild, 'channelName': self.channel, 'kind': 'text'},
-                self.generation, ACTOR, NOW)
+                self.generation, ACTOR, self.now)
         variant['text'] = text
         if self.name is not None:
             channel['discordSenderName'] = self.name
         self.engine, self.state, self.channel_record, self.variant = engine, state, channel, variant
         return self
 
-    def review(self, *, at=NOW + 300):
+    def review(self, *, at=None):
+        at = self.now + 300 if at is None else at
         payload = {'variantId': self.variant['id'], 'channelId': self.channel_record['id'],
                    'destinationId': auth.destination_id(self.workspace, self.connection, self.guild, self.channel),
                    'localTime': datetime.fromtimestamp(at, timezone.utc).strftime('%Y-%m-%dT%H:%M'),
                    'timeZone': 'UTC', 'acknowledgedWarnings': []}
-        self.engine.apply_phase2(None, self.state, 'review', payload, {'user_id': ACTOR})
+        with self.patched():
+            self.engine.apply_phase2(None, self.state, 'review', payload, {'user_id': ACTOR})
         return self.state['phase2']['reviews'][-1]
 
     def approve(self, entry=None):
         entry = entry or self.review()
-        self.engine.apply_phase2(None, self.state, 'approve', {'reviewId': entry['id'], 'digest': entry['digest'],
-                                                              'confirmed': True}, {'user_id': ACTOR})
+        with self.patched():
+            self.engine.apply_phase2(None, self.state, 'approve', {'reviewId': entry['id'], 'digest': entry['digest'],
+                                                                  'confirmed': True}, {'user_id': ACTOR})
         return next(j for j in self.state['phase2']['jobs'] if j['id'] == entry['jobId'])
 
     # -- credentials ------------------------------------------------------------------------------------------------

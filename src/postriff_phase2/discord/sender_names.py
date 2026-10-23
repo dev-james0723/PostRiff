@@ -408,8 +408,7 @@ class SenderNames:
             unavailable(reasons)
         return profile, envelope, stamp
 
-    def _profile(self, kind, envelope, stamp, saved, observed, observed_at, reasons, names_on, nickname_on, *, member_nick=None,
-                 fingerprint_name=None):
+    def _profile(self, kind, envelope, stamp, saved, observed, observed_at, reasons, names_on, nickname_on, *, member_nick=None):
         reasons = sorted(reasons, key=lambda r: REASON_ORDER.index(r['code']))
         if kind == 'webhook':
             if names_on and saved is not None:

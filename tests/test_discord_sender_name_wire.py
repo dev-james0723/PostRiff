@@ -132,6 +132,52 @@ class PerSendWire(unittest.TestCase):
         with switch(True):
             self.assertEqual(tenant.review()['manifest']['discordSenderName'], 'New brand')
 
+    def test_an_approval_keeps_the_name_its_review_showed(self):
+        tenant = F.Tenant(9, 'Name X').build()
+        world = F.World([tenant])
+        with switch(True):
+            entry = tenant.review()
+            self.assertEqual(entry['manifest']['discordSenderName'], 'Name X')
+            tenant.channel_record['discordSenderName'] = 'Name Y'      # the setting changes between review and approval
+            job = tenant.approve(entry)
+            self.assertEqual(job['manifest']['discordSenderName'], 'Name X')
+            self.assertEqual(world.dispatch(job)['state'], 'provider_accepted')
+        self.assertEqual(world.wire.posts[0]['body']['username'], 'Name X')
+
+    def test_automation_decisions_follow_the_switch_without_ever_changing_the_approved_name(self):
+        """campaigns._decide and publisher.commit with the feature on and off (the upstream test covers on)."""
+        from postriff_phase2 import campaigns, publisher
+        for at_decision, at_commit, expected in [(True, True, 'Approved brand'), (False, False, None), (False, True, None),
+                                                 (True, False, AlphaError)]:
+            with self.subTest(at_decision=at_decision, at_commit=at_commit):
+                tenant = F.Tenant(10, 'Approved brand').build()
+                state, channel = tenant.state, tenant.channel_record
+                destination = auth.destination(state, channel, channel['defaultDestinationId'])
+                task = {'id': 'synthetic-task', 'status': 'active', 'schedule': {'timeZone': 'UTC'}}
+                item = {'key': 'synthetic-item', 'platform': 'Discord', 'channelId': channel['id'],
+                        'variantId': tenant.variant['id'], 'state': 'ready_for_review', 'publishAt': F.NOW + 300}
+                run = {'id': 'synthetic-run', 'taskId': task['id'], 'items': [item]}
+                root = campaigns._root(state)
+                root['recurringTasks'].append(task)
+                root['occurrences'].append(run)
+                shown = 'Approved brand' if at_decision else None      # what the page displayed (nothing while off)
+                body = {'occurrenceId': run['id'], 'itemKey': item['key'], 'decision': 'approve', 'confirmed': True,
+                        'variantRevision': 1, 'excludedUnknowns': [], 'acknowledgedWarnings': [],
+                        'destinationId': destination['id'], 'destinationGeneration': destination['resourceGeneration'],
+                        'publishAt': F.NOW + 300, 'discordSenderName': shown}
+                with switch(at_decision):
+                    campaigns._decide(state, root, body, F.ACTOR, F.NOW)
+                channel['discordSenderName'] = 'Changed afterwards'
+                with switch(at_commit):
+                    if expected is AlphaError:
+                        with self.assertRaises(AlphaError):
+                            publisher.commit(tenant.engine, state, F.ACTOR, {'occurrenceId': run['id'], 'itemKey': item['key']}, F.NOW + 60)
+                        continue
+                    queued = publisher.commit(tenant.engine, state, F.ACTOR, {'occurrenceId': run['id'], 'itemKey': item['key']}, F.NOW + 60)
+                job = next(j for j in state['phase2']['jobs'] if j['id'] == queued['jobId'])
+                self.assertEqual(auth.wire_content(job['manifest']).get('username'), expected)
+                self.assertTrue(auth.job_authorized(state, channel, job))
+
     def test_nothing_mutable_or_process_global_is_consulted_when_executing(self):
         tenant, job = self.named_job('Original brand')
         world = F.World([tenant])
