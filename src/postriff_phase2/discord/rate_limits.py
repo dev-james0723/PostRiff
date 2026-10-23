@@ -567,9 +567,16 @@ class SharedPostgresBudget:
             row['cap'] = min(row['cap'],cap) if active_prior else cap
             row['window'] = max(row['window'],window) if active_prior else window
             row['left'] = min(row['left'],max(0,row['cap']-used))
-        if row['cap'] is not None and row['reset'] <= now and row['kind'] != 'policy':
+        # A refilled learned window waits for an answer to a request of that NEW window to establish its real reset
+        # (freshAfter). If no such answer can arrive any more (every request of the window was lost, or answered
+        # without headers) that wait must not last for ever: once the longest an answer can take has passed (the
+        # window plus the margin) the countdown is stale and the window is refilled once more, as a cold one is probed.
+        learned = row['kind'] == 'route' and row['learned']
+        waiting = learned and row['freshAfter'] is not None
+        lapsed = waiting and row['freshAfter'] + self._horizon(row['window']) <= now
+        if row['cap'] is not None and (row['reset'] <= now or lapsed) and row['kind'] != 'policy':
             # The application row never refills: _slide derives its left/reset from the admissions at each reservation.
-            if row['kind'] == 'route' and row['learned'] and row['freshAfter'] is not None:
+            if waiting and not lapsed:
                 # No second refill from a stale countdown. A response to a
                 # request from this new window must establish its real reset.
                 raise RateCoordinatorUnavailable()
@@ -577,10 +584,16 @@ class SharedPostgresBudget:
             pending = (self._pending(cur,key,now,since=now-self._horizon(row['window']))
                        if row['kind'] != 'invalid' else 0)
             row['left'] = max(0,row['cap']-pending)
-            if row['kind'] == 'route' and row['learned']:
+            if learned and row['left'] > 0:
                 row['freshAfter'],row['reset'] = now,self.policy.expires_at
             else:
+                # No slot to admit means no request to answer: wait one window and count again, never the sentinel
+                # (a caller told to wait until the policy expires would hold its post for good).
                 row['reset'] = now + row['window']
+        elif waiting and row['left'] <= 0:
+            # Still waiting for the answer that establishes the window, with nothing left to send: quote a poll or
+            # the lapse of the wait, whichever is sooner, not the sentinel. (Denied below, so this is never stored.)
+            row['reset'] = min(now + row['window'], row['freshAfter'] + self._horizon(row['window']))
 
     def _slide(self, cur, row, now):
         """Set the application row's `left` and `reset` from the admissions themselves (an exact sliding window).
@@ -931,8 +944,10 @@ class SharedPostgresBudget:
                             first = not was_learned[key] and 200 <= classification['status'] < 400 and not transport_failure
                             row['left'] = observation_remaining(row['left'],int(left),first=first,pending=pending)
                             fresh_header = True
-                        else:
+                        elif fresh:
                             row['left'] = min(row['left'],int(left))
+                        # else: an answer to a request from before this row's last refill describes the window that
+                        # ended; the refill already charged what was then in flight, so it cannot tighten the new one.
                     elif any(name in headers for name in ('x-ratelimit-limit','x-ratelimit-remaining','x-ratelimit-reset-after','x-ratelimit-reset')):
                         row['hold'] = True  # malformed numeric hints need operator review
                     if classification['status'] in (403,404):
