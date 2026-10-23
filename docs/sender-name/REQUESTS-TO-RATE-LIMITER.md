@@ -30,7 +30,7 @@ def reconcile_nickname_by_id(self, cur, admission_id: str, guild_id: str) -> Non
 * `SELECT ... FROM ADMISSIONS WHERE id=%s::uuid AND application_key=%s FOR UPDATE`; no `auth_key`/`credential_key` comparison.
 * Require `method='PATCH'`, `NOT is_publish`, `credential_kind='bot'`, `binding_hash IS NULL`, `intent_id IS NULL`,
   `route_key=_digest('PATCH:/guilds/{id}/members/@me')`, `path_key=_digest(f'/guilds/{guild_id}/members/@me')`; else `RateCoordinatorUnavailable`.
-* Idempotent: state `observed` or `blocked` returns without writing.
+* Idempotent: state `observed` or `blocked` returns without writing, and this test comes BEFORE the age conditions (today `reconcile_nickname` raises for a settled admission younger than 120 s; a late duplicate must be silent).
 * State `reserved`, `sent`, `uncertain`: only when `reserved_at + 120 s <= now` and `expires_at <= now` (the conditions already in
   `reconcile_nickname`), then the existing `UPDATE ... SET state='observed', outcome_at=clock_timestamp(), status_code=NULL,
   rate_scope='unknown'`; too young: `RateCoordinatorUnavailable`.

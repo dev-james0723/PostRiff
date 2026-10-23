@@ -17,6 +17,7 @@ import discord_lane_fixture as L
 import discord_sender_name_fixture as F
 from discord_sender_name_settings_fixture import Settings
 from postriff_alpha.domain import AlphaError
+from postriff_phase2.discord import sender_names as names
 from postriff_phase2.discord.oauth import DiscordConnections
 from postriff_phase2.discord.rate_limits import SharedPostgresBudget
 from postriff_phase2.hosted import PostgresWorkspaceRepository
@@ -46,6 +47,7 @@ class RealStore:
         self.m = Settings()                       # builds states, credential rows and Discord-side configuration
         self.sessions, self.auth_time = {}, {}
         self.s = None
+        self.now = F.NOW                          # the Rafii-side clock (claims, freshness); the database keeps its own
 
     def flush(self):
         m = self.m
@@ -78,7 +80,7 @@ class RealStore:
         verify.auth_time = lambda token, principal: self.auth_time.get(token, time.time())
         repository = PostgresWorkspaceRepository(self.cluster.factory(), verify)
         oauth = SimpleNamespace(_provider=lambda _: provider, callback_uri=lambda _: 'https://rafii.example.invalid/callback',
-                                clock=lambda: F.NOW, vault=m.s.oauth.vault, repository=repository,
+                                clock=lambda: self.now, vault=m.s.oauth.vault, repository=repository,
                                 commands=SimpleNamespace(engine=SimpleNamespace(invalidate=lambda *_: None)))
         self.s = DiscordConnections(oauth)
         self.s._fresh_identity = lambda *_: None
@@ -123,9 +125,9 @@ class RoutesOnPostgres(unittest.TestCase):
         with self.cluster.connect(autocommit=True) as db:
             db.execute('DELETE FROM public.pr_encrypted_credentials')
             db.execute("DELETE FROM public.pr_auth_throttle")
-        patcher = patch.dict(os.environ, ON)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        for patcher in (patch.dict(os.environ, ON), patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.r = RealStore(self.cluster)
         m = self.r.m
         self.ua, self.ub = m.user(1), m.user(2)
@@ -222,7 +224,10 @@ class RoutesOnPostgres(unittest.TestCase):
         # role refusals against the real membership flags
         before = r.snapshot()
         self.assertEqual(r.attempt(r.get, self.A, viewer_token, self.wa.connection)[:2], (403, 'permission_denied'))
+        # another admin may edit a webhook name (a Rafii setting): this form is merely stale; the bot nickname is the installer's alone
         outcome = r.attempt(r.post, self.A, admin_token, self.wa.connection, {'name': 'Admin Weekly', 'fingerprint': 'f' * 64, **BODY})
+        self.assertEqual(outcome[:2], (409, 'discord_sender_name_required'))
+        outcome = r.attempt(r.post, self.A, admin_token, self.ia.connection, {'name': 'Admin Bot', 'fingerprint': 'f' * 64, **BODY})
         self.assertEqual(outcome[:2], (403, 'discord_sender_name_unavailable'))
         self.assertEqual(r.snapshot(), before)
 
@@ -256,8 +261,8 @@ class RoutesOnPostgres(unittest.TestCase):
         before = len(hooks.calls)
         r.post(self.A, self.ta, self.ia.connection, {'name': 'Counted Bot', 'fingerprint': profile['fingerprint'], **BODY})
         bot_edit = collections.Counter(method for method, _ in hooks.calls[before:])
-        self.assertEqual(bot_read, collections.Counter({'GET': 6}))      # identity x2 (cold cache), server, two members, bot member
-        self.assertEqual(bot_edit, collections.Counter({'GET': 7, 'PATCH': 1}))   # the same reads, one write, one read-back
+        self.assertEqual(bot_read, collections.Counter({'GET': 5}))      # identity x2 (cold cache), server, the person, the bot member
+        self.assertEqual(bot_edit, collections.Counter({'GET': 6, 'PATCH': 1}))   # the same reads, one write, one read-back
         # A post itself: the name adds no request (the wire tests count the create; the lane tests compare named and unnamed).
 
     # -- the cross-workspace nickname check (SQL) ---------------------------------------------------------------------------
@@ -340,6 +345,241 @@ class RoutesOnPostgres(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
+# (1b) the nickname write through the REAL request coordinator: admissions, claims and their reconciliation
+
+@unittest.skipIf(L.FENCED, L.SKIP_FENCED)
+@unittest.skipUnless(L.AVAILABLE, L.SKIP_UNAVAILABLE)
+class ClaimFlowOnPostgres(unittest.TestCase):
+    """SharedPostgresBudget on a disposable PostgreSQL, Discord synthetic. The coordinator's clock is the database's, so
+    "time passes" means a short real wait (permit_ttl_seconds is 5) plus ageing the admission row, and the Rafii-side clock
+    (claims) moves by itself."""
+    GUILD = '6800001'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cluster = extra_migration_cluster()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.cluster.close()
+
+    def setUp(self):
+        self.cluster.reset()
+        with self.cluster.connect(autocommit=True) as db:
+            db.execute('DELETE FROM public.pr_encrypted_credentials')
+            db.execute('DELETE FROM public.pr_auth_throttle')
+        patcher = patch.dict(os.environ, ON)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.r = RealStore(self.cluster)
+        m = self.r.m
+        self.ua, self.ub = m.user(1), m.user(2)
+        self.A, self.B = m.workspace(1), m.workspace(2)
+        self.ta, self.tb = m.member(self.A, self.ua, 'owner'), m.member(self.B, self.ub, 'owner')
+        self.ia = m.installation(self.A, 1, self.ua, guild=self.GUILD)
+        self.r.flush()
+        self.provider = m.s.adapter
+        self.provider.rate_v1_enabled = True
+        self.limiter = SharedPostgresBudget(self.cluster.factory(), F.APP, policy=L.policy(self.cluster.now(), capacity=200))
+        self.provider.rate_limiter = self.limiter
+        m.hooks.rate_headers = F.Hooks.bucket_headers
+        self.config = m.hooks.guild_config[self.GUILD]
+
+    # -- helpers -------------------------------------------------------------------------------------------------------
+    def profile(self):
+        return self.r.get(self.A, self.ta, self.ia.connection)
+
+    def post(self, profile, name='Real Claim Bot'):
+        return self.r.attempt(self.r.post, self.A, self.ta, self.ia.connection,
+                              {'name': name, 'fingerprint': profile['fingerprint'], **BODY})
+
+    def admissions(self):
+        with self.cluster.connect(autocommit=True) as db:
+            return db.execute("SELECT state,status_code FROM public.pr_discord_request_admissions "
+                              "WHERE method='PATCH' AND NOT is_publish ORDER BY request_seq").fetchall()
+
+    def channel(self):
+        with self.cluster.connect(autocommit=True) as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.A,)).fetchone()[0]
+        return next(c for c in state['phase2']['channels'] if c['id'] == self.ia.connection)
+
+    def kinds(self):
+        with self.cluster.connect(autocommit=True) as db:
+            return {row[0] for row in db.execute("SELECT kind FROM public.pr_audit_events WHERE workspace_id=%s "
+                                                 "AND kind LIKE 'discord.sender_name%%'", (self.A,)).fetchall()}
+
+    def age_admissions(self):
+        """Let the coordinator see the admission as old: its own deadline passes in real time (5 s), and it was reserved
+        ten minutes ago (the reconciliation needs 120 s)."""
+        time.sleep(6)
+        with self.cluster.connect(autocommit=True) as db:
+            db.execute("UPDATE public.pr_discord_request_admissions SET reserved_at = reserved_at - interval '10 minutes' "
+                       "WHERE method='PATCH'")
+
+    def lose_the_response(self):
+        self.r.m.hooks.lose_patch_response = True
+        outcome = self.post(self.profile())
+        self.assertEqual(outcome[:2], (409, 'discord_sender_edit_pending'))
+        self.assertEqual(self.config.patches, [{'nick': 'Real Claim Bot'}], 'applied once, never replayed')
+        return self.channel()['discordSenderEdit']
+
+    def add_contender(self):
+        """A second workspace's live bot installation of the same server appears (its credential row is all the check reads)."""
+        ids = self.r.m.installation(self.B, 7, self.ub, guild=self.GUILD)
+        row = self.r.m.credentials[(self.B, ids.connection)]['row']
+        with self.cluster.connect(autocommit=True) as db:
+            db.execute('INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,'
+                       'access_ciphertext,key_id,scopes,access_expires_at,authorization_generation) '
+                       "VALUES(%s,%s,'discord',%s,%s,%s,%s,to_timestamp(%s),%s::uuid)",
+                       (self.B, ids.connection, row[6], row[0], row[1], row[5], row[3], row[4]))
+        return ids
+
+    def permit_of(self, admission_id):
+        from postriff_phase2.discord.rate_limits import Permit, _digest
+        with self.cluster.connect(autocommit=True) as db:
+            expires = db.execute('SELECT extract(epoch from expires_at)::double precision FROM public.pr_discord_request_admissions '
+                                 'WHERE id=%s::uuid', (admission_id,)).fetchone()[0]
+        return Permit(admission_id, self.limiter.application_key, 'PATCH', _digest(f'/guilds/{self.GUILD}/members/@me'),
+                      self.provider._rate_identity('bot'), None, expires)
+
+    # -- the flows -------------------------------------------------------------------------------------------------------
+    def test_a_successful_write_leaves_one_observed_admission_no_claim_and_an_audit_reason_for_the_server(self):
+        saved = self.r.post(self.A, self.ta, self.ia.connection,
+                            {'name': 'Real Claim Bot', 'fingerprint': self.profile()['fingerprint'], **BODY})
+        self.assertEqual(saved['savedName'], 'Real Claim Bot')
+        self.assertEqual(self.admissions(), [('observed', 200)])
+        self.assertNotIn('discordSenderEdit', self.channel())
+        self.assertEqual(self.config.patches, [{'nick': 'Real Claim Bot'}])
+        import re
+        self.assertRegex(self.config.patch_headers[0]['X-Audit-Log-Reason'], re.compile(r'^Rafii shared bot nickname change \(ref [0-9a-f]{16}\)$'))
+        self.assertEqual(self.kinds(), {'discord.sender_name_updated'})
+
+    def test_a_refusal_by_discord_releases_the_claim_and_never_replays_the_write(self):
+        self.config.reject_patch = True
+        outcome = self.post(self.profile())
+        self.assertEqual(outcome[:2], (409, 'discord_sender_write_refused'))
+        self.assertEqual(self.admissions(), [('observed', 403)])
+        self.assertNotIn('discordSenderEdit', self.channel())
+        self.assertEqual(len(self.config.patches), 1)
+        self.assertIsNone(self.channel().get('discordSenderName'))
+        # What the coordinator does next is its own business (REQUESTS-TO-RATE-LIMITER R4): as shipped, a 403 opens a route
+        # circuit for the server until the policy expires. Either way the route sends nothing on its own and keeps no claim.
+        self.config.reject_patch = False
+        retry = self.post(self.profile())
+        self.assertNotIn('discordSenderEdit', self.channel())
+        if retry[0] == 'ok':
+            self.assertEqual(len(self.config.patches), 2)
+        else:
+            self.assertEqual(retry[:2], (429, 'discord_rate_delayed'))
+            self.assertGreater(retry[3]['retryAfterSeconds'], 3600, 'the measured embargo for the policy lifetime')
+            self.assertEqual(len(self.config.patches), 1, 'a delayed request is never sent')
+
+    def test_a_lost_response_leaves_an_uncertain_admission_that_a_read_after_the_deadline_retires(self):
+        claim = self.lose_the_response()
+        self.assertEqual([state for state, _ in self.admissions()], ['uncertain'])
+        self.assertEqual(self.r.attempt(self.r.get, self.A, self.ta, self.ia.connection)[:2], (409, 'discord_sender_edit_pending'))
+        self.assertEqual([state for state, _ in self.admissions()], ['uncertain'], 'a read before the deadline settles nothing')
+        self.age_admissions()
+        self.r.now += 121
+        recovered = self.r.get(self.A, self.ta, self.ia.connection)
+        self.assertEqual(self.admissions(), [('observed', None)], 'retired by the later read, with no invented HTTP status')
+        self.assertNotIn('discordSenderEdit', self.channel())
+        self.assertEqual(recovered['savedName'], 'Real Claim Bot', 'Discord applied it; the read adopts what it reports')
+        self.assertEqual(self.kinds(), {'discord.sender_name_reconciled'})
+        self.assertEqual(len(self.config.patches), 1)
+        self.assertTrue(claim['rateAdmissionId'])
+
+    def test_after_a_bot_token_rotation_the_admission_is_retired_by_id_if_offered_and_otherwise_stays_an_orphan(self):
+        claim = self.lose_the_response()
+        self.provider.bot_token = 'synthetic-rotated-bot'
+        self.age_admissions()
+        self.r.now += 121
+        if hasattr(self.limiter, 'reconcile_nickname_by_id'):
+            self.r.get(self.A, self.ta, self.ia.connection)
+            self.assertEqual([state for state, _ in self.admissions()], ['observed'])
+            self.assertEqual(self.kinds(), {'discord.sender_name_reconciled'})
+            return
+        # The coordinator as shipped cannot match the old credential: the person still sees a pending answer ...
+        pending = self.r.attempt(self.r.get, self.A, self.ta, self.ia.connection)
+        self.assertEqual(pending[:2], (409, 'discord_sender_edit_pending'))
+        self.assertEqual(pending[3], {'retryAfterSeconds': 60})
+        self.assertEqual([state for state, _ in self.admissions()], ['uncertain'])
+        # ... until the grace period ends, then the claim is abandoned and the admission is an orphan (R2/R3).
+        self.r.now += names.CLAIM_GRACE_SECONDS
+        profile = self.r.get(self.A, self.ta, self.ia.connection)
+        self.assertTrue(profile['editable'])
+        self.assertNotIn('discordSenderEdit', self.channel())
+        self.assertEqual(self.kinds(), {'discord.sender_name_claim_abandoned'})
+        self.assertEqual([state for state, _ in self.admissions()], ['uncertain'])
+        with self.cluster.connect(autocommit=True) as db:
+            pending_forever = db.execute("SELECT count(*) FROM public.pr_discord_request_admissions "
+                                         "WHERE state IN ('sent','uncertain') AND NOT is_publish AND method='PATCH'").fetchone()[0]
+        self.assertEqual(pending_forever, 1, claim)
+
+    def test_the_final_guard_blocks_the_real_admission_when_a_second_installation_appears(self):
+        profile = self.profile()
+        real = self.limiter.consume
+
+        def consume_then_the_other_installation_appears(*args, **kwargs):
+            real(*args, **kwargs)
+            self.add_contender()
+        self.limiter.consume = consume_then_the_other_installation_appears
+        outcome = self.post(profile)
+        self.assertEqual(outcome[:2], (409, 'discord_sender_name_unavailable'))
+        self.assertEqual(outcome[3], {'reasons': [{'code': 'nickname_authority_other_workspace'}]})
+        self.assertEqual(self.admissions(), [('blocked', None)])
+        self.assertEqual(self.config.patches, [])
+        self.assertNotIn('discordSenderEdit', self.channel())
+
+    def test_abandon_and_reconcile_are_silent_on_every_terminal_state_of_the_real_table(self):
+        self.r.post(self.A, self.ta, self.ia.connection, {'name': 'Real Claim Bot', 'fingerprint': self.profile()['fingerprint'], **BODY})
+        with self.cluster.connect(autocommit=True) as db:
+            admission = str(db.execute("SELECT id FROM public.pr_discord_request_admissions WHERE method='PATCH'").fetchone()[0])
+        permit = self.permit_of(admission)
+        self.limiter.abandon_unsent_nickname(permit)                       # observed: a late denied writer changes nothing
+        # (reconcile_nickname checks the admission's age before its state, so a YOUNG settled admission raises today:
+        # REQUESTS-TO-RATE-LIMITER R2 asks for the terminal check first. Aged, as a reconciling read always sees it:)
+        self.age_admissions()
+        with self.cluster.connect() as db, db.cursor() as cur:
+            self.limiter.reconcile_nickname(cur, permit, self.GUILD)       # observed: already settled
+        self.assertEqual(self.admissions(), [('observed', 200)])
+        with self.cluster.connect(autocommit=True) as db:
+            db.execute("UPDATE public.pr_discord_request_admissions SET state='blocked' WHERE method='PATCH'")
+        self.limiter.abandon_unsent_nickname(permit)
+        with self.cluster.connect() as db, db.cursor() as cur:
+            self.limiter.reconcile_nickname(cur, permit, self.GUILD)
+        self.assertEqual([state for state, _ in self.admissions()], ['blocked'])
+
+    def test_the_guild_lock_orders_the_authority_check_after_a_concurrent_installation(self):
+        """The installation commit and the nickname authority check take the same transaction-scoped lock: a check that
+        starts while an installation of the server is committing waits for it and then sees its row."""
+        m = self.r.m
+        second = m.installation(self.B, 7, self.ub, guild=self.GUILD)
+        row = m.credentials[(self.B, second.connection)]['row']
+        started, result = threading.Event(), {}
+
+        def check():
+            with self.cluster.connect() as db, db.cursor() as cur:
+                started.set()
+                result['count'] = self.r.s.nickname_contenders(cur, self.A, self.ia.connection, self.GUILD)
+
+        with self.cluster.connect() as installing, installing.cursor() as cur:
+            self.r.s.guild_lock(cur, self.GUILD)                  # what save_installation takes before its upsert
+            thread = threading.Thread(target=check)
+            thread.start()
+            started.wait(10)
+            thread.join(2)
+            self.assertTrue(thread.is_alive(), 'the check must wait for the installation that holds the lock')
+            self.assertNotIn('count', result)
+            cur.execute('INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,'
+                        'access_ciphertext,key_id,scopes,access_expires_at,authorization_generation) '
+                        "VALUES(%s,%s,'discord',%s,%s,%s,%s,to_timestamp(%s),%s::uuid)",
+                        (self.B, second.connection, row[6], row[0], row[1], row[5], row[3], row[4]))
+        thread.join(30)                                           # the installation committed and released the lock
+        self.assertEqual(result.get('count'), 1, 'the check ran after the commit and sees the second installation')
+
+
+# ---------------------------------------------------------------------------------------------------------------------
 # (2) the W-02 lane and the legacy worker execute named, unnamed and bot posts against a mock Discord
 
 class WebhookDiscord(L.MockDiscord):
@@ -349,11 +589,16 @@ class WebhookDiscord(L.MockDiscord):
         self.by_hook = {t.hook: t for t in tenants if t.kind == 'webhook'}
         self.executes = []
         self.default_name = F.DEFAULT_HOOK_NAME
+        self.nicks = {}          # guild -> the bot's server nickname as Discord reports it on the bot-member read
 
     def _answer(self, method, path, body, now):
         parts = path.split('?')[0].strip('/').split('/')
         if parts[0] != 'webhooks':
-            return super()._answer(method, path, body, now)
+            answer = super()._answer(method, path, body, now)
+            if (method == 'GET' and len(parts) == 4 and parts[0] == 'guilds' and parts[2] == 'members' and parts[3] == F.BOT
+                    and parts[1] in self.nicks and answer.get('status') == 200):
+                answer = {**answer, 'body': {**answer['body'], 'nick': self.nicks[parts[1]]}}
+            return answer
         tenant = self.by_hook.get(parts[1])
         if tenant is None or len(parts) < 3 or parts[2] != tenant.hook_credential:
             return {'status': 404, 'headers': {}, 'body': {'message': 'Unknown Webhook'}}
@@ -512,14 +757,18 @@ class LaneAndWorkerOnPostgres(unittest.TestCase):
         self.assertEqual(self.wire.route429, 0)
         self.assertEqual(sum(r['counters']['posted'] for r in results), len(jobs))
 
-    def run_one(self, name):
-        """One webhook tenant, one approved post, one thread: the exact multiset of Discord requests it takes."""
+    def run_one(self, name, *, kind='webhook', nickname=None):
+        """One tenant, one approved post, one thread: the exact multiset of Discord requests it takes."""
         self.cluster.reset()
         now = self.cluster.now() - 360
-        tenant = F.Tenant(0, name, now=now).build(text='Counted post')
+        tenant = F.Tenant(0, name, kind=kind, now=now).build(text='Counted post')
+        if nickname is not None:
+            tenant.channel_record['discordBotNickname'] = {'value': nickname, 'observedAt': now}
         tenant.approve()
         seed(self.cluster, [tenant])
         wire = WebhookDiscord([tenant])
+        if nickname is not None:
+            wire.nicks[tenant.guild] = nickname
         hosted = lane_social(self.cluster, [tenant], wire)
         worker = PostgresWorker(self.cluster.factory(), social=hosted, worker_id='sn-count', discord_workers=True)
         with L.no_billing():
@@ -534,17 +783,62 @@ class LaneAndWorkerOnPostgres(unittest.TestCase):
             shape = (path.split('?')[0].replace(tenant.hook_credential, '{token}').replace(tenant.hook, '{hook}')
                      .replace(tenant.guild, '{guild}').replace(tenant.channel, '{channel}'))
             counted[(method, '/'.join('{id}' if part.isdigit() else part for part in shape.split('/')))] += 1
-        return counted, wire
+        return counted, wire, tenant
 
     def test_a_name_adds_no_request_to_a_webhook_post(self):
-        named, named_wire = self.run_one('Counted Weekly')
-        plain, plain_wire = self.run_one(None)
+        named, named_wire, _ = self.run_one('Counted Weekly')
+        plain, plain_wire, _ = self.run_one(None)
         self.assertEqual(named_wire.executes[0]['body'].get('username'), 'Counted Weekly')
         self.assertNotIn('username', plain_wire.executes[0]['body'])
         self.assertEqual(named, plain, 'a sender name must add no Discord request to a post')
         self.assertEqual(named[('POST', '/webhooks/{hook}/{token}')], 1)
         # Recorded for CAPACITY-NOTES.md: the full per-post request shape of one webhook post.
         self.assertEqual(sum(named.values()), sum(plain.values()))
+
+    def test_a_frozen_bot_nickname_adds_no_request_to_a_bot_post(self):
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}):
+            frozen, _, _ = self.run_one(None, kind='bot', nickname='Weekly Rafii')
+            self.assertEqual(self.frozen_nickname(), 'Weekly Rafii')
+            plain, _, _ = self.run_one(None, kind='bot')
+            self.assertIsNone(self.frozen_nickname())
+        self.assertEqual(frozen, plain, 'freezing the nickname must add no Discord request to a bot post')
+
+    def frozen_nickname(self):
+        job = next(iter(read_jobs(self.cluster).values()))
+        return job['manifest'].get('discordBotNickname')
+
+    def test_a_bot_post_approved_under_one_nickname_is_held_when_the_server_nickname_changed(self):
+        now = self.cluster.now() - 360
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}):
+            tenants = []
+            for index in range(3):
+                tenant = F.Tenant(index, None, kind='bot', now=now).build(text=f'Nickname post {index}')
+                tenant.channel_record['discordBotNickname'] = {'value': f'Weekly {index}', 'observedAt': now}
+                tenant.approve()
+                tenants.append(tenant)
+            seed(self.cluster, tenants)
+            wire = WebhookDiscord(tenants)
+            wire.nicks = {tenants[0].guild: 'Weekly 0',                 # unchanged: sent
+                          tenants[1].guild: 'Renamed By A Server Admin',  # renamed since approval: held
+                          tenants[2].guild: None}                     # nickname removed since approval: held
+            self.hosted = lane_social(self.cluster, tenants, wire)
+            worker = PostgresWorker(self.cluster.factory(), social=self.hosted, worker_id='sn-nick', discord_workers=True)
+            with L.no_billing():
+                for _ in range(300):
+                    worker.step()
+                    if all(job['state'] in SETTLED for job in read_jobs(self.cluster).values()):
+                        break
+                    time.sleep(.05)
+        by_workspace = {workspace: job for (workspace, _), job in read_jobs(self.cluster).items()}
+        states = [by_workspace[t.workspace]['state'] for t in tenants]
+        self.assertEqual(states, ['verified', 'held', 'held'])
+        for tenant in tenants[1:]:
+            job = by_workspace[tenant.workspace]
+            self.assertIn('no longer the one this post was approved under', job['events'][-1]['message'])
+            self.assertEqual(job.get('discordDispatchIntents') or [], [], 'no intent was sealed for a post that could not be sent')
+            self.assertNotIn('providerReference', job)
+        sent_to = {entry[1] for created in wire.creates.values() for entry in created}      # (time, channel, wall clock) per create
+        self.assertEqual(sent_to, {tenants[0].channel}, 'only the unchanged nickname reached Discord')
 
     def test_switching_the_feature_off_holds_only_the_named_posts_and_they_stay_held_when_it_returns(self):
         tenants = self.start(named=3, plain=2, bots=2, posts=1)

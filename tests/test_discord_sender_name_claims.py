@@ -5,6 +5,7 @@ uncertain admission must stay resolvable: reconnect, bot-token rotation, ambiguo
 stand-in in discord_sender_name_fixture.py; the real coordinator on PostgreSQL is driven in test_discord_sender_name_postgres.py.
 """
 import json
+import os
 import secrets
 import unittest
 from types import SimpleNamespace
@@ -233,6 +234,99 @@ class LostResponses(Claims):
         self.limiter.abandon_unsent_nickname = Mock(side_effect=RateCoordinatorUnavailable())
         self.assertEqual(self.post()[1], 'discord_sender_name_unavailable')
         self.assertFalse(adapter.rate_coordinator_degraded)
+
+
+class ReadyGate(unittest.TestCase):
+    """The settings routes need the same shared request coordinator that a post needs: when it cannot admit a request, the
+    profile says so and nothing is asked of Discord (SNR-4, the gate the sibling routes have)."""
+    FLAGS = {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true', 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}
+    # Answered with a profile that says why (and 503 on a write): the coordinator cannot admit a request.
+    CONDITIONS = {
+        'rate limits off': lambda a, lim: setattr(a, 'rate_v1_enabled', False),
+        'provider not production reviewed': lambda a, lim: setattr(a, 'production_reviewed', False),
+        'no coordinator': lambda a, lim: setattr(a, 'rate_limiter', None),
+        'coordinator without a policy': lambda a, lim: setattr(lim, 'policy', None),
+        'coordinator degraded': lambda a, lim: setattr(a, 'rate_coordinator_degraded', True),
+    }
+    # Already refused for every Discord connection route by DiscordConnections.adapter, before any sender-name code runs.
+    PAUSED = {
+        'authorization v2 off': lambda a, lim: setattr(a, 'authorization_v2_enabled', False),
+        'connections v2 off': lambda a, lim: setattr(a, 'connections_v2_enabled', False),
+        'execution paused': lambda a, lim: setattr(a, 'execution_enabled', False),
+    }
+
+    def setUp(self):
+        patcher = patch.dict(os.environ, self.FLAGS)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.w = Settings()
+        self.ua = self.w.user(1)
+        self.A = self.w.workspace(1)
+        self.ta = self.w.member(self.A, self.ua, 'owner')
+        self.wa = self.w.webhook(self.A, 1, self.ua, name='Alpha Weekly')
+        self.ia = self.w.installation(self.A, 1, self.ua, guild='6400001')
+        self.limiter = self.w.use_limiter()
+        self.adapter = self.w.s.adapter
+
+    def test_a_ready_provider_answers(self):
+        for ids in (self.wa, self.ia):
+            self.assertTrue(self.w.get(self.A, self.ta, ids.connection)['editable'])
+
+    def test_each_missing_condition_makes_the_edit_unavailable_without_a_discord_request_or_a_state_change(self):
+        for label, break_it in self.CONDITIONS.items():
+            for ids in (self.wa, self.ia):
+                with self.subTest(condition=label, connection=ids.connection[:14]):
+                    self.setUp()
+                    break_it(self.adapter, self.limiter)
+                    before = self.w.snapshot()
+                    profile = self.w.get(self.A, self.ta, ids.connection)
+                    self.assertEqual((profile['editable'], profile['unavailable']), (False, [{'code': 'provider_unavailable'}]))
+                    self.assertEqual(self.w.snapshot(), before, 'no Discord request, no state change')
+                    refused = self.w.attempt(self.w.post, self.A, self.ta, ids.connection,
+                                             {'name': 'Gated Name', 'fingerprint': profile['fingerprint'], **BODY})
+                    self.assertEqual(refused[:2], (503, 'discord_sender_name_unavailable'))
+                    self.assertEqual(refused[3], {'reasons': [{'code': 'provider_unavailable'}]})
+                    self.assertEqual(self.w.snapshot(), before)
+
+    def test_a_paused_provider_refuses_both_routes_like_every_other_discord_route(self):
+        for label, break_it in self.PAUSED.items():
+            for ids in (self.wa, self.ia):
+                with self.subTest(condition=label, connection=ids.connection[:14]):
+                    self.setUp()
+                    break_it(self.adapter, self.limiter)
+                    before = self.w.snapshot()
+                    for call in (lambda: self.w.get(self.A, self.ta, ids.connection),
+                                 lambda: self.w.post(self.A, self.ta, ids.connection, {'name': 'Gated Name', 'fingerprint': 'f' * 64, **BODY})):
+                        outcome = self.w.attempt(call)
+                        self.assertEqual(outcome[:2], (503, 'discord_connection_required'))
+                    self.assertEqual(self.w.snapshot(), before)
+
+    def test_the_webhook_route_switch_gates_only_webhook_connections(self):
+        self.adapter.webhook_v1_enabled = False
+        self.assertEqual([r['code'] for r in self.w.get(self.A, self.ta, self.wa.connection)['unavailable']], ['provider_unavailable'])
+        self.assertTrue(self.w.get(self.A, self.ta, self.ia.connection)['editable'])
+
+    def test_the_provider_view_tells_the_page_what_the_routes_would_answer(self):
+        from postriff_phase2.oauth import OAuthService
+        modes = OAuthService.discord_modes
+        view = modes(self.adapter)
+        self.assertEqual((view['bot']['nickname']['enabled'], view['webhook']['senderName']['enabled']), (True, True))
+        for label, break_it in {**self.CONDITIONS, **self.PAUSED}.items():
+            with self.subTest(condition=label):
+                self.setUp()
+                break_it(self.adapter, self.limiter)
+                view = modes(self.adapter)
+                self.assertEqual((view['bot']['nickname']['enabled'], view['webhook']['senderName']['enabled']), (False, False))
+        self.setUp()
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'false'}):
+            view = modes(self.adapter)
+            self.assertEqual((view['bot']['nickname']['enabled'], view['webhook']['senderName']['enabled']), (False, True))
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'false'}):
+            view = modes(self.adapter)
+            self.assertEqual((view['bot']['nickname']['enabled'], view['webhook']['senderName']['enabled']), (False, False))
+        self.adapter.webhook_v1_enabled = False
+        view = modes(self.adapter)
+        self.assertEqual((view['bot']['nickname']['enabled'], view['webhook']['senderName']['enabled']), (True, False))
 
 
 class Reconnect(unittest.TestCase):

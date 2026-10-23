@@ -287,8 +287,10 @@ class SenderNames:
                        and x.get('workspaceId') == state['workspace']['id']), None)
         return bool(record) and record.get('authorizedBy') == actor
 
-    def custody(self, cur, state, actor, *, fresh=True, require_authorizer=True):
-        """(channel, envelope, stamp). Every integrity failure is a reconnect; only the authorizer may write a nickname."""
+    def custody(self, cur, state, actor, *, fresh=True, require_authorizer=True, live=True):
+        """(channel, envelope, stamp). Every integrity failure is a reconnect; only the authorizer may write a nickname.
+        `live=False` skips the webhook validator that needs the webhook route to be enabled: used only for the first look,
+        when the answer is going to be "unavailable" without any provider request."""
         if (not actor or state.get('workspace', {}).get('id') != self.workspace
                 or state.get('accountDeletion') or state.get('accountBlock')):
             fail('This workspace cannot change Discord sender settings.', 403, code='permission_denied')
@@ -318,7 +320,8 @@ class SenderNames:
                     or envelope.get('channel') != channel.get('discordWebhookChannelId')):
                 fail('Reconnect this Discord connection before changing its sender name.', 409,
                      code='discord_connection_required')
-            self.s.validate_webhook(cur, self.workspace, envelope)
+            if live:
+                self.s.validate_webhook(cur, self.workspace, envelope)
         else:
             identity = next((x for x in state.get('phase2', {}).get('discordIdentityLinks', [])
                              if x.get('id') == envelope.get('identityConnectionId')
@@ -389,7 +392,8 @@ class SenderNames:
         provider = self.s.oauth._provider('discord')
         mode = 'post' if writing else 'get'
         with self.s.local(self.workspace, self.token) as (cur, state, actor):
-            channel, first, first_stamp = self.custody(cur, state, actor, fresh=False, require_authorizer=False)
+            channel, first, first_stamp = self.custody(cur, state, actor, fresh=False, require_authorizer=False,
+                                                       live=bool(getattr(provider, 'webhook_v1_enabled', False)))
             self._limit(cur, mode, self.workspace, 15 if writing else 40)
             self._limit(cur, mode, f'{self.workspace}:{self.connection}', 6 if writing else 12)
             if writing:
