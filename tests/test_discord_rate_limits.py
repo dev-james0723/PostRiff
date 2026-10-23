@@ -112,15 +112,28 @@ class MemoryLedger:
             elif self.store_fault=='key':self.result[0]=('99:'+'0'*64,)
             elif self.store_fault=='duplicate':self.result=[self.result[0]]+self.result[:-1]
         elif sql.startswith('WITH locked_pending AS MATERIALIZED'):
-            key,now=params
-            self.result=[(sum(key in r['keys'] and (r['state'] in ('sent','uncertain') or
+            bounded='coalesce(sent_at,reserved_at)' in sql
+            key,since,now=params if bounded else (params[0],None,params[1])
+            self.result=[(sum(key in r['keys'] and (r['state'] in ('sent','uncertain') and (not bounded or self.unobserved_at(r)>since) or
                 r['state'] in ('reserved','sealed') and r['expires']>now) for r in self.admissions.values()),)]
         elif sql.startswith('WITH locked_alias AS MATERIALIZED'):
-            pid,alias,auth,route,major,_alias,now=params
+            bounded='coalesce(sent_at,reserved_at)' in sql
+            pid,alias,auth,route,major,*rest=params
+            since,_alias,now=rest if bounded else (None,*rest)
             pending=[r for r in self.admissions.values() if r['id']!=pid and
                 (alias in r['keys'] or (r['auth'],r['route'],r['major'])==(auth,route,major)) and
-                (r['state'] in ('sent','uncertain') or r['state'] in ('reserved','sealed') and r['expires']>now)]
+                (r['state'] in ('sent','uncertain') and (not bounded or self.unobserved_at(r)>since) or
+                 r['state'] in ('reserved','sealed') and r['expires']>now)]
             self.result=[(len(pending),sum(alias not in r['keys'] for r in pending))]
+        elif sql.startswith('SELECT count(*) FROM public.pr_discord_request_admissions WHERE application_key='):
+            key,cutoff,now,since=params  # the application row's unresolved requests older than its window (_slide)
+            self.result=[(sum(r['application']==key and r['reserved']<=cutoff and (
+                r['state'] in ('reserved','sealed') and r['expires']>now or
+                r['state'] in ('sent','uncertain') and self.unobserved_at(r)>since) for r in self.admissions.values()),)]
+        elif sql.startswith('SELECT extract(epoch from reserved_at)::double precision FROM public.pr_discord_request_admissions'):
+            key,limit=params  # the newest admissions of the application, newest first (_slide)
+            newest=sorted((r for r in self.admissions.values() if r['application']==key),key=lambda r:-r['seq'])[:limit]
+            self.result=[(r['reserved'],) for r in newest]
         elif sql.startswith('WITH reservation_clock AS MATERIALIZED'):
             self.now+=self.insert_delay
             moment=self.workspace.now if self.workspace else self.now
@@ -129,7 +142,8 @@ class MemoryLedger:
             self.serial+=1
             names=('id','application','auth','credential','kind','method','path','route','major','bucket','keys',
                 'publish','binding','workspace','publication','manifest','authorization','approval','worker','lease','channel','expires')
-            row=dict(zip(names,params[:-1]));row.update(seq=self.serial,state='sent' if ',state,sent_at)' in sql else 'reserved',intent=None,reserved=moment)
+            row=dict(zip(names,params[:-1]));row.update(seq=self.serial,state='sent' if ',state,sent_at)' in sql else 'reserved',intent=None,reserved=moment,
+                sent=moment if ',state,sent_at)' in sql else None)
             if row['publish'] and any(r['binding']==row['binding'] for r in self.admissions.values()):
                 raise ValueError('Duplicate synthetic binding')
             self.admissions[row['id']]=row
@@ -156,7 +170,7 @@ class MemoryLedger:
             if self.rowcount:r.update(state='sealed',intent=intent)
         elif "SET state='sent'" in sql:
             pid,expected=params;r=self.admissions[pid];self.rowcount=int(r['state']==expected)
-            if self.rowcount:r['state']='sent'
+            if self.rowcount:r.update(state='sent',sent=self.workspace.now if self.workspace else self.now)
         elif "SET state='blocked',outcome_at=clock_timestamp() WHERE id=" in sql:
             r=self.admissions[params[0]];self.rowcount=int(r['state']=='sent' and r['method']=='GET' and not r['publish'])
             if self.rowcount:r['state']='blocked'
@@ -167,6 +181,8 @@ class MemoryLedger:
             state,status,scope,pid=params;r=self.admissions[pid];self.rowcount=int(r['state']=='sent')
             if self.rowcount:r.update(state=state,status=status,scope=scope)
         else:raise AssertionError('Unrecognized synthetic SQL contract: '+sql[:110])
+    @staticmethod
+    def unobserved_at(row):return row['sent'] if row.get('sent') is not None else row['reserved']  # coalesce(sent_at,reserved_at)
     def fetchone(self):return self.result.pop(0) if self.result else None
     def fetchall(self):result,self.result=self.result,[];return result
 

@@ -23,6 +23,7 @@ STATE = 'public.pr_discord_rate_state'
 ROUTES = 'public.pr_discord_route_buckets'
 ADMISSIONS = 'public.pr_discord_request_admissions'
 MAX_EPOCH = 253402300799.0  # representable through year9999; excessive hints hold
+SLOT_EPSILON = 1e-6  # one tick of the database clock (timestamptz keeps whole microseconds)
 _ID = re.compile(r'^[0-9]{5,25}$')
 _HASH = re.compile(r'^[a-f0-9]{64}$')
 _LABEL = re.compile(r'^[A-Za-z0-9_.:-]{1,64}$')
@@ -316,8 +317,17 @@ class SharedPostgresBudget:
     Mapping row -> sorted scope rows is the lock order for reserve/observe.
     Seal/consume use workspace -> credential -> admission only. They never take
     scope locks. Lost/ambiguous admissions are never refunded in their window.
-    Uncertain sends conservatively retain one slot across resets until resolved.
+    Uncertain sends conservatively retain one slot across resets until resolved,
+    or until they can no longer reach Discord: their scope's window plus
+    UNOBSERVED_MARGIN_SECONDS. The application-wide row is an exact sliding
+    window over the admissions themselves (_slide), not a fixed one.
     """
+    # The longest an admitted request can still be on its way to Discord after it was marked sent: the transport's
+    # 20-second socket timeout (providers.http_transport) plus allowance for DNS, TLS set-up and clock skew. A request
+    # whose answer was never observed keeps counting against a scope for that scope's window plus this margin, never
+    # longer: after it nothing it did can fall inside any window the scope still holds.
+    UNOBSERVED_MARGIN_SECONDS = 30.0
+
     def __init__(self, connection_factory, application_id, *, policy=None, **_compat):
         if not isinstance(application_id, str) or not _ID.fullmatch(application_id):
             raise RateCoordinatorUnavailable()
@@ -499,19 +509,29 @@ class SharedPostgresBudget:
                 or sorted(value[0] for value in changed) != ordered):
             raise RateCoordinatorUnavailable()
 
-    def _pending(self, cur, key, now):
+    def _horizon(self, window):
+        """How long an admission whose answer was never observed keeps counting against a scope with this window."""
+        return window + self.UNOBSERVED_MARGIN_SECONDS
+
+    def _pending(self, cur, key, now, since=None):
         # Lock before filtering expiry: consume may have passed its final clock
         # check while holding an admission and commit sent after that expiry.
         # READ COMMITTED re-reads that row after the lock wait; the outer count
         # must see the committed state. Consume/seal never acquire scope locks.
+        # `since` (epoch seconds) drops sent/uncertain rows marked sent at or before it from the locked set and the
+        # count: such a request cannot still reach Discord inside any window this scope holds (_horizon), and is
+        # no longer in flight in any transaction. Reserved/sealed rows are bounded by their own expiry.
+        recent = '' if since is None else (" AND (state NOT IN ('sent','uncertain')"
+                                           " OR coalesce(sent_at,reserved_at)>to_timestamp(%s))")
         cur.execute(f'''WITH locked_pending AS MATERIALIZED (
             SELECT state,expires_at FROM {ADMISSIONS} WHERE scope_keys @> ARRAY[%s]::text[]
-            AND state IN ('reserved','sealed','sent','uncertain') ORDER BY request_seq FOR UPDATE)
+            AND state IN ('reserved','sealed','sent','uncertain'){recent} ORDER BY request_seq FOR UPDATE)
             SELECT count(*) FROM locked_pending WHERE
-            (state IN ('sent','uncertain') OR state IN ('reserved','sealed') AND expires_at>to_timestamp(%s))''', (key,now))
+            (state IN ('sent','uncertain') OR state IN ('reserved','sealed') AND expires_at>to_timestamp(%s))''',
+            (key,now) if since is None else (key,since,now))
         return cur.fetchone()[0]
 
-    def _alias_pending(self, cur, alias, permit, meta, now):
+    def _alias_pending(self, cur, alias, permit, meta, now, since=None):
         # One row per durable admission: OR does not duplicate a request already
         # present on both keys. Other routes on the OLD bucket are not migrated;
         # only this exact auth/route/major joins the new alias. The caller holds
@@ -519,14 +539,17 @@ class SharedPostgresBudget:
         # Include expired reserved/sealed rows in the locking step. Filtering
         # them first could miss an in-flight consume, then map its sent row
         # without charging it. Counts and alias mapping share these row locks.
+        # `since` bounds unobserved sent/uncertain rows exactly as in _pending.
+        recent = '' if since is None else (" AND (state NOT IN ('sent','uncertain')"
+                                           " OR coalesce(sent_at,reserved_at)>to_timestamp(%s))")
         cur.execute(f'''WITH locked_alias AS MATERIALIZED (
             SELECT scope_keys,state,expires_at FROM {ADMISSIONS} WHERE id<>%s::uuid
             AND (scope_keys @> ARRAY[%s]::text[] OR (auth_key=%s AND route_key=%s AND major_key=%s))
-            AND state IN ('reserved','sealed','sent','uncertain') ORDER BY request_seq FOR UPDATE)
+            AND state IN ('reserved','sealed','sent','uncertain'){recent} ORDER BY request_seq FOR UPDATE)
             SELECT count(*),count(*) FILTER (WHERE NOT scope_keys @> ARRAY[%s]::text[])
             FROM locked_alias WHERE
             (state IN ('sent','uncertain') OR state IN ('reserved','sealed') AND expires_at>to_timestamp(%s))''',
-            (permit.id,alias,permit.identity.auth_key,*meta,alias,now))
+            (permit.id,alias,permit.identity.auth_key,*meta,*(() if since is None else (since,)),alias,now))
         values = cur.fetchone()
         if (not values or len(values) != 2 or any(type(v) is not int or v < 0 for v in values)
                 or values[1] > values[0]):
@@ -544,17 +567,71 @@ class SharedPostgresBudget:
             row['cap'] = min(row['cap'],cap) if active_prior else cap
             row['window'] = max(row['window'],window) if active_prior else window
             row['left'] = min(row['left'],max(0,row['cap']-used))
-        if row['cap'] is not None and row['reset'] <= now:
+        if row['cap'] is not None and row['reset'] <= now and row['kind'] != 'policy':
+            # The application row never refills: _slide derives its left/reset from the admissions at each reservation.
             if row['kind'] == 'route' and row['learned'] and row['freshAfter'] is not None:
                 # No second refill from a stale countdown. A response to a
                 # request from this new window must establish its real reset.
                 raise RateCoordinatorUnavailable()
-            pending = self._pending(cur,key,now) if row['kind'] != 'invalid' else 0
+            # An unobserved request carries into this window only while it can still reach Discord (_horizon).
+            pending = (self._pending(cur,key,now,since=now-self._horizon(row['window']))
+                       if row['kind'] != 'invalid' else 0)
             row['left'] = max(0,row['cap']-pending)
             if row['kind'] == 'route' and row['learned']:
                 row['freshAfter'],row['reset'] = now,self.policy.expires_at
             else:
                 row['reset'] = now + row['window']
+
+    def _slide(self, cur, row, now):
+        """Set the application row's `left` and `reset` from the admissions themselves (an exact sliding window).
+
+        Exactness. Every reservation of this application holds its policy row FOR UPDATE from before `now` is read
+        until it commits, and it is the only writer of this application's admissions, so request_seq order is
+        admission order and, while the database clock does not run backwards, reserved_at never decreases along it.
+        The `slots`-th newest admission is then the one whose age decides the next admission: a slot is free only
+        STRICTLY more than one window after the admission that held it. So admission i+cap is stamped more than one
+        window after admission i, and no closed interval of one window holds more than `cap` admissions. The caller
+        stamps its own admission at or after `now`, which can only widen that gap. A database clock behind its newest
+        admission is waited out, not trusted, so the order assumption cannot be broken by a step backwards.
+
+        Every admission counts for exactly one window whatever became of it (used, released, blocked, expired,
+        observed): none is refunded inside its window, as the fixed window never refunded one inside its own. An
+        admission still unresolved after that window keeps one slot for a bounded time (_horizon): sent/uncertain
+        rows, and reserved/sealed rows until their expiry. It is counted once, never again for a later window.
+
+        left: free slots before this request. reset: when the next slot frees if none is free; otherwise now + window,
+        the bound a permit has always had (it cannot outlive the window that paid for it). Returns the reset to store
+        when this request's own admission will fill the window, else None.
+        """
+        cap, window = row['cap'], row['window']
+        cur.execute(f'''SELECT count(*) FROM {ADMISSIONS} WHERE application_key=%s AND reserved_at<=to_timestamp(%s)
+            AND state IN ('reserved','sealed','sent','uncertain')
+            AND (state IN ('reserved','sealed') AND expires_at>to_timestamp(%s)
+                 OR state IN ('sent','uncertain') AND coalesce(sent_at,reserved_at)>to_timestamp(%s))''',
+            (self.application_key,now-window-SLOT_EPSILON,now,now-self._horizon(window)))
+        held = cur.fetchone()[0]
+        if type(held) is not int or held < 0:
+            raise RateCoordinatorUnavailable()
+        slots = cap - held
+        row['left'], row['reset'] = 0, now + window  # resolution alone can free a slot: poll once per window
+        if slots <= 0:
+            return None
+        cur.execute(f'''SELECT extract(epoch from reserved_at)::double precision FROM {ADMISSIONS}
+            WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s''', (self.application_key,slots))
+        stamps = [value[0] for value in cur.fetchall()]
+        if len(stamps) > slots or any(not valid_number(stamp) for stamp in stamps):
+            raise RateCoordinatorUnavailable()
+        if stamps and stamps[0] > now:
+            row['reset'] = stamps[0] + SLOT_EPSILON  # the clock is behind its newest admission: wait for it
+            return None
+        busy = [stamp + window + SLOT_EPSILON for stamp in stamps if stamp + window + SLOT_EPSILON > now]
+        if len(busy) >= slots:
+            row['reset'] = busy[-1]  # the oldest of the newest `slots` admissions frees first
+            return None
+        row['left'], row['reset'] = slots - len(busy), now + window
+        if row['left'] == 1:  # this admission fills the window: the next slot is the oldest busy one's (or its own)
+            return busy[-1] if busy else now + window + SLOT_EPSILON
+        return None
 
     def _insert(self, cur, permit, route, major, bucket, keys, binding, *, read_sent=False):
         if read_sent and (permit.method != 'GET' or binding is not None or permit.binding_hash is not None):
@@ -613,10 +690,13 @@ class SharedPostgresBudget:
             previous = {key:dict(row) for key,row in rows.items()}
             now = self._policy(cur)  # wall time after lock waits
             wait, wait_scope = 0.0, 'unknown'
+            filled_reset = None
             for key,row in rows.items():
                 self._roll(cur,key,row,now)
                 if row['hold']:
                     raise RateCoordinatorUnavailable()
+                if row['kind'] == 'policy':
+                    filled_reset = self._slide(cur,row,now)  # sets left/reset; denied below like any capped row
                 embargo = max((row['blocked'] or 0)-now,(row['circuit'] or 0)-now)
                 if embargo > wait:
                     wait,wait_scope = embargo,'embargo'
@@ -640,6 +720,8 @@ class SharedPostgresBudget:
             for key,row in rows.items():
                 if row['cap'] is not None and row['kind'] != 'invalid':
                     row['left'] -= 1
+                    if row['kind'] == 'policy' and filled_reset is not None:
+                        row['reset'] = filled_reset  # stored for readers: when the full window frees its next slot
             self._store_batch(cur,rows,locked_keys=keys,previous=previous)
             permit = Permit(str(uuid.uuid4()),self.application_key,method,_digest(path),identity,binding_hash(binding),expiry)
             self._insert(cur,permit,route,major,bucket,keys,binding,read_sent=read_sent)
@@ -804,7 +886,10 @@ class SharedPostgresBudget:
                 raise RateCoordinatorUnavailable()
             was_learned = {key:row['learned'] for key,row in rows.items() if row['kind']=='route'}
             fresh_header = False
-            pending,unmapped = self._alias_pending(cur,header_route,permit,meta,now) if header_route else (0,0)
+            # The alias's own window, or the one this response reports, whichever is longer, plus the margin.
+            horizon = self._horizon(max(rows[header_route]['window'],reset_hint-now)) if header_route else 0
+            pending,unmapped = (self._alias_pending(cur,header_route,permit,meta,now,since=now-horizon)
+                                if header_route else (0,0))
             current_unmapped = int(header_route not in admission['keys'])
             if header_route:
                 # Even a failed response cannot escape its newly discovered
@@ -827,7 +912,9 @@ class SharedPostgresBudget:
                     # This is a cold-probe semaphore, not a provider quota.
                     # A completed response lets the next unknown route discover
                     # its headers. Route/app slots remain spent in this window.
-                    row['left'] = max(0,1-max(0,self._pending(cur,key,now)-1))
+                    since = now-self._horizon(row['window'])
+                    own = int(admission['reserved'] > since)  # this response's own request is among the rows counted
+                    row['left'] = max(0,1-max(0,self._pending(cur,key,now,since=since)-own))
                 if row['kind'] == 'route':
                     if raw_bucket is not None and new_bucket is None:
                         row['hold'] = True
