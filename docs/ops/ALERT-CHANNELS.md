@@ -17,7 +17,15 @@ Today's detectors in that pipeline are `publish_failure_rate` (all platforms, fr
 
 ## 2. What this branch implements, and why delivery is not wired
 
-Implemented: the protected read-only payload `GET /api/ops/discord/health` (cron secret), its SQL twin `docs/ops/discord-ops-snapshot.sql`, the rules and thresholds (`scripts/discord_ops_check.py`, `docs/ops/discord-alert-thresholds.json`), the cross-tenant log line `security.cross_tenant_denied`, the phone runbook and the isolated drills. **Not implemented: any delivery to a person.** The one channel that pages (founder incidents, then e-mail, push and a call) cannot take a new detector without (a) a migration, because `rafii_control.founder_incidents.detector` has a CHECK listing the four detectors above, (b) a line in `rafii_control/slices.py`, which this lane may not edit, and (c) a reviewed decision on phone-call cost. A flag alone would not have made it work, so it is a proposal (section 4).
+Implemented: the protected read-only payload `GET /api/ops/discord/health` (cron secret), its SQL twin `docs/ops/discord-ops-snapshot.sql`, the rules and thresholds (`scripts/discord_ops_check.py`, `docs/ops/discord-alert-thresholds.json`), the cross-tenant log line `security.cross_tenant_denied`, the phone runbook and the isolated drills. **Not implemented: any delivery to a person.** The one channel that pages (founder incidents, then e-mail, push and a call) cannot take a new detector without (a) a migration, because `rafii_control.founder_incidents.detector` has a CHECK listing the four detectors above, (b) a line in `rafii_control/slices.py`, which this lane may not edit, and (c) a reviewed decision on phone-call cost. A flag alone would not have made it work, so it is a proposal (section 3).
+
+Signals not yet covered: the cross-tenant line is written only by the membership gate (the uniform 403, the probe's
+"workspace-scope" style). The 404 and 409 object-binding refusals (another tenant's connection, identity, job or OAuth
+state named from one's own workspace: `_member_grant` and the callback binding in `oauth.py`, `read_credential` and the
+identity lookups in `discord/oauth.py`) are spread over several security-sensitive sites and also answer ordinary stale
+screens, so they were not touched; the proposal is the same capped, id-free line at each site with its own event name,
+reviewed with the final SHA. Until then those probes are visible only as 4xx counts by route family
+(`CROSS_TENANT_DISCORD_4XX`) and in the Q-05 probe's own receipts.
 
 ## 3. The minimal set that works with the Mac offline (recommendation)
 

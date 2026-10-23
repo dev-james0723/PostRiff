@@ -1,0 +1,1140 @@
+{
+ "command": "POSTRIFF_PG_BIN=/usr/lib/postgresql/16/bin PYTHONPATH=src:tests python tests/discord_ops_drills.py",
+ "drills": [
+  {
+   "checks": [
+    {
+     "check": "every post verified once, no duplicate",
+     "observed": {
+      "verified": 12
+     },
+     "pass": true
+    },
+    {
+     "check": "lane loops ended normally",
+     "observed": [
+      "idle"
+     ],
+     "pass": true
+    },
+    {
+     "check": "healthy baseline: no warn or page alert",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "payload saw 12 accepted creates",
+     "observed": 12,
+     "pass": true
+    },
+    {
+     "check": "payload sections all observed",
+     "observed": [],
+     "pass": true
+    },
+    {
+     "check": "no workspace, server or channel id in the payload",
+     "observed": 0,
+     "pass": true
+    },
+    {
+     "check": "the SQL twin reports the same counts as the payload",
+     "observed": {
+      "deliveries.accepted": [
+       12,
+       12
+      ],
+      "deliveries.creates": [
+       13,
+       13
+      ],
+      "deliveries.uncertain": [
+       0,
+       0
+      ],
+      "guards.invalid.remainingRatio": [
+       1.0,
+       1.0
+      ],
+      "guards.policy.hold": [
+       false,
+       false
+      ],
+      "queue.dueWorkspaces": [
+       0,
+       0
+      ],
+      "servers.used": [
+       0,
+       0
+      ],
+      "traffic.invalid10m": [
+       0,
+       0
+      ]
+     },
+     "pass": true
+    },
+    {
+     "check": "the SQL twin ages agree within 5 s",
+     "observed": 0.0,
+     "pass": true
+    },
+    {
+     "check": "the SQL twin on the healthy baseline: no warn or page alert",
+     "observed": {},
+     "pass": true
+    }
+   ],
+   "class": "BASELINE",
+   "id": "D0",
+   "references": [],
+   "result": "PASS",
+   "seconds": 6.9,
+   "simulated": [],
+   "steps": [
+    {
+     "alerts": {},
+     "counts": {
+      "accepted": 12,
+      "creates": 13,
+      "dueWorkspaces": 0,
+      "duplicates": 0,
+      "verified": 12
+     },
+     "step": "after a normal drain"
+    }
+   ],
+   "title": "A healthy run raises nothing; the SQL twin agrees with the payload"
+  },
+  {
+   "checks": [
+    {
+     "check": "lag 1000 s with progress: BACKLOG_LAG is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "lag 1000 s with progress: not reported as a silent halt",
+     "observed": null,
+     "pass": true
+    },
+    {
+     "check": "lag 1000 s: cleared after the drain",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "after the 1000 s drill: no warn or page alert",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "lag 400 s with progress: BACKLOG_LAG is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "lag 400 s with progress: not reported as a silent halt",
+     "observed": null,
+     "pass": true
+    },
+    {
+     "check": "lag 400 s: cleared after the drain",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "after the 400 s drill: no warn or page alert",
+     "observed": {},
+     "pass": true
+    }
+   ],
+   "class": "BACKLOG",
+   "id": "D1",
+   "references": [
+    "the lane draining a burst exactly once: test_many_loops_create_every_post_exactly_once"
+   ],
+   "result": "PASS",
+   "seconds": 33.3,
+   "simulated": [],
+   "steps": [
+    {
+     "alerts": {
+      "BACKLOG_LAG": "page",
+      "SILENT_HALT_NO_PROGRESS": "page"
+     },
+     "counts": {
+      "oldestDueLagSeconds": 1000.3
+     },
+     "step": "injected: 40 posts due 1000 s ago, nothing run yet"
+    },
+    {
+     "alerts": {
+      "BACKLOG_LAG": "page"
+     },
+     "counts": {
+      "dueWorkspaces": 30,
+      "lastClaimAgeSeconds": 0.6,
+      "oldestDueLagSeconds": 1005.7,
+      "verified": 0
+     },
+     "step": "one shard ran for 5 s"
+    },
+    {
+     "alerts": {},
+     "counts": {
+      "dueWorkspaces": 0,
+      "duplicates": 0,
+      "verified": 40
+     },
+     "step": "recovered: four shards drained the queue"
+    },
+    {
+     "alerts": {
+      "BACKLOG_LAG": "warn",
+      "SILENT_HALT_NO_PROGRESS": "page"
+     },
+     "counts": {
+      "oldestDueLagSeconds": 401.1
+     },
+     "step": "injected: 40 posts due 400 s ago, nothing run yet"
+    },
+    {
+     "alerts": {
+      "BACKLOG_LAG": "warn"
+     },
+     "counts": {
+      "dueWorkspaces": 32,
+      "lastClaimAgeSeconds": 0.5,
+      "oldestDueLagSeconds": 406.5,
+      "verified": 0
+     },
+     "step": "one shard ran for 5 s"
+    },
+    {
+     "alerts": {},
+     "counts": {
+      "dueWorkspaces": 0,
+      "duplicates": 0,
+      "verified": 40
+     },
+     "step": "recovered: four shards drained the queue"
+    }
+   ],
+   "title": "Late work is detected at warn and page levels while senders still make progress"
+  },
+  {
+   "checks": [
+    {
+     "check": "three uncertain creates: DELIVERY_UNCERTAIN is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "three system-caused failures of ten: DELIVERY_SYSTEM_FAILURES is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "the 403s are counted as customer-caused, not ours",
+     "observed": [
+      2,
+      0
+     ],
+     "pass": true
+    },
+    {
+     "check": "nothing was created twice",
+     "observed": 0,
+     "pass": true
+    },
+    {
+     "check": "delivery alerts cleared",
+     "observed": {},
+     "pass": true
+    }
+   ],
+   "class": "DELIVERY",
+   "id": "D2",
+   "references": [
+    "an uncertain create is never sent again: test_a_loop_that_dies_after_discord_accepted_never_causes_a_second_post; the jobs stay uncertain for read-back reconciliation"
+   ],
+   "result": "PASS",
+   "seconds": 18.0,
+   "simulated": [
+    "recovery: the ledger rows were moved 16 minutes into the past (the 15-minute window cannot be waited out in a drill)"
+   ],
+   "steps": [
+    {
+     "alerts": {
+      "DELIVERY_DISCORD_5XX": "warn",
+      "DELIVERY_SYSTEM_FAILURES": "warn",
+      "DELIVERY_UNCERTAIN": "page"
+     },
+     "counts": {
+      "accepted": 5,
+      "creates": 10,
+      "jobs": {
+       "held": 2,
+       "uncertain": 3,
+       "verified": 5
+      },
+      "rejectedCustomer": 2,
+      "rejectedSystem": 0,
+      "uncertain": 3
+     },
+     "step": "injected: 3 creates lose their answer, 2 are refused 403 (bot lacks permission)"
+    },
+    {
+     "alerts": {},
+     "counts": {
+      "uncertain": 0,
+      "uncertainJobsLeftForReconciliation": 3
+     },
+     "step": "recovered: 16 minutes later (simulated), no new failures"
+    }
+   ],
+   "title": "Uncertain and failed creates are split into system- and customer-caused"
+  },
+  {
+   "checks": [
+    {
+     "check": "invalid budget: before: no warn or page alert",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "invalid budget 20% left: RATE_INVALID_BUDGET is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "invalid budget alert cleared after the reset",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "global embargo active: RATE_EMBARGO is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "one global 429 in 15 minutes: RATE_429 is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "embargo alert cleared when it ended",
+     "observed": {
+      "RATE_429": "warn"
+     },
+     "pass": true
+    },
+    {
+     "check": "429 alert cleared after its window",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "policy 3.0 days left: RATE_POLICY is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "policy 0.5 days left: RATE_POLICY is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "policy alert cleared after renewal (a new build with a new policy)",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "budget spent for the last minute: RATE_APP_BUDGET_SPENT is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "budget alert cleared after a quiet minute",
+     "observed": {},
+     "pass": true
+    }
+   ],
+   "class": "RATE_LIMIT",
+   "id": "D3",
+   "references": [
+    "loops sleep out an embargo or a spent budget instead of claiming: test_a_global_429_pauses_every_loop_without_a_retry_storm, test_a_spent_invalid_request_budget_is_waited_out_without_claiming"
+   ],
+   "result": "PASS",
+   "seconds": 79.6,
+   "simulated": [
+    "the 429 count: ledger moved 16 minutes into the past",
+    "the quiet minute after the demand: ledger moved 2 minutes into the past"
+   ],
+   "steps": [
+    {
+     "alerts": {
+      "RATE_INVALID_BUDGET": "page"
+     },
+     "counts": {
+      "remaining": 4,
+      "remainingRatio": 0.2,
+      "resetSeconds": 9.5
+     },
+     "step": "injected: 16 invalid answers (403) of a 20-per-window budget"
+    },
+    {
+     "alerts": {},
+     "counts": {
+      "remainingRatio": 1.0
+     },
+     "step": "recovered: the window reset"
+    },
+    {
+     "alerts": {
+      "RATE_429": "warn",
+      "RATE_EMBARGO": "warn"
+     },
+     "counts": {
+      "embargoSeconds": 6.0,
+      "responses429Global": 1
+     },
+     "step": "injected: a global 429, retry after 6 s"
+    },
+    {
+     "alerts": {
+      "RATE_429": "warn"
+     },
+     "counts": {},
+     "step": "the embargo ended"
+    },
+    {
+     "alerts": {
+      "RATE_POLICY": "warn"
+     },
+     "counts": {
+      "daysLeft": 3.0,
+      "laneDaysLeft": 3.0
+     },
+     "step": "injected: policy valid for 3.0 more days"
+    },
+    {
+     "alerts": {
+      "RATE_POLICY": "page"
+     },
+     "counts": {
+      "daysLeft": 0.5,
+      "laneDaysLeft": 0.5
+     },
+     "step": "injected: policy valid for 0.5 more days"
+    },
+    {
+     "alerts": {
+      "RATE_APP_BUDGET_SPENT": "warn"
+     },
+     "counts": {
+      "admissions60s": 118,
+      "admitted": 123,
+      "refused": 122
+     },
+     "step": "injected: 62 s of demand above a 2-per-second budget"
+    }
+   ],
+   "title": "Invalid-request budget, a global 429, policy expiry and a spent application budget"
+  },
+  {
+   "checks": [
+    {
+     "check": "no progress: SILENT_HALT_NO_PROGRESS is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "after the shards ran: no warn or page alert",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "lane not ready: SILENT_HALT_LANE_NOT_READY is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "policy not valid: RATE_POLICY is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "lane alerts cleared with a valid policy",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "route answers 200 with a snapshot",
+     "observed": "rafii.discord.ops.health",
+     "pass": true
+    },
+    {
+     "check": "route answering: no warn or page alert",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "HTTP 401 is an alarm, not silence: SILENT_HALT_HEALTH_UNANSWERED is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "HTTP 503: SILENT_HALT_HEALTH_UNANSWERED is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "database unreachable: SILENT_HALT_DATABASE is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "no shard lines: SILENT_HALT_NO_SHARDS is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "no-shards alert cleared",
+     "observed": {},
+     "pass": true
+    }
+   ],
+   "class": "SILENT_HALT",
+   "id": "D4",
+   "references": [
+    "recovery after shard crons stopped and after an expired policy: test_recovery_after_the_shard_crons_stopped_for_minutes, test_recovery_after_the_policy_expired_drains_exactly_once"
+   ],
+   "result": "PASS",
+   "seconds": 22.2,
+   "simulated": [
+    "the 3-minute log window without shard lines is an empty window passed to parse_logs"
+   ],
+   "steps": [
+    {
+     "alerts": {
+      "SILENT_HALT_NO_PROGRESS": "page"
+     },
+     "counts": {
+      "lastAdmissionAgeSeconds": null,
+      "lastClaimAgeSeconds": null,
+      "oldestDueLagSeconds": 200.1
+     },
+     "step": "injected: 5 posts due 200 s ago, no sender ran"
+    },
+    {
+     "alerts": {},
+     "counts": {
+      "verified": 5
+     },
+     "step": "recovered: the shards ran"
+    },
+    {
+     "alerts": {
+      "RATE_POLICY": "page",
+      "SILENT_HALT_LANE_NOT_READY": "page"
+     },
+     "counts": {
+      "blocker": "coordinator_unavailable",
+      "claimed": 0,
+      "shardStoppedBy": "coordinator_unavailable"
+     },
+     "step": "injected: lane flag on, reviewed policy expired two days ago"
+    },
+    {
+     "alerts": {},
+     "counts": {
+      "observed": true
+     },
+     "step": "the real route over HTTP, right secret"
+    },
+    {
+     "alerts": {
+      "SILENT_HALT_HEALTH_UNANSWERED": "page"
+     },
+     "counts": {
+      "reason": "http_401"
+     },
+     "step": "a monitor with the wrong secret"
+    },
+    {
+     "alerts": {
+      "SILENT_HALT_HEALTH_UNANSWERED": "page"
+     },
+     "counts": {
+      "reason": "http_503"
+     },
+     "step": "a build whose runtime cannot start"
+    },
+    {
+     "alerts": {
+      "SILENT_HALT_DATABASE": "page"
+     },
+     "counts": {
+      "errors": [
+       {
+        "error": "OperationalError",
+        "section": "database"
+       }
+      ]
+     },
+     "step": "the database unreachable from the function"
+    },
+    {
+     "alerts": {
+      "SILENT_HALT_NO_SHARDS": "page"
+     },
+     "counts": {},
+     "step": "injected: no discord.lane.completed line in 180 s"
+    },
+    {
+     "alerts": {},
+     "counts": {
+      "laneLines": 3
+     },
+     "step": "recovered: three shard invocations logged"
+    }
+   ],
+   "title": "Due work with no progress, a lane that cannot run, a payload that does not answer"
+  },
+  {
+   "checks": [
+    {
+     "check": "their own workspace opens and logs nothing",
+     "observed": 0,
+     "pass": true
+    },
+    {
+     "check": "cross-tenant baseline: no warn or page alert",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "every refusal is the uniform 403",
+     "observed": {
+      "403": 38
+     },
+     "pass": true
+    },
+    {
+     "check": "38 refusals for one actor in 10 minutes: CROSS_TENANT_PROBING is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "a refusal from the Discord code path: CROSS_TENANT_DISCORD is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "one line per actor, family and minute (5 lines for 38 refusals)",
+     "observed": 5,
+     "pass": true
+    },
+    {
+     "check": "lines carry only family, status, actor key and suppressed",
+     "observed": [
+      "actorKey",
+      "event",
+      "routeFamily",
+      "status",
+      "suppressed"
+     ],
+     "pass": true
+    },
+    {
+     "check": "no workspace or member id in any line",
+     "observed": null,
+     "pass": true
+    },
+    {
+     "check": "from the log lines alone: CROSS_TENANT_PROBING is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "Discord family from the log lines alone: CROSS_TENANT_DISCORD is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "4xx spike on Discord routes: CROSS_TENANT_DISCORD_4XX is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "cross-tenant alerts cleared",
+     "observed": {},
+     "pass": true
+    }
+   ],
+   "class": "CROSS_TENANT",
+   "id": "D5",
+   "references": [
+    "the isolation itself (both directions, reads and writes, no side effects) is the Q-05 probe (branch claude/discord-q05-probe-20261023); this drill proves only the signal"
+   ],
+   "result": "PASS",
+   "seconds": 7.4,
+   "simulated": [
+    "recovery: the denial counters' clock and the request-metrics minutes moved 16 minutes on"
+   ],
+   "steps": [
+    {
+     "alerts": {},
+     "counts": {
+      "lines": 0
+     },
+     "step": "baseline: a member opens their own workspace"
+    },
+    {
+     "alerts": {
+      "CROSS_TENANT_DISCORD": "warn",
+      "CROSS_TENANT_PROBING": "page"
+     },
+     "counts": {
+      "deniedTotal": 38,
+      "discord": 1,
+      "lines": 5,
+      "statuses": {
+       "403": 38
+      },
+      "topActorDenials10m": 38
+     },
+     "step": "injected: one member asks for another workspace 37 times over 4 minutes, once more on a Discord route"
+    },
+    {
+     "alerts": {
+      "CROSS_TENANT_DISCORD": "warn",
+      "CROSS_TENANT_PROBING": "page"
+     },
+     "counts": {
+      "fleetDenials": 38,
+      "fleetTop": 38,
+      "note": "a line reports the denials suppressed before it, so the newest minute is seen one line late"
+     },
+     "step": "the same refusals read from the log lines only (the check-in path)"
+    },
+    {
+     "alerts": {
+      "CROSS_TENANT_DISCORD": "warn",
+      "CROSS_TENANT_DISCORD_4XX": "warn",
+      "CROSS_TENANT_PROBING": "page"
+     },
+     "counts": {
+      "responses4xxDiscord": 200
+     },
+     "step": "injected: 200 client errors on a Discord route in the request metrics"
+    },
+    {
+     "alerts": {},
+     "counts": {
+      "deniedTotal": 0
+     },
+     "step": "recovered: 16 minutes later (simulated), no new refusals"
+    }
+   ],
+   "title": "Workspace refusals by the real membership gate: probing, a Discord route, a 4xx spike"
+  },
+  {
+   "checks": [
+    {
+     "check": "open build with gate *, cap 10000: no warn or page alert",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "gate closed after the opening: CONFIG_GATE is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "cap back to 90: CONFIG_CAP is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "gate and cap alerts clear when the open build serves again",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "reviewed flag off: CONFIG_REVIEWED is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "reviewed alert cleared",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "81 of 100 servers: CONFIG_CAP_USED is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "servers used equals the connect gate's own count (81)",
+     "observed": [
+      81,
+      81
+     ],
+     "pass": true
+    },
+    {
+     "check": "91 of 100 servers: CONFIG_CAP_USED is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "servers used equals the connect gate's own count (91)",
+     "observed": [
+      91,
+      91
+     ],
+     "pass": true
+    },
+    {
+     "check": "cap alert cleared with the cap at 10000",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "gate wider than the tester list during the canary: CONFIG_GATE is page",
+     "observed": "page",
+     "pass": true
+    },
+    {
+     "check": "canary gate of two workspaces raises nothing",
+     "observed": {},
+     "pass": true
+    }
+   ],
+   "class": "CONFIG",
+   "id": "D6",
+   "references": [],
+   "result": "PASS",
+   "seconds": 7.9,
+   "simulated": [],
+   "steps": [
+    {
+     "alerts": {
+      "CONFIG_CAP": "page",
+      "CONFIG_GATE": "page"
+     },
+     "counts": {
+      "cap": 90,
+      "gate": "closed"
+     },
+     "step": "injected: a later build omitted the gate and cap lines"
+    },
+    {
+     "alerts": {
+      "CONFIG_REVIEWED": "page"
+     },
+     "counts": {},
+     "step": "injected: the reviewed flag missing on the serving build"
+    },
+    {
+     "alerts": {
+      "CONFIG_CAP_USED": "warn"
+     },
+     "counts": {
+      "gatesOwnCount": 81,
+      "ratio": 0.81,
+      "used": 81
+     },
+     "step": "injected: 81 servers held against a cap of 100"
+    },
+    {
+     "alerts": {
+      "CONFIG_CAP_USED": "page"
+     },
+     "counts": {
+      "gatesOwnCount": 91,
+      "ratio": 0.91,
+      "used": 91
+     },
+     "step": "injected: 91 servers held against a cap of 100"
+    },
+    {
+     "alerts": {
+      "CONFIG_GATE": "page"
+     },
+     "counts": {
+      "gate": "open"
+     },
+     "step": "canary phase with the gate open: an accidental opening"
+    }
+   ],
+   "title": "A build without the open settings, the reviewed flag off, the server cap filling"
+  },
+  {
+   "checks": [
+    {
+     "check": "the runbook has the hold statements",
+     "observed": [
+      "DRAIN_CHECK",
+      "HOLD_INSERT",
+      "HOLD_OFF",
+      "HOLD_ON",
+      "HOLD_READBACK"
+     ],
+     "pass": true
+    },
+    {
+     "check": "on an empty coordinator HOLD_ON changes nothing (the runbook says so)",
+     "observed": [
+      0,
+      0
+     ],
+     "pass": true
+    },
+    {
+     "check": "the inserted hold is the coordinator's own row and stops every loop before a claim",
+     "observed": [
+      [
+       1,
+       1
+      ],
+      0
+     ],
+     "pass": true
+    },
+    {
+     "check": "hold visible: SILENT_HALT_OPERATOR_HOLD is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "after HOLD_OFF the coordinator works with that row and every post is verified once",
+     "observed": {
+      "verified": 4
+     },
+     "pass": true
+    },
+    {
+     "check": "after the inserted hold was lifted: no warn or page alert",
+     "observed": {},
+     "pass": true
+    },
+    {
+     "check": "every loop stopped with operator_hold",
+     "observed": [
+      "operator_hold"
+     ],
+     "pass": true
+    },
+    {
+     "check": "at most the step each loop had in flight was sent after the hold (<= 4)",
+     "observed": 3,
+     "pass": true
+    },
+    {
+     "check": "nothing was admitted after the hold committed",
+     "observed": 0,
+     "pass": true
+    },
+    {
+     "check": "read-back: policy_rows 1, held 1, seconds since the last request growing",
+     "observed": [
+      [
+       1,
+       1
+      ],
+      0.0,
+      2.0
+     ],
+     "pass": true
+    },
+    {
+     "check": "hold visible to the monitor: SILENT_HALT_OPERATOR_HOLD is warn",
+     "observed": "warn",
+     "pass": true
+    },
+    {
+     "check": "read-back after HOLD_OFF: held 0",
+     "observed": [
+      1,
+      0
+     ],
+     "pass": true
+    },
+    {
+     "check": "resumed: every post sent at most once; the rest verified, a post sealed when the hold landed is uncertain",
+     "observed": {
+      "verified": 30
+     },
+     "pass": true
+    },
+    {
+     "check": "after resuming: no warn or page alert besides DELIVERY_UNCERTAIN, DELIVERY_SYSTEM_FAILURES",
+     "observed": {},
+     "pass": true
+    }
+   ],
+   "class": "OPERATION",
+   "id": "O1",
+   "references": [
+    "the lane property itself: test_an_operator_hold_stops_every_loop_within_one_iteration"
+   ],
+   "result": "PASS",
+   "seconds": 18.4,
+   "simulated": [
+    "after HOLD_OFF the five-minute wait of posts refused by the hold was skipped"
+   ],
+   "steps": [
+    {
+     "alerts": {},
+     "counts": {
+      "held": 0,
+      "policyRows": 0
+     },
+     "step": "read-back before any request"
+    },
+    {
+     "alerts": {
+      "SILENT_HALT_OPERATOR_HOLD": "warn"
+     },
+     "counts": {
+      "claimed": 0,
+      "discordRequests": 0,
+      "held": 1,
+      "policyRows": 1,
+      "stoppedBy": [
+       "operator_hold"
+      ]
+     },
+     "step": "HOLD_INSERT, then two shards"
+    },
+    {
+     "alerts": {
+      "SILENT_HALT_OPERATOR_HOLD": "warn"
+     },
+     "counts": {
+      "admissionsAfterHold": 0,
+      "postsAfterHold": 3,
+      "readback": [
+       [
+        1,
+        1
+       ],
+       [
+        0.0,
+        2.0
+       ]
+      ],
+      "stoppedBy": [
+       "operator_hold"
+      ]
+     },
+     "step": "HOLD_ON while four shards send"
+    },
+    {
+     "alerts": {},
+     "counts": {
+      "duplicates": 0,
+      "jobs": {
+       "verified": 30
+      },
+      "readback": [
+       1,
+       0
+      ]
+     },
+     "step": "HOLD_OFF and resume"
+    }
+   ],
+   "title": "Hold ON and OFF with the phone runbook's statements, run verbatim in a separate session"
+  },
+  {
+   "checks": [
+    {
+     "check": "drain check: no live lease and nothing sealed, so the worker can be switched",
+     "observed": [
+      0,
+      0,
+      0
+     ],
+     "pass": true
+    },
+    {
+     "check": "the payload reads the older worker; lane flag off is not a lane alarm",
+     "observed": {
+      "SILENT_HALT_OPERATOR_HOLD": "warn"
+     },
+     "pass": true
+    },
+    {
+     "check": "drained by the older worker, nothing sent twice",
+     "observed": {
+      "verified": 16
+     },
+     "pass": true
+    },
+    {
+     "check": "after the rollback: no warn or page alert besides DELIVERY_UNCERTAIN, DELIVERY_SYSTEM_FAILURES",
+     "observed": {},
+     "pass": true
+    }
+   ],
+   "class": "OPERATION",
+   "id": "O2",
+   "references": [
+    "the rollback mechanics are the W-02 tests: test_rollback_the_flag_turned_off_mid_run_lets_the_frozen_minute_cron_take_over, test_rollback_to_the_frozen_worker_never_recreates_a_sealed_post, test_rollback_to_the_frozen_worker_never_recreates_a_post_discord_accepted, test_rollback_the_flag_off_then_on_again_keeps_every_post_exactly_once"
+   ],
+   "result": "PASS",
+   "seconds": 11.5,
+   "simulated": [
+    "after HOLD_OFF the five-minute wait of posts refused by the hold was skipped"
+   ],
+   "steps": [
+    {
+     "alerts": {},
+     "counts": {
+      "liveLeases": 0,
+      "sealedNow": 0,
+      "uncertainToReconcile": 0
+     },
+     "step": "1-2: HOLD_ON while sending, loops stopped, DRAIN_CHECK"
+    },
+    {
+     "alerts": {
+      "SILENT_HALT_OPERATOR_HOLD": "warn"
+     },
+     "counts": {
+      "laneEnabled": false
+     },
+     "step": "3: the older (2a5a523d) worker serves, hold still on"
+    },
+    {
+     "alerts": {},
+     "counts": {
+      "duplicates": 0,
+      "jobs": {
+       "verified": 16
+      }
+     },
+     "step": "4: HOLD_OFF, the older worker drains"
+    }
+   ],
+   "title": "Rollback order: hold, drain check, the older worker, lift; and the lane flag off"
+  }
+ ],
+ "environment": "isolated",
+ "finishedAt": "2026-10-23T05:19:40Z",
+ "kind": "rafii.discord.ops.drill-receipt",
+ "postgres": "16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+ "python": "3.13.16",
+ "result": "PASS",
+ "sourceRevision": "a76c0ed851a27e50d709d542501820eb4ab57f5d",
+ "startedAt": "2026-10-23T05:16:12Z",
+ "thresholds": "docs/ops/discord-alert-thresholds.json",
+ "version": 1
+}
