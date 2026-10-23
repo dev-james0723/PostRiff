@@ -42,6 +42,13 @@ from postriff_phase2.oauth import CredentialVault  # noqa: E402
 from postriff_phase2 import providers as provider_registry  # noqa: E402
 
 RECORD = {'phases': {}, 'errors': []}
+
+
+def synthetic():
+    """A credential-shaped value made for this run (rule P2-SEC-CI-04: no literal credential, no scanner exception)."""
+    return 'synthetic-' + secrets.token_hex(12)
+
+
 CURRENT = {'phase': None}
 HTTP = []
 
@@ -155,9 +162,8 @@ verify.auth_time = lambda token, principal: time.time()
 # Production's provider configuration, with fake credentials: Discord is mounted with the four v2 flags and the policy.
 ENV = {'POSTRIFF_PUBLIC_BASE_URL': 'https://app.impact.invalid', 'VERCEL_ENV': 'production',
        'POSTRIFF_OAUTH_DISCORD_CLIENT_ID': '123456789012345678',
-       # Generated for this run (rule P2-SEC-CI-04: no literal credential, no scanner exception).
-       'POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET': 'synthetic-' + secrets.token_hex(12),
-       'POSTRIFF_DISCORD_BOT_TOKEN': 'synthetic-' + secrets.token_hex(12),
+       'POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET': synthetic(),
+       'POSTRIFF_DISCORD_BOT_TOKEN': synthetic(),
        'POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED': 'true', 'POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED': 'true',
        'POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED': 'true', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true',
        'POSTRIFF_WORKER_MAX_JOBS': '25', 'POSTRIFF_WORKER_MAX_SECONDS': '40',

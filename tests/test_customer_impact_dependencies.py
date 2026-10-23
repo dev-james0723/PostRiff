@@ -111,6 +111,11 @@ def pdf(pages, encoding=False):
     return out.getvalue()
 
 
+def synthetic():
+    """A credential-shaped value made for this run (rule P2-SEC-CI-04: no literal credential, no scanner exception)."""
+    return 'synthetic-' + secrets.token_hex(12)
+
+
 def pdfs(directory):
     from pypdf import PdfReader, PdfWriter
     d = Path(directory)
@@ -121,8 +126,8 @@ def pdfs(directory):
     (d / '04-bad-xref.pdf').write_bytes(good.replace(b'0000000009 00000 n', b'0000000999 00000 n', 1))
     (d / '05-truncated.pdf').write_bytes(good[: len(good) // 2])
     writer = PdfWriter(clone_from=PdfReader(io.BytesIO(pdf(['Secret text']))))
-    # Generated (rule P2-SEC-CI-04); the readers open it with the empty user password.
-    writer.encrypt(user_password='', owner_password='synthetic-' + secrets.token_hex(12), algorithm='RC4-128')
+    # The owner password is generated (rule P2-SEC-CI-04); the readers open the file with the empty user password.
+    writer.encrypt(user_password='', owner_password=synthetic(), algorithm='RC4-128')
     buffer = io.BytesIO()
     writer.write(buffer)
     (d / '06-encrypted.pdf').write_bytes(buffer.getvalue())
