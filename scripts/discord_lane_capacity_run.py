@@ -356,8 +356,9 @@ class Harness:
         port = cluster_tools.free_port()
         ini = folder / 'pgbouncer.ini'
         (folder / 'userlist.txt').write_text('"postgres" ""\n')
+        timeout = (" connect_query='SET statement_timeout=%d'" % s['db_statement_timeout_ms']) if s['db_statement_timeout_ms'] else ''
         ini.write_text('\n'.join([
-            '[databases]', '* = host=%s port=%d user=postgres' % (self.cluster.sock, self.cluster.port), '',
+            '[databases]', '* = host=%s port=%d user=postgres%s' % (self.cluster.sock, self.cluster.port, timeout), '',
             '[pgbouncer]', 'listen_addr = 127.0.0.1', 'listen_port = %d' % port, 'unix_socket_dir =',
             'auth_type = trust', 'auth_file = %s' % (folder / 'userlist.txt'), 'pool_mode = transaction',
             'default_pool_size = %d' % s['max_db_connections'], 'reserve_pool_size = 0',
@@ -429,6 +430,18 @@ class Harness:
         self.pooler_process = self.start_child(argv, name='pooler')
         self.wait_ready('pooler', 'pooler.ready')
         self.config['poolerPid'] = self.pooler_process.pid
+        # The application's own path to the database must work before anything is seeded.
+        import psycopg
+        try:
+            with psycopg.connect(self.app_dsn, prepare_threshold=None, connect_timeout=10) as db:
+                db.execute('SELECT 1').fetchone()
+                db.commit()
+        except Exception as error:
+            tail = ''
+            for name in ('pgbouncer/pgbouncer.log', 'pgbouncer.out', 'pooler.out'):
+                if (self.dir / name).exists():
+                    tail += '\n--- %s\n%s' % (name, (self.dir / name).read_text(errors='replace')[-1500:])
+            raise RuntimeError('the application cannot reach the database through the pooler: %s%s' % (error, tail))
 
     def mock(self):
         s = self.s
