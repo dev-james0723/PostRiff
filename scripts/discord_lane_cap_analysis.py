@@ -320,6 +320,14 @@ def analyse(run_dir):
 
     states = Counter(final_states.get('byPost', {}).get(p, 'missing') for p in posts)
     db_verified = states.get('verified', 0)
+    # Every post not verified at the mock, by its final database state and by whether the mock saw any create
+    # attempt for it (an 'uncertain' post with no attempt was never sent; one with an attempt needs reconciliation).
+    unverified = Counter()
+    for post_id, p in posts.items():
+        if p['verifiedAtMock'] is None:
+            state = final_states.get('byPost', {}).get(post_id, 'missing')
+            unverified['%s, %s' % (state, 'create attempted at the mock' if p['createAttempts'] or p['creates']
+                                   else 'no create at the mock')] += 1
 
     # Requests, as the mock saw them during the run (seeding used an in-process world and is not in this log).
     routes = Counter(r['route'] for r in window)
@@ -460,7 +468,7 @@ def analyse(run_dir):
         'outcomes': {'sentAtMock': sent, 'verifiedAtMock': verified_mock, 'verifiedInDatabase': db_verified,
                      'notVerified': len(posts) - verified_mock, 'databaseStates': dict(states),
                      'deadLetters': final_states.get('deadLetters', 0), 'notSent': len(posts) - sent,
-                     'foreignCreates': foreign_creates},
+                     'foreignCreates': foreign_creates, 'notVerifiedByStateAndAttempt': dict(unverified)},
         'duplicates': {'byNonce': duplicates_nonce, 'byPostId': duplicates_post,
                        'mockCounterNonce': counters.get('duplicateNonceCreates'),
                        'mockCounterPost': counters.get('duplicatePostCreates'),
@@ -860,6 +868,12 @@ def receipt(result, verdicts, config, differences, expectations=()):
                  'database states %s; dead letters %d; creates for unknown nonces %d.' % (
                      result['posts'], result['workspaces'], o['sentAtMock'], o['verifiedAtMock'], o['verifiedInDatabase'],
                      json.dumps(o['databaseStates'], sort_keys=True), o['deadLetters'], o['foreignCreates']))
+    if o.get('notVerifiedByStateAndAttempt'):
+        lines.append('')
+        lines.append('Not verified at the mock, by final database state and whether the mock saw a create attempt: %s. '
+                     '(An uncertain post with no create at the mock was never sent; it still waits for manual '
+                     'reconciliation under the existing rule.)' % ', '.join(
+                         '%s: %d' % item for item in sorted(o['notVerifiedByStateAndAttempt'].items())))
     lines.append('')
     lines.append('Creations per minute after T (minute: posts): ' + (', '.join(
         '%s: %d' % item for item in result['creationsPerMinute'].items()) or 'none') + '.')
