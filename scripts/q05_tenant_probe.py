@@ -62,6 +62,15 @@ class Config:
         # read/list endpoint to discover it). Keyed by the tenant that OWNS it.
         self.victim_oauth_state = {"A": env.get("Q05_VICTIM_A_OAUTH_STATE"),
                                    "B": env.get("Q05_VICTIM_B_OAUTH_STATE")}
+        # Optional OTHER members of each workspace, for the intra-workspace sender-name cases
+        # (Q05_TOKEN_A_VIEWER, ..._EDITOR, ..._CONNMGR = editor with connection-management,
+        # ..._ADMIN = admin who did not authorize the connection, ..._REMOVED = a removed member).
+        # Absent => those cases are NOT RUN (undiscovered), never PASS.
+        for key in ("A", "B"):
+            for role in ROLE_KEYS:
+                self.token[f"{key}.{role}"] = env.get(f"Q05_TOKEN_{key}_{role.upper()}")
+        # Local harness only: mark the attack phase so the harness can bracket it exactly.
+        self.phase_markers = env.get("Q05_PHASE_MARKERS") == "1"
 
     def missing(self):
         names = []
@@ -80,6 +89,7 @@ class Config:
 
 
 OTHER = {"A": "B", "B": "A"}
+ROLE_KEYS = ("viewer", "editor", "connmgr", "admin", "removed")
 
 # Workspace-scoped route families (the first path segment after /api/workspaces/<id>/)
 # that the probe LIVE-attacks. Everything else must be in EXCLUDED_FAMILIES with a reason.
@@ -192,6 +202,20 @@ class Client:
         if self._ctx is not None:
             handlers.append(urllib.request.HTTPSHandler(context=self._ctx))
         self._opener = urllib.request.build_opener(*handlers)
+        # (provider calls, provider writes) the LOCAL harness attributes to the last request, from its
+        # X-Q05-Provider-Calls / -Writes headers; None when unobservable (every hosted run).
+        self.last_provider = None
+
+    def marker(self, name):
+        """Local harness only: tell it where the attack phase starts/ends (a GET it answers itself)."""
+        self.budget.take()
+        req = urllib.request.Request(self.config.base_url + "/api/health", method="GET",
+                                     headers={"X-Q05-Phase": name, "Accept": "application/json"})
+        try:
+            with self._opener.open(req, timeout=30) as resp:
+                resp.read(1000)
+        except (urllib.error.URLError, TimeoutError, OSError):
+            pass
 
     def request(self, method, path, token_key, *, body=None, mutation=False):
         """Return (status, text, body_obj). Never raises on HTTP error status, and never
@@ -215,15 +239,24 @@ class Client:
         if self.config.extra_header_name and self.config.extra_header_value:
             headers[self.config.extra_header_name] = self.config.extra_header_value
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        self.last_provider = None
         try:
             with self._opener.open(req, timeout=30) as resp:
                 raw = resp.read(2_000_000)
                 status = resp.status
+                rhead = resp.headers
         except urllib.error.HTTPError as err:
             raw = err.read(2_000_000)
             status = err.code
+            rhead = err.headers
         except (urllib.error.URLError, TimeoutError, OSError) as err:
             return (0, "transport_error:" + type(err).__name__, None)
+        try:
+            calls, writes = rhead.get("X-Q05-Provider-Calls"), rhead.get("X-Q05-Provider-Writes")
+            if calls is not None and writes is not None:
+                self.last_provider = (int(calls), int(writes))
+        except (TypeError, ValueError, AttributeError):
+            self.last_provider = None
         text = raw.decode("utf-8", "replace")
         try:
             obj = json.loads(text)
@@ -256,6 +289,14 @@ class Discovery:
         # The caller's OWN member entry ("you": true) when its role is owner, else None. The only safe
         # target for member_remove: the owner-differential DELETE of the owner is refused (409).
         self.owner_member = None
+        # Customer sender names (RC2): connections by kind, the owner's own profile per connection
+        # (fingerprint/name/kind, from its own GET), and whether this build serves the route at all
+        # (True / False = route absent on this build / None = no Discord connection to ask about).
+        self.webhooks = []
+        self.installations = []
+        self.sender = {}
+        self.sender_feature = None
+        self.sender_contract = None   # 1 = the integration-tip (v1) answers, 2 = docs/sender-name/UI-API-CONTRACT.md v2
         self.markers = set()
 
     def _mark(self, value):
@@ -281,13 +322,20 @@ def discover(client, config, key):
         d._mark(cid)
         d._mark(ch.get("account"))
         d._mark(ch.get("providerAccountId"))
-        if ch.get("platform") == "Discord":
+        d._mark(ch.get("discordSenderName"))
+        if ch.get("platform") == "Discord" and not ch.get("revoked"):
             d.connections.append(cid)
+            if ch.get("discordConnectionKind") == "webhook":
+                d.webhooks.append(cid)
+            elif ch.get("discordConnectionKind") == "installation":
+                d.installations.append(cid)
         for dest in ch.get("discordDestinations", []) or []:
             if isinstance(dest, dict):
                 d._mark(dest.get("id"))
                 d._mark(dest.get("channelId"))
                 d._mark(dest.get("guildId"))
+    # installations first, so the pre-existing connection cases keep targeting a bot installation
+    d.connections = d.installations + [c for c in d.connections if c not in d.installations]
     for link in phase2.get("discordIdentityLinks", []) or []:
         if isinstance(link, dict) and link.get("id"):
             d.identities.append(link["id"])
@@ -317,6 +365,34 @@ def discover(client, config, key):
                     if stable:
                         d.destinations.setdefault(cid, []).append(stable)
                         d._mark(stable)
+
+    # Customer sender names: the owner's OWN profile of its first webhook and first installation. NOTE
+    # this GET is not read-only on the RC2 line (it re-verifies the connection and records that), which
+    # is why it runs here, before the attack-phase snapshot, and why owner differentials for these
+    # routes run as controls after the attack phase.
+    for cid in d.webhooks[:1] + d.installations[:1]:
+        st, text, b = client.request("GET", f"/api/workspaces/{d.workspace}/channels/{cid}/{SENDER_ROUTE}", tok)
+        err = error_body(b, text)
+        if st == 200 and isinstance(b, dict) and isinstance(b.get("fingerprint"), str):
+            d.sender_feature = True
+            contract = b.get("contractVersion") if isinstance(b.get("contractVersion"), int) else 1
+            feature = b.get("feature") if isinstance(b.get("feature"), dict) else {}
+            d.sender[cid] = {"kind": b.get("senderKind"), "fingerprint": b["fingerprint"], "name": b.get("name"),
+                             "contract": contract,
+                             # v2 server-side switch, as this request saw it (v1 has none: always on)
+                             "namesOn": feature.get("senderNames", True) is not False}
+            d.sender_contract = max(d.sender_contract or 1, contract)
+            d._mark(b.get("name"))
+            d._mark(b.get("guildId"))
+        elif st == 404 and err not in SENDER_404_BODIES:
+            d.sender_feature = False if d.sender_feature is None else d.sender_feature   # route not served
+        else:
+            d.sender_feature = True   # the route answers (e.g. reconnect needed); its control will fail loudly
+    if d.sender:
+        # the v1 sender GET re-verifies and saves (revision bump): re-read the revision the owner controls use
+        st, _t, b = client.request("GET", f"/api/workspaces/{d.workspace}", tok)
+        if st == 200 and isinstance(b, dict):
+            d.revision = b.get("revision")
 
     # Members (own read). Never treat members[0] as the owner: the app lists members ORDER BY role (text),
     # so admin/approver/editor sort BEFORE owner. Only the caller's own entry ("you") with role owner is
@@ -409,7 +485,8 @@ class Case:
     def __init__(self, cid, method, template, direction, kind, blast, path,
                  token_key, *, body=None, mutation=False, expected=("403", "404"),
                  needs=None, victim_key=None, scope=None, differential=False,
-                 owner_token_key=None):
+                 owner_token_key=None, twin_path=None, expect_status=None, expect_body=None,
+                 expect_prefix=None, deferred=None):
         self.cid = cid
         self.method = method
         self.template = template
@@ -430,9 +507,21 @@ class Case:
         # identical request and must get PAST the gate (any answer that is not the gate 403).
         self.differential = differential
         self.owner_token_key = owner_token_key
+        # existence oracle: the same request aimed at an id that has never existed must get the SAME
+        # answer (status, error, code); a different answer tells an attacker the victim object exists.
+        self.twin_path = twin_path
+        # "role"/"validation" scopes, and non-2xx controls: the exact expected answer.
+        self.expect_status = expect_status
+        self.expect_body = expect_body
+        self.expect_prefix = expect_prefix
+        # a ws_scope differential that cannot run inline (the owner's request has its own write side
+        # effects on this line): it is the named control, run after the attack phase; if that control
+        # does not PASS, this case is downgraded to INCONCLUSIVE.
+        self.deferred = deferred
         # results
         self.observed = None
         self.owner_observed = None
+        self.twin_observed = None
         self.verdict = None
         self.note = ""
 
@@ -445,7 +534,26 @@ IDOR_DENY_BODIES = frozenset({
     "This item is not available in your workspace.",               # store.find (jobs)
     "This Discord identity is unavailable to this workspace member.",  # discord identity_record
     "Connection request unavailable.",                             # discord OAuth state binding
+    "This Discord connection is unavailable.",                     # discord sender_names custody (RC2)
 })
+
+# Customer Discord sender names (RC2): GET/POST /api/workspaces/{ws}/channels/{conn}/discord-sender-name.
+# Bodies read from the RC2 source (discord/sender_names.py, permissions.py); compared in memory only.
+SENDER_ROUTE = "discord-sender-name"
+SENDER_404_BODIES = frozenset({"This Discord connection is unavailable.",
+                               "This Discord identity is unavailable to this workspace member."})
+PERMISSION_DENY_BODY = "This action needs the 'manage_connections' permission in this workspace."
+AUTHORIZER_DENY_BODY = "Only this webhook’s authorizing member can change its sender name."
+SENDER_STALE_BODY = "Discord sender settings changed. Reload and review the name again."
+NAME_RULE_PREFIX = "Choose a name of 1–"
+# A well-formed POST body whose fingerprint can never be current: the owner's identical request gets past
+# every authorization check and stops at the fingerprint compare (409), so it can never rename anything.
+STALE_SENDER_BODY = {"name": "Q05 probe name", "fingerprint": "0" * 64, "confirmed": True,
+                     "sharedServerConfirmed": True}
+# Never-existing ids for the existence-oracle twins (same shape as real ones).
+NONEXISTENT_WORKSPACE = "00000000-0000-4000-8000-000000000e05"
+NONEXISTENT_CONNECTION = {"webhook": "discord-webhook-00000000-0000-5000-8000-000000000e05",
+                          "bot": "discord-installation-00000000-0000-5000-8000-000000000e05"}
 # Statuses that are neither a clean deny nor a clear accept: a run that sees one on an attack
 # cannot conclude isolation holds, so it is INCONCLUSIVE (a failure of the run), never a PASS.
 INCONCLUSIVE_STATUSES = {400, 401, 405, 410, 415, 429}
@@ -730,6 +838,7 @@ def build_matrix(disc, config, flags):
             body={"action": "p2_refresh", "payload": {}, "expectedRevision": d_o.revision},
             mutation=True, expected=("200",)))
 
+    cases.extend(build_sender_cases(disc, config))
     return cases
 
 
@@ -738,6 +847,248 @@ def _not_built(cid, method, template, direction, kind, blast, victim_key, why):
              victim_key=victim_key)
     c.needs = why
     return c
+
+
+def _not_applicable(cid, method, template, direction, kind, blast, victim_key, why):
+    """NOT RUN because the build does not serve the route at all (no hole can exist in a route that is
+    not there). Reported loudly, does not fail the probe's exit; a hosted GATE run still fails on any
+    NOT RUN case, and gate runs are pinned to the reviewed build."""
+    c = _not_built(cid, method, template, direction, kind, blast, victim_key, why)
+    c.not_applicable = True
+    return c
+
+
+# --------------------------------------------------------------------------- #
+# Customer Discord sender names (RC2)
+# --------------------------------------------------------------------------- #
+def _sender_post(fingerprint, name="Q05 probe name"):
+    return {"name": name, "fingerprint": fingerprint, "confirmed": True, "sharedServerConfirmed": True}
+
+
+UNAVAILABLE_BODY = "This Discord sender name cannot be changed right now."   # v2 discord_sender_name_unavailable
+IDENTITY_DENY_BODY = "This Discord identity is unavailable to this workspace member."
+# which roles are probed against which connection kinds (the permission and gate checks precede the
+# kind-specific custody, so viewer/editor/removed are probed on the webhook only)
+ROLE_KINDS = {"viewer": ("webhook",), "editor": ("webhook",), "connmgr": ("webhook", "bot"),
+              "admin": ("webhook", "bot"), "removed": ("webhook",)}
+# Contract v2 throttles sender-name POSTs to 15 per 10 minutes per workspace (and counts every POST that
+# passes the gate and the permission check), so the probe spends as few as it can: the bot connection's
+# non-authorizer POST is probed with the admin only.
+ROLE_POST_SKIP = {("connmgr", "bot")}
+
+
+def role_expect(role, kind, method, contract):
+    """The exact answer another member of the SAME workspace must get, per sender-name contract version.
+    Returns (status, set of accepted error bodies, twin?, readonly?). readonly: a v2 non-authorizer GET is a
+    read-only 200 profile (editable false, not_authorizing_member, answered without any Discord read)."""
+    if role in ("viewer", "editor"):
+        # Contract v2 says "same body as a foreign or non-existent workspace"; the implementation keeps the
+        # permission body. Both are refusals before any object is read (and the twin must match).
+        return 403, {PERMISSION_DENY_BODY, GATE_DENY_BODY}, True, False
+    if role == "removed":
+        return 403, {GATE_DENY_BODY}, True, False                     # no longer a member: the tenant gate
+    # connmgr / admin: hold connection-management, but did not authorize this connection
+    if contract >= 2:
+        if method == "GET":
+            return 200, set(), False, True
+        return 403, {UNAVAILABLE_BODY}, False, False
+    if kind == "webhook":
+        return 403, {AUTHORIZER_DENY_BODY}, False, False
+    return 404, {IDENTITY_DENY_BODY}, False, False
+
+
+MALFORMED_CONNECTIONS = (("short", "x"), ("dots", ".."), ("quote", "discord-webhook-%27%20OR%201%3D1--"),
+                         ("long", "A" * 300))
+# Kept to two: on contract v2 every POST by a connection manager counts against a 15-per-10-minutes
+# per-workspace throttle, and the whole sender-name set must stay inside it.
+BAD_NAMES = (("too_long", "x" * 81), ("reserved", "Discord official"))
+
+
+def build_sender_cases(disc, config):
+    """Sender-name cases. Attacks (cross-tenant, mixed ids, other members of the same workspace,
+    malformed ids) run in the attack phase and never reach the provider; the owner controls — which on
+    this line re-verify and record (writes) — run after the attack phase and double as the deferred
+    differentials of the workspace-scope attacks."""
+    cases = []
+    absent = {k: disc[k].sender_feature is False for k in ("A", "B")}
+    na_why = "sender-name route not served by this build"
+
+    def route(ws, conn):
+        return f"/api/workspaces/{ws}/channels/{conn}/{SENDER_ROUTE}"
+
+    # ---- cross-tenant: victim workspace (gate) and own workspace + victim connection (IDOR) ------- #
+    for attacker in ("A", "B"):
+        victim = OTHER[attacker]
+        a_ws, v_ws = config.workspace[attacker], config.workspace[victim]
+        d_a, d_v = disc[attacker], disc[victim]
+        arrow = f"{attacker}->{victim}"
+        vph, aph = f"<{victim}.workspace>", f"<{attacker}.workspace>"
+        for kind, vlist in (("webhook", d_v.webhooks), ("bot", d_v.installations)):
+            vconn = vlist[0] if vlist else None
+            prof = d_v.sender.get(vconn) if vconn else None
+            t_ws = f"/api/workspaces/{vph}/channels/<{victim}.{kind}>/{SENDER_ROUTE}"
+            t_idor = f"/api/workspaces/{aph}/channels/<{victim}.{kind}>/{SENDER_ROUTE}"
+            specs = (
+                # id, method, template, kind, blast, scope, workspace in path, body, deferred owner differential
+                (f"read.sender.ws_scope.{kind}.{arrow}", "GET", t_ws, "read", "", "ws_scope", v_ws, None,
+                 f"control.sender.get.{kind}.{victim}"),
+                (f"write.sender.ws_scope.{kind}.{arrow}", "POST", t_ws, "write", "state", "ws_scope", v_ws,
+                 STALE_SENDER_BODY, f"control.sender.post_stale.{kind}.{victim}"),
+                (f"read.sender.idor.{kind}.{arrow}", "GET", t_idor, "read", "", "idor", a_ws, None, None),
+                (f"write.sender.idor.{kind}.{arrow}", "POST", t_idor, "write", "state", "idor", a_ws,
+                 STALE_SENDER_BODY, None),
+                # the victim's REAL current fingerprint, replayed: only isolation can stop it (no owner
+                # differential: the owner's identical request would succeed and rename)
+                (f"write.sender.replay_ws_scope.{kind}.{arrow}", "POST", t_ws, "write", "state", "ws_scope",
+                 v_ws, "victim-fingerprint", None),
+            )
+            for cid, method, tmpl, ck, blast, scope, ws_path, body, deferred in specs:
+                if absent[victim]:
+                    cases.append(_not_applicable(cid, method, tmpl, arrow, ck, blast, victim, na_why))
+                    continue
+                if not vconn or (body == "victim-fingerprint" and not prof):
+                    cases.append(_not_built(cid, method, tmpl, arrow, ck, blast, victim,
+                                            f"no victim {kind} connection"
+                                            + (" sender profile" if body == "victim-fingerprint" else "") + " discovered"))
+                    continue
+                if body == "victim-fingerprint":
+                    body = _sender_post(prof["fingerprint"])
+                # existence twins: every gate case; the IDOR GET (an IDOR POST would only spend the attacker's
+                # own v2 POST throttle again for the same custody answer)
+                twin = (route(NONEXISTENT_WORKSPACE, vconn) if scope == "ws_scope"
+                        else route(a_ws, NONEXISTENT_CONNECTION[kind]) if method == "GET" else None)
+                cases.append(Case(cid, method, tmpl, arrow, ck, blast, route(ws_path, vconn), attacker,
+                                  body=body, mutation=(method == "POST"), victim_key=victim, scope=scope,
+                                  twin_path=twin, deferred=deferred))
+        # mixed: the attacker's OWN webhook id under the victim's workspace id -> the gate. For the GET the
+        # victim owner's identical request stops at "connection unavailable" before any re-verification, so
+        # that differential runs inline; the POST uses the deferred owner control (one fewer throttled POST).
+        own = d_a.webhooks[0] if d_a.webhooks else None
+        for method, ck, blast in (("GET", "read", ""), ("POST", "write", "state")):
+            cid = f"{ck}.sender.mixed.{arrow}"
+            tmpl = f"/api/workspaces/{vph}/channels/<{attacker}.webhook>/{SENDER_ROUTE}"
+            if absent[attacker] or absent[victim]:
+                cases.append(_not_applicable(cid, method, tmpl, arrow, ck, blast, victim, na_why))
+            elif not own:
+                cases.append(_not_built(cid, method, tmpl, arrow, ck, blast, victim,
+                                        "no attacker webhook connection discovered"))
+            else:
+                inline = method == "GET"
+                cases.append(Case(cid, method, tmpl, arrow, ck, blast, route(v_ws, own), attacker,
+                                  body=STALE_SENDER_BODY if method == "POST" else None, mutation=(method == "POST"),
+                                  victim_key=victim, scope="ws_scope", differential=inline,
+                                  owner_token_key=victim if inline else None,
+                                  twin_path=route(NONEXISTENT_WORKSPACE, own),
+                                  deferred=None if inline else f"control.sender.post_stale.webhook.{victim}"))
+        # malformed ids from the attacker's own workspace: a clean 4xx, never 2xx/5xx, never the provider
+        for label, conn in MALFORMED_CONNECTIONS + (("ws", None),):
+            for method, ck, blast in (("GET", "read", ""),):
+                cid = f"{ck}.sender.malformed.{label}.{attacker}"
+                tmpl = (f"/api/workspaces/<malformed>/channels/<{victim}.webhook>/{SENDER_ROUTE}" if conn is None
+                        else f"/api/workspaces/{aph}/channels/<malformed:{label}>/{SENDER_ROUTE}")
+                if absent[attacker]:
+                    cases.append(_not_applicable(cid, method, tmpl, attacker, ck, blast, victim, na_why))
+                    continue
+                if conn is None and not d_v.webhooks:
+                    cases.append(_not_built(cid, method, tmpl, attacker, ck, blast, victim,
+                                            "no victim webhook connection discovered"))
+                    continue
+                path = route("not-a-workspace-id", d_v.webhooks[0]) if conn is None else route(a_ws, conn)
+                cases.append(Case(cid, method, tmpl, attacker, ck, blast, path, attacker,
+                                  body=STALE_SENDER_BODY if method == "POST" else None, mutation=(method == "POST"),
+                                  victim_key=victim, scope="malformed"))
+
+    # ---- other members of the SAME workspace: viewer/editor vs connection managers vs removed ------ #
+    contract = max([d.sender_contract for d in disc.values() if d.sender_contract] or [1])
+    for owner in ("A", "B"):
+        d_o, o_ws, oph = disc[owner], config.workspace[owner], f"<{owner}.workspace>"
+        for role in ROLE_KEYS:
+            tok_key = f"{owner}.{role}"
+            for kind in ROLE_KINDS[role]:
+                olist = d_o.webhooks if kind == "webhook" else d_o.installations
+                oconn = olist[0] if olist else None
+                for method, ck, blast in (("GET", "read", ""), ("POST", "write", "state")):
+                    if method == "POST" and (role, kind) in ROLE_POST_SKIP:
+                        continue
+                    status, bodies, twin, readonly = role_expect(role, kind, method, contract)
+                    cid = f"{ck}.sender.role.{role}.{kind}.{owner}"
+                    tmpl = f"/api/workspaces/{oph}/channels/<{owner}.{kind}>/{SENDER_ROUTE}"
+                    direction = f"{owner}:{role}"
+                    if absent[owner]:
+                        cases.append(_not_applicable(cid, method, tmpl, direction, ck, blast, None, na_why))
+                    elif not config.token.get(tok_key):
+                        cases.append(_not_built(cid, method, tmpl, direction, ck, blast, None,
+                                                f"role principal not provided (Q05_TOKEN_{owner}_{role.upper()})"))
+                    elif not oconn:
+                        cases.append(_not_built(cid, method, tmpl, direction, ck, blast, None,
+                                                f"no {kind} connection discovered"))
+                    else:
+                        c = Case(cid, method, tmpl, direction, ck, blast, route(o_ws, oconn), tok_key,
+                                 body=STALE_SENDER_BODY if method == "POST" else None,
+                                 mutation=(method == "POST"), scope="role", expect_status=status,
+                                 expect_body=bodies,
+                                 twin_path=route(o_ws, NONEXISTENT_CONNECTION[kind]) if twin else None,
+                                 deferred=f"control.sender.{'get' if method == 'GET' else 'post_stale'}.{kind}.{owner}")
+                        c.readonly_profile = readonly
+                        cases.append(c)
+
+    # ---- owner controls (run after the attack phase) --------------------------------------------- #
+    for owner in ("A", "B"):
+        d_o, o_ws, oph = disc[owner], config.workspace[owner], f"<{owner}.workspace>"
+        for kind, olist in (("webhook", d_o.webhooks), ("bot", d_o.installations)):
+            oconn = olist[0] if olist else None
+            prof = d_o.sender.get(oconn) if oconn else None
+            names_off = bool(prof) and not prof.get("namesOn", True)
+            tmpl = f"/api/workspaces/{oph}/channels/<{owner}.{kind}>/{SENDER_ROUTE}"
+            # post_stale: the owner's identical-shape POST gets past every authorization check and is refused
+            # harmlessly — the stale fingerprint (both versions) or, on v2, a switched-off capability.
+            specs = [(f"control.sender.get.{kind}.{owner}", "GET", None, None, None, False),
+                     (f"control.sender.post_stale.{kind}.{owner}", "POST", STALE_SENDER_BODY, 409,
+                      {SENDER_STALE_BODY, UNAVAILABLE_BODY}, False)]
+            if kind == "webhook":
+                # an invalid name with the owner's CURRENT fingerprint (v2 checks the fingerprint's state half
+                # before the name rules): must be refused 400, nothing renamed, no provider write
+                specs += [(f"control.sender.reject_name.{label}.{owner}", "POST",
+                           _sender_post(prof["fingerprint"], name=bad) if prof else None, 400, None, True)
+                          for label, bad in BAD_NAMES]
+            for cid, method, body, st, bd, needs_names in specs:
+                if absent[owner]:
+                    cases.append(_not_applicable(cid, method, tmpl, "control", "control", "", owner, na_why))
+                elif not oconn or (needs_names and not prof):
+                    cases.append(_not_built(cid, method, tmpl, "control", "control", "", owner,
+                                            f"owner has no {kind} connection{' sender profile' if needs_names else ''} to control"))
+                elif needs_names and names_off:
+                    cases.append(_not_applicable(cid, method, tmpl, "control", "control", "", owner,
+                                                 "sender names are switched off on this build"))
+                else:
+                    cases.append(Case(cid, method, tmpl, "control", "control", "", route(o_ws, oconn), owner,
+                                      body=body, mutation=(method == "POST"), expected=(str(st or 200),),
+                                      expect_status=st, expect_body=bd,
+                                      expect_prefix=NAME_RULE_PREFIX if cid.startswith("control.sender.reject_name") else None))
+        # replay of an OLD settings fingerprint (a stateful sequence on the owner's own webhook)
+        wprof = d_o.sender.get(d_o.webhooks[0]) if d_o.webhooks else None
+        for step in ("save", "stale_replay", "restore"):
+            cid = f"control.sender.{step}.{owner}"
+            tmpl = f"/api/workspaces/{oph}/channels/<{owner}.webhook>/{SENDER_ROUTE}"
+            if absent[owner]:
+                cases.append(_not_applicable(cid, "POST", tmpl, "control", "control", "state", owner, na_why))
+            elif wprof and not wprof.get("namesOn", True):
+                cases.append(_not_applicable(cid, "POST", tmpl, "control", "control", "state", owner,
+                                             "sender names are switched off on this build"))
+            elif not d_o.webhooks:
+                cases.append(_not_built(cid, "POST", tmpl, "control", "control", "state", owner,
+                                        "owner has no webhook connection to control"))
+            else:
+                c = Case(cid, "POST", tmpl, "control", "control", "state", route(o_ws, d_o.webhooks[0]), owner,
+                         mutation=True, scope="sequence")
+                c.sequence_step = step
+                cases.append(c)
+        # audit leak: after the attacks, the attacker's own audit must hold none of the victim's data
+        cid = f"control.sender.audit_leak.{owner}"
+        cases.append(Case(cid, "GET", f"/api/workspaces/{oph}/audit", "control", "control", "",
+                          f"/api/workspaces/{o_ws}/audit", owner, scope="audit_leak",
+                          victim_key=OTHER[owner]))
+    return cases
 
 
 class _FullFlags:
@@ -757,6 +1108,11 @@ def _full_discovery(config):
         d.jobs = [(f"{k}-job", "0" * 64)]
         d.members = [f"{k}-member"]
         d.owner_member = f"{k}-member"
+        d.installations, d.webhooks = [f"{k}-conn"], [f"{k}-webhook"]
+        d.connections = [f"{k}-conn", f"{k}-webhook"]
+        d.sender = {c: {"kind": kind, "fingerprint": "f" * 64, "name": "x", "contract": 1, "namesOn": True}
+                    for c, kind in ((f"{k}-conn", "bot"), (f"{k}-webhook", "webhook"))}
+        d.sender_feature, d.sender_contract = True, 1
         disc[k] = d
     return disc
 
@@ -764,12 +1120,16 @@ def _full_discovery(config):
 def expected_case_ids(config):
     """The FIXED full set of case ids the matrix produces when every victim object is discovered.
     Gate mode fails if any of these is missing from an actual run (M4)."""
-    saved = dict(config.victim_oauth_state)
+    saved, saved_tokens = dict(config.victim_oauth_state), dict(config.token)
     config.victim_oauth_state = {"A": "state-a", "B": "state-b"}
+    for key in ("A", "B"):
+        for role in ROLE_KEYS:
+            config.token[f"{key}.{role}"] = config.token.get(f"{key}.{role}") or "role-token"
     try:
         return {c.cid for c in build_matrix(_full_discovery(config), config, _FullFlags())}
     finally:
         config.victim_oauth_state = saved
+        config.token = saved_tokens
 
 
 # --------------------------------------------------------------------------- #
@@ -793,10 +1153,14 @@ def leak_detected(text, markers):
     return any(m and m in text for m in markers)
 
 
+def error_code(obj):
+    return obj.get("code") if isinstance(obj, dict) and isinstance(obj.get("code"), str) else None
+
+
 def run_case(client, case, disc, flags):
     if case.needs:
         case.verdict = "NOT_RUN"
-        case.note = "undiscovered:" + case.needs
+        case.note = ("not-applicable:" if getattr(case, "not_applicable", False) else "undiscovered:") + case.needs
         case.observed = "-"
         return
     gate = gated_reason(case, flags)
@@ -808,10 +1172,37 @@ def run_case(client, case, disc, flags):
 
     status, text, obj = client.request(case.method, case.path, case.token_key,
                                        body=case.body, mutation=case.mutation)
+    provider = client.last_provider        # (calls, writes) when the local harness can attribute them
     case.observed = str(status)
     err = error_body(obj, text)
 
+    if case.scope == "audit_leak":
+        # The attacker's own audit after the attack phase: no data unique to the victim may appear.
+        own = disc[OTHER[case.victim_key]].markers if case.victim_key else set()
+        unique = (disc[case.victim_key].markers - own) if case.victim_key else set()
+        if not 200 <= status <= 299:
+            case.verdict, case.note = "FAIL", "own audit unreadable (INCONCLUSIVE)"
+        elif leak_detected(text, unique):
+            case.verdict, case.note = "FAIL", "victim data present in the attacker's own audit log"
+        else:
+            case.verdict = "PASS"
+        return
+
     if case.kind == "control":
+        if case.expect_status is not None:
+            # a control whose healthy answer is a specific refusal (stale fingerprint, invalid name):
+            # it proves the owner gets PAST every authorization check and is stopped later, harmlessly
+            ok = (status == case.expect_status
+                  and (case.expect_body is None or err in _as_set(case.expect_body))
+                  and (case.expect_prefix is None or (err or "").startswith(case.expect_prefix)))
+            if ok and provider is not None and provider[1] > 0:
+                case.verdict, case.note = "FAIL", "a refused owner request wrote to the provider"
+            elif ok:
+                case.verdict = "PASS"
+            else:
+                case.verdict = "FAIL"
+                case.note = "control did not answer as expected (INCONCLUSIVE)"
+            return
         # A control passes ONLY on a 2xx: a success (or object-level answer) proves the owner
         # gets through the route. Anything else makes the family INCONCLUSIVE (a run failure),
         # so a 403/404/step-up on a control can never be mistaken for a healthy deny elsewhere.
@@ -827,6 +1218,122 @@ def run_case(client, case, disc, flags):
     def inconclusive(reason):
         case.verdict = "INCONCLUSIVE"
         case.note = reason
+
+    if provider is not None and provider[0] > 0:
+        case.verdict = "FAIL"
+        case.note = f"the refused request reached the provider ({provider[0]} request(s), {provider[1]} write(s))"
+        return
+    _score_attack(client, case, status, text, obj, err, markers, inconclusive)
+    if case.verdict == "PASS" and case.twin_path:
+        _check_twin(client, case, status, err, error_code(obj), inconclusive)
+
+
+def _check_twin(client, case, status, err, code, inconclusive):
+    """The same request at an id that never existed must get the same (status, error, code)."""
+    t_status, t_text, t_obj = client.request(case.method, case.twin_path, case.token_key,
+                                             body=case.body, mutation=case.mutation)
+    case.twin_observed = str(t_status)
+    t_provider = client.last_provider
+    if t_status == 0 or 300 <= t_status <= 399 or t_status >= 500 or t_status == 429:
+        return inconclusive(f"existence twin answered {t_status}; cannot compare")
+    if t_provider is not None and t_provider[0] > 0:
+        case.verdict, case.note = "FAIL", "the never-existing-id twin reached the provider"
+        return
+    if (t_status, error_body(t_obj, t_text), error_code(t_obj)) != (status, err, code):
+        case.verdict = "FAIL"
+        case.note = "existence oracle: the answer for the victim's id differs from a never-existing id"
+
+
+def _as_set(value):
+    return value if isinstance(value, (set, frozenset)) else {value}
+
+
+def run_sender_sequence(client, steps, flags):
+    """Replay of an OLD settings fingerprint, on the owner's OWN webhook (own data only): save a name (the
+    fingerprint read before it is now stale) -> replaying that old fingerprint must be refused with the
+    stale-settings answer and change nothing -> restore the original name. Needs --allow-writes."""
+    by_step = {c.sequence_step: c for c in steps}
+    save, replay, restore = by_step["save"], by_step["stale_replay"], by_step["restore"]
+    for c in steps:
+        c.observed = "-"
+    if not flags.allow_writes:
+        for c in steps:
+            c.verdict, c.note = "NOT_RUN", "gated:write (pass --allow-writes)"
+        return
+
+    def fail_all(from_cases, why):
+        for c in from_cases:
+            if c.verdict is None:
+                c.verdict, c.note = "FAIL", why
+
+    path, tok = save.path, save.token_key
+    owner = save.cid.rsplit(".", 1)[1]
+    st, _t, prof = client.request("GET", path, tok)
+    if st != 200 or not isinstance(prof, dict) or not isinstance(prof.get("fingerprint"), str):
+        return fail_all(steps, "could not read the owner's own sender profile (INCONCLUSIVE)")
+    old_fp, original = prof["fingerprint"], prof.get("savedName") or prof.get("name")
+    renamed = f"Q05 renamed {owner}"
+    st, _t, body = client.request("POST", path, tok, body=_sender_post(old_fp, renamed), mutation=True)
+    save.observed = str(st)
+    if st != 200 or not isinstance(body, dict) or body.get("name") != renamed:
+        return fail_all(steps, "the owner could not save its own sender name (INCONCLUSIVE)")
+    save.verdict = "PASS"
+    st, text, obj = client.request("POST", path, tok, body=_sender_post(old_fp, "Q05 stale replay"), mutation=True)
+    provider = client.last_provider
+    replay.observed = str(st)
+    st2, _t2, now_prof = client.request("GET", path, tok)
+    unchanged = st2 == 200 and isinstance(now_prof, dict) and now_prof.get("name") == renamed
+    if st == 409 and error_body(obj, text) == SENDER_STALE_BODY and unchanged:
+        if provider is not None and provider[1] > 0:
+            replay.verdict, replay.note = "FAIL", "the refused stale replay wrote to the provider"
+        else:
+            replay.verdict = "PASS"
+    else:
+        replay.verdict = "FAIL"
+        replay.note = ("an old fingerprint was accepted, or the name changed" if st == 200 or not unchanged
+                       else f"stale replay answered {st} (expected the stale-settings 409) (INCONCLUSIVE)")
+    if not (isinstance(now_prof, dict) and isinstance(now_prof.get("fingerprint"), str) and isinstance(original, str)
+            and original):
+        return fail_all([restore], "could not restore the original name (INCONCLUSIVE)")
+    st, _t, obj = client.request("POST", path, tok, body=_sender_post(now_prof["fingerprint"], original), mutation=True)
+    restore.observed = str(st)
+    if st == 200 and isinstance(obj, dict) and obj.get("name") == original:
+        restore.verdict = "PASS"
+    else:
+        fail_all([restore], f"restoring the original name answered {st} (INCONCLUSIVE)")
+
+
+def _score_attack(client, case, status, text, obj, err, markers, inconclusive):
+    if case.scope == "role" and getattr(case, "readonly_profile", False):
+        # contract v2: a member who holds connection-management but did not authorize the connection may READ
+        # its settings — a read-only 200 (editable false, not_authorizing_member) answered without Discord.
+        if status != 200 or not isinstance(obj, dict):
+            return inconclusive(f"expected a read-only 200 profile, got {status}")
+        codes = [r.get("code") for r in (obj.get("unavailable") or []) if isinstance(r, dict)]
+        if obj.get("editable") is not False or "not_authorizing_member" not in codes:
+            case.verdict, case.note = "FAIL", "a member who did not authorize the connection was offered an edit"
+            return
+        if obj.get("observedAt") is not None:
+            case.verdict, case.note = "FAIL", "a non-authorizer's read made a Discord read"
+            return
+        case.verdict = "PASS"
+        return
+    if case.scope == "malformed":
+        # A malformed id must get a clean JSON 4xx: never accepted, never a server error, no leak.
+        if status == 0 or 300 <= status <= 399 or status in (401, 429):
+            return inconclusive(f"status {status} on a malformed id (cannot conclude)")
+        if status >= 500:
+            return inconclusive("server error on a malformed id (robustness; cannot conclude)")
+        if 200 <= status <= 299:
+            case.verdict, case.note = "FAIL", "malformed id accepted (2xx)"
+            return
+        if leak_detected(text, markers):
+            case.verdict, case.note = "FAIL", "victim marker present in response"
+            return
+        if err is None:
+            return inconclusive(f"{status} without a JSON error body")
+        case.verdict = "PASS"
+        return
 
     if status == 0:
         return inconclusive("transport error (cannot conclude)")
@@ -876,6 +1383,14 @@ def run_case(client, case, disc, flags):
             return inconclusive("403 on an IDOR attack (step-up/permission?); cannot attribute to tenancy")
         return inconclusive(f"status {status} on an IDOR attack")
 
+    if case.scope == "role":
+        # Another member of the SAME workspace: must be refused by the exact control the feature names
+        # (permission / authorizing member / the gate for a removed member).
+        if status == case.expect_status and err in _as_set(case.expect_body):
+            case.verdict = "PASS"
+            return
+        return inconclusive(f"refused with {status}, but not by the expected control")
+
     return inconclusive("case has no deny scope")
 
 
@@ -893,6 +1408,7 @@ def case_record(case):
         "expected": "|".join(case.expected),
         "observed": case.observed,
         "ownerObserved": case.owner_observed,
+        "twinObserved": case.twin_observed,
         "scope": case.scope or "",
         "verdict": case.verdict,
         "note": case.note,
@@ -923,6 +1439,11 @@ def write_markdown(path, cases, summary, flags, config):
                      "objects exist and the cases run"
                      + (" (allowed in this smoke run)." if flags.smoke else "."))
         lines.append("")
+    if summary.get("not_applicable"):
+        lines.append(f"> NOT APPLICABLE: **{summary['not_applicable']}** case(s) target a route this build does "
+                     "not serve (e.g. customer sender names before RC2). They do not fail this probe run, but a "
+                     "hosted GATE run fails on any NOT RUN case, and gate runs are pinned to the reviewed build.")
+        lines.append("")
     if summary["inconclusive"]:
         lines.append(f"> INCONCLUSIVE: **{summary['inconclusive']}** case(s) could not be classified as a "
                      "clean deny (a failed control, or an attack that returned a redirect, 5xx, 401/429/"
@@ -933,9 +1454,9 @@ def write_markdown(path, cases, summary, flags, config):
     lines.append("")
     lines.append("| metric | count |")
     lines.append("|---|---|")
-    for k in ("total", "passed", "failed", "inconclusive", "not_run_gated", "undiscovered",
+    for k in ("total", "passed", "failed", "inconclusive", "not_run_gated", "undiscovered", "not_applicable",
               "controls_passed", "controls_failed", "reads", "writes",
-              "blast_state", "blast_send", "blast_inert"):
+              "blast_state", "blast_send", "blast_inert", "sender_cases", "sender_passed"):
         lines.append(f"| {k} | {summary.get(k, 0)} |")
     lines.append(f"| overall | {'PASS' if summary['exit'] == 0 else 'FAIL'} |")
     lines.append("")
@@ -966,7 +1487,8 @@ class Flags:
 def summarize(cases, smoke=False):
     s = {k: 0 for k in ("total", "passed", "failed", "not_run_gated", "undiscovered",
                          "controls_passed", "controls_failed", "reads", "writes",
-                         "blast_state", "blast_send", "blast_inert", "inconclusive")}
+                         "blast_state", "blast_send", "blast_inert", "inconclusive",
+                         "not_applicable", "sender_cases", "sender_passed")}
     for c in cases:
         s["total"] += 1
         if c.kind == "read":
@@ -979,6 +1501,10 @@ def summarize(cases, smoke=False):
             s["blast_send"] += 1
         elif c.blast == "inert":
             s["blast_inert"] += 1
+        if ".sender." in c.cid:
+            s["sender_cases"] += 1
+            if c.verdict == "PASS":
+                s["sender_passed"] += 1
         if c.verdict == "PASS":
             s["passed"] += 1
             if c.kind == "control":
@@ -993,6 +1519,8 @@ def summarize(cases, smoke=False):
         elif c.verdict == "NOT_RUN":
             if c.note.startswith("undiscovered"):
                 s["undiscovered"] += 1
+            elif c.note.startswith("not-applicable"):
+                s["not_applicable"] += 1   # the build does not serve the route: reported, not a probe failure
             else:
                 s["not_run_gated"] += 1
     # exit 0 only if no FAIL, nothing INCONCLUSIVE (a control that did not succeed, or an attack
@@ -1079,17 +1607,42 @@ def main(argv=None):
     cases = build_matrix(disc, config, flags)
     attack_cases = [c for c in cases if c.kind in ("read", "write")]
     control_cases = [c for c in cases if c.kind == "control"]
+    audit_checks = [c for c in control_cases if c.scope == "audit_leak"]
+    sequences = [c for c in control_cases if c.scope == "sequence"]
+    plain_controls = [c for c in control_cases if c.scope not in ("audit_leak", "sequence")]
     try:
+        if config.phase_markers:
+            client.marker("attack-start")
         for c in attack_cases:
             run_case(client, c, disc, flags)
+        if config.phase_markers:
+            client.marker("attack-end")
         # 4. snapshot AFTER the attack set, before any owner controls mutate state
         after = {k: snapshot(client, config, k) for k in ("A", "B")}
-        # 5. controls (owner on own workspace; may change own state legitimately)
-        for c in control_cases:
+        # 5. controls (owner on own workspace; may change own state legitimately). The audit-leak checks run
+        #    first, before any owner control writes audit rows of its own.
+        for c in audit_checks + plain_controls:
             run_case(client, c, disc, flags)
+        for owner in ("A", "B"):
+            steps = [c for c in sequences if c.cid.endswith("." + owner)]
+            if steps and all(not c.needs for c in steps):
+                run_sender_sequence(client, steps, flags)
+            else:
+                for c in steps:
+                    run_case(client, c, disc, flags)
     except RuntimeError as err:
         print("probe aborted: " + str(err), file=sys.stderr)
         return 2
+
+    # 5b. deferred owner differentials: a workspace-scope or same-workspace refusal only counts once the
+    #     route's owner control (run above, after the attacks) proved the owner gets past those checks.
+    by_id = {c.cid: c for c in cases}
+    for c in attack_cases:
+        if c.deferred and c.verdict == "PASS":
+            control = by_id.get(c.deferred)
+            if control is None or control.verdict != "PASS":
+                c.verdict = "INCONCLUSIVE"
+                c.note = f"deferred owner differential {c.deferred} did not pass"
 
     # 6. no-side-effect verdict per tenant (attacks must not change the victim)
     snapshot_cases = []

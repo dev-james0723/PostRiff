@@ -112,6 +112,7 @@ class FakeClient:
     def __init__(self, by_token):
         self.by_token = by_token
         self.calls = []
+        self.last_provider = None   # (calls, writes) when a local harness attributes them; None = unobservable
 
     def request(self, method, path, token_key, *, body=None, mutation=False):
         self.calls.append((token_key, path))
