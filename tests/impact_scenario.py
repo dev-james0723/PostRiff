@@ -160,6 +160,11 @@ ENV = {'POSTRIFF_PUBLIC_BASE_URL': 'https://app.impact.invalid', 'VERCEL_ENV': '
        'POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED': 'true', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true',
        'POSTRIFF_WORKER_MAX_JOBS': '25', 'POSTRIFF_WORKER_MAX_SECONDS': '40',
        'POSTRIFF_DISCORD_RATE_POLICY': os.environ.get('IMPACT_RATE_POLICY', '')}
+if os.environ.get('IMPACT_BUILD') == 'dark':
+    # The dark build's own command-line variables (RC-RECEIPT section 4, D1): reviewed flag, cap, and a gate that names
+    # one tester workspace which is none of the scenario's workspaces (a placeholder id that belongs to nobody).
+    ENV.update({'POSTRIFF_OAUTH_DISCORD_REVIEWED': 'true', 'POSTRIFF_DISCORD_GUILD_CAP': '10000',
+                'POSTRIFF_DISCORD_CONNECT_WORKSPACES': '00000000-0000-4000-8000-00000000d1d1'})
 os.environ.update(ENV)
 providers = provider_registry.registry_from_environment(dict(os.environ))
 for adapter in providers.values():

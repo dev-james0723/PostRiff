@@ -4,7 +4,8 @@ One disposable PostgreSQL cluster gets the schema Production has (the RLS harnes
 copied into one database per tree. tests/impact_scenario.py then runs the same scenario with each tree's code (three
 first sign-ins, one ordinary LinkedIn post prepared and approved, workspace and Channels reads for everyone, one minute
 tick of the worker), with Production's provider configuration (fake credentials; the four Discord flags, the rate
-policy and the worker budget set as on 2026-10-23) and every provider transport refused. tests/impact_state_probe.py
+policy and the worker budget set as on 2026-10-23; for the candidate also the dark build's command-line variables:
+reviewed flag, cap 10000 and a gate naming one other workspace) and every provider transport refused. tests/impact_state_probe.py
 runs the code behind every workspace read and command on the resulting stored state with each tree.
 
 A plain test proves "same as live". A test whose name says it pins a difference documents an accepted difference with
@@ -102,7 +103,9 @@ class SharedPathsLiveVersusCandidate(unittest.TestCase):
                 subprocess.run(psql + [cls.dsn('postgres'), '-c', 'CREATE DATABASE impact_%s TEMPLATE impact_template' % name], check=True, capture_output=True)
                 done = subprocess.run([sys.executable, str(ROOT / 'tests' / 'impact_scenario.py'), '--tree', str(cls.trees[name]),
                                        '--dsn', cls.dsn('impact_' + name)], capture_output=True, text=True, timeout=600,
-                                      env={**os.environ, 'IMPACT_RATE_POLICY': policy, 'PYTHONDONTWRITEBYTECODE': '1'})
+                                      env={**os.environ, 'IMPACT_RATE_POLICY': policy, 'PYTHONDONTWRITEBYTECODE': '1',
+                                           # The candidate runs as the dark build D1 would serve it; live as dpl_47SG.
+                                           'IMPACT_BUILD': 'dark' if name == 'rc' else 'live'})
                 if done.returncode:
                     raise RuntimeError('scenario failed on %s: %s' % (name, done.stderr[-2000:]))
                 cls.records[name] = json.loads(done.stdout)
