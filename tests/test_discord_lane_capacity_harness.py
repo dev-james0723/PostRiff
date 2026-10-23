@@ -176,6 +176,24 @@ class LiveSmoke(unittest.TestCase):
         self.assertGreater(result['requests']['perVerifiedPost'], 2)
         self.assertEqual(result['workers']['blockedEgress'], 0)
 
+    def test_four_seeding_processes_released_together_all_finish(self):
+        # The GitHub-hosted failure: four seeding processes asked for the bot's own routes at the same moment, and the
+        # provider's one-second admission wait expired in one of them. The slices are now released together on
+        # purpose, and a delayed read is retried; every slice must finish and leave no admission open.
+        out = tempfile.mkdtemp(prefix='cap-seed-')
+        self.addCleanup(shutil.rmtree, out, True)
+        done = subprocess.run([sys.executable, '-B', str(SCRIPTS / 'discord_lane_capacity_run.py'), 'seed-check',
+                               '--scenario', 'smoke', '--source-tree', str(ROOT), '--out', out, '--label', 'unittest',
+                               '--workspaces', '16', '--posts', '32', '--seed-processes', '4', '--lead-seconds', '30'],
+                              capture_output=True, text=True, timeout=600,
+                              env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        self.assertEqual(done.returncode, 0, done.stdout[-3000:] + done.stderr[-3000:])
+        summary = json.loads(done.stdout.strip().splitlines()[-1])
+        self.assertEqual((summary['posts'], summary['processes'], len(summary['slices'])), (32, 4, 4), summary)
+        run_dir = next(Path(out).iterdir())
+        config = json.loads((run_dir / 'config.json').read_text())
+        self.assertFalse({'sent', 'uncertain'} & set(config['seedAdmissionsByState']), config['seedAdmissionsByState'])
+
     @unittest.skipUnless(os.environ.get('CAP_HARNESS_FULL') == '1', 'set CAP_HARNESS_FULL=1 for the live ceiling control')
     def test_live_ceiling_control_trips_the_counter(self):
         result = self.run_harness('smoke', '--policy-capacity', '200', '--mock-latency', 'fixed:2', '--posts', '60',

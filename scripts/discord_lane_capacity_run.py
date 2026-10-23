@@ -601,10 +601,19 @@ class Harness:
                     '--source-tree', str(self.tree), '--admin-dsn', self.admin_dsn, '--env', str(self.env_seed),
                     '--plan', str(plan_path), '--out', str(out), '--slice', '%d/%d' % (part, workers)]
             processes.append((self.start_child(argv, name='seed-%d' % part), out))
+        # Release every slice at once (each waits for seed-plan.json.go after its imports).
+        while not all(Path(str(out) + '.ready').exists() for _, out in processes):
+            for process, _ in processes:
+                if process.poll() is not None and process.returncode:
+                    self.seed_failure(processes, 'while starting')
+            if time.time() > connect_deadline:
+                raise RuntimeError('the seeding processes did not start in time')
+            time.sleep(0.1)
+        Path(str(plan_path) + '.go').write_text(json.dumps({'at': time.time()}))
         while not all(Path(str(out) + '.connected').exists() for _, out in processes):
             for process, _ in processes:
                 if process.poll() is not None and process.returncode:
-                    raise RuntimeError('a seeding process failed while connecting; see %s' % self.dir)
+                    self.seed_failure(processes, 'while connecting the workspaces')
             if time.time() > connect_deadline:
                 raise RuntimeError('seeding could not connect the workspaces in time')
             time.sleep(0.5)
@@ -639,14 +648,17 @@ class Harness:
             while process.poll() is None:
                 if time.time() > deadline + 20:
                     raise RuntimeError('seeding overran T; rerun with a larger --lead-seconds')
+                if any(other.poll() for other, _ in processes):
+                    break  # another slice already failed: report it now, not after this one finishes
                 time.sleep(0.25)
-            if process.returncode:
-                raise RuntimeError('a seeding process failed; see %s' % self.dir)
+            if any(other.poll() for other, _ in processes):
+                self.seed_failure(processes, 'while approving the posts')
         with open(self.dir / 'seed-manifest.jsonl', 'w') as manifest:
             for _, out in processes:
                 manifest.write(Path(out).read_text())
                 Path(out).unlink()
                 Path(str(out) + '.connected').unlink()
+                Path(str(out) + '.ready').unlink()
         done = time.time()
         rows = analysis.load_jsonl(self.dir / 'seed-manifest.jsonl')
         if len(rows) != posts or len({r['nonce'] for r in rows}) != posts:
@@ -657,14 +669,76 @@ class Harness:
                 jsonb_array_elements(coalesce(w.state#>'{phase2,jobs}','[]'::jsonb)) j
                 WHERE j#>>'{manifest,platform}'='Discord' AND j->>'state'='scheduled'""").fetchone()[0]
             credentials = db.execute("SELECT count(*) FROM public.pr_encrypted_credentials WHERE provider='discord'").fetchone()[0]
+            seed_admissions = dict(db.execute(
+                'SELECT state,count(*) FROM public.pr_discord_request_admissions GROUP BY state').fetchall())
             if self.config.get('pgStatStatements'):
                 db.execute('SELECT pg_stat_statements_reset()')
+        self.config['seedAdmissionsByState'] = seed_admissions
         if counted != posts:
             raise RuntimeError('the database holds %d scheduled Discord jobs, expected %d' % (counted, posts))
+        open_slots = {k: v for k, v in seed_admissions.items() if k in ('sent', 'uncertain')}
+        if open_slots:
+            # A sent or uncertain admission keeps its slot of the application budget (it never expires): the measured
+            # run would start with less than the reviewed capacity.
+            raise RuntimeError('seeding left request admissions open %s; the run would start with a reduced budget'
+                               % json.dumps(open_slots, sort_keys=True))
         self.config.update(seedingSeconds=round(done - started, 1), seedingEndedAt=done,
                            leadSecondsActual=round(self.reference - done, 1), discordCredentials=credentials)
         self.log('seeded in %.0f s: %d scheduled jobs, %d Discord credentials; lead to T %.0f s' % (
             done - started, counted, credentials, self.reference - done))
+
+    def seed_failure(self, processes, phase):
+        """Name every failed seeding process with its exit code and the end of its own output (stdout and stderr go
+        to seed-<n>.out), in harness.log and in the error, so a failure is diagnosable from the artifact alone."""
+        failed = []
+        for number, (process, _) in enumerate(processes):
+            code = process.poll()
+            if code:
+                path = self.dir / ('seed-%d.out' % number)
+                tail = path.read_text(errors='replace')[-4000:] if path.exists() else '(no output file)'
+                failed.append((number, code, tail.strip()))
+        for number, code, tail in failed:
+            self.log('seeding process seed-%d exited with %s %s; the end of seed-%d.out:\n%s' % (
+                number, code, phase, number, tail))
+        if not failed:
+            raise RuntimeError('a seeding process failed %s; see %s' % (phase, self.dir))
+        number, code, tail = failed[0]
+        last = [line for line in tail.splitlines() if line.strip()]
+        raise RuntimeError('a seeding process failed %s (%s); seed-%d.out ends with: %s' % (
+            phase, ', '.join('seed-%d exit %s' % (n, c) for n, c, _ in failed), number,
+            ' | '.join(last[-6:])[-1500:]))
+
+    def seed_check(self):
+        """Only the seeding path of a scenario (its layout, its seed processes, the manifest and database checks), on a
+        throwaway cluster, then clean up: no mock, no pooler, no cron. A fast check of multi-process seeding."""
+        started = time.time()
+        try:
+            self.prepare()
+            self.database()
+            self.app_dsn = self.admin_dsn
+            self.write_environments()
+            self.seed()
+            summary = {'event': 'seed_check.done', 'scenario': self.scenario, 'dir': str(self.dir),
+                       'workspaces': self.config.get('seededWorkspaces'), 'posts': self.config.get('seededPosts'),
+                       'processes': max(1, min(self.s['seed_processes'], self.config.get('seededWorkspaces') or 1)),
+                       'connectSeconds': self.config.get('seedConnectSeconds'),
+                       'seedingSeconds': self.config.get('seedingSeconds'),
+                       'credentials': self.config.get('discordCredentials'),
+                       'slices': [json.loads(line) for n in range(8) if (self.dir / ('seed-%d.out' % n)).exists()
+                                  for line in (self.dir / ('seed-%d.out' % n)).read_text(errors='replace').splitlines()
+                                  if line.startswith('{"event": "seed.slice_done"')],
+                       'seconds': round(time.time() - started, 1)}
+            self.log(json.dumps(summary))
+            return summary
+        except BaseException as error:
+            self.config['harnessError'] = '%s: %s' % (type(error).__name__, error)
+            self.log('seed check failed: %s' % error)
+            raise
+        finally:
+            self.stop.set()
+            self.cron_stop.set()
+            self.cleanup()
+            (self.dir / 'config.json').write_text(json.dumps(self.config, indent=1, default=str))
 
     # -- the cron emulator --------------------------------------------------------------------------------------
 
@@ -1330,6 +1404,9 @@ def main(argv=None):
     run = sub.add_parser('run', help='run one scenario')
     run.add_argument('--scenario', required=True, choices=sorted(SCENARIOS))
     common(run)
+    check = sub.add_parser('seed-check', help="only a scenario's seeding (its layout and seed processes), then clean up")
+    check.add_argument('--scenario', required=True, choices=sorted(SCENARIOS))
+    common(check)
     profile = sub.add_parser('profile', help='run a list of scenarios and write SUITE-<name>.md')
     profile.add_argument('--name', required=True, choices=sorted(PROFILES))
     profile.add_argument('--only', help='comma-separated subset of the profile')
@@ -1364,6 +1441,17 @@ def main(argv=None):
     os.makedirs(args.out, exist_ok=True)
     if args.command == 'run':
         run_one(args, args.scenario)
+        return 0
+    if args.command == 'seed-check':
+        settings = settings_for(args.scenario, overrides_from(args))
+        stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        run_dir = Path(args.out) / ('%s-seedcheck-%s-%s' % (stamp, args.scenario, (args.label or 'run').replace(' ', '_')))
+        harness = Harness(args, settings, args.scenario, run_dir)
+        ACTIVE.append(harness)
+        try:
+            print(json.dumps(harness.seed_check()), flush=True)
+        finally:
+            ACTIVE.remove(harness)
         return 0
     planned = PROFILES[args.name] if not args.only else [n for n in args.only.split(',') if n]
     runs = {}

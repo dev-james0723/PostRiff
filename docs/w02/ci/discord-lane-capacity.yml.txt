@@ -148,6 +148,13 @@ jobs:
             ${{ runner.temp }}/capacity/*/result.json
             ${{ runner.temp }}/capacity/*/config.json
             ${{ runner.temp }}/capacity/*/harness.log
+            ${{ runner.temp }}/capacity/*/seed-*.out
+            ${{ runner.temp }}/capacity/*/seed-plan.json
+            ${{ runner.temp }}/capacity/*/pooler.out
+            ${{ runner.temp }}/capacity/*/pooler.json
+            ${{ runner.temp }}/capacity/*/pgbouncer.out
+            ${{ runner.temp }}/capacity/*/mock.out
+            ${{ runner.temp }}/capacity/*/mock/mock-live.json
             ${{ runner.temp }}/capacity/*/seed-manifest.jsonl
             ${{ runner.temp }}/capacity/*/samples.jsonl
             ${{ runner.temp }}/capacity/*/invocations.jsonl

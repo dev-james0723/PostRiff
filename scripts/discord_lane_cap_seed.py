@@ -79,6 +79,9 @@ class Seeder:
         self.provider.authorization_v2_enabled = self.env.get('POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED') == 'true'
         self.provider.connections_v2_enabled = self.env.get('POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED') == 'true'
         self.provider.rate_v1_enabled = self.env.get('POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED') == 'true'
+        self.read_retries = {}
+        if os.environ.get('CAP_SEED_IMPATIENT') != '1':  # '1' only for the negative control in the harness self-checks
+            self._patient_reads()
         self.tokens = {}
         dsn = admin_dsn
 
@@ -101,6 +104,33 @@ class Seeder:
                                               public_base_url=self.env['POSTRIFF_PUBLIC_BASE_URL'])
         if self.provider.rate_v1_enabled and (self.provider.rate_limiter is None or self.provider.rate_limiter.policy is None):
             raise RuntimeError('the seeding rate policy was not accepted by the coordinator')
+
+    def _patient_reads(self):
+        """Seeding only: a read the shared coordinator delays is tried again, as a person would click again.
+
+        Several seeding processes start together and share the bot's own routes (GET /users/@me and GET
+        /oauth2/applications/@me, no major parameter): while such a route is still unknown the coordinator admits one
+        discovery request per second for all of them, and the provider waits at most one second before it raises
+        ReadAdmissionDelayed ("no request was sent"). One seeding process then died at its first workspace (seen on
+        the GitHub-hosted runner and reproduced here with four processes starting at once). Retrying a GET that was
+        never sent is safe and changes nothing the run measures: seeding requests are not in the run's log, and the
+        harness checks afterwards that seeding left no admission open. Writes are never retried."""
+        from postriff_phase2.discord.rate_limits import RateDelayed
+        original = self.provider._discord_http
+        counts = self.read_retries
+
+        def patient(method, path, **kwargs):
+            for attempt in range(80):
+                try:
+                    return original(method, path, **kwargs)
+                except RateDelayed as error:
+                    if method != 'GET' or attempt == 79:
+                        raise
+                    key = '%s %s (%s, %s)' % (method, self.mock.route_class(method, path).split(' ', 1)[1],
+                                              getattr(error, 'rate_scope_kind', '?'), getattr(error, 'rate_cause', '?'))
+                    counts[key] = counts.get(key, 0) + 1
+                    time.sleep(min(2.0, max(0.05, error.retry_after_seconds)) + (os.getpid() % 7) * 0.03 + attempt * 0.01)
+        self.provider._discord_http = patient
 
     def connect(self, index):
         mock, service = self.mock, self.service
@@ -241,7 +271,17 @@ def main(argv=None):
     seeder = Seeder(args.source_tree, args.admin_dsn, env, workspaces_total=plan['workspacesTotal'],
                     run_tag=plan['runTag'])
     mine = [item for position, item in enumerate(plan['workspaces']) if position % parts == part]
+    # Every slice starts its first workspace at the same moment (as on an idle runner, where imports take the same
+    # time everywhere): the shared bot routes then meet their worst case in every run, not only on a fast machine.
+    Path(args.out + '.ready').write_text('ready')
+    go = Path(args.plan + '.go')
+    while not go.exists():
+        if time.time() > plan['deadline']:
+            raise SystemExit('the harness never released the seeding processes')
+        time.sleep(0.02)
     started = time.time()
+    if os.environ.get('CAP_SEED_FAIL_SLICE') == str(part):  # harness self-check only: a slice that fails on purpose
+        raise RuntimeError('capacity harness self-check: seeding slice %s fails on purpose' % args.slice)
     # Phase 1: every workspace and its Discord connection (the slow part; no due time is needed for it).
     fixtures = [(seeder.connect(index), offsets) for index, offsets in mine]
     connected = time.time()
@@ -265,7 +305,7 @@ def main(argv=None):
     os.replace(args.out + '.tmp', args.out)
     print(json.dumps({'event': 'seed.slice_done', 'slice': args.slice, 'workspaces': len(fixtures), 'posts': posts,
                       'connectSeconds': round(connected - started, 1), 'scheduleSeconds': round(time.time() - connected, 1),
-                      'seedingRequests': seeder.transport.calls}), flush=True)
+                      'seedingRequests': seeder.transport.calls, 'delayedReadsRetried': seeder.read_retries}), flush=True)
     return 0
 
 

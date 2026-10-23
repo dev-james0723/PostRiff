@@ -79,6 +79,12 @@ def shape():
     upload = step('capacity', 'Keep the receipt')
     paths = upload['with']['path']
     check('the artifact never includes the per-run environment files', 'env-' not in paths and 'env*' not in paths)
+    # A failure must be diagnosable from the artifact alone: every child process's own output is kept.
+    for name in ('seed-*.out', 'seed-plan.json', 'pooler.out', 'pgbouncer.out', 'mock.out', 'harness.log',
+                 'pgbouncer/pgbouncer.log', 'postgres.log'):
+        check('the artifact keeps %s' % name, '${{ runner.temp }}/capacity/*/' + name in paths)
+    check('every artifact path is under the run directories', all(
+        line.strip().startswith('${{ runner.temp }}/capacity/*/') for line in paths.splitlines() if line.strip()))
     check('the receipt goes to the step summary', 'GITHUB_STEP_SUMMARY' in step('capacity', 'The receipt')['run'])
     fetch = step('capacity', 'Fetch the harness')['run']
     check('each fetched tree is verified at its exact SHA and clean', 'test "$(git -C "$dir" rev-parse HEAD)" = "$want"' in fetch
@@ -251,6 +257,55 @@ def maker(fix):
         check('make_request_branch.sh refuses ' + name, done.returncode == 2, done.stdout + done.stderr)
 
 
+# --- the multi-process seeding path ----------------------------------------------------------------------------------------
+
+def seeding():
+    """The harness's own seeding at a small scale with four processes released together (the path that failed on the
+    GitHub-hosted runner), and a slice that fails on purpose: its own output must reach harness.log and the error.
+    Needs PostgreSQL server binaries (POSTRIFF_PG_BIN), psycopg and the application tree; skipped otherwise."""
+    root = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
+    runner = os.path.join(root, 'scripts', 'discord_lane_capacity_run.py')
+    try:
+        import psycopg  # noqa: F401
+        has_driver = True
+    except ImportError:
+        has_driver = False
+    if not os.environ.get('POSTRIFF_PG_BIN') or not has_driver or not os.path.isdir(os.path.join(root, 'src', 'postriff_phase2')):
+        print('skip the four-process seeding checks (need POSTRIFF_PG_BIN, psycopg and the application tree)')
+        return
+
+    def seed_check(label, extra_env):
+        out = tempfile.mkdtemp(prefix='cap-ci-seed-')
+        try:
+            done = subprocess.run([sys.executable, '-B', runner, 'seed-check', '--scenario', 'smoke', '--source-tree', root,
+                                   '--out', out, '--label', label, '--workspaces', '16', '--posts', '32',
+                                   '--seed-processes', '4', '--lead-seconds', '30'], capture_output=True, text=True,
+                                  timeout=900, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', **extra_env})
+            logs = ''
+            for run_dir in os.listdir(out):
+                path = os.path.join(out, run_dir, 'harness.log')
+                if os.path.exists(path):
+                    logs += open(path).read()
+            return done, logs
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
+    done, _ = seed_check('ci-tests', {})
+    summary = {}
+    try:
+        summary = json.loads(done.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        pass
+    check('four seeding processes released together all finish', done.returncode == 0 and summary.get('posts') == 32
+          and len(summary.get('slices') or []) == 4, (done.stdout + done.stderr)[-1500:])
+    done, logs = seed_check('ci-fail', {'CAP_SEED_FAIL_SLICE': '2'})
+    check('a failing seeding slice stops the run', done.returncode != 0)
+    check("the failing slice's own output is in harness.log", 'seeding process seed-2 exited with 1' in logs
+          and 'seeding slice 2/4 fails on purpose' in logs, logs[-1200:])
+    check("the error names the slice and quotes the end of its output",
+          'seed-2 exit 1' in done.stderr and 'seed-2.out ends with' in done.stderr
+          and 'fails on purpose' in done.stderr, done.stderr[-1200:])
+
+
 # --- external validators -------------------------------------------------------------------------------------------------
 
 def validators(fix):
@@ -287,6 +342,7 @@ def main():
         validators(fix)
     finally:
         shutil.rmtree(fix.root, ignore_errors=True)
+    seeding()
     failed = [r for r in RESULTS if not r[1]]
     print('%d checks, %d failed' % (len(RESULTS), len(failed)))
     return 1 if failed else 0

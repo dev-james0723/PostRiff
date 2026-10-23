@@ -61,8 +61,21 @@ tail -f "$SCRATCH/s1.out"     # one progress line per minute; RECEIPT.md and res
 
 `profile --name release` runs every scenario in turn and writes `SUITE-release.md` (one line per planned scenario,
 NOT RUN for any that did not run); `--only S1,S2` narrows it. `analyze RUN_DIR` recomputes a receipt from the raw
-files. `scenarios` lists the scenarios. The self-checks: `python -m unittest tests.test_discord_lane_capacity_harness`
-(fast checks always; the live smoke when `POSTRIFF_PG_BIN` is set; `CAP_HARNESS_FULL=1` adds a live ceiling control).
+files. `scenarios` lists the scenarios. `seed-check --scenario S1` runs only a scenario's seeding (its layout and
+its seed processes, released together) on a throwaway cluster and cleans up: a two-minute check of the multi-process
+seeding path. The self-checks: `python -m unittest tests.test_discord_lane_capacity_harness` (fast checks always; the
+live smoke and a four-process seed check when `POSTRIFF_PG_BIN` is set; `CAP_HARNESS_FULL=1` adds a live ceiling
+control).
+
+Seeding with several processes: each seeding process opens its own connection to the mock world but they share the
+coordinator, and the bot's own routes (`GET /users/@me`, `GET /oauth2/applications/@me`) have no major parameter, so
+while they are still unknown the coordinator admits one discovery request per second for all processes together. The
+provider waits at most one second for a read admission and then raises `ReadAdmissionDelayed` (no request was sent):
+on an idle GitHub-hosted runner the four seeders start at the same moment and one of them died this way (all four
+scaled requests on 2026-10-23, harness 920991d6). The seeder now retries such a delayed GET (never a write), the
+harness releases the slices together on purpose so every run meets the worst case, a failing slice's own output
+(`seed-<n>.out`) is quoted in `harness.log` and in the error, and the harness refuses a seeding that leaves a request
+admission `sent` or `uncertain` (it would hold a slot of the run's budget for good).
 
 A full S1 takes about 40 minutes here (6 minutes of seeding, a lead to T, the drain, collection). The baseline
 scenario measures the frozen worker, so point it at RC1: `--source-tree "$SCRATCH/trees/2a5a523d"`.
