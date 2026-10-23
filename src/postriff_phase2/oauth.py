@@ -1076,22 +1076,6 @@ class OAuthService:
                 # Default selection is not a material authorization change.
                 self.commands.engine.invalidate(state)
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
-            if adapter.id == "facebook":
-                state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
-                channel = next((item for item in state['phase2']['channels'] if item['id'] == connection_id), None)
-                page = adapter.session(updated).get('page') or {}
-                if channel is None or page.get('id') != destination_id:
-                    raise AlphaError('Choose an eligible Facebook Page again.', 409)
-                channel.update(destinationId=destination_id, accountType='page', account=page['name'])
-                # A fresh authorized Page-list entry is connection evidence only. Optional write/read
-                # grants and Page tasks retain independent capability checks.
-                matrix = self._capabilities(adapter, 'identity', grant['scopes'], [], self.clock(), updated)
-                channel['capabilityVerified'] = matrix['publish']['level'] == 'Direct'
-                for name, value in matrix.items():
-                    cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()",
-                                (workspace_id, connection_id, name, value['level'], value['evidence'], value['capabilityVersion'], value['verifiedAt']))
-                self.commands.engine.invalidate(state)
-                cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
             if adapter.id == "google_business_profile":
                 state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
                 channel = next((item for item in state["phase2"]["channels"] if item["id"] == connection_id), None)
