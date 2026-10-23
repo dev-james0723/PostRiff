@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "_status": "PROPOSAL for the owner to edit. Not active anywhere: the engine (src/rafii_control/oncall/) is off unless RAFII_ONCALL_ENGINE_ENABLED is exactly 'true', and nothing in the running application imports it. The roster below is a placeholder with no person and no destination, so roster_problems() reports it and readiness says BLOCKED.",
+  "_source": "Owner reply 15 (H-07 policy adopted as the target). docs/ops/H07-POLICY-MAP.md explains every row; docs/ops/H07-EVIDENCE.md says what is proven.",
+  "timeZone": "America/New_York",
+  "dutyHours": {
+    "_note": "Routine incident handling every day 09:00 to 23:00 local wall time, weekends included; daylight saving is resolved per date. A listed holiday has no duty window (P0 still pages 24/7).",
+    "start": "09:00",
+    "end": "23:00",
+    "holidays": []
+  },
+  "defaults": {
+    "_note": "Anything not listed under priorities: a page is P1, a warning is P2, info is not routed.",
+    "page": "P1",
+    "warn": "P2"
+  },
+  "priorities": [
+    {"rule": "CROSS_TENANT_PROBE_FAILED", "severity": "page", "priority": "P0"},
+    {"rule": "CROSS_TENANT_PROBING", "severity": "page", "priority": "P0"},
+    {"rule": "CROSS_TENANT_PROBING", "severity": "warn", "priority": "P1"},
+    {"rule": "CROSS_TENANT_DISCORD", "severity": "warn", "priority": "P1"},
+    {"rule": "CROSS_TENANT_DISCORD_4XX", "severity": "warn", "priority": "P2"},
+    {"rule": "DELIVERY_UNCERTAIN", "severity": "page", "priority": "P0"},
+    {"rule": "DELIVERY_UNCERTAIN", "severity": "warn", "priority": "P1"},
+    {"rule": "DELIVERY_UNAUTHORIZED", "severity": "page", "priority": "P0"},
+    {"rule": "DELIVERY_SYSTEM_FAILURES", "severity": "page", "priority": "P0"},
+    {"rule": "DELIVERY_SYSTEM_FAILURES", "severity": "warn", "priority": "P1"},
+    {"rule": "DELIVERY_STUCK_SENT", "severity": "warn", "priority": "P1"},
+    {"rule": "DELIVERY_CUSTOMER_FAILURES", "severity": "warn", "priority": "P2"},
+    {"rule": "DELIVERY_DISCORD_5XX", "severity": "warn", "priority": "P2"},
+    {"rule": "RATE_CREDENTIAL_HOLD", "severity": "page", "priority": "P0"},
+    {"rule": "RATE_INVALID_REQUESTS", "severity": "page", "priority": "P0"},
+    {"rule": "RATE_INVALID_BUDGET", "severity": "page", "priority": "P0"},
+    {"rule": "RATE_INVALID_BUDGET", "severity": "warn", "priority": "P1"},
+    {"rule": "RATE_POLICY", "severity": "page", "priority": "P0"},
+    {"rule": "RATE_POLICY", "severity": "warn", "priority": "P1"},
+    {"rule": "RATE_EMBARGO", "severity": "page", "priority": "P1"},
+    {"rule": "RATE_EMBARGO", "severity": "warn", "priority": "P2"},
+    {"rule": "RATE_429", "severity": "page", "priority": "P1"},
+    {"rule": "RATE_429", "severity": "warn", "priority": "P2"},
+    {"rule": "RATE_APP_BUDGET_SPENT", "severity": "warn", "priority": "P2"},
+    {"rule": "RATE_ROUTE_CIRCUITS", "severity": "warn", "priority": "P2"},
+    {"rule": "SILENT_HALT_NO_PROGRESS", "severity": "page", "priority": "P0"},
+    {"rule": "SILENT_HALT_NO_PROGRESS", "severity": "warn", "priority": "P2"},
+    {"rule": "SILENT_HALT_NO_SHARDS", "severity": "page", "priority": "P0"},
+    {"rule": "SILENT_HALT_LANE_NOT_READY", "severity": "page", "priority": "P0"},
+    {"rule": "SILENT_HALT_LANE_NOT_READY", "severity": "warn", "priority": "P1"},
+    {"rule": "SILENT_HALT_HEALTH_UNANSWERED", "severity": "page", "priority": "P0"},
+    {"rule": "SILENT_HALT_DATABASE", "severity": "page", "priority": "P0"},
+    {"rule": "SILENT_HALT_PROJECTION", "severity": "page", "priority": "P0"},
+    {"rule": "SILENT_HALT_OPERATOR_HOLD", "severity": "warn", "priority": "P1"},
+    {"rule": "SILENT_HALT_LANE_STOPS", "severity": "warn", "priority": "P2"},
+    {"rule": "BACKLOG_LAG", "severity": "page", "priority": "P1"},
+    {"rule": "BACKLOG_LAG", "severity": "warn", "priority": "P2"},
+    {"rule": "CONFIG_GATE", "severity": "page", "evidence": {"mode": "open"}, "priority": "P0"},
+    {"rule": "CONFIG_GATE", "severity": "page", "priority": "P1"},
+    {"rule": "CONFIG_FLAGS", "severity": "page", "priority": "P0"},
+    {"rule": "CONFIG_REVIEWED", "severity": "page", "priority": "P0"},
+    {"rule": "CONFIG_CAP", "severity": "page", "priority": "P1"},
+    {"rule": "CONFIG_MISCONFIGURED", "severity": "page", "priority": "P1"},
+    {"rule": "CONFIG_CAP_USED", "severity": "page", "priority": "P1"},
+    {"rule": "CONFIG_CAP_USED", "severity": "warn", "priority": "P2"},
+    {"rule": "CONFIG_KILL_SWITCH", "severity": "warn", "priority": "P1"},
+    {"rule": "CONFIG_BUILD", "severity": "warn", "priority": "P1"},
+    {"rule": "CONFIG_LANE_FLAG", "severity": "warn", "priority": "P2"},
+    {"rule": "ONCALL_ROSTER_INVALID", "severity": "page", "priority": "P0"},
+    {"rule": "ONCALL_DELIVERY_FAILED", "severity": "page", "priority": "P0"},
+    {"rule": "ONCALL_AUTO_HOLD_ENGAGED", "severity": "page", "priority": "P0"},
+    {"rule": "ONCALL_AUTO_HOLD_FAILED", "severity": "page", "priority": "P0"},
+    {"rule": "ONCALL_HEARTBEAT_STALE", "severity": "page", "priority": "P0"},
+    {"rule": "ONCALL_ENGINE_GAP", "severity": "warn", "priority": "P1"}
+  ],
+  "escalation": {
+    "_note": "after = seconds since the chain started (the incident opened, was raised, or its suppression ended). A duty step counts only seconds inside duty hours and fires only inside them; outsideHours lists the channels that still go at once outside them. Steps resolve the person on call when they fire.",
+    "P0": [
+      {"after": 0, "to": "primary", "channels": ["push", "email"]},
+      {"after": 300, "to": "primary", "channels": ["phone"]},
+      {"after": 600, "to": "backup", "channels": ["push", "email", "phone"]}
+    ],
+    "P1": [
+      {"after": 0, "to": "primary", "channels": ["push", "email"], "hours": "duty", "outsideHours": ["email"]},
+      {"after": 900, "to": "backup", "channels": ["push", "email"], "hours": "duty"}
+    ],
+    "P2": [
+      {"after": 0, "to": "primary", "channels": ["email"], "hours": "duty"}
+    ]
+  },
+  "repeat": {
+    "_note": "An unacknowledged P0 runs its chain again every 15 minutes, three rounds in all [proposal: the policy does not say what happens after the Backup].",
+    "P0": {"periodSeconds": 900, "rounds": 3}
+  },
+  "records": {
+    "_note": "E-mails that record the incident's status and outcome to everyone paged for it.",
+    "P0": ["acknowledged", "resolved"],
+    "P1": ["acknowledged", "resolved"],
+    "P2": []
+  },
+  "suppression": {
+    "neverSuppress": ["CROSS_TENANT_PROBE_FAILED", "CROSS_TENANT_PROBING", "DELIVERY_UNAUTHORIZED", "DELIVERY_UNCERTAIN",
+                      "ONCALL_ROSTER_INVALID", "ONCALL_DELIVERY_FAILED", "ONCALL_AUTO_HOLD_ENGAGED", "ONCALL_AUTO_HOLD_FAILED",
+                      "ONCALL_HEARTBEAT_STALE"],
+    "inhibit": [
+      {"when": "SILENT_HALT_DATABASE", "suppress": ["SILENT_HALT_PROJECTION", "SILENT_HALT_NO_PROGRESS", "SILENT_HALT_LANE_NOT_READY", "SILENT_HALT_NO_SHARDS", "BACKLOG_LAG"]},
+      {"when": "SILENT_HALT_OPERATOR_HOLD", "suppress": ["SILENT_HALT_NO_PROGRESS", "BACKLOG_LAG"]},
+      {"when": "RATE_CREDENTIAL_HOLD", "suppress": ["SILENT_HALT_NO_PROGRESS", "BACKLOG_LAG"]},
+      {"when": "CONFIG_FLAGS", "suppress": ["SILENT_HALT_NO_PROGRESS", "SILENT_HALT_LANE_NOT_READY", "BACKLOG_LAG"]},
+      {"when": "CONFIG_KILL_SWITCH", "suppress": ["SILENT_HALT_NO_PROGRESS", "BACKLOG_LAG"]}
+    ],
+    "maintenance": [],
+    "reopenWithinSeconds": 600,
+    "resolveAfterClearEvaluations": 2,
+    "noDataRules": ["SILENT_HALT_HEALTH_UNANSWERED", "SILENT_HALT_DATABASE"],
+    "storm": {"windowSeconds": 600, "limits": {"push": 6, "email": 10, "phone": 2}}
+  },
+  "fallback": {
+    "_note": "When the first channel of a step fails for its person (no destination, provider failure or refusal), the next step of the same round fires at once instead of waiting.",
+    "escalateNowWhenFirstChannelFails": true
+  },
+  "autoHold": {
+    "_note": "Option D. Only with RAFII_ONCALL_AUTO_HOLD_ENABLED exactly 'true' and an injected executor. Engages the PHONE-RUNBOOK HOLD_ON statement on these page-level rules; never lifts it.",
+    "rules": ["CROSS_TENANT_PROBE_FAILED", "CROSS_TENANT_PROBING", "DELIVERY_UNCERTAIN", "RATE_INVALID_REQUESTS", "RATE_INVALID_BUDGET"],
+    "severity": "page"
+  },
+  "heartbeat": {"maxAgeSeconds": 180},
+  "roster": {
+    "_note": "PLACEHOLDER. The owner names a real Primary and Backup; destinations are opaque references resolved by the delivery adapters (for example a founder operator id), never an address or number in this file.",
+    "shifts": [
+      {"days": "daily", "start": "00:00", "end": "24:00", "primary": "PRIMARY", "backup": "BACKUP"}
+    ],
+    "people": {
+      "PRIMARY": {"push": null, "email": null, "phone": null},
+      "BACKUP": {"push": null, "email": null, "phone": null}
+    }
+  }
+}
