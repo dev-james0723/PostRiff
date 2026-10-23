@@ -283,3 +283,80 @@ Question put to the owner (one line to answer):
 6. **Deliverable.** Reuse the ledger, the release definition and the evidence pack; update only what actually changed; report what is completed and verified, what is unfinished and the evidence gaps, what can still be repaired automatically, what truly needs the owner's authorization, the updated paths and commit SHAs, and an RC2 release-readiness conclusion.
 
 **What this reply does not change:** reply 13 stays in force (capacity standard, release order 5a/5b/5c, Q-05 accounts through the normal sign-up flow only, the three-message limit for real sends, no Production setting changes). It supersedes only the part of reply 13 that said the owner would be asked for four screenshots for M-03 and for a new empty Discord server: the agent tries to establish both itself first.
+
+## Reply 15, received 2026-10-23 about 06:05Z (the owner titled it "Reply 14 — RC2 Scope Expansion + H-07 On-call Decision")
+
+> 我決定：
+>
+> A. 將 Sender Name 功能一併納入 RC2
+>
+> 正式批准將 codex/discord-sender-name-20261023（commit 97b3956a）納入 RC2 候選範圍。
+>
+> 我希望 Rafii Public Release 第一版已經支援顧客自訂 Discord 發送者名稱，包括 Webhook Sender Name 及適用情況下的 Bot Nickname。
+>
+> 請完成以下工作：
+>
+> 1. 將現有分支安全整合到 RC2 candidate，保留原有功能，不覆寫未合併工作。
+> 2. 重新執行 Security Review、Code Review、A/B Verification、Multi-tenant Isolation、Capacity Test 及 CI。
+> 3. Webhook 使用每次發送的 Sender Name Override，避免跨客戶名稱污染。
+> 4. Bot Nickname 必須遵守 Guild-level 限制，只有具備相應權限的 Server 管理員可以授權修改；不得讓不同 Rafii 用戶互相覆蓋名稱。
+> 5. 驗證不同 Workspace、Guild、Channel、Webhook 的名稱隔離、權限、並行發送及回退行為。
+> 6. 同時測試 Sender Name ON/OFF、Bot/Webhook 兩種模式、5,000 筆排程負載及 W-02 兼容性。
+> 7. 提供 UI 驗收，讓用戶設定名稱、預覽 Discord 實際顯示效果，並清楚知道何時無法修改 Bot 暱稱。
+>
+> RC2 Freeze 可以合理延後，但不可以因趕進度而跳過驗收。
+>
+> 如 Bot Nickname 存在無法安全解決的跨租戶衝突，必須隔離該能力；Webhook 自訂發送者名稱仍應優先完成。所有例外須清楚記錄，不得虛報整項功能通過。
+>
+> B. H-07 — On-call Coverage and Alert Channels
+>
+> 我選擇以下正式運作政策：
+>
+> On-call Coverage
+>
+> * P0 Critical：24/7，包括週末及假期。
+> * 日常事故處理：每日 09:00–23:00，America/New_York 時區。
+> * 非日常處理時段：維持自動監控，P0 由當值人員處理。
+> * 必須指定 Primary On-call 與 Backup On-call，並確保有人實際承接警報。
+>
+> Alert Channels
+>
+> * Push Notification：主要即時警報渠道。
+> * Email：同步記錄事故、狀態及處理結果。
+> * Phone Call：P0 Critical 緊急升級渠道。
+>
+> Escalation Policy
+>
+> * P0：立即 Push + Email；5 分鐘未確認即電話升級，10 分鐘未確認轉 Backup。
+> * P1：Push + Email，值班時間內 15 分鐘確認。
+> * P2：Email / Dashboard，按正常維護流程處理。
+> * 必須支援去重、警報抑制、事故確認、升級及 Audit Trail。
+>
+> 以上係正式採用的目標政策，唔代表目前已完成配置。
+>
+> 請先核實實際值班人員、通知目的地、手機 Push、電話渠道及端到端測試。只有排班、路由、送達、確認與升級測試全部成功，H-07 先可以標記 VERIFIED。
+>
+> 如欠缺真正 24/7 P0 人手，必須標記 BLOCKED 並提出可執行替代安排，不得紙面通過。
+>
+> Execution Authorization
+>
+> 可以自主進行上述非 Production 工程、整合、審查及隔離測試，盡量並行推進，唔需要每完成一項就停下來等我。
+>
+> 但今次批准不包括 Production Deployment、正式公開發文、變更 Production 環境變數、付費服務或正式 Public Release。
+>
+> 完成後提供更新版 RC2 Scope、H-07 Evidence、測試結果、Commit SHA、剩餘 Blockers，以及最後 GO/NO-GO 建議。
+>
+> 目標：RC2 包含安全、可靠、真正支援多客戶的 Custom Sender Name，並具備可驗證的 Incident Response 機制。
+
+**Reading, by the agent:**
+
+1. **Scope.** RC2 now contains the customer-chosen Discord sender name: the incoming-webhook sender name (applied per send, so a name can never leak from one customer to another) and, where it applies, the bot's per-server nickname. The upstream commit is `97b3956a` on `codex/discord-sender-name-20261023` (built on RC1 `2a5a523d`; it merges cleanly with the W-02 head). It is integrated into the RC2 line without overwriting unmerged work and every gate applies to it as to the rest of RC2: independent security review and code review, the A/B probe with sender-name cases, multi-tenant isolation (workspace, server, channel, webhook), concurrent sends and fallback behaviour, sender name ON and OFF, bot and webhook modes, the 5,000-post load and W-02 compatibility, exact-SHA CI, and an interface acceptance (set the name, preview how Discord shows it, a clear statement of when the bot nickname cannot be changed). **The freeze moves; no acceptance is skipped.** If the bot nickname has a cross-tenant conflict that cannot be solved safely it is isolated (switched off) and the webhook sender name is finished first; every exception is recorded and the feature is not reported as passing as a whole.
+2. **H-07 policy adopted as the target, not as a fact.** P0 Critical 24/7 including weekends and holidays; routine incident handling every day 09:00 to 23:00 America/New_York; outside those hours automatic monitoring continues and P0 goes to the person on call; a Primary and a Backup on-call must be named and someone must actually receive the alerts. Channels: push (main, immediate), e-mail (record of incident, status and outcome), phone call (P0 escalation). P0: push and e-mail at once, phone after 5 minutes without acknowledgement, Backup after 10 minutes. P1: push and e-mail, acknowledge within 15 minutes during duty hours. P2: e-mail or dashboard, normal maintenance. Deduplication, suppression, acknowledgement, escalation and an audit trail are required. **H-07 becomes VERIFIED only when the roster, routing, delivery, acknowledgement and escalation tests all succeed** against real people and real destinations. With no real 24/7 P0 cover it is marked BLOCKED with executable alternatives.
+3. **Working mode.** Non-Production engineering, integration, review and isolated tests, in parallel, without stopping at each item. Final package: updated RC2 scope, H-07 evidence, test results, commit SHAs, remaining blockers and a GO/NO-GO recommendation.
+
+**Authorized by this reply and being carried out:** the sender-name integration, fixes, tests, UI and reviews described above (non-Production); building the alert pipeline (routing, deduplication, suppression, acknowledgement, escalation, audit trail) and its isolated end-to-end tests with fake providers; the written H-07 evidence and alternatives; everything in replies 12 to 14 that is still in progress.
+
+**Still NOT authorized (each needs its own explicit approval):** any Production build, promotion or deployment; any change of a Production environment variable or project setting (so the alert and call settings, the lane flags and the gate cannot be set); any Production database or Auth write, including a migration that the alert pipeline or the sender name may need; any paid service (a phone-call provider, an on-call or paging service, more database compute); any real Discord message outside the earlier approval; any public announcement; the Public Release. Real delivery tests of push, e-mail and phone call go to the owner's real destinations through Production services, so they are Production operations and will be listed in Packet 3.
+
+**What the agent needs from the owner for H-07 and cannot invent:** the names of the Primary and the Backup on-call, and for each of them the e-mail address, the mobile number for calls and the device for push; whether a phone-call provider is already available; and whether a person really covers P0 at night and on weekends. Until then H-07 stays NOT VERIFIED (BLOCKED if no 24/7 P0 person exists).
+
