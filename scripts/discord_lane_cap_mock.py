@@ -380,7 +380,8 @@ class World:
         if tenant is not None and tenant != index:
             record['misrouted'] = True
             self.counters['misrouted'] += 1
-        copies = 2 if self.double_accept_every and (self.counters['creates'] + 1) % self.double_accept_every == 0 else 1
+        self.accepted_creates = getattr(self, 'accepted_creates', 0) + 1
+        copies = 2 if self.double_accept_every and self.accepted_creates % self.double_accept_every == 0 else 1
         message = None
         for copy_number in range(copies):
             self.sequence += 1

@@ -111,7 +111,8 @@ class Stats:
             pick = lambda q: ordered[min(len(ordered) - 1, int(q * len(ordered)))]
             return {'count': len(ordered), 'mean': round(sum(ordered) / len(ordered), 6), 'p50': round(pick(.5), 6),
                     'p95': round(pick(.95), 6), 'p99': round(pick(.99), 6), 'max': round(ordered[-1], 6)}
-        result = {'mode': self.args.mode, 'poolSize': self.args.pool_size, 'maxClients': self.args.max_clients,
+        result = {'mode': self.args.mode, 'poolSize': self.args.pool_size if self.args.mode == 'pool' else None,
+                  'maxClients': self.args.max_clients if self.args.mode == 'pool' else None,
                   'latencyMs': self.args.latency_ms, 'connectRtts': self.args.connect_rtts,
                   'waitTimeoutSeconds': self.args.wait_timeout, 'at': time.time(),
                   'clients': self.clients, 'clientPeak': self.client_peak, 'clientsTotal': self.clients_total,

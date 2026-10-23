@@ -16,6 +16,11 @@ from collections import Counter, defaultdict
 CREATE = 'POST /channels/{id}/messages'
 
 
+def load_json(path):
+    with open(path) as handle:
+        return json.load(handle)
+
+
 def load_jsonl(path):
     rows = []
     if not os.path.exists(path):
@@ -124,17 +129,17 @@ def cron_gap(invocations, period, *, first_minute, last_minute):
 
 
 def analyse(run_dir):
-    config = json.load(open(os.path.join(run_dir, 'config.json')))
+    config = load_json(os.path.join(run_dir, 'config.json'))
     manifest = load_jsonl(os.path.join(run_dir, 'seed-manifest.jsonl'))
     requests = load_jsonl(os.path.join(run_dir, 'mock', 'mock-requests.jsonl'))
-    mock_summary = json.load(open(os.path.join(run_dir, 'mock', 'mock-summary.json')))
-    final_states = json.load(open(os.path.join(run_dir, 'final-states.json')))
+    mock_summary = load_json(os.path.join(run_dir, 'mock', 'mock-summary.json'))
+    final_states = load_json(os.path.join(run_dir, 'final-states.json'))
     folder = os.path.join(run_dir, 'invocations')
     invocations = []
     for name in sorted(os.listdir(folder)):
         if name.endswith('.json'):
             try:
-                invocations.append(json.load(open(os.path.join(folder, name))))
+                invocations.append(load_json(os.path.join(folder, name)))
             except ValueError:
                 invocations.append({'path': name, 'exception': 'unreadable result'})
     events = load_jsonl(os.path.join(run_dir, 'invocations.jsonl'))
@@ -142,8 +147,8 @@ def analyse(run_dir):
     samples = load_jsonl(os.path.join(run_dir, 'samples.jsonl'))
     pooler = None
     if os.path.exists(os.path.join(run_dir, 'pooler-final.json')):
-        pooler = json.load(open(os.path.join(run_dir, 'pooler-final.json')))
-    extra = json.load(open(os.path.join(run_dir, 'database-final.json'))) if os.path.exists(
+        pooler = load_json(os.path.join(run_dir, 'pooler-final.json'))
+    extra = load_json(os.path.join(run_dir, 'database-final.json')) if os.path.exists(
         os.path.join(run_dir, 'database-final.json')) else {}
 
     T = config['dueAt']
@@ -262,12 +267,23 @@ def analyse(run_dir):
             'assignedPeak', 'waitingPeak', 'demandPeak', 'transactions', 'waitTimeouts', 'clientsRefused',
             'dirtyReleases', 'ignoredStartupOptions', 'errorsBySqlstate', 'waitSeconds', 'transactionHoldSeconds',
             'exchangeSeconds', 'cpuSeconds')}
-        if pooler.get('poolSize'):
+        if pooler.get('mode') == 'pool' and pooler.get('poolSize'):
             database['poolerDemandShare'] = (pooler.get('demandPeak') or 0) / pooler['poolSize']
-        errors.update(pooler.get('errorsBySqlstate') or {})
-        database['statementTimeouts'] = (pooler.get('errorsBySqlstate') or {}).get('57014', 0)
+            errors.update(pooler.get('errorsBySqlstate') or {})
+            database['statementTimeouts'] = (pooler.get('errorsBySqlstate') or {}).get('57014', 0)
+        else:
+            database['statementTimeouts'] = (extra.get('logErrorsBySqlstate') or {}).get('57014', 0)
     else:
-        database['statementTimeouts'] = (extra.get('logErrorsBySqlstate') or {}).get('57014')
+        database['statementTimeouts'] = (extra.get('logErrorsBySqlstate') or {}).get('57014', 0)
+    bouncer = [x['pgbouncer'] for x in samples if isinstance(x.get('pgbouncer'), dict) and 'error' not in x['pgbouncer']]
+    if bouncer:
+        database['pgbouncer'] = {'peakServerActive': max(b['svActive'] for b in bouncer),
+                                 'peakClientsWaiting': max(b['clWaiting'] for b in bouncer),
+                                 'peakDemand': max(b['svActive'] + b['clWaiting'] for b in bouncer),
+                                 'longestWaitSeconds': max(b['maxWait'] for b in bouncer)}
+        if config.get('poolSize'):
+            database['poolerDemandShare'] = database['pgbouncer']['peakDemand'] / config['poolSize']
+        database['statementTimeouts'] = (extra.get('logErrorsBySqlstate') or {}).get('57014', 0)
     for code, count in (extra.get('logErrorsBySqlstate') or {}).items():
         errors['postgresLog:' + code] += count
 
@@ -360,6 +376,8 @@ def judge(result, standard):
             value = value * measure['scale']
         if value is None:
             verdict = 'NOT MEASURED'
+        elif not result['outcomes']['sentAtMock'] and measure['op'] != 'report':
+            verdict = 'NOT MEASURED'  # nothing was sent: a zero count proves nothing
         elif measure['op'] == '<=':
             verdict = 'PASS' if value <= measure['limit'] else 'FAIL'
         elif measure['op'] == '>=':

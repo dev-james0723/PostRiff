@@ -54,6 +54,8 @@ def role_prelude(source_tree):
 
 
 def apply_schema(dsn, source_tree, *, log=print):
+    """The role harness (roles are cluster-wide: created once, kept) and the production migration set, on an empty
+    database; refuses a database that already has a Rafii schema."""
     import psycopg
     started = time.time()
     applied = []
@@ -61,13 +63,14 @@ def apply_schema(dsn, source_tree, *, log=print):
         exists = db.execute("SELECT to_regclass('public.pr_workspaces')").fetchone()[0]
         if exists:
             raise RuntimeError('the target database already has a Rafii schema; use an empty database')
-        db.execute("SELECT 1 FROM pg_roles WHERE rolname='authenticated'")
-        has_roles = db.execute("SELECT count(*) FROM pg_roles WHERE rolname IN ('anon','authenticated','service_role')").fetchone()[0] == 3
-        has_auth = db.execute("SELECT to_regclass('auth.users')").fetchone()[0] is not None
-        if not has_roles and not has_auth:
-            db.execute(role_prelude(source_tree))
-        elif not has_auth:
-            raise RuntimeError('the target database has Supabase roles but no auth.users; prepare it like rls.sql does')
+        roles = {row[0] for row in db.execute(
+            "SELECT rolname FROM pg_roles WHERE rolname IN ('anon','authenticated','service_role')").fetchall()}
+        if db.execute("SELECT to_regclass('auth.users')").fetchone()[0] is None:
+            for statement in [part.strip() for part in role_prelude(source_tree).split(';\n') if part.strip()]:
+                words = statement.split()
+                if words[:2] == ['create', 'role'] and words[2] in roles:
+                    continue
+                db.execute(statement.rstrip(';'))
         for path in migration_paths(source_tree):
             body = re.sub(r'(?im)^(?:begin|commit);\s*$', '', path.read_text())
             with db.transaction():
@@ -160,3 +163,24 @@ class LocalCluster:
                         pass
         finally:
             shutil.rmtree(self.tmp, ignore_errors=True)
+
+
+def fresh_database(admin_dsn, name):
+    """CREATE DATABASE `name` on an external server and return (admin DSN, connection info) pointing at it."""
+    import psycopg
+    if not re.fullmatch(r'[a-z][a-z0-9_]{1,50}', name):
+        raise ValueError('unsafe database name')
+    with psycopg.connect(admin_dsn, autocommit=True) as db:
+        db.execute('CREATE DATABASE %s' % name)
+    info = psycopg.conninfo.conninfo_to_dict(admin_dsn)
+    info['dbname'] = name
+    return psycopg.conninfo.make_conninfo(**info)
+
+
+def drop_database(admin_dsn, name):
+    import psycopg
+    if not re.fullmatch(r'[a-z][a-z0-9_]{1,50}', name):
+        return
+    with psycopg.connect(admin_dsn, autocommit=True) as db:
+        db.execute('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=%s AND pid<>pg_backend_pid()', (name,))
+        db.execute('DROP DATABASE IF EXISTS %s' % name)

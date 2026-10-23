@@ -68,9 +68,9 @@ BASE = dict(workspaces=2000, posts=5000, hot_posts=0, per_minute=0, minutes=0, d
             expiry_in_minutes=None, injections=None, seed_processes=4, expect=())
 
 SCENARIOS = {
-    'smoke': dict(workspaces=10, posts=60, cron_period=20, lane_max_seconds=12, shards=4, lead_seconds=25,
+    'smoke': dict(workspaces=10, posts=30, cron_period=20, lane_max_seconds=15, shards=4, lead_seconds=10,
                   max_run_minutes=4, seed_processes=1, stall_detect_minutes=2,
-                  description='Tiny end-to-end check of the harness itself: 60 posts in 10 workspaces, 20-second '
+                  description='Tiny end-to-end check of the harness itself: 30 posts in 10 workspaces, 20-second '
                               'cron period, 4 shards. Not a capacity measurement.',
                   expect=('all_verified', 'no_duplicates', 'no_late_sends', 'isolation', 'clean_workers')),
     'S1': dict(description='5,000 posts due in the same minute, spread over 2,000 workspaces (standard section 4).',
@@ -278,6 +278,11 @@ class Harness:
 
     def prepare(self):
         s, args = self.s, self.args
+        # Children run from a copy of the harness taken now, so editing the harness during a run changes nothing.
+        self.scripts = self.dir / 'harness'
+        self.scripts.mkdir(exist_ok=True)
+        for source in sorted(SCRIPTS.glob('discord_lane_cap*.py')) + [SCRIPTS / 'discord_lane_capacity_run.py']:
+            shutil.copy2(source, self.scripts / source.name)
         tree = Path(args.source_tree).resolve()
         self.tree = tree
         sha = git(tree, 'rev-parse', 'HEAD')
@@ -316,9 +321,18 @@ class Harness:
     def database(self):
         s, args = self.s, self.args
         if args.admin_database_url:
-            self.admin_dsn = args.admin_database_url
-            self.app_dsn_upstream = args.database_url or args.admin_database_url
-            self.config['database'] = 'external'
+            # One fresh database per run on the external server (each scenario needs an empty schema); the
+            # application's URL (through the external pooler) is pointed at the same database name.
+            import psycopg
+            self.external_db = 'capacity_' + re.sub(r'[^a-z0-9]', '_', self.dir.name.lower())[:40]
+            self.admin_dsn = cluster_tools.fresh_database(args.admin_database_url, self.external_db)
+            if args.database_url:
+                info = psycopg.conninfo.conninfo_to_dict(args.database_url)
+                info['dbname'] = self.external_db
+                self.external_app_dsn = psycopg.conninfo.make_conninfo(**info)
+            else:
+                self.external_app_dsn = self.admin_dsn
+            self.config['database'] = 'external server, database %s' % self.external_db
         else:
             pg_bin = args.pg_bin or os.environ.get('POSTRIFF_PG_BIN')
             if not pg_bin:
@@ -334,12 +348,60 @@ class Harness:
             self.config['pgStatStatements'] = db.execute(
                 "SELECT count(*) FROM pg_extension WHERE extname='pg_stat_statements'").fetchone()[0] == 1
 
+    def pgbouncer(self):
+        """A real PgBouncer (transaction mode, pool --max-db-connections) in front of the throwaway cluster."""
+        s, args = self.s, self.args
+        folder = self.dir / 'pgbouncer'
+        folder.mkdir(exist_ok=True)
+        port = cluster_tools.free_port()
+        ini = folder / 'pgbouncer.ini'
+        (folder / 'userlist.txt').write_text('"postgres" ""\n')
+        ini.write_text('\n'.join([
+            '[databases]', '* = host=%s port=%d user=postgres' % (self.cluster.sock, self.cluster.port), '',
+            '[pgbouncer]', 'listen_addr = 127.0.0.1', 'listen_port = %d' % port, 'unix_socket_dir =',
+            'auth_type = trust', 'auth_file = %s' % (folder / 'userlist.txt'), 'pool_mode = transaction',
+            'default_pool_size = %d' % s['max_db_connections'], 'reserve_pool_size = 0',
+            'max_client_conn = %d' % s['max_client_connections'], 'server_reset_query =',
+            'ignore_startup_parameters = extra_float_digits,options', 'query_wait_timeout = %d' % int(s['pool_wait_timeout']),
+            'admin_users = postgres', 'stats_users = postgres', 'logfile = %s' % (folder / 'pgbouncer.log'),
+            'pidfile = %s' % (folder / 'pgbouncer.pid'), '']))
+        runas = []
+        if os.geteuid() == 0:  # PgBouncer refuses to run as root
+            shutil.chown(folder, 'postgres', 'postgres')
+            for item in folder.iterdir():
+                shutil.chown(item, 'postgres', 'postgres')
+            runas = ['runuser', '-u', 'postgres', '--']
+        self.bouncer_process = self.start_child([*runas, args.pgbouncer_bin, str(ini)], name='pgbouncer')
+        deadline = time.time() + 20
+        import socket as _socket
+        while time.time() < deadline:
+            try:
+                _socket.create_connection(('127.0.0.1', port), timeout=1).close()
+                break
+            except OSError:
+                time.sleep(0.2)
+        else:
+            raise RuntimeError('PgBouncer did not start; see %s' % (self.dir / 'pgbouncer.out'))
+        self.args.pooler_admin_url = 'host=127.0.0.1 port=%d dbname=pgbouncer user=postgres sslmode=disable' % port
+        self.pool_database = 'postgres'
+        return port
+
     def pooler(self):
         s, args = self.s, self.args
         port = cluster_tools.free_port()
         stats = self.dir / 'pooler.json'
-        if self.cluster is not None:
-            argv = [sys.executable, '-B', str(SCRIPTS / 'discord_lane_cap_pooler.py'), '--mode', 'pool',
+        self.pool_database = getattr(self, 'external_db', None) or 'postgres'
+        if self.cluster is not None and args.pooler == 'pgbouncer':
+            bouncer = self.pgbouncer()
+            argv = [sys.executable, '-B', str(self.scripts / 'discord_lane_cap_pooler.py'), '--mode', 'relay',
+                    '--listen-port', str(port), '--upstream-host', '127.0.0.1', '--upstream-port', str(bouncer),
+                    '--latency-ms', str(s['db_latency_ms']), '--stats', str(stats)]
+            self.app_dsn = 'host=127.0.0.1 port=%d dbname=postgres user=postgres sslmode=disable' % port
+            self.config['pooler'] = 'PgBouncer %s, transaction mode, pool %d, behind the harness relay adding %.1f ms per round trip' % (
+                args.pgbouncer_bin, s['max_db_connections'], s['db_latency_ms'])
+            self.config['poolSize'] = s['max_db_connections']
+        elif self.cluster is not None:
+            argv = [sys.executable, '-B', str(self.scripts / 'discord_lane_cap_pooler.py'), '--mode', 'pool',
                     '--listen-port', str(port), '--upstream-socket', self.cluster.socket_path,
                     '--pool-size', str(s['max_db_connections']), '--max-clients', str(s['max_client_connections']),
                     '--latency-ms', str(s['db_latency_ms']), '--connect-rtts', str(s['db_connect_rtts']),
@@ -351,8 +413,8 @@ class Harness:
                 s['max_db_connections'], s['db_latency_ms'])
         elif args.database_url and s['db_latency_ms']:
             import psycopg
-            info = psycopg.conninfo.conninfo_to_dict(args.database_url)
-            argv = [sys.executable, '-B', str(SCRIPTS / 'discord_lane_cap_pooler.py'), '--mode', 'relay',
+            info = psycopg.conninfo.conninfo_to_dict(self.external_app_dsn)
+            argv = [sys.executable, '-B', str(self.scripts / 'discord_lane_cap_pooler.py'), '--mode', 'relay',
                     '--listen-port', str(port), '--upstream-host', info.get('host', '127.0.0.1'),
                     '--upstream-port', str(info.get('port', 5432)), '--latency-ms', str(s['db_latency_ms']),
                     '--stats', str(stats)]
@@ -360,7 +422,7 @@ class Harness:
             self.app_dsn = psycopg.conninfo.make_conninfo(**info)
             self.config['pooler'] = 'external pooler at --database-url, harness relay adds %.1f ms' % s['db_latency_ms']
         else:
-            self.app_dsn = args.database_url or self.admin_dsn
+            self.app_dsn = getattr(self, 'external_app_dsn', None) or self.admin_dsn
             self.config['pooler'] = 'external (--database-url), no harness relay'
             self.pooler_process = None
             return
@@ -371,7 +433,7 @@ class Harness:
     def mock(self):
         s = self.s
         self.mock_port = cluster_tools.free_port()
-        argv = [sys.executable, '-B', str(SCRIPTS / 'discord_lane_cap_mock.py'), '--port', str(self.mock_port),
+        argv = [sys.executable, '-B', str(self.scripts / 'discord_lane_cap_mock.py'), '--port', str(self.mock_port),
                 '--out', str(self.dir / 'mock'), '--workspaces', str(self.workspace_count()),
                 '--latency', s['mock_latency'], '--tail-probability', str(s['mock_tail_probability']),
                 '--tail-ms', str(s['mock_tail_ms']), '--read-limit', s['mock_read_limit'],
@@ -389,7 +451,7 @@ class Harness:
                 rule = dict(rule)
                 for key in ('at', 'after'):
                     if key in rule:
-                        rule[key] = self.T + 60 * rule[key]
+                        rule[key] = self.reference + 60 * rule[key]
                 rules.append(rule)
             self.mock_injection_file.write_text(json.dumps(rules))
             self.config['mockInjections'] = rules
@@ -404,7 +466,7 @@ class Harness:
         s = self.s
         env = {
             'POSTRIFF_DATABASE_URL': self.app_dsn,
-            'POSTRIFF_SUPABASE_URL': 'https://capacity-harness.supabase.invalid',
+            'POSTRIFF_SUPABASE_URL': 'https://capacity-harness-synthetic.supabase.co',  # shape only; DNS is fenced
             'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': 'sb_publishable_capacity_harness_synthetic_000',
             'POSTRIFF_SUPABASE_SECRET_KEY': 'sb_secret_capacity_harness_synthetic_000000',
             'POSTRIFF_CREDENTIAL_KEY': self.credential_key,
@@ -504,7 +566,7 @@ class Harness:
         posts = sum(len(d) for _, d in layout)
         hot = max((len(d) for _, d in layout), default=0)
         workers = max(1, min(s['seed_processes'], len(layout)))
-        estimate = 15 + (len(layout) * 0.45 + posts * 0.004) / workers + (hot ** 2) * 5e-6 + (hot * 0.01)
+        estimate = 15 + (len(layout) * 0.7 + posts * 0.01) / workers + (hot ** 2) * 5e-6 + (hot * 0.01)
         now = time.time()
         expiry_seam = s['expiry_in_minutes'] is not None
         lead = s['lead_seconds']
@@ -518,16 +580,18 @@ class Harness:
             clock_offset = (T - 300) - now
             self.first_cron_floor = first
         else:
-            T = math.ceil((now + estimate * 1.6 + lead) / 60) * 60
+            granularity = 60 if period >= 60 else period
+            T = math.ceil((now + estimate * 1.6 + lead) / granularity) * granularity
             clock_offset = 0.0
             self.first_cron_floor = None
         self.T = T
-        deadline = (self.first_cron_floor if expiry_seam else T) - max(10, lead * 0.3)
+        self.reference = self.first_cron_floor if expiry_seam else T
+        deadline = self.reference - max(10, lead * 0.3)
         plan = {'workspacesTotal': self.workspace_count(), 'runTag': self.dir.name, 'deadline': deadline,
                 'clockOffset': clock_offset,
                 'workspaces': [[index, [T + offset for offset in offsets]] for index, offsets in layout]}
         (self.dir / 'seed-plan.json').write_text(json.dumps(plan))
-        self.config.update(dueAt=T, dueAtIso=now_iso(T), seedEstimateSeconds=round(estimate, 1),
+        self.config.update(dueAt=T, dueAtIso=now_iso(T), referenceAt=self.reference, seedEstimateSeconds=round(estimate, 1),
                            seededWorkspaces=len(layout), seededPosts=posts, hotPosts=s['hot_posts'],
                            seedClockOffsetSeconds=clock_offset)
         self.log('seeding %d posts in %d workspaces with %d processes (estimate %.0f s); T = %s%s' % (
@@ -537,7 +601,7 @@ class Harness:
         processes = []
         for part in range(workers):
             out = self.dir / ('seed-%d.jsonl' % part)
-            argv = [sys.executable, '-I', '-B', str(SCRIPTS / 'discord_lane_cap_seed.py'),
+            argv = [sys.executable, '-I', '-B', str(self.scripts / 'discord_lane_cap_seed.py'),
                     '--source-tree', str(self.tree), '--admin-dsn', self.admin_dsn, '--env', str(self.env_seed),
                     '--plan', str(self.dir / 'seed-plan.json'), '--out', str(out), '--slice', '%d/%d' % (part, workers)]
             processes.append((self.start_child(argv, name='seed-%d' % part), out))
@@ -575,13 +639,13 @@ class Harness:
 
     def env_for(self, scheduled):
         flip = self.s['flag_off']
-        if flip and self.T + 60 * flip[0] <= scheduled < self.T + 60 * flip[1]:
+        if flip and self.reference + 60 * flip[0] <= scheduled < self.reference + 60 * flip[1]:
             return self.env_off
         return self.env_run
 
     def stalled(self, scheduled):
         stall = self.s['stall']
-        return bool(stall and self.T + 60 * stall[0] <= scheduled < self.T + 60 * stall[1])
+        return bool(stall and self.reference + 60 * stall[0] <= scheduled < self.reference + 60 * stall[1])
 
     def spawn(self, path, scheduled):
         name = '%d-%s' % (int(scheduled), path.strip('/').replace('/', '-'))
@@ -589,7 +653,7 @@ class Harness:
         env = dict(os.environ)
         env['PYTHONDONTWRITEBYTECODE'] = '1'
         env['CAP_SPAWNED_AT'] = repr(time.time())
-        argv = [sys.executable, '-I', '-B', str(SCRIPTS / 'discord_lane_cap_invoke.py'), '--source-tree', str(self.tree),
+        argv = [sys.executable, '-I', '-B', str(self.scripts / 'discord_lane_cap_invoke.py'), '--source-tree', str(self.tree),
                 '--path', path, '--env', str(self.env_for(scheduled)), '--mock-port', str(self.mock_port),
                 '--start-at', repr(scheduled), '--out', str(out)]
         if self.s['invocation_mode'] == 'warm':
@@ -658,7 +722,7 @@ class Harness:
         seen = 0
         while not self.stop.is_set():
             now = time.time()
-            if kills and now >= self.T + 60 * kills[0]:
+            if kills and now >= self.reference + 60 * kills[0]:
                 kills.pop(0)
                 candidates = [(n, i) for n, i in self.alive(lane_only=True) if now > i['scheduled']]
                 if candidates:
@@ -694,7 +758,7 @@ class Harness:
 
     def lock_injector(self):
         spec = self.s['lock_injection']
-        next_at = self.T + 60 * spec['start']
+        next_at = self.reference + 60 * spec['start']
         while not self.stop.is_set():
             if time.time() >= next_at:
                 next_at += spec['every']
@@ -753,6 +817,8 @@ class Harness:
                 except Exception:
                     pass
                 db = None
+            if self.args.pooler_admin_url:
+                sample['pgbouncer'] = self.pgbouncer_pools()
             try:
                 sample['pooler'] = json.loads((self.dir / 'pooler.json').read_text())
                 sample['pooler'] = {k: sample['pooler'].get(k) for k in ('clients', 'assigned', 'waiting', 'transactions', 'waitTimeouts')}
@@ -768,6 +834,25 @@ class Harness:
         handle.close()
         if db is not None:
             db.close()
+
+    def pgbouncer_pools(self):
+        """SHOW POOLS on a PgBouncer admin console (simple query protocol): client and server counts, longest wait."""
+        try:
+            import psycopg
+            if getattr(self, '_bouncer', None) is None or self._bouncer.closed:
+                self._bouncer = psycopg.connect(self.args.pooler_admin_url, autocommit=True, connect_timeout=5)
+            cur = psycopg.ClientCursor(self._bouncer)
+            cur.execute('SHOW POOLS')
+            names = [c.name for c in cur.description]
+            rows = [dict(zip(names, row)) for row in cur.fetchall()]
+            mine = [r for r in rows if r.get('database') == self.pool_database]
+            pick = lambda key: sum(int(r.get(key) or 0) for r in mine)
+            return {'clActive': pick('cl_active'), 'clWaiting': pick('cl_waiting'), 'svActive': pick('sv_active'),
+                    'svIdle': pick('sv_idle'), 'maxWait': max((float(r.get('maxwait') or 0) + float(r.get('maxwait_us') or 0) / 1e6
+                                                               for r in mine), default=0.0)}
+        except Exception as error:
+            self._bouncer = None
+            return {'error': type(error).__name__}
 
     def mock_stats(self):
         try:
@@ -790,20 +875,25 @@ class Harness:
             signature = (json.dumps(jobs, sort_keys=True), (stats or {}).get('counters', {}).get('requests'))
             if signature != last_signature:
                 last_signature, last_progress = signature, now
+            reference = self.reference
+            stall = s['stall']
+            if stall and now < reference + 60 * stall[1] + 60:
+                last_progress = now  # an intentional stall is not a lack of progress
             if s['fixed_run_minutes'] is not None:
-                if now >= self.T + 60 * s['fixed_run_minutes']:
+                if now >= reference + 60 * s['fixed_run_minutes']:
                     reason = 'fixed duration (%d min after T)' % s['fixed_run_minutes']
                 continue
-            if jobs and now > self.T + 30 and jobs['pending'] == 0:
+            if jobs and now > reference + 30 and jobs['pending'] == 0 and (
+                    not s['per_minute'] or now > reference + 60 * s['minutes']):
                 self.config['allTerminalAt'] = now
                 reason = 'every post terminal'
-            elif now > self.T + 60 * s['max_run_minutes']:
+            elif now > reference + 60 * s['max_run_minutes']:
                 reason = 'time limit (%d min after T)' % s['max_run_minutes']
-            elif now > self.T + 120 and now - last_progress > 60 * s['stall_detect_minutes']:
+            elif now > reference + 120 and now - last_progress > 60 * s['stall_detect_minutes']:
                 reason = 'no progress for %d min' % s['stall_detect_minutes']
             if int(now) % 60 < 5 and jobs:
                 self.log('T%+.1f min: %s; mock %s; alive %d; load %s' % (
-                    (now - self.T) / 60, json.dumps(jobs), json.dumps({k: (stats or {}).get('counters', {}).get(k) for k in (
+                    (now - reference) / 60, json.dumps(jobs), json.dumps({k: (stats or {}).get('counters', {}).get(k) for k in (
                         'requests', 'creates', 'readbacks', 'global429', 'route429', 'aboveGlobalBot')}),
                     len(self.alive()), load1()))
         self.config['endReason'] = reason
@@ -886,6 +976,8 @@ class Harness:
             self.config['mockCpuSeconds'] = mock_cpu
         except (OSError, ValueError, KeyError):
             pass
+        if getattr(self, 'bouncer_process', None) and self.bouncer_process.poll() is None:
+            self.bouncer_process.terminate()
         if getattr(self, 'pooler_process', None) and self.pooler_process.poll() is None:
             self.pooler_process.terminate()
             try:
@@ -910,6 +1002,11 @@ class Harness:
         if self.cluster is not None:
             self.cluster.close()
             self.cluster = None
+        if getattr(self, 'external_db', None) and not self.args.keep_database:
+            try:
+                cluster_tools.drop_database(self.args.admin_database_url, self.external_db)
+            except Exception as error:
+                self.log('could not drop %s: %s' % (self.external_db, error))
 
     # -- the run ------------------------------------------------------------------------------------------------
 
@@ -1035,6 +1132,9 @@ def overrides_from(args):
 
 def run_one(args, name):
     settings = settings_for(name, overrides_from(args))
+    if name == 'baseline' and getattr(args, 'baseline_source_tree', None):
+        args = copy.copy(args)
+        args.source_tree = args.baseline_source_tree
     if settings['policy_capacity'] != 25:
         settings['information_only'] = True
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
@@ -1088,6 +1188,11 @@ def main(argv=None):
         p.add_argument('--pg-bin', help='PostgreSQL server binaries (default POSTRIFF_PG_BIN)')
         p.add_argument('--admin-database-url', help='external database for setup, seeding and sampling (superuser)')
         p.add_argument('--database-url', help='external database URL the application uses (e.g. through a pooler)')
+        p.add_argument('--keep-database', action='store_true', help='external mode: keep the per-run database')
+        p.add_argument('--pooler-admin-url', help='PgBouncer admin console URL to sample SHOW POOLS each second')
+        p.add_argument('--pooler', choices=('harness', 'pgbouncer'), default='harness',
+                       help='local cluster only: the harness transaction pooler (default) or a real PgBouncer')
+        p.add_argument('--pgbouncer-bin', default='/usr/sbin/pgbouncer')
         for name, kind in (('workspaces', int), ('posts', int), ('hot-posts', int), ('lane-max-seconds', float),
                            ('lane-max-steps', int), ('shards', int), ('policy-capacity', int), ('mock-latency', str),
                            ('mock-tail-probability', float), ('mock-tail-ms', float), ('mock-read-limit', str),
@@ -1107,6 +1212,7 @@ def main(argv=None):
     profile = sub.add_parser('profile', help='run a list of scenarios and write SUITE-<name>.md')
     profile.add_argument('--name', required=True, choices=sorted(PROFILES))
     profile.add_argument('--only', help='comma-separated subset of the profile')
+    profile.add_argument('--baseline-source-tree', help='the frozen tree for the baseline scenario (RC1)')
     common(profile)
     again = sub.add_parser('analyze', help='recompute result.json and RECEIPT.md for a finished run directory')
     again.add_argument('run_dir')
