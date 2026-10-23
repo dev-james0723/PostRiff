@@ -711,6 +711,20 @@ class Outlook(unittest.TestCase):
         self.rows = [self.row(policy, 'policy', remaining=0, reset=self.now - 1)]
         self.assertEqual(lane.outlook(self.worker), (None, 0.0), 'a past window refills on the next reservation')
 
+    def test_a_spent_invalid_request_budget_is_a_wait_like_a_spent_window(self):
+        # The coordinator refuses on any capped row with nothing left (rate_limits._reserve), not only the policy row.
+        invalid = self.keys()[3]
+        self.rows = [self.row(invalid, 'invalid', remaining=0, reset=self.now + 42)]
+        self.assertEqual(lane.outlook(self.worker), (None, 42.0))
+        for remaining, reset in ((1, self.now + 42), (0, self.now - 1), (0, None)):
+            with self.subTest(remaining=remaining, reset=reset):
+                self.rows = [self.row(invalid, 'invalid', remaining=remaining, reset=reset)]
+                self.assertEqual(lane.outlook(self.worker), (None, 0.0))
+        for index, kind in ((1, 'global'), (2, 'credential')):
+            with self.subTest(kind=kind):  # uncapped rows: their remaining is NULL, only embargoes count
+                self.rows = [self.row(self.keys()[index], kind, remaining=None, reset=self.now + 42)]
+                self.assertEqual(lane.outlook(self.worker), (None, 0.0))
+
     def test_an_expired_policy_or_missing_coordinator_stops_the_loop(self):
         self.now = self.provider.rate_limiter.policy.expires_at + 1
         self.assertEqual(lane.outlook(self.worker)[0], 'coordinator_unavailable')

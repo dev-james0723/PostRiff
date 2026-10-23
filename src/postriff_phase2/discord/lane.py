@@ -234,7 +234,9 @@ def outlook(lane):
             # The runbook's kill switch is the policy row; the coordinator itself holds the credential row after a 401.
             return ('operator_hold' if kind == 'policy' else 'coordinator_hold'), 0.0
         wait = max(wait, (blocked or 0) - now, (circuit or 0) - now)
-        if kind == 'policy' and remaining is not None and remaining <= 0 and reset is not None:
+        # Like the coordinator's _reserve: every capped row with nothing left refuses until its reset, the application
+        # policy and the invalid-request budget alike (remaining is NULL exactly on the uncapped rows; migration 124).
+        if remaining is not None and remaining <= 0 and reset is not None:
             wait = max(wait, reset - now)
     return None, wait
 

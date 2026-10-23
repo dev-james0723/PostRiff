@@ -404,6 +404,71 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.embargo_run(tick)
         self.assertGreaterEqual(claims['tick'], 20, 'without the lane\'s wait, the loops claim and release nearly every due post')
 
+    # (h) the invalid-request budget --------------------------------------------------------------------------------
+
+    def spent_invalid_budget(self, reset_in=40):
+        """Six due posts (three whose approvals lapse in 20 s) and the coordinator's invalid-request row spent until
+        `reset_in` seconds from now with no embargo on it (as after an embargo lifted by hand): the coordinator refuses
+        every request until the reset (rate_limits._reserve: any capped row with nothing left)."""
+        tenants = [F.Tenant(n) for n in range(6)]
+        at = self.cluster.now() + 20 - 3600
+        F.seed(self.cluster, tenants[:3], 1, now=at - 300, at=at)
+        F.seed(self.cluster, tenants[3:], 1)
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
+        self.worker = F.base_worker(self.cluster, self.hosted)
+        self.admissions('reserve_read', 1)  # the coordinator's rows exist once any request was admitted
+        with self.cluster.connect(autocommit=True) as db:
+            db.execute("UPDATE public.pr_discord_rate_state SET remaining=0, blocked_until=NULL, "
+                       "reset_at=clock_timestamp()+make_interval(secs=>%s) WHERE kind='invalid'", (reset_in,))
+        return self.worker
+
+    def test_a_spent_invalid_request_budget_is_waited_out_without_claiming(self):
+        worker = self.spent_invalid_budget()
+        before = self.revisions()
+        results, failures = F.run_lanes(worker, 4, seconds=10)
+        self.assertEqual(failures, [])
+        self.assertEqual({r['stoppedBy'] for r in results}, {'rate_wait'})
+        for counter in ('claimed', 'rateDelayed', 'held', 'steps'):
+            self.assertEqual(sum(r['counters'][counter] for r in results), 0, counter)
+        self.assertEqual(self.revisions(), before, 'no workspace was claimed, released or written')
+        self.assertEqual(self.wire.calls, [])
+        found = F.jobs(self.cluster).values()
+        self.assertEqual({job['state'] for job in found}, {'scheduled'}, 'nothing held early')
+        self.assertFalse([job for job in found if job.get('attempts') or job.get('discordWorker')])
+
+    def test_control_the_existing_loop_churns_through_the_same_spent_budget(self):
+        worker = self.spent_invalid_budget()
+        before = self.revisions()
+        with F.no_billing():
+            worker.tick_discord(10, 10)
+        self.assertEqual(worker.discord_stats['rateDelays'], 6, 'every due post claimed, refused and released')
+        self.assertGreater(self.revisions(), before)
+        found = list(F.jobs(self.cluster).values())
+        held = [job for job in found if job['state'] == 'held']
+        self.assertEqual(len(held), 3, 'the posts whose approval ends before the reset are held at once')
+        self.assertTrue(all(job['discordWorker']['releaseReason'] == 'rate_delayed' for job in found))
+        self.assertEqual(self.wire.calls, [], 'the coordinator refused before any request left')
+
+    def test_the_coordinator_embargoes_an_invalid_budget_it_spends_itself_and_the_lane_waits(self):
+        """Recorded: when an invalid response spends the budget, the coordinator also sets blocked_until to the
+        window's reset, so the lane's embargo read already covered that path; the capped-row rule covers the rest."""
+        self.wire = F.MockDiscord([F.Tenant(0)])
+        self.hosted = F.social(self.cluster, [F.Tenant(0)], self.wire, invalid_capacity=1)
+        limiter, identity = self.hosted.providers['discord'].rate_limiter, self.hosted.providers['discord']._rate_identity('bot')
+        limiter.observe(limiter.reserve_read('GET', '/guilds/6900000', identity=identity), {'status': 403, 'headers': {}})
+        with self.cluster.connect(autocommit=True) as db:
+            remaining, embargo, reset = db.execute(
+                "SELECT remaining, extract(epoch from blocked_until-clock_timestamp()), "
+                "extract(epoch from reset_at-clock_timestamp()) FROM public.pr_discord_rate_state "
+                "WHERE kind='invalid'").fetchone()
+        self.assertEqual(remaining, 0)
+        self.assertAlmostEqual(float(embargo), float(reset), places=3)
+        self.assertGreater(float(reset), 590)
+        blocker, wait = F.discord_lane.outlook(F.discord_lane.LaneWorker(F.base_worker(self.cluster, self.hosted), 0))
+        self.assertIsNone(blocker)
+        self.assertGreater(wait, 590)
+
     # (g) database connections -------------------------------------------------------------------------------------
 
     def test_each_loop_holds_one_database_connection_at_a_time(self):

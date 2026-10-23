@@ -70,8 +70,9 @@ time [simulated]. It adds a new path that can multiply invocations, which the co
    - read the coordinator's four application-wide rows without locks (policy, bot global, bot credential, invalid
      budget), using the coordinator's own key derivation. A manual hold on the policy row stops the loop
      (`operator_hold`); a hold on another of them (the coordinator holds the credential row after a 401) stops it too
-     (`coordinator_hold`); an active block, circuit or spent window is slept out (with jitter) before claiming, or ends
-     the loop if it outlasts the budget (`rate_wait`);
+     (`coordinator_hold`); an active block or circuit on any of them, or a capped row with nothing left until its reset
+     (the application window or the invalid-request budget: the coordinator refuses on either), is slept out (with
+     jitter) before claiming, or ends the loop if it outlasts the budget (`rate_wait`);
    - one existing Discord-only step (`PostgresWorker.step(discord_only=True)`): claim one job from the least recently
      served due workspace (`FOR UPDATE ... SKIP LOCKED`, at most one live Discord lease per workspace), the permission
      preflight, lease renewal, the create permit, the sealed intent, the create, the fenced completion; or a read-back;
@@ -129,6 +130,7 @@ lane loops in healthy processes send the rest [reasoned].
 | An approval that expires while its post waits is held, never sent late | approval rechecked at claim, seal and the final pre-send guard; a lease never outlives the approval | `test_a_post_whose_approval_expires_while_waiting_is_held_and_never_sent_late` |
 | Operator hold stops the lane within one iteration | pre-claim read of `manual_hold` | `test_an_operator_hold_stops_every_loop_within_one_iteration`, `test_a_hold_set_before_the_minute_starts_claims_nothing`, with a control that the old loop claims and postpones every post under the same hold |
 | A global 429 pauses every loop without a retry storm, and the denied post is not failed | embargo read before each claim; rate waits never count as attempts | `test_a_global_429_pauses_every_loop_without_a_retry_storm`, `test_a_global_429_makes_each_loop_sleep_instead_of_claiming`, with a control that the old loop claims and releases every post |
+| A spent invalid-request budget pauses every loop without claiming, and nothing is held early | pre-claim read applies the coordinator's rule to every capped row; when the coordinator spends that budget itself it also sets `blocked_until` to the reset, which the read already honoured | `test_a_spent_invalid_request_budget_is_waited_out_without_claiming`, with a control that the old loop claims, releases and holds every due post; `test_the_coordinator_embargoes_an_invalid_budget_it_spends_itself_and_the_lane_waits` |
 | One database connection per loop at a time | sequential transactions, none held across HTTP | `test_each_loop_holds_one_database_connection_at_a_time` |
 | The last step ends inside the function limit | admission deadline, capped budget | offline `test_no_budget_can_outlast_the_function_limit_with_one_step_in_flight`, `test_no_step_starts_after_the_budget_...` |
 | Flag off, or on with the lane unable to run, is the frozen behaviour | flag read as the exact string; one readiness test (`lane.blocker`) for the tick and the lane; equivalence with `2a5a523d` | offline `FlagOffIsTheFrozenBase`, `LaneReadiness`, `ExistingTick` |
