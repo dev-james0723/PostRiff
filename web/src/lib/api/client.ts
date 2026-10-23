@@ -93,12 +93,11 @@ export class ApiError extends Error {
   requestId?: string;
   /** What the person can do next, when the server says (e.g. `complete_mfa` / `enroll_mfa` on a security step-up). */
   nextAction?: string;
-  /** A stable machine reason when the server names one (Discord sender names: `bot_lacks_change_nickname`, ...). Never parsed from `message`. */
-  reason?: string;
-  /** Epoch seconds when a held operation can be checked again (Discord sender names, `discord_sender_edit_pending`). */
-  retryAt?: number;
-  /** Which rule a refused value broke (Discord sender names: `reserved_word`, ...). */
-  issue?: string;
+  /**
+   * The whole JSON error body when it is an object, for the fields a screen reads by name (Discord sender names:
+   * `reason`, `reasons`, `retryAfterSeconds`). `message` stays the English diagnostic; branch on `code` and these.
+   */
+  body?: Record<string, unknown>;
   constructor(message: string, status: number, code?: string, requestId?: string) {
     super(message);
     this.name = 'ApiError';
@@ -124,26 +123,20 @@ async function parse<T>(res: Response): Promise<T> {
     let message = 'The workspace could not complete that request.';
     let code: string | undefined;
     let nextAction: string | undefined;
-    let reason: string | undefined;
-    let retryAt: number | undefined;
-    let issue: string | undefined;
+    let fields: Record<string, unknown> | undefined;
     try {
-      const body = (await res.json()) as { error?: unknown; code?: unknown; nextAction?: unknown; reason?: unknown; retryAt?: unknown; issue?: unknown };
+      const body = (await res.json()) as { error?: unknown; code?: unknown; nextAction?: unknown };
       if (typeof body?.error === 'string' && body.error) message = body.error;
       if (typeof body?.code === 'string') code = body.code;
       if (typeof body?.nextAction === 'string') nextAction = body.nextAction;
-      if (typeof body?.reason === 'string') reason = body.reason;
-      if (typeof body?.retryAt === 'number' && Number.isFinite(body.retryAt)) retryAt = body.retryAt;
-      if (typeof body?.issue === 'string') issue = body.issue;
+      if (body && typeof body === 'object' && !Array.isArray(body)) fields = body as Record<string, unknown>;
     } catch {
       /* keep the generic message */
     }
     const requestId = res.headers.get('X-Request-ID') ?? undefined;
     const error = new ApiError(message, res.status, code, requestId && /^[a-f0-9]{32}$/.test(requestId) ? requestId : undefined);
     if (nextAction) error.nextAction = nextAction;
-    if (reason) error.reason = reason;
-    if (retryAt !== undefined) error.retryAt = retryAt;
-    if (issue) error.issue = issue;
+    if (fields) error.body = fields;
     throw error;
   }
   if (res.status === 204) return undefined as T;

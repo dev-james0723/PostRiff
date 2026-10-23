@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,25 +21,27 @@ import { keys } from '@/lib/api/hooks';
 import { discordCopy } from '@/lib/channels/discord-copy';
 import {
   SENDER_LIMIT,
-  SENDER_NAME_ISSUES,
   canCheckAgain,
   checkSenderName,
-  classifySenderModes,
+  classifySenderFeature,
   classifySenderProfile,
   classifySenderRefusal,
+  formatRetryTime,
+  isSenderNameIssue,
+  type BlockedState,
+  type SenderFeature,
   type SenderKind,
-  type SenderNameIssue,
-  type SenderState
+  type SenderReason,
+  type SenderRefusal
 } from '@/lib/channels/discord-sender-name';
-import { fillCount, senderIssueMessage, type BlockedStateKey } from '@/lib/channels/discord-sender-state-copy';
+import { fillCount, senderIssueMessage } from '@/lib/channels/discord-sender-state-copy';
 import { usePreferences } from '@/lib/preferences';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN } from './rafii-materials';
-import { DiscordMessagePreview } from './discord-message-preview';
+import { DiscordMessagePreview, type PreviewNameSource } from './discord-message-preview';
 import { SenderStatePanel } from './discord-sender-state-panel';
 
-type Blocked = SenderState & { key: BlockedStateKey };
 type Origin = 'open' | 'check' | 'save';
 
 /**
@@ -49,14 +51,49 @@ type Origin = 'open' | 'check' | 'save';
 const ARIA_DISABLED = 'aria-disabled:cursor-not-allowed aria-disabled:opacity-60';
 
 const describedBy = (...ids: (string | false | null | undefined)[]) => ids.filter(Boolean).join(' ') || undefined;
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** The fields of a failed request that the sender-name states are chosen from. A network failure has no status. */
+function refusalOf(cause: unknown): SenderRefusal {
+  if (!(cause instanceof ApiError)) return {};
+  const body = cause.body ?? {};
+  const reasons = Array.isArray(body.reasons)
+    ? body.reasons.filter(isRecord).map((reason): SenderReason => ({
+        code: String(reason.code),
+        ...(typeof reason.retryAfterSeconds === 'number' ? { retryAfterSeconds: reason.retryAfterSeconds } : {})
+      }))
+    : undefined;
+  return {
+    status: cause.status,
+    code: cause.code,
+    reasons,
+    retryAfterSeconds: typeof body.retryAfterSeconds === 'number' ? body.retryAfterSeconds : undefined,
+    message: cause.message
+  };
+}
+
+/** Where the shown name came from, as the preview words it. */
+function previewSource(profile: DiscordSenderProfile | null, dirty: boolean): PreviewNameSource {
+  if (dirty) return 'draft';
+  switch (profile?.nameSource) {
+    case 'saved_override':
+      return 'saved';
+    case 'webhook_default':
+      return 'webhook_default';
+    case 'observed_nickname':
+      return 'observed';
+    case 'bot_username':
+      return 'bot_username';
+    case 'none':
+      return 'unknown';
+    default:
+      return profile?.senderKind === 'bot' ? 'observed' : 'saved';
+  }
+}
 
 export function DiscordSenderNameControl({ channel, provider }: { channel: ChannelView; provider?: ProviderView }) {
   const { workspaceId } = useWorkspaceApi();
   return <SenderNameEditor key={`${workspaceId}:${channel.id}`} channel={channel} provider={provider} />;
-}
-
-function isBlocked(state: SenderState): state is Blocked {
-  return state.key !== 'ready';
 }
 
 function SenderNameEditor({ channel, provider }: { channel: ChannelView; provider?: ProviderView }) {
@@ -73,24 +110,33 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<null | 'loading' | 'saving'>(null);
   const [profile, setProfile] = useState<DiscordSenderProfile | null>(null);
-  const [problem, setProblem] = useState<Blocked | null>(null);
+  const [problems, setProblems] = useState<BlockedState[]>([]);
   const [origin, setOrigin] = useState<Origin>('open');
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [shared, setShared] = useState(false);
   const [saved, setSaved] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [clock, setClock] = useState(() => Date.now());
   const [focusRequest, setFocusRequest] = useState<{ target: 'name' | 'panel'; serial: number } | null>(null);
 
-  const kind: SenderKind = profile?.senderKind ?? (channel.discordConnectionKind === 'webhook' ? 'webhook' : 'bot');
+  const connectionKind: SenderKind = channel.discordConnectionKind === 'webhook' ? 'webhook' : 'bot';
+  const kind: SenderKind = profile?.senderKind ?? connectionKind;
+  // The server's two global switches: from the provider view when it carries them, else what an earlier read in this
+  // page session learned (shared by every card). They only add a line under the button; the dialog always asks.
+  const switchesKey = ['discord-sender-switches', workspaceId] as const;
+  const learned = useQuery({ queryKey: switchesKey, queryFn: () => null as SenderFeature | null, enabled: false, staleTime: Infinity, gcTime: Infinity }).data ?? null;
+  const switchedOff = classifySenderFeature(provider?.discordSenderNames ?? learned, connectionKind);
   const isBot = kind === 'bot';
-  const switchedOff = classifySenderModes(provider?.discordSenderNames, kind);
-  const limit = profile?.maxLength ?? SENDER_LIMIT[kind];
-  const check = checkSenderName(name, kind, limit);
+  const limit = profile?.rules?.maxLength ?? profile?.maxLength ?? SENDER_LIMIT[kind];
+  const check = checkSenderName(name, kind, { limit, forbidden: profile?.rules?.forbiddenCharacters });
   const dirty = profile !== null && name !== profile.name;
   const showIssues = dirty && check.issues.length > 0;
-  const editable = profile !== null && problem === null;
+  const editable = profile !== null && problems.length === 0;
+  const primary = problems[0] ?? null;
   const guild = channel.discordDestinations?.find((destination) => destination.guildId === profile?.guildId)?.guildName;
+  const waiting = primary?.retryAtMs != null && primary.retryAtMs > clock;
+  const observedTime = profile?.observedAt != null ? formatRetryTime(profile.observedAt * 1000, locale, timeZone) : null;
 
   // Why Save cannot be used right now, in the order a person would fix it. null means it can be used.
   const saveWhy: string | null =
@@ -98,7 +144,7 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
       ? copy.senderSaving
       : busy === 'loading'
         ? copy.senderSaveWhyLoading
-        : problem !== null
+        : problems.length > 0
           ? copy.senderSaveWhyBlocked
           : profile === null
             ? copy.senderSaveWhyLoading
@@ -125,43 +171,44 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
     return () => cancelAnimationFrame(frame);
   }, [focusRequest, open]);
 
+  // A held change or a throttle names a time; "Check again" wakes up at it.
+  useEffect(() => {
+    const at = primary?.retryAtMs;
+    if (at == null || at <= clock) return;
+    const timer = window.setTimeout(() => setClock(Date.now()), Math.min(at - clock + 50, 2_147_000_000));
+    return () => window.clearTimeout(timer);
+  }, [primary?.retryAtMs, clock]);
+
   function focusOn(target: 'name' | 'panel') {
     setFocusRequest((current) => ({ target, serial: (current?.serial ?? 0) + 1 }));
   }
 
   function apply(next: DiscordSenderProfile, from: Origin) {
-    const state = classifySenderProfile(next);
+    const now = Date.now();
+    const blocked = classifySenderProfile(next, now);
+    if (next.feature) client.setQueryData(switchesKey, next.feature);
     setProfile(next);
-    setName(next.name);
+    setName(next.name ?? '');
     setShared(false);
     setOrigin(from);
-    setCheckedAt(Date.now());
-    if (isBlocked(state)) {
-      setProblem(state);
-      focusOn('panel');
-    } else {
-      setProblem(null);
-      if (from !== 'save') focusOn('name');
-    }
+    setCheckedAt(now);
+    setClock(now);
+    setProblems(blocked);
+    if (blocked.length > 0) focusOn('panel');
+    else if (from !== 'save') focusOn('name');
   }
 
   function explain(cause: unknown, from: Origin) {
-    const known = cause instanceof ApiError ? cause : null;
     reportStepUp(cause);
-    const state = classifySenderRefusal({
-      status: known?.status,
-      code: known?.code,
-      reason: known?.reason,
-      retryAt: known?.retryAt,
-      message: known?.message
-    });
+    const now = Date.now();
     // Anything that may have reached Discord ends the form: the person reloads (a read) and decides again.
     setProfile(null);
     setName('');
     setShared(false);
     setOrigin(from);
-    setCheckedAt(from === 'save' ? null : Date.now());
-    setProblem(isBlocked(state) ? state : { ...state, key: 'failed' });
+    setCheckedAt(from === 'save' ? null : now);
+    setClock(now);
+    setProblems(classifySenderRefusal(refusalOf(cause), now));
     focusOn('panel');
   }
 
@@ -189,17 +236,7 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
     setProfile(null);
     setName('');
     setShared(false);
-    if (switchedOff && isBlocked(switchedOff)) {
-      // The platform already said no for this kind of connection: explain without asking Discord anything.
-      request.current++;
-      setBusy(null);
-      setOrigin('open');
-      setCheckedAt(null);
-      setProblem(switchedOff);
-      focusOn('panel');
-      return;
-    }
-    setProblem(null);
+    setProblems([]);
     void load('open');
   }
 
@@ -227,8 +264,12 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
       if (current !== request.current) return;
       if (cause instanceof ApiError && cause.status === 400) {
         // Refused before anything was sent to Discord: the fingerprint is still good, so the form stays for a fix.
-        const issue = SENDER_NAME_ISSUES.find((candidate: SenderNameIssue) => candidate === cause.issue);
-        setRefusal(issue ? senderIssueMessage(copy, issue, check) : fillCount(copy.senderIssueSummary, { limit }));
+        const reason = cause.body?.reason;
+        setRefusal(
+          cause.code === 'discord_sender_name_invalid' && isSenderNameIssue(reason)
+            ? senderIssueMessage(copy, reason, check)
+            : fillCount(copy.senderIssueSummary, { limit })
+        );
         focusOn('name');
       } else {
         explain(cause, 'save');
@@ -249,7 +290,7 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
     request.current++;
     setOpen(false);
     setProfile(null);
-    setProblem(null);
+    setProblems([]);
     setRefusal(null);
     setSaved(false);
     setBusy(null);
@@ -263,44 +304,50 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
   const refusalId = `${id}-refusal`;
   const whyId = `${id}-why`;
   const formId = `${id}-form`;
-  const hintId = `${id}-card-hint`;
-  const rereadLabel = problem?.key === 'stale' || problem?.key === 'failed' ? copy.senderReload : copy.senderCheckAgain;
+  const rereadLabel = primary?.key === 'stale' || primary?.key === 'failed' ? copy.senderReload : copy.senderCheckAgain;
   // A failed action is an alert; a state found when the editor opened rides in the persistent live region.
-  const asAlert = problem !== null && (origin === 'save' || problem.key === 'failed');
-  const panel = problem && (
+  const asAlert = problems.length > 0 && (origin === 'save' || problems.some((problem) => problem.key === 'failed'));
+  const panels = problems.map((problem, index) => (
     <SenderStatePanel
+      key={problem.key}
       state={problem}
+      kind={kind}
       copy={copy}
       locale={locale}
       timeZone={timeZone}
-      id={panelId}
+      nowMs={clock}
+      id={`${panelId}-${index}`}
       role={asAlert ? 'alert' : undefined}
-      headingRef={headingRef}
-      checkedAtMs={origin === 'save' ? null : checkedAt}
+      headingRef={index === 0 ? headingRef : undefined}
+      checkedAtMs={origin === 'save' || index > 0 ? null : checkedAt}
       actions={
-        <>
-          {problem.signInAgain && (
-            <Button type='button' variant='glass' className={CONTROL_44} onClick={() => void signInAgain()}>
-              {copy.senderSignInAgain}
-            </Button>
-          )}
-          {canCheckAgain(problem.key) && (
-            <Button
-              type='button'
-              variant='glass'
-              className={cn(CONTROL_44, ARIA_DISABLED)}
-              aria-disabled={busy !== null}
-              onClick={() => {
-                if (busy === null) void load('check');
-              }}
-            >
-              {rereadLabel}
-            </Button>
-          )}
-        </>
+        index > 0 ? undefined : (
+          <>
+            {problem.signInAgain && (
+              <Button type='button' variant='glass' className={CONTROL_44} onClick={() => void signInAgain()}>
+                {copy.senderSignInAgain}
+              </Button>
+            )}
+            {canCheckAgain(problem.key) && (
+              <Button
+                type='button'
+                variant='glass'
+                className={cn(CONTROL_44, ARIA_DISABLED)}
+                aria-disabled={busy !== null || waiting}
+                aria-describedby={waiting ? `${panelId}-0-recheck` : undefined}
+                data-sender-check-again
+                onClick={() => {
+                  if (busy === null && !waiting) void load('check');
+                }}
+              >
+                {rereadLabel}
+              </Button>
+            )}
+          </>
+        )
       }
     />
-  );
+  ));
 
   return (
     <>
@@ -309,7 +356,7 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
         className={CONTROL_44}
         aria-label={`${copy.senderEdit} · ${channel.account}`}
         aria-haspopup='dialog'
-        aria-describedby={switchedOff ? hintId : undefined}
+        aria-describedby={switchedOff ? `${id}-card-hint` : undefined}
         data-discord-sender-edit
         data-availability={switchedOff?.key ?? 'unknown'}
         onClick={show}
@@ -317,7 +364,7 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
         {copy.senderEdit}
       </Button>
       {switchedOff && (
-        <span id={hintId} className='text-muted-foreground basis-full text-xs' data-discord-sender-edit-hint>
+        <span id={`${id}-card-hint`} className='text-muted-foreground basis-full text-xs' data-discord-sender-edit-hint>
           {copy.senderCardOff}
         </span>
       )}
@@ -331,6 +378,7 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
       >
         <DialogContent
           showCloseButton={false}
+          data-testid='discord-sender-dialog'
           className={cn(DIALOG_ELEVATED, 'max-h-[calc(100dvh-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-lg')}
         >
           <DialogHeader>
@@ -344,9 +392,9 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
               {busy === 'loading' && <p className='text-muted-foreground text-sm'>{copy.senderChecking}</p>}
               {busy === 'saving' && <p className='text-muted-foreground text-sm'>{copy.senderSaving}</p>}
               {saved && !busy && <p className='text-sm'>{copy.senderSaved}</p>}
-              {!asAlert && panel}
+              {!asAlert && panels}
             </div>
-            {asAlert && panel}
+            {asAlert && panels}
             {profile && (
               <>
                 <div className='flex min-w-0 flex-col gap-1' id={scopeId}>
@@ -357,17 +405,28 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
                   <p className='text-muted-foreground text-sm [overflow-wrap:anywhere]'>
                     {copy.serverLabel}: {guild ? `${guild} (${profile.guildId})` : profile.guildId}
                   </p>
+                  {observedTime && (
+                    <p className='text-muted-foreground text-xs' data-sender-observed-at>
+                      {copy.senderCheckedAt.replace('{time}', observedTime)}
+                    </p>
+                  )}
                 </div>
+                {isBot && profile.externalChange && profile.observedName && (
+                  <p className='rounded-lg border p-3 text-sm [overflow-wrap:anywhere]' data-sender-external-change>
+                    {copy.senderExternalChange.replace('{name}', profile.observedName)}
+                  </p>
+                )}
                 <div className='flex min-w-0 flex-col gap-2'>
                   <Label htmlFor={`${id}-name`}>{copy.senderNameLabel}</Label>
                   <Input
                     id={`${id}-name`}
                     ref={nameRef}
                     value={name}
+                    placeholder={editable ? undefined : copy.senderNameNotKnown}
                     readOnly={!editable || busy !== null}
                     aria-readonly={!editable || busy !== null}
                     aria-invalid={showIssues || refusal !== null}
-                    aria-describedby={describedBy(scopeId, rulesId, countId, showIssues && issuesId, refusal !== null && refusalId, problem !== null && `${panelId}-body`)}
+                    aria-describedby={describedBy(scopeId, editable && rulesId, countId, showIssues && issuesId, refusal !== null && refusalId, problems.length > 0 && `${panelId}-0-body`)}
                     autoComplete='off'
                     autoCapitalize='off'
                     spellCheck={false}
@@ -379,10 +438,15 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
                       setRefusal(null);
                     }}
                   />
-                  <div id={rulesId} className='text-muted-foreground flex flex-col gap-0.5 text-xs' data-sender-rules>
-                    <p>{copy.senderNameLimit.replace('{limit}', String(limit))}</p>
-                    {!isBot && <p>{copy.senderRuleWebhookReserved}</p>}
-                  </div>
+                  {editable && (
+                    <ul id={rulesId} className='text-muted-foreground flex list-disc flex-col gap-0.5 pl-5 text-xs' data-sender-rules>
+                      <li>{copy.senderRuleLength.replace('{limit}', String(limit))}</li>
+                      <li>{copy.senderRuleSpaces}</li>
+                      <li>{copy.senderRuleForbidden}</li>
+                      <li>{copy.senderRuleUrl}</li>
+                      <li>{copy.senderRuleReserved}</li>
+                    </ul>
+                  )}
                   {editable ? (
                     <p
                       id={countId}
@@ -418,8 +482,11 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
                 </div>
                 <DiscordMessagePreview
                   kind={kind}
-                  name={name}
-                  nameSource={dirty ? 'draft' : isBot ? 'observed' : 'saved'}
+                  name={dirty ? name : profile.effectiveName ?? (profile.name || null)}
+                  nameSource={previewSource(profile, dirty)}
+                  badge={profile.preview?.badge}
+                  queuedKeepsName={profile.preview?.queuedPostsKeepApprovedName}
+                  queuedFollowsNickname={profile.preview?.queuedPostsFollowCurrentNickname}
                   copy={copy}
                   locale={locale}
                   timeZone={timeZone}
@@ -433,9 +500,10 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
                       className='mt-1 size-4 shrink-0'
                       checked={shared}
                       disabled={busy !== null}
+                      aria-labelledby={`${id}-shared`}
                       onChange={(event) => setShared(event.target.checked)}
                     />
-                    {copy.senderSharedConfirm}
+                    <span id={`${id}-shared`}>{copy.senderSharedConfirm}</span>
                   </label>
                 )}
               </>

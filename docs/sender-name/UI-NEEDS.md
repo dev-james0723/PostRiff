@@ -1,125 +1,54 @@
-# Customer Discord sender names: what the web UI needs from the backend
+# Customer Discord sender names: what the web UI needs from the backend, and how contract v2 answered it
 
 Author: web/UI engineer. Branch `claude/discord-rc2-sendername-ui-20261023`, based on the RC2 integration line `5a94b4f2` (contains upstream sender-name commit `97b3956a`).
 
-Status: written before the backend contract (`docs/sender-name/UI-API-CONTRACT.md` on `claude/discord-rc2-sendername-20261023`) existed. Nothing below is agreed yet. The UI is built so that every item is optional: when a field or code is missing it falls back to the coarse behaviour in section 6 and says so honestly (it never invents a reason). When the contract lands, section 8 is replaced by a reconciliation table (UI name, backend name, status).
+History: the first version of this file (commit `f79f2f25`) was written before the backend contract existed. The backend agent then published `docs/sender-name/UI-API-CONTRACT.md` (v2) on `claude/discord-rc2-sendername-20261023`; this file was read against it at that branch's head `1c61a4a7` and rewritten. The UI is built against v2. Read the contract at the branch head, not here, for anything the backend may have corrected since.
 
-The owner's decision this serves (verbatim intent): users set the name, preview what Discord really shows, and are told clearly when the bot nickname cannot be changed. Webhook names are per send and come first. If the bot nickname cannot be made safe across workspaces it is isolated by a switch, and the UI must show that state honestly (not a broken form).
+What the owner's decision asks of the UI: users set the name, preview what Discord really shows, and are told clearly (and without error styling) when the bot nickname cannot be changed and why. Webhook names are per send. The bot nickname is shared by everyone who uses the bot in a server; if it cannot be made safe across workspaces it is isolated by a switch, and the UI shows that state honestly.
 
-## 1. What the UI already reads and needs no change
+## 1. How each original need was answered
 
-| Where | Field | Used for |
+| Original need | Contract v2 | What the UI does with it |
 | --- | --- | --- |
-| `GET/POST /channels/{id}/discord-sender-name` | `connectionId, senderKind ('bot'|'webhook'), scope, guildId, name, maxLength (80 or 32), fingerprint, state` | editor, limit, stale-save guard |
-| `ChannelView` (`GET /channels`) | `discordConnectionKind`, `discordSenderName` (webhook only today) | card line, schedule and review preview |
-| `Manifest` | `senderKind`, `discordSenderName` (frozen webhook name) | review preview |
-| `RunItemDecision` | `discordSenderName` | automation history |
-| Errors | `ApiError.status`, `ApiError.code`, `ApiError.message`, `nextAction` | recovery |
+| Refusals the UI can tell apart (the old code `discord_sender_name_required` covered everything) | `unavailable[].code` on a GET, `reasons[].code` on a refused POST, `reason` on a 400, distinct `code` per other case | One state per code, each with its own message in English, Traditional Chinese and Simplified Chinese and a stable test id `discord-sender-state-<code>`. 15 states, listed in `UI-ACCEPTANCE.md`. |
+| Say whether editing is possible on the GET | `editable`, `unavailable[]` (server-ordered, may hold several) | Read-only view: name shown, field read-only, Save `aria-disabled` with its reason, one panel per listed reason in the server's order. No retry, no polling. |
+| When a held change can be checked again | `retryAfterSeconds` on `edit_pending` and `rate_limited` | Shown as a wait and a clock time; "Check again" stays `aria-disabled` until then and wakes up by itself. |
+| Stale save | 409 `discord_sender_name_required` (the only stale code) | `stale` state, Reload (a read), the next save uses the new fingerprint. |
+| Name rules, the same messages as the server | `rules`, 400 `discord_sender_name_invalid` + `reason` | The browser applies the same ten rules in the server's order before saving (shared fixture, section 4); one message per rule; the server's `reason` is shown if it disagrees. |
+| Preview facts | `preview.badge`, `audience`, `queuedPostsKeepApprovedName`, `queuedPostsFollowCurrentNickname`, `nameSource`, `observedName`, `observedAt`, `externalChange` | Badge text, which note is drawn, "as last checked" wording, a notice when someone else renamed the bot ("Rafii does not own this name"). |
+| Bot nickname in the channel view | not provided | Still needed, see 2.2. |
+| Switches before opening the dialog | only `feature` in the GET body | Still needed, see 2.1. |
 
-Existing codes the UI already understands: `discord_sender_edit_pending` (ambiguous write), `step_up_required` and `security_step_up_required` (fresh session), `discord_sender_name_required` (everything else).
+Fields the UI reads and needs no change for: `connectionId, senderKind, scope, guildId, name, maxLength, fingerprint, state`, `Manifest.discordSenderName`, `ChannelView.discordSenderName` (webhook only), `RunItemDecision.discordSenderName`.
 
-## 2. The problem: refusals are not machine readable
+## 2. Still needed
 
-In `sender_names.py` every refusal goes through `fail()`, which always uses the code `discord_sender_name_required` with status 400, 401, 403, 404 or 409. The UI therefore cannot tell these apart:
+### 2.1 The two switches on the connections page, without a request per card
 
-* "not the member who authorized this connection" (403) vs "authorizer lacks Manage Nicknames or the bot lacks Change Nickname" (403, one combined message for two different causes) vs "this workspace cannot change sender settings" (403)
-* "settings changed since you opened the editor" (409 fingerprint or competing claim) vs "reconnect this connection" (409) vs "Discord returned a different bot" (409)
-* a rejected name (400) vs a missing shared-server confirmation (400)
+The default state at the opening is both switches OFF (`feature.senderNames`, `feature.botNickname`), and every installation card shows an "Edit sender name" button. Today the card cannot know the switches before a dialog is opened, and the GET is throttled (12 per 10 minutes per connection, 40 per workspace), so the page must not read every card.
 
-The messages are English prose and must never be parsed. Section 3 asks for stable codes.
-
-## 3. Needed from the backend
-
-### 3.1 Error body: `reason`, `retryAt`, `issue`
-
-Non-2xx body, in addition to `error` and `code`:
+Requested, optional, no throttle, no Discord read: on the Discord entry of `GET /channels` `providers[]`, the same object the GET already returns as `feature`:
 
 ```json
-{ "error": "...", "code": "discord_sender_name_unavailable", "reason": "member_lacks_manage_nicknames" }
-{ "error": "...", "code": "discord_sender_name_stale" }
-{ "error": "...", "code": "discord_sender_edit_pending", "retryAt": 1792750000 }
-{ "error": "...", "code": "discord_sender_name_invalid", "issue": "reserved_word" }
-{ "error": "...", "code": "discord_sender_shared_unconfirmed" }
+"discordSenderNames": { "senderNames": false, "botNickname": false }
 ```
 
-* `retryAt` is epoch seconds: the claim's `expiresAt` (today `clock + 120`). It lets the UI say when the next check is possible. Without it the UI says "about two minutes".
-* `issue` is one of `empty | surrounding_space | too_long | not_nfc | control_character | reserved_word`. The UI validates locally with the same rules before sending (limit counted in Unicode code points, `NFC`, categories `C*` plus U+2028/U+2029, webhook names may not contain `discord` or `clyde` after case folding), so `issue` is only needed when the server disagrees with the browser.
-* `reason` values (the whole vocabulary the UI renders; unknown values render the generic "failed" state):
+The UI already understands it (`ProviderView.discordSenderNames`): when a switch is off for the connection's kind it adds one line under the button ("Changing the sender name is switched off for now. Open Edit sender name to see why.") and keeps the button, which opens the read-only explanation. It also remembers, for the page session, the `feature` object of any GET it has already made and applies it to the other cards the same way. Without the provider field, the first card a person opens teaches the page.
 
-| `reason` | Meaning | Who can fix it | Applies to |
-| --- | --- | --- | --- |
-| `feature_disabled` | Customer sender names are off for this environment or workspace | Rafii | both |
-| `bot_nickname_disabled` | Bot nickname editing is isolated by the platform switch; webhook names still work | Rafii | bot |
-| `not_authorizing_member` | The viewer is not the member who authorized this connection | that member | both |
-| `member_lacks_manage_nicknames` | Live check: the authorizer has none of owner, Administrator, Manage Nicknames | a Discord server administrator | bot |
-| `bot_lacks_change_nickname` | Live check: the bot has neither Administrator nor Change Nickname in this server | a Discord server administrator | bot |
-| `nickname_managed_elsewhere` | Another Rafii workspace holds the nickname for this server's bot member. No identifier of that workspace may be sent. | nobody here | bot |
-| `reconnect_required` | Credential, generation, scope or authorizing identity no longer match, or the connection is revoked | the authorizing member | both |
+### 2.2 The last observed bot nickname on the channel view
 
-`discord_sender_name_stale` covers a fingerprint mismatch and a competing edit claim. `discord_sender_edit_pending` is unchanged except for `retryAt`.
+`channels.py` returns `discordSenderName` for webhooks only. The schedule dialog and the review cards therefore show a bot post's author as the generic label "Server bot" and say that Discord shows whatever nickname the bot has when the post is sent. Wanted, optional: for installations, the last nickname Rafii observed and when (`discordSenderName`, `discordSenderObservedAt`). The UI would then show that name with "as last checked". It never shows a made-up bot name.
 
-### 3.2 `GET .../discord-sender-name`: say whether editing is possible
+## 3. Findings in the backend (not UI work; for the backend agent and the captain)
 
-Add to the 200 body:
+1. A lone UTF-16 surrogate in a name makes `name_problem` raise instead of answering: `name.encode('utf-16-le')` raises `UnicodeEncodeError` before the `control_or_format` test is reached, so a crafted POST (`"name": "a\ud800b"`) is a server error, not a 400. Reproduce: `name_problem('lone\ud800surrogate', 'bot')` at `1c61a4a7`. The editor never sends such a name (it refuses it as `control_or_format` first).
+2. The contract table lists `sender_names_disabled` as applying to webhooks, the code applies it first to both kinds: a bot with the master switch off gets `sender_names_disabled`, never `bot_nickname_disabled`. The UI handles both; the copy for `sender_names_disabled` is written for both kinds.
+3. `nickname_authority_other_workspace` means NEITHER workspace may change the nickname while both have the server connected. The owner's wording ("another workspace manages the nickname") describes a different rule. The UI copy states the implemented behaviour: another workspace also uses this server's bot, so Rafii lets no workspace change the shared nickname; the other workspace is never named.
+4. `maxLength` is documented in code points but the server also keeps UTF-16 units within it (an emoji counts 2). The editor's counter shows the binding count (UTF-16 units) so it never disagrees with the server.
+5. `rate_limited` always carries `retryAfterSeconds: 60`; the UI shows it as sent.
 
-```json
-"availability": { "editable": true }
-"availability": { "editable": false, "reason": "bot_lacks_change_nickname" }
-"availability": { "editable": false, "reason": "edit_pending", "retryAt": 1792750000 }
-"nameSource": "discord" | "saved",
-"checkedAt": 1792749700
-```
+## 4. Known divergences between the editor's rules and the server's
 
-Preferred: return 200 with `editable:false` whenever the current name could still be read (the editor then shows the name read-only next to the explanation). Acceptable: a 403/409 with `code` and `reason` from 3.1 and no profile. The UI handles both.
-
-### 3.3 Provider flags (so the card and editor can explain before any round trip)
-
-On the Discord entry of `GET /channels` `providers[]`:
-
-```json
-"discordSenderNames": {
-  "webhook": { "enabled": true },
-  "bot": { "enabled": false, "reason": "bot_nickname_disabled" }
-}
-```
-
-`reason` is `feature_disabled` or `bot_nickname_disabled`. Absent means "unknown, find out on open".
-
-### 3.4 Bot nickname on the channel view
-
-`channels.py` returns `discordSenderName` only for webhooks (`None` for bots). For the schedule and review previews the UI would like, for bot connections, the last observed nickname and when it was observed:
-
-```json
-"discordSenderName": "Rafii", "discordSenderObservedAt": 1792749700
-```
-
-Without it the bot preview shows the generic label "Server bot" and says the nickname is whatever the bot has in this server when the post is sent. It never shows a made-up bot name. The nickname is not secret (every member of the server sees it).
-
-## 4. Behaviour the UI relies on (please keep)
-
-* `fingerprint` changes whenever anything the editor depends on changes, and a POST with an old fingerprint is refused before any provider write (already true).
-* A GET never performs a provider write and a reload never retries a write (already true: `observe(reconcile=True)` only reads; the UI also never sends a second POST after an error).
-* The two-minute ambiguity window is reported through `discord_sender_edit_pending`; the UI offers "Check again", which is a GET.
-
-## 5. Not needed (and not wanted)
-
-* The identity, name or id of any other workspace (`nickname_managed_elsewhere` must stay anonymous).
-* Discord permission bitfields, role names or user ids in error bodies.
-
-## 6. What the UI does today when the backend does not send the above
-
-| Backend says | UI state |
-| --- | --- |
-| `discord_sender_edit_pending`, no `retryAt` | "still being confirmed", wait about two minutes, then Check again |
-| `step_up_required` / `security_step_up_required` | "confirm it's you" with the sign-in-again button |
-| 403 with no `reason` | "permission unclear": lists the three possible causes (authorizing member, Manage Nicknames, Change Nickname) |
-| 409 or other with no `reason` | "could not be verified": Reload the current name, no retry |
-| provider flag absent | opens the editor and decides from the GET |
-
-## 7. Examples the synthetic harness will use (for the contract reconciliation)
-
-One 200 body and one error per state in section 3.1, exactly as written there. If the contract uses other names, only `web/src/lib/channels/discord-sender-name.ts` (`classifySenderRefusal`, `classifySenderProfile`) changes.
-
-## 8. Reconciliation with `UI-API-CONTRACT.md`
-
-Not available yet at the time of writing (fetched `origin` at 2026-10-23 06:19Z; the backend branch was not published).
+* The editor copies `sender_names.name_problem`; `web/tests/fixtures/discord-sender-name-verdicts.json` holds 96 verdicts generated by running the real function (commit `1c61a4a7`), `tests/test_discord_sender_name_ui_contract.py` re-checks them against the server module (skipped, with a message, on a tree that does not have `name_problem` yet; run on the merged tree), and `web/tests/discord-sender-name.test.cjs` checks the editor against the same file.
+* The reserved-word comparison was also compared code point by code point against the server's folding (every Unicode code point, both implementations). One range differs: 36 Unicode 16 characters (U+1CCD6 to U+1CCF9, outlined Latin letters and digits) that this browser engine folds to ASCII and the server's older Unicode tables do not. For those the editor is stricter than the server (it refuses a name the server would accept). Nothing the server refuses is accepted by the editor.
+* The server remains the authority. If it disagrees, its `reason` is shown and the form stays (the fingerprint is still valid because nothing was sent to Discord).

@@ -26,130 +26,177 @@ const html = (props) => renderToStaticMarkup(React.createElement(DiscordMessageP
 const text = (markup) => markup.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
 
 // ---------------------------------------------------------------------------------------------------------------
-// Validation rules
+// Validation rules (contract v2)
 // ---------------------------------------------------------------------------------------------------------------
 
-test('the editor gives the same verdict as the server validator for every shared case', () => {
+test('the editor gives the same verdict, and the same first reason, as the server for every shared case', () => {
+  assert.equal(verdicts.schema, 'rafii.discord-sender-name-verdicts.v2');
   assert.deepEqual(verdicts.limits, logic.SENDER_LIMIT);
-  assert.ok(verdicts.cases.length >= 50);
+  assert.ok(verdicts.cases.length >= 90);
   for (const shared of verdicts.cases) {
     const check = logic.checkSenderName(nameOf(shared), shared.kind);
     const label = `${shared.kind}: ${shared.note}`;
-    assert.equal(check.issues.length === 0, shared.accepted, label);
-    if (!shared.accepted) assert.deepEqual([...check.issues].sort(), [...shared.issues].sort(), label);
+    assert.equal(check.issues.length === 0, shared.reason === null, label);
+    // The server reports the first rule it finds; the editor lists every rule in the same order.
+    if (shared.reason !== null) assert.equal(check.issues[0], shared.reason, label);
   }
 });
 
-test('the shared fixture covers every rule the server has', () => {
-  const rules = new Set(verdicts.cases.flatMap((shared) => shared.issues));
+test('the shared fixture covers every rule the server has, for both kinds', () => {
+  const rules = new Set(verdicts.cases.map((shared) => shared.reason).filter(Boolean));
   assert.deepEqual([...rules].sort(), [...logic.SENDER_NAME_ISSUES].sort());
-  const bots = verdicts.cases.filter((shared) => shared.kind === 'bot');
-  const hooks = verdicts.cases.filter((shared) => shared.kind === 'webhook');
-  assert.ok(bots.some((shared) => shared.accepted) && bots.some((shared) => !shared.accepted));
-  assert.ok(hooks.some((shared) => shared.accepted) && hooks.some((shared) => !shared.accepted));
+  for (const kind of ['webhook', 'bot']) {
+    const mine = verdicts.cases.filter((shared) => shared.kind === kind);
+    assert.ok(mine.some((shared) => shared.reason === null), `${kind} has accepted names`);
+    assert.ok(mine.some((shared) => shared.reason !== null), `${kind} has refused names`);
+  }
 });
 
-test('length is counted in Unicode code points, as the backend counts it', () => {
+test('length is the binding of code points and UTF-16 units, as the server keeps both within the limit', () => {
   assert.equal(logic.codePointLength('abc'), 3);
   assert.equal(logic.codePointLength('\u{1F600}'), 1);
   assert.equal('\u{1F600}'.length, 2);
   assert.equal(logic.codePointLength('é'), 2);
   assert.equal(logic.codePointLength('D Festival 公告'), 13);
+  const emoji = logic.checkSenderName('\u{1F600}'.repeat(41), 'webhook');
+  assert.deepEqual({ length: emoji.length, codePoints: emoji.codePoints, over: emoji.over }, { length: 82, codePoints: 41, over: 2 });
+  assert.ok(emoji.issues.includes('too_long'));
+  assert.deepEqual(logic.checkSenderName('\u{1F600}'.repeat(40), 'webhook').issues, []);
   const over = logic.checkSenderName('x'.repeat(85), 'webhook');
   assert.deepEqual({ length: over.length, limit: over.limit, over: over.over }, { length: 85, limit: 80, over: 5 });
   assert.equal(logic.checkSenderName('x'.repeat(32), 'bot').over, 0);
   assert.equal(logic.checkSenderName('x'.repeat(33), 'bot').over, 1);
   // The profile's own limit wins when the server sends one.
-  assert.equal(logic.checkSenderName('x'.repeat(10), 'bot', 8).over, 2);
+  assert.equal(logic.checkSenderName('x'.repeat(10), 'bot', { limit: 8 }).over, 2);
 });
 
-test('reserved words apply to webhook names only, and fold case the way the server does', () => {
-  for (const word of ['discord', 'Discord', 'DISCORD', 'xClydex', 'diſcord']) {
-    assert.ok(logic.checkSenderName(word, 'webhook').issues.includes('reserved_word'), word);
-    assert.ok(!logic.checkSenderName(word, 'bot').issues.includes('reserved_word'), word);
+test('reserved words apply to both kinds and fold the way the server folds', () => {
+  for (const word of ['discord', 'Discord', 'DISCORD', 'xClydex', 'diſcord', 'D1scord', 'd i s c o r d', 'dis_cord', 'P0stR1ff', 'RAFII', 'dіscord', 'DİSCORD', 'ClYdE']) {
+    for (const kind of ['webhook', 'bot']) assert.ok(logic.checkSenderName(word, kind).issues.includes('reserved_word'), `${kind} ${word}`);
   }
-  for (const fine of ['d i s c o r d', 'dıscord', 'DİSCORD', 'ｄｉｓｃｏｒｄ']) {
-    assert.ok(!logic.checkSenderName(fine, 'webhook').issues.includes('reserved_word'), fine);
+  for (const name of ['Everyone', 'HERE', 'he re']) assert.ok(logic.isReservedName(name), name);
+  for (const fine of ['Here Maps', 'Everyone Welcome', 'Hero', 'Traffic Updates', 'Safari News', 'Acme Weekly']) {
+    assert.ok(!logic.isReservedName(fine), fine);
   }
+  // Look-alike folding is the server's table, character for character.
+  assert.deepEqual(logic.reservedSkeletons('Dïscörd'), ['discord', 'discord']);
+  assert.deepEqual(logic.reservedSkeletons('C1yde'), ['ciyde', 'clyde']);
 });
 
-test('every broken rule is listed, not only the first', () => {
-  const issues = logic.checkSenderName(` ${'​'}${'x'.repeat(90)}Discord `, 'webhook').issues;
-  for (const expected of ['surrounding_space', 'too_long', 'control_character', 'reserved_word']) assert.ok(issues.includes(expected), expected);
+test('every broken rule is listed in the server order, not only the first', () => {
+  const issues = logic.checkSenderName(` ${'​'}${'x'.repeat(90)}@Discord www.x `, 'webhook').issues;
+  assert.deepEqual(issues, ['surrounding_space', 'too_long', 'control_or_format', 'forbidden_character', 'url_like', 'reserved_word']);
+  assert.deepEqual(logic.checkSenderName('', 'bot').issues, ['empty']);
+  assert.deepEqual(logic.checkSenderName('   ', 'bot').issues, ['empty']);
+  assert.deepEqual(logic.checkSenderName('Acme Weekly', 'webhook').issues, []);
+});
+
+test('the forbidden characters follow the list the server sends', () => {
+  assert.ok(logic.checkSenderName('a|b', 'webhook', { forbidden: ['|'] }).issues.includes('forbidden_character'));
+  assert.ok(!logic.checkSenderName('a@b', 'webhook', { forbidden: ['|'] }).issues.includes('forbidden_character'));
+  assert.deepEqual(logic.FORBIDDEN_CHARACTERS, ['@', '#', ':', '```', '<', '>']);
 });
 
 // ---------------------------------------------------------------------------------------------------------------
-// Availability states
+// Availability states (contract v2)
 // ---------------------------------------------------------------------------------------------------------------
 
-test('a refused request maps to the state the backend named, never to a guessed cause', () => {
-  const state = (error) => logic.classifySenderRefusal(error);
-  for (const reason of logic.SERVER_REASONS) {
-    assert.equal(state({ status: 403, code: 'discord_sender_name_unavailable', reason }).key, reason, reason);
-    assert.equal(state({ status: 409, reason }).key, reason, reason);
+const NOW = 1_800_000_000_000;
+
+test('a readable profile lists every reason the name cannot be changed, in the order the server sent them', () => {
+  const classify = (profile) => logic.classifySenderProfile(profile, NOW);
+  assert.deepEqual(classify({}), []);
+  assert.deepEqual(classify({ editable: true, unavailable: [] }), []);
+  for (const code of logic.UNAVAILABLE_CODES) {
+    const [state] = classify({ editable: false, unavailable: [{ code }] });
+    assert.equal(state.key, code, code);
+    assert.equal(state.signInAgain, code === 'session_reverification_required', code);
   }
-  assert.deepEqual(state({ status: 409, code: 'discord_sender_edit_pending', retryAt: 1792750000 }), { key: 'edit_pending', retryAt: 1792750000, signInAgain: false });
-  assert.deepEqual(state({ status: 409, code: 'discord_sender_edit_pending' }), { key: 'edit_pending', retryAt: null, signInAgain: false });
-  assert.equal(state({ status: 409, code: 'discord_sender_name_stale' }).key, 'stale');
-  assert.deepEqual(state({ status: 403, code: 'step_up_required' }), { key: 'step_up_required', retryAt: null, signInAgain: true });
-  assert.deepEqual(state({ status: 403, code: 'security_step_up_required' }), { key: 'step_up_required', retryAt: null, signInAgain: false });
-  assert.equal(state({ status: 403, message: 'Please sign in again to continue.' }).signInAgain, true);
-  assert.equal(state({ status: 401 }).key, 'step_up_required');
-  // The current backend: one code for everything. 403 is permission; the rest cannot be told apart.
-  assert.equal(state({ status: 403, code: 'discord_sender_name_required' }).key, 'permission_unclear');
-  assert.equal(state({ status: 409, code: 'discord_sender_name_required' }).key, 'failed');
-  assert.equal(state({ status: 400, code: 'discord_sender_name_required' }).key, 'failed');
-  assert.equal(state({ status: 404 }).key, 'reconnect_required');
-  assert.equal(state({ status: 500 }).key, 'failed');
-  assert.equal(state({ status: 403, reason: 'something_new' }).key, 'permission_unclear');
-  assert.equal(state({ status: 503, reason: 'something_new' }).key, 'failed');
-  assert.equal(state({}).key, 'failed');
+  assert.deepEqual(classify({ editable: false, unavailable: [{ code: 'edit_pending', retryAfterSeconds: 90 }] }), [{ key: 'edit_pending', retryAfterSeconds: 90, retryAtMs: NOW + 90_000, signInAgain: false }]);
+  assert.deepEqual(classify({ editable: false, unavailable: [{ code: 'bot_missing_change_nickname', retryAfterSeconds: 5 }] })[0], { key: 'bot_missing_change_nickname', retryAfterSeconds: null, retryAtMs: null, signInAgain: false });
+  const several = classify({ editable: false, unavailable: [{ code: 'person_missing_manage_nicknames' }, { code: 'bot_missing_change_nickname' }, { code: 'edit_pending', retryAfterSeconds: 30 }, { code: 'edit_pending' }] });
+  assert.deepEqual(several.map((state) => state.key), ['person_missing_manage_nicknames', 'bot_missing_change_nickname', 'edit_pending']);
+  // Not editable with nothing we recognise: say so, never guess a cause.
+  assert.deepEqual(classify({ editable: false }).map((state) => state.key), ['failed']);
+  assert.deepEqual(classify({ editable: false, unavailable: [{ code: 'something_new' }] }).map((state) => state.key), ['failed']);
 });
 
-test('a readable profile says whether it can be edited, and why not', () => {
-  const state = (profile) => logic.classifySenderProfile(profile);
-  assert.equal(state({}).key, 'ready');
-  assert.equal(state({ availability: null }).key, 'ready');
-  assert.equal(state({ availability: { editable: true } }).key, 'ready');
-  for (const reason of logic.SERVER_REASONS) assert.equal(state({ availability: { editable: false, reason } }).key, reason, reason);
-  assert.equal(state({ availability: { editable: false, reason: 'edit_pending', retryAt: 1792750000 } }).retryAt, 1792750000);
-  assert.equal(state({ availability: { editable: false, reason: 'bot_lacks_change_nickname', retryAt: 5 } }).retryAt, null);
-  assert.equal(state({ availability: { editable: false } }).key, 'failed');
-  assert.equal(state({ availability: { editable: false, reason: 'something_new' } }).key, 'failed');
-});
-
-test('platform switches explain themselves before any request', () => {
-  const mode = logic.classifySenderModes;
-  assert.equal(mode(undefined, 'bot'), null);
-  assert.equal(mode({}, 'bot'), null);
-  assert.equal(mode({ bot: { enabled: true } }, 'bot'), null);
-  assert.equal(mode({ bot: { enabled: false } }, 'bot').key, 'bot_nickname_disabled');
-  assert.equal(mode({ bot: { enabled: false, reason: 'bot_nickname_disabled' } }, 'bot').key, 'bot_nickname_disabled');
-  assert.equal(mode({ bot: { enabled: false, reason: 'feature_disabled' } }, 'bot').key, 'feature_disabled');
-  assert.equal(mode({ webhook: { enabled: false } }, 'webhook').key, 'feature_disabled');
-  // The bot switch does not switch webhook names off (the owner's rule: webhook names come first).
-  assert.equal(mode({ bot: { enabled: false } }, 'webhook'), null);
+test('a refused request maps to the state the contract names, never to a guessed cause', () => {
+  const states = (error) => logic.classifySenderRefusal(error, NOW);
+  const first = (error) => states(error)[0];
+  for (const code of logic.UNAVAILABLE_CODES) {
+    assert.equal(first({ status: 409, code: 'discord_sender_name_unavailable', reasons: [{ code }] }).key, code, code);
+  }
+  assert.deepEqual(states({ status: 403, code: 'discord_sender_name_unavailable', reasons: [{ code: 'person_role_below_bot' }, { code: 'bot_missing_change_nickname' }] }).map((state) => state.key), ['person_role_below_bot', 'bot_missing_change_nickname']);
+  assert.deepEqual(first({ status: 409, code: 'discord_sender_edit_pending', retryAfterSeconds: 118 }), { key: 'edit_pending', retryAfterSeconds: 118, retryAtMs: NOW + 118_000, signInAgain: false });
+  assert.deepEqual(first({ status: 409, code: 'discord_sender_edit_pending' }), { key: 'edit_pending', retryAfterSeconds: null, retryAtMs: null, signInAgain: false });
+  assert.equal(first({ status: 409, code: 'discord_sender_name_required' }).key, 'stale');
+  assert.equal(first({ status: 409, code: 'discord_connection_required' }).key, 'reconnect_required');
+  assert.equal(first({ status: 404, code: 'not_found' }).key, 'reconnect_required');
+  assert.equal(first({ status: 403, code: 'permission_denied' }).key, 'workspace_permission');
+  assert.deepEqual(first({ status: 429, code: 'rate_limited', retryAfterSeconds: 60 }), { key: 'rate_limited', retryAfterSeconds: 60, retryAtMs: NOW + 60_000, signInAgain: false });
+  assert.deepEqual(first({ status: 403, code: 'step_up_required' }), { key: 'session_reverification_required', retryAfterSeconds: null, retryAtMs: null, signInAgain: true });
+  assert.deepEqual(first({ status: 403, code: 'security_step_up_required' }), { key: 'session_reverification_required', retryAfterSeconds: null, retryAtMs: null, signInAgain: false });
+  assert.deepEqual(first({ status: 401, code: 'unauthenticated' }), { key: 'session_reverification_required', retryAfterSeconds: null, retryAtMs: null, signInAgain: true });
+  assert.equal(first({ status: 403, message: 'Please sign in again to continue.' }).signInAgain, true);
+  for (const status of [502, 503, 504]) assert.equal(first({ status }).key, 'upstream_unavailable', String(status));
+  assert.equal(first({}).key, 'upstream_unavailable', 'a network failure has no status');
+  // Anything else, including a 409 with a code from the previous backend, is the generic failure.
+  assert.equal(first({ status: 500 }).key, 'failed');
+  assert.equal(first({ status: 409, code: 'something_new' }).key, 'failed');
+  assert.equal(first({ status: 403, code: 'discord_sender_name_unavailable', reasons: [{ code: 'something_new' }] }).key, 'failed');
+  assert.equal(first({ status: 403, code: 'discord_sender_name_required' }).key, 'failed');
+  assert.equal(first({ status: 400, code: 'discord_sender_name_required' }).key, 'failed');
 });
 
 test('only the states that can change offer a check, and a check is a read', () => {
   const offered = logic.SENDER_STATES.filter((key) => logic.canCheckAgain(key));
-  assert.deepEqual(offered.sort(), ['edit_pending', 'bot_lacks_change_nickname', 'failed', 'member_lacks_manage_nicknames', 'not_authorizing_member', 'permission_unclear', 'reconnect_required', 'stale'].sort());
+  assert.deepEqual(offered.sort(), ['bot_missing_change_nickname', 'edit_pending', 'failed', 'nickname_authority_other_workspace', 'person_missing_manage_nicknames', 'person_role_below_bot', 'rate_limited', 'reconnect_required', 'stale', 'upstream_unavailable'].sort());
+  // The contract: these three are answered without Discord and must not be retried.
+  for (const key of ['sender_names_disabled', 'bot_nickname_disabled', 'not_authorizing_member']) assert.equal(logic.canCheckAgain(key), false, key);
   assert.equal(logic.canCheckAgain('ready'), false);
 });
 
-test('the thirteen states are exactly the ones the copy explains', () => {
-  assert.equal(logic.SENDER_STATES.length, 13);
-  assert.deepEqual(stateCopy.BLOCKED_STATES.sort(), logic.SENDER_STATES.filter((key) => key !== 'ready').sort());
+test('the sixteen states are the fifteen the copy explains plus ready', () => {
+  assert.equal(logic.SENDER_STATES.length, 16);
+  assert.equal(logic.SENDER_STATES[0], 'ready');
+  assert.deepEqual([...stateCopy.BLOCKED_STATES].sort(), logic.SENDER_STATES.filter((key) => key !== 'ready').sort());
+  for (const code of logic.UNAVAILABLE_CODES) assert.ok(logic.SENDER_STATES.includes(code), code);
 });
 
-test('retry times are formatted for the reader and never invented', () => {
+test('retry times and waits are formatted for the reader and never invented', () => {
   assert.equal(logic.formatRetryTime(null, 'en'), null);
   assert.equal(logic.formatRetryTime(Number.NaN, 'en'), null);
-  assert.match(logic.formatRetryTime(1792749000, 'en', 'UTC'), /\d{1,2}:\d{2}/);
+  assert.match(logic.formatRetryTime(1792749000000, 'en', 'UTC'), /\d{1,2}:\d{2}/);
+  assert.equal(logic.formatWait(60, 'en'), '60 seconds');
+  assert.equal(logic.formatWait(2, 'en'), '2 seconds');
+  assert.equal(logic.formatWait(89, 'en'), '89 seconds');
+  assert.equal(logic.formatWait(90, 'en'), '2 minutes');
+  assert.equal(logic.formatWait(118, 'en'), '2 minutes');
+  assert.equal(logic.formatWait(121, 'en'), '3 minutes');
+  assert.match(logic.formatWait(60, 'zh-Hant'), /^60\s*秒$/);
+  assert.match(logic.formatWait(120, 'zh-Hans'), /^2\s*分钟$/);
   const en = packs.en;
-  assert.equal(stateCopy.recheckLine(en, null, 'en'), en.senderRecheckSoon);
-  assert.equal(stateCopy.recheckLine(en, 1792749000, 'en', 'UTC', 1792749001 * 1000), en.senderRecheckNow);
-  assert.match(stateCopy.recheckLine(en, 1792749000, 'en', 'UTC', 1792748000 * 1000), /^Rafii can check again at \d{1,2}:\d{2}/);
+  const state = (retryAtMs, retryAfterSeconds) => ({ retryAtMs, retryAfterSeconds });
+  assert.equal(stateCopy.recheckLine(en, state(null, null), 'en'), en.senderRecheckSoon);
+  assert.equal(stateCopy.recheckLine(en, state(1792749000000, 60), 'en', 'UTC', 1792749001000), en.senderRecheckNow);
+  assert.match(stateCopy.recheckLine(en, state(1792749060000, 60), 'en', 'UTC', 1792749000000), /^Rafii can check again in about 60 seconds, at \d{1,2}:\d{2}/);
+  assert.match(stateCopy.recheckLine(en, state(1792749120000, 118), 'en', 'UTC', 1792749000000), /^Rafii can check again in about 2 minutes, at \d{1,2}:\d{2}/);
+  // A time without a named wait is still honest about the time only.
+  assert.match(stateCopy.recheckLine(en, state(1792749120000, null), 'en', 'UTC', 1792749000000), /^Rafii can check again at \d{1,2}:\d{2}/);
+});
+
+test('the two switches explain themselves without asking Discord anything', () => {
+  const state = (feature, kind) => logic.classifySenderFeature(feature, kind, NOW);
+  assert.equal(state(undefined, 'bot'), null);
+  assert.equal(state(null, 'webhook'), null);
+  assert.equal(state({}, 'bot'), null);
+  assert.equal(state({ senderNames: true, botNickname: true }, 'bot'), null);
+  assert.equal(state({ senderNames: false, botNickname: false }, 'bot').key, 'sender_names_disabled');
+  assert.equal(state({ senderNames: false, botNickname: false }, 'webhook').key, 'sender_names_disabled');
+  assert.equal(state({ senderNames: true, botNickname: false }, 'bot').key, 'bot_nickname_disabled');
+  // The bot switch never switches webhook names off (the owner's rule: webhook names come first).
+  assert.equal(state({ senderNames: true, botNickname: false }, 'webhook'), null);
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -194,38 +241,55 @@ test('every state has a title, a body and a next step in each locale', () => {
     const english = stateCopy.senderStateCopy(packs.en, state);
     assert.notEqual(english.title, english.body);
   }
-  // Each of the eight named situations says something different.
+  // Each situation says something different.
   const titles = new Set(stateCopy.BLOCKED_STATES.map((state) => stateCopy.senderStateCopy(packs.en, state).title));
   assert.equal(titles.size, stateCopy.BLOCKED_STATES.length);
 });
 
 test('the messages never name another workspace and say what the person can do', () => {
   for (const locale of LOCALES) {
-    const elsewhere = stateCopy.senderStateCopy(packs[locale], 'nickname_managed_elsewhere');
-    assert.doesNotMatch(`${elsewhere.title}${elsewhere.body}${elsewhere.next}`, /workspace\s+(id|named)|[0-9a-f]{8}-[0-9a-f]{4}/i);
+    const shared = stateCopy.senderStateCopy(packs[locale], 'nickname_authority_other_workspace');
+    assert.doesNotMatch(`${shared.title}${shared.body}${shared.next}`, /workspace\s+(id|named)|[0-9a-f]{8}-[0-9a-f]{4}/i);
   }
   const english = (state) => stateCopy.senderStateCopy(packs.en, state);
-  assert.match(english('feature_disabled').next, /Nothing to do/);
+  assert.match(english('sender_names_disabled').next, /Nothing to do/);
+  assert.doesNotMatch(english('sender_names_disabled').body, /held/, 'the held-post sentence is shown for webhooks only, in its own line');
+  assert.match(packs.en.senderStateHeldNote, /held, not sent under another name/);
   assert.match(english('bot_nickname_disabled').next, /incoming webhook/);
-  assert.match(english('member_lacks_manage_nicknames').body, /Manage Nicknames/);
-  assert.match(english('bot_lacks_change_nickname').body, /Change Nickname/);
+  assert.match(english('bot_nickname_disabled').body, /Webhook sender names are not affected/);
+  assert.match(english('not_authorizing_member').next, /Ask that member/);
+  assert.match(english('person_missing_manage_nicknames').body, /Manage Nicknames/);
+  assert.match(english('person_role_below_bot').body, /highest role is above the bot’s highest role/);
+  assert.match(english('bot_missing_change_nickname').body, /Change Nickname/);
+  assert.match(english('nickname_authority_other_workspace').body, /does not let any workspace change that nickname/);
+  assert.match(english('nickname_authority_other_workspace').body, /does not say which workspace/);
   assert.match(english('edit_pending').next, /never sends the change a second time/);
   assert.match(english('stale').body, /another member|another Rafii workspace/);
-  assert.match(english('step_up_required').next, /Sign out and sign in again/);
+  assert.match(english('session_reverification_required').next, /Sign out and sign in again/);
+  assert.match(english('reconnect_required').next, /Channels page/);
+  assert.match(english('rate_limited').body, /Nothing was changed/);
+  assert.match(english('upstream_unavailable').body, /Nothing was changed/);
+  assert.match(english('workspace_permission').next, /workspace owner or administrator/);
 });
 
 test('validation messages fill their numbers and name the rule', () => {
   const numbers = { length: 85, limit: 80, over: 5 };
-  assert.equal(stateCopy.senderIssueMessage(packs.en, 'too_long', numbers), 'Too long: 85 of 80 characters. Remove 5.');
+  assert.equal(stateCopy.senderIssueMessage(packs.en, 'too_long', numbers), 'Too long: 85 of 80 characters. Remove 5. Emoji and some symbols count as 2.');
   for (const locale of LOCALES) {
     for (const issue of logic.SENDER_NAME_ISSUES) {
       const message = stateCopy.senderIssueMessage(packs[locale], issue, numbers);
       assert.ok(message.trim() && !/\{[a-z]+\}/.test(message), `${locale}.${issue}`);
     }
     assert.match(stateCopy.senderIssueMessage(packs[locale], 'reserved_word', numbers), /Discord/);
+    assert.match(stateCopy.senderIssueMessage(packs[locale], 'reserved_word', numbers), /Rafii/);
+    assert.match(stateCopy.senderIssueMessage(packs[locale], 'forbidden_character', numbers), /@ # : < >/);
   }
   assert.equal(stateCopy.fillCount(packs.en.senderCount, { count: 7, limit: 80 }), '7 / 80 characters');
-  assert.match(stateCopy.fillCount(packs.en.senderIssueSummary, { limit: 32 }), /^Choose a name of 1–32 characters without surrounding spaces, control characters or reserved webhook names\.$/);
+  assert.equal(stateCopy.fillCount(packs.en.senderIssueSummary, { limit: 32 }), 'Choose a name of 1–32 characters without surrounding spaces, control characters, reserved words or mention syntax.');
+  // The rules list names every limit the editor enforces.
+  assert.equal(packs.en.senderRuleLength.replace('{limit}', '80'), '80 characters at most. Emoji and some symbols count as 2.');
+  assert.match(packs.en.senderRuleForbidden, /@ # : < > and ```/);
+  assert.match(packs.en.senderRuleReserved, /Discord, Clyde, Rafii, PostRiff, everyone or here/);
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -273,10 +337,28 @@ test('a bot post is shown with the shared server nickname and never as a per-pos
   }
   const en = packs.en.previewBotNote;
   assert.match(en, /Everyone who uses this bot in this server/);
+  assert.match(en, /people who use other apps there/);
   assert.match(en, /people who never use Rafii/);
   assert.match(en, /other Rafii workspaces/);
   assert.match(en, /cannot freeze it per post/);
   assert.match(en, /server administrator can change it at any time/);
+});
+
+test('queued posts: a webhook post keeps its approved name, a bot post follows the current nickname, and neither is promised unless the server says so', () => {
+  const hook = html(base('en', { text: 'Hi' }));
+  assert.ok(hook.includes(packs.en.previewWebhookQueuedNote));
+  assert.ok(!hook.includes(packs.en.previewBotQueuedNote));
+  assert.ok(!html(base('en', { text: 'Hi', queuedKeepsName: false })).includes(packs.en.previewWebhookQueuedNote));
+  const bot = html(base('en', { kind: 'bot', name: 'Concert helper', nameSource: 'observed', text: 'Hi' }));
+  assert.ok(bot.includes(packs.en.previewBotQueuedNote));
+  assert.ok(!bot.includes(packs.en.previewWebhookQueuedNote));
+  assert.ok(!html(base('en', { kind: 'bot', name: 'Concert helper', nameSource: 'observed', text: 'Hi', queuedFollowsNickname: false })).includes(packs.en.previewBotQueuedNote));
+  for (const locale of LOCALES) {
+    const botNote = html(base(locale, { kind: 'bot', name: 'x', nameSource: 'observed', text: 'Hi' }));
+    assert.ok(!botNote.includes(packs[locale].previewWebhookQueuedNote), `${locale}: a bot post is never said to keep a name`);
+  }
+  assert.match(packs.en.previewBotQueuedNote, /whatever nickname the bot has when they are sent/);
+  assert.doesNotMatch(packs.en.previewBotNote + packs.en.previewBotQueuedNote, /keeps? the name/i);
 });
 
 test('the preview follows what is typed, and says it is not saved yet', () => {
@@ -289,6 +371,17 @@ test('the preview follows what is typed, and says it is not saved yet', () => {
   assert.deepEqual(previewAuthor(packs.en, 'webhook', '  ', 'saved'), { label: packs.en.previewWebhookNameDefault, placeholder: true });
   assert.deepEqual(previewAuthor(packs.en, 'bot', null, 'unknown'), { label: packs.en.previewBotNameUnknown, placeholder: true });
   assert.deepEqual(previewAuthor(packs.en, 'bot', 'Rafii', 'observed'), { label: 'Rafii', placeholder: false });
+});
+
+test('a webhook default name and a bot username are labelled as what they are', () => {
+  const fallback = html(base('en', { kind: 'webhook', name: 'Spidey Bot', nameSource: 'webhook_default', text: 'Hi' }));
+  assert.match(fallback, /<span data-preview-author[^>]*>Spidey Bot<\/span>/);
+  assert.ok(fallback.includes(packs.en.previewWebhookDefaultNote));
+  const username = html(base('en', { kind: 'bot', name: 'Rafii Helper', nameSource: 'bot_username', text: 'Hi' }));
+  assert.ok(username.includes(packs.en.previewBotUsernameNote));
+  assert.ok(username.includes(packs.en.previewBotNote));
+  const tagged = html(base('en', { badge: 'APP', text: 'Hi' }));
+  assert.match(tagged, /<span data-preview-app-tag[^>]*>APP<\/span>/);
 });
 
 test('light and dark use their own palette, and compact mode keeps the honest lines', () => {
@@ -345,9 +438,10 @@ test('each availability state renders its own message in every locale with a sta
   const seen = new Set();
   for (const locale of LOCALES) {
     for (const key of stateCopy.BLOCKED_STATES) {
+      const timed = key === 'edit_pending' || key === 'rate_limited';
       const markup = renderToStaticMarkup(React.createElement(SenderStatePanel, {
-        state: { key, retryAt: key === 'edit_pending' ? 1792750000 : null, signInAgain: false },
-        copy: packs[locale], locale, timeZone: 'UTC', id: 'x', nowMs: 1792749000 * 1000, checkedAtMs: 1792749000 * 1000
+        state: { key, retryAfterSeconds: timed ? 90 : null, retryAtMs: timed ? 1792750000000 : null, signInAgain: false },
+        copy: packs[locale], locale, timeZone: 'UTC', id: 'x', nowMs: 1792749000000, checkedAtMs: 1792749000000
       }));
       const lines = stateCopy.senderStateCopy(packs[locale], key);
       assert.match(markup, new RegExp(`data-testid="discord-sender-state-${key}"`));
@@ -355,21 +449,38 @@ test('each availability state renders its own message in every locale with a sta
       for (const part of ['title', 'body', 'next']) assert.ok(text(markup).includes(text(lines[part])), `${locale} ${key} ${part}`);
       assert.ok(text(markup).includes(text(packs[locale].senderStateNextLabel)));
       assert.match(markup, /data-checked-at/);
-      assert.equal(/data-recheck/.test(markup), key === 'edit_pending', `${locale} ${key} recheck line`);
+      assert.equal(/data-recheck/.test(markup), timed, `${locale} ${key} recheck line`);
       if (locale === 'en') seen.add(text(markup));
     }
   }
   assert.equal(seen.size, stateCopy.BLOCKED_STATES.length);
 });
 
-test('a pending change says when it can be checked again; an alert is announced as one', () => {
+test('a held change names its wait and its time; an alert is announced as one', () => {
   const panel = (state, extra) => renderToStaticMarkup(React.createElement(SenderStatePanel, { state, copy: packs.en, locale: 'en', timeZone: 'UTC', id: 'p', ...extra }));
-  assert.match(panel({ key: 'edit_pending', retryAt: 1792750000, signInAgain: false }, { nowMs: 1792749000 * 1000 }), /Rafii can check again at \d{1,2}:\d{2}/);
-  assert.match(panel({ key: 'edit_pending', retryAt: null, signInAgain: false }), /in about two minutes/);
-  assert.match(panel({ key: 'edit_pending', retryAt: 1792748000, signInAgain: false }, { nowMs: 1792749000 * 1000 }), /check again now/);
-  assert.match(panel({ key: 'failed', retryAt: null, signInAgain: false }, { role: 'alert' }), /role="alert"/);
-  assert.doesNotMatch(panel({ key: 'failed', retryAt: null, signInAgain: false }), /role="alert"/);
-  assert.match(panel({ key: 'stale', retryAt: null, signInAgain: false }, { actions: React.createElement('button', null, 'Go') }), /<button>Go<\/button>/);
+  const base = { signInAgain: false };
+  const pending = (retryAtMs, retryAfterSeconds) => ({ key: 'edit_pending', retryAtMs, retryAfterSeconds, ...base });
+  assert.match(panel(pending(1792749090000, 90), { nowMs: 1792749000000 }), /Rafii can check again in about 2 minutes, at \d{1,2}:\d{2}/);
+  assert.match(panel(pending(1792749090000, 90), { nowMs: 1792749000000 }), /data-retry-after-seconds="90"/);
+  assert.match(panel(pending(null, null)), /in about two minutes/);
+  assert.match(panel(pending(1792748000000, 90), { nowMs: 1792749000000 }), /check again now/);
+  assert.match(panel({ key: 'rate_limited', retryAtMs: 1792749060000, retryAfterSeconds: 60, ...base }, { nowMs: 1792749000000 }), /Rafii can check again in about 60 seconds, at/);
+  assert.match(panel(pending(null, null)), /id="p-recheck"/);
+  // The two held states say different things.
+  assert.notEqual(text(panel(pending(null, null))), text(panel({ key: 'rate_limited', retryAtMs: null, retryAfterSeconds: null, ...base })));
+  assert.match(panel({ key: 'failed', retryAtMs: null, retryAfterSeconds: null, ...base }, { role: 'alert' }), /role="alert"/);
+  assert.doesNotMatch(panel({ key: 'failed', retryAtMs: null, retryAfterSeconds: null, ...base }), /role="alert"/);
+  assert.match(panel({ key: 'stale', retryAtMs: null, retryAfterSeconds: null, ...base }, { actions: React.createElement('button', null, 'Go') }), /<button>Go<\/button>/);
+});
+
+test('the held-post sentence of the master switch is shown for webhooks only, and nothing is styled as an error', () => {
+  const off = { key: 'sender_names_disabled', retryAtMs: null, retryAfterSeconds: null, signInAgain: false };
+  const panel = (kind) => renderToStaticMarkup(React.createElement(SenderStatePanel, { state: off, kind, copy: packs.en, locale: 'en', id: 'p' }));
+  assert.match(panel('webhook'), /data-held-note/);
+  assert.ok(text(panel('webhook')).includes(text(packs.en.senderStateHeldNote)));
+  assert.doesNotMatch(panel('bot'), /data-held-note/);
+  assert.doesNotMatch(panel(undefined), /data-held-note/);
+  assert.doesNotMatch(panel('bot'), /destructive|role="alert"/);
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -440,5 +551,6 @@ test('the sender-name harness exits non-zero on any failure and checks its own c
   assert.match(harness, /process\.exitCode = 1/);
   assert.match(harness, /assert\.equal\(process\.env\.CI, 'true'\)/);
   assert.match(harness, /REQUIRED_CASES/);
-  assert.match(harness, /assert\.deepEqual\([^)]*REQUIRED_CASES/);
+  assert.match(harness, /assert\.deepEqual\(\[\.\.\.ran\[combo\]\]\.sort\(\), \[\.\.\.REQUIRED_CASES\]\.sort\(\)/);
+  assert.match(harness, /assert\.deepEqual\(\[\.\.\.once\]\.sort\(\), \[\.\.\.ONCE_CASES\]\.sort\(\)/);
 });

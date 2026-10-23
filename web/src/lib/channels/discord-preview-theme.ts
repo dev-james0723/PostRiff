@@ -65,8 +65,9 @@ export function relativeLuminance(hex: string): number {
 
 /** WCAG 2.x contrast ratio between two `#rrggbb` colours (1 to 21). */
 export function contrastRatio(foreground: string, background: string): number {
-  const [light, dark] = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
-  return (light + 0.05) / (dark + 0.05);
+  const first = relativeLuminance(foreground);
+  const second = relativeLuminance(background);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 }
 
 /** The text/background pairs the preview draws, with the minimum ratio each needs (all are small text: 4.5). */

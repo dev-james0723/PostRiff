@@ -1478,8 +1478,6 @@ export interface Capability {
 
 export interface ChannelView {
   discordSenderName?: string | null;
-  /** Epoch seconds when `discordSenderName` was last read from Discord (bot nicknames; UI-NEEDS 3.4). */
-  discordSenderObservedAt?: number | null;
   discordEngagement?: { implemented: boolean; enabled: boolean };
   defaultDestinationId?: string | null;
   discordDestinations?: DiscordDestination[];
@@ -1509,37 +1507,68 @@ export interface ChannelView {
   pictureDigest?: string | null;
 }
 
+/** One reason a sender name cannot be changed now (`unavailable` on a GET, `reasons` on a refused POST). */
+export interface DiscordSenderReason {
+  code: string;
+  /** Seconds until a held change or a throttle can be checked again. */
+  retryAfterSeconds?: number;
+}
+
+export interface DiscordSenderRules {
+  minLength: number;
+  maxLength: number;
+  lengthUnit: string;
+  surroundingSpace: boolean;
+  forbiddenCharacters: string[];
+  reservedWords: boolean;
+  singleSpacesOnly: boolean;
+}
+
+/**
+ * `GET`/`POST /channels/{id}/discord-sender-name` (contract v2, docs/sender-name/UI-API-CONTRACT.md). Every field after
+ * `state` is optional here so a v1 body, which has only the first eight, still reads as an editable profile.
+ */
 export interface DiscordSenderProfile {
   connectionId: string;
   senderKind: 'bot' | 'webhook';
   scope: 'server' | 'connection';
   guildId: string;
+  /** What Discord shows for the next message (the effective name), or '' when it is not known. */
   name: string;
   maxLength: number;
   fingerprint: string;
   state: 'verified';
-  /**
-   * Whether this person can change the name now, and if not why (docs/sender-name/UI-NEEDS.md 3.2). A profile without
-   * it is editable, which is what the current backend sends. `reason` is one of the stable names in
-   * `lib/channels/discord-sender-name.ts`; an unknown one renders as the generic failure, never as a guessed cause.
-   */
-  availability?: { editable: boolean; reason?: string; retryAt?: number };
-  /** Where `name` was read from: the connection's saved setting, or Discord itself. */
-  nameSource?: 'saved' | 'discord';
-  /** Epoch seconds of the read behind `name`. */
-  checkedAt?: number;
-}
-
-/** Provider-level switches for customer sender names (UI-NEEDS 3.3); absent means "find out on open". */
-export interface DiscordSenderNameModes {
-  webhook?: { enabled: boolean; reason?: string };
-  bot?: { enabled: boolean; reason?: string };
+  contractVersion?: number;
+  rules?: DiscordSenderRules;
+  effectiveName?: string | null;
+  nameSource?: 'saved_override' | 'webhook_default' | 'observed_nickname' | 'bot_username' | 'none';
+  /** Webhook: the override Rafii freezes into future reviews. Bot: the nickname Rafii last set. */
+  savedName?: string | null;
+  /** What Discord itself reported at `observedAt` (epoch seconds); null when no Discord read was made. */
+  observedName?: string | null;
+  observedAt?: number | null;
+  /** Bot only: the nickname in Discord differs from the one Rafii last set. */
+  externalChange?: boolean;
+  feature?: { senderNames: boolean; botNickname: boolean };
+  editable?: boolean;
+  /** Empty exactly when `editable` is true. */
+  unavailable?: DiscordSenderReason[];
+  preview?: {
+    currentDisplayName: string | null;
+    badge: string;
+    audience: 'this_connection' | 'everyone_in_server';
+    queuedPostsKeepApprovedName: boolean;
+    queuedPostsFollowCurrentNickname: boolean;
+  };
+  /** Present and true on the body of a successful POST. */
+  saved?: boolean;
 }
 
 export interface ProviderView {
   discordConnectionsV2?: boolean;
   discordModes?: DiscordModes;
-  discordSenderNames?: DiscordSenderNameModes;
+  /** The two global sender-name switches, when the server sends them with the providers (docs/sender-name/UI-NEEDS.md 2.1). */
+  discordSenderNames?: { senderNames?: boolean; botNickname?: boolean };
   /** Whether THIS workspace may start a Discord connection (launch gate); existing connections are unaffected. */
   discordAccess?: { status: 'open' | 'closed'; reason?: string; capped?: boolean };
   /** Restricted server-side Pinterest pilot; never a public release gate. */

@@ -1,6 +1,6 @@
 {
- "schema": "rafii.discord-sender-name-verdicts.v1",
- "about": "Verdicts of sender_names.validate_name, shared by tests/test_discord_sender_name_ui_contract.py (backend) and web/tests/discord-sender-name.test.cjs (editor).",
+ "schema": "rafii.discord-sender-name-verdicts.v2",
+ "about": "The first rule sender_names.name_problem (contract v2) finds for each name, or null when the name is accepted. Shared by tests/test_discord_sender_name_ui_contract.py (backend) and web/tests/discord-sender-name.test.cjs (editor).",
  "limits": {
   "webhook": 80,
   "bot": 32
@@ -8,483 +8,587 @@
  "cases": [
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
-   "note": "plain",
-   "name": "Rafii"
+   "reason": null,
+   "note": "plain brand",
+   "name": "Acme Weekly"
   },
   {
    "kind": "bot",
-   "accepted": true,
-   "issues": [],
-   "note": "plain",
-   "name": "Rafii"
+   "reason": null,
+   "note": "plain brand",
+   "name": "Acme Bot"
   },
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
-   "note": "CJK and an inner space",
+   "reason": null,
+   "note": "CJK with an inner space",
    "name": "D Festival \u516c\u544a"
   },
   {
    "kind": "bot",
-   "accepted": true,
-   "issues": [],
+   "reason": null,
    "note": "CJK",
-   "name": "\u97f3\u6a02\u6703\u5c0f\u52a9\u624b"
+   "name": "D Festival \u52a9\u624b"
   },
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
-   "note": "precomposed e-acute is NFC",
-   "name": "Caf\u00e9"
+   "reason": null,
+   "note": "precomposed accents are NFC",
+   "name": "Caf\u00e9 M\u00fcller"
   },
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
+   "reason": null,
+   "note": "Cyrillic",
+   "name": "\u0414\u0430\u0439\u0434\u0436\u0435\u0441\u0442 \u043d\u043e\u0432\u043e\u0441\u0442\u0435\u0439"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "Arabic",
+   "name": "\u0627\u0644\u0623\u062e\u0628\u0627\u0631"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "Japanese",
+   "name": "\u9031\u520a\u30cb\u30e5\u30fc\u30b9"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "emoji",
+   "name": "\ud83c\udfb5 Daily Notes"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
    "note": "exactly 80 characters",
-   "unit": "x",
+   "unit": "a",
    "repeat": 80
   },
   {
    "kind": "bot",
-   "accepted": true,
-   "issues": [],
+   "reason": null,
    "note": "exactly 32 characters",
-   "unit": "x",
+   "unit": "a",
    "repeat": 32
   },
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
-   "note": "80 code points (160 UTF-16 units)",
+   "reason": null,
+   "note": "40 emoji = 80 UTF-16 units",
    "unit": "\ud83d\ude00",
-   "repeat": 80
+   "repeat": 40
   },
   {
    "kind": "bot",
-   "accepted": true,
-   "issues": [],
-   "note": "32 code points (64 UTF-16 units)",
+   "reason": null,
+   "note": "16 emoji = 32 UTF-16 units",
    "unit": "\ud83d\ude00",
-   "repeat": 32
-  },
-  {
-   "kind": "bot",
-   "accepted": true,
-   "issues": [],
-   "note": "reserved words apply to webhooks only",
-   "name": "Discord"
-  },
-  {
-   "kind": "bot",
-   "accepted": true,
-   "issues": [],
-   "note": "reserved words apply to webhooks only",
-   "name": "Clyde"
+   "repeat": 16
   },
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
-   "note": "spaced letters are not the word",
-   "name": "d i s c o r d"
+   "reason": null,
+   "note": "here inside a longer name is fine",
+   "name": "Here Maps"
   },
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
-   "note": "fullwidth letters are not folded to ASCII",
-   "name": "\uff44\uff49\uff53\uff43\uff4f\uff52\uff44"
+   "reason": null,
+   "note": "everyone inside a longer name is fine",
+   "name": "Everyone Welcome"
   },
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
-   "note": "dotless i stays itself",
-   "name": "d\u0131scord"
+   "reason": null,
+   "note": "contains \"ffic\" but is not reserved",
+   "name": "Traffic Updates"
   },
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
-   "note": "dotted capital I folds to i plus a combining dot",
-   "name": "D\u0130SCORD"
+   "reason": null,
+   "note": "contains \"afari\" but is not reserved",
+   "name": "Safari News"
   },
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
-   "note": "a symbol is not a control character",
-   "name": "Club \u2603 Night"
+   "reason": null,
+   "note": "a symbol is fine",
+   "name": "Star \u2605 Team"
   },
   {
    "kind": "webhook",
-   "accepted": true,
-   "issues": [],
+   "reason": null,
    "note": "a variation selector is a mark, not a format character",
    "name": "Caf\u00e9\ufe0f"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "empty"
-   ],
+   "reason": null,
+   "note": "an ampersand is fine",
+   "name": "Fish & Chips"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "digits and brackets are fine",
+   "name": "Q3 results (draft)"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "hero is not \"here\"",
+   "name": "Hero"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "plain nickname",
+   "name": "Concert helper"
+  },
+  {
+   "kind": "webhook",
+   "reason": "empty",
    "note": "empty",
    "name": ""
   },
   {
    "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "empty"
-   ],
+   "reason": "empty",
    "note": "empty",
    "name": ""
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "empty"
-   ],
-   "note": "only a space",
+   "reason": "empty",
+   "note": "one space",
    "name": " "
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "empty"
-   ],
-   "note": "only spaces",
+   "reason": "empty",
+   "note": "spaces",
    "name": "   "
   },
   {
-   "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "empty",
-    "control_character"
-   ],
-   "note": "only a tab",
-   "name": "\t"
-  },
-  {
-   "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "empty"
-   ],
-   "note": "only an ideographic space",
+   "kind": "bot",
+   "reason": "empty",
+   "note": "ideographic space only",
    "name": "\u3000"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "surrounding_space"
-   ],
+   "reason": "empty",
+   "note": "a tab only",
+   "name": "\t"
+  },
+  {
+   "kind": "webhook",
+   "reason": "surrounding_space",
    "note": "leading space",
-   "name": " Rafii"
+   "name": " lead"
   },
   {
-   "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "surrounding_space"
-   ],
+   "kind": "bot",
+   "reason": "surrounding_space",
    "note": "trailing space",
-   "name": "Rafii "
-  },
-  {
-   "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "surrounding_space"
-   ],
-   "note": "both sides",
-   "name": " Rafii "
+   "name": "trail "
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "surrounding_space"
-   ],
+   "reason": "surrounding_space",
    "note": "leading no-break space",
-   "name": "\u00a0Rafii"
+   "name": "\u00a0Acme"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "surrounding_space"
-   ],
+   "reason": "surrounding_space",
    "note": "trailing ideographic space",
-   "name": "Rafii\u3000"
+   "name": "Acme\u3000"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "too_long"
-   ],
-   "note": "81 characters",
-   "unit": "x",
-   "repeat": 81
-  },
-  {
-   "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "too_long"
-   ],
-   "note": "33 characters",
-   "unit": "x",
-   "repeat": 33
-  },
-  {
-   "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "too_long"
-   ],
-   "note": "33 code points",
-   "unit": "\ud83d\ude00",
-   "repeat": 33
-  },
-  {
-   "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "too_long"
-   ],
-   "note": "81 code points",
-   "unit": "\ud83d\ude00",
-   "repeat": 81
-  },
-  {
-   "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "not_nfc"
-   ],
-   "note": "e plus combining acute is not NFC",
+   "reason": "not_normalized",
+   "note": "e plus combining acute is NFD",
    "name": "Cafe\u0301"
   },
   {
    "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "not_nfc"
-   ],
-   "note": "A plus combining ring is not NFC",
+   "reason": "not_normalized",
+   "note": "A plus ring is NFD",
    "name": "A\u030a"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
-   "note": "NUL",
-   "name": "Ra\u0000fii"
+   "reason": "too_long",
+   "note": "81 characters",
+   "unit": "a",
+   "repeat": 81
+  },
+  {
+   "kind": "bot",
+   "reason": "too_long",
+   "note": "33 characters",
+   "unit": "a",
+   "repeat": 33
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
+   "reason": "too_long",
+   "note": "41 emoji = 82 UTF-16 units",
+   "unit": "\ud83d\ude00",
+   "repeat": 41
+  },
+  {
+   "kind": "bot",
+   "reason": "too_long",
+   "note": "17 emoji = 34 UTF-16 units",
+   "unit": "\ud83d\ude00",
+   "repeat": 17
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
    "note": "line feed",
-   "name": "Ra\nfii"
+   "name": "bad\nname"
   },
   {
-   "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
+   "kind": "bot",
+   "reason": "control_or_format",
    "note": "tab",
-   "name": "Ra\tfii"
-  },
-  {
-   "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
-   "note": "zero width space (Cf)",
-   "name": "Ra\u200bfii"
-  },
-  {
-   "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
-   "note": "zero width joiner (Cf), as in family emoji",
-   "name": "Ra\u200dfii"
+   "name": "bad\tname"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
+   "reason": "control_or_format",
+   "note": "NUL",
+   "name": "bad\u0000name"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "right-to-left override",
+   "name": "bad\u202ename"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "left-to-right isolate",
+   "name": "bad\u2066name"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "zero width space",
+   "name": "zero\u200bwidth"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "zero width joiner",
+   "name": "join\u200dder"
+  },
+  {
+   "kind": "bot",
+   "reason": "control_or_format",
+   "note": "byte order mark",
+   "name": "bom\ufeffname"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "tag character",
+   "name": "tag\udb40\udc41name"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "private use",
+   "name": "pua\ue000name"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "unassigned code point",
+   "name": "gap\u0378name"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
    "note": "line separator",
-   "name": "Ra\u2028fii"
+   "name": "line\u2028sep"
+  },
+  {
+   "kind": "bot",
+   "reason": "control_or_format",
+   "note": "next line control",
+   "name": "next\u0085line"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
-   "note": "paragraph separator",
-   "name": "Ra\u2029fii"
+   "reason": "spacing",
+   "note": "two spaces",
+   "name": "a  b"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
-   "note": "byte order mark at the start",
-   "name": "\ufeffRafii"
+   "reason": "spacing",
+   "note": "inner no-break space",
+   "name": "a\u00a0b"
   },
   {
    "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
-   "note": "right-to-left override (Cf)",
-   "name": "Ra\u202efii"
-  },
-  {
-   "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
-   "note": "private use (Co)",
-   "name": "Ra\ue000fii"
-  },
-  {
-   "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
-   "note": "lone surrogate (Cs)",
-   "name": "Ra\ud800fii"
-  },
-  {
-   "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "control_character"
-   ],
-   "note": "next line (Cc)",
-   "name": "Ra\u0085fii"
-  },
-  {
-   "kind": "bot",
-   "accepted": false,
-   "issues": [
-    "control_character",
-    "surrounding_space"
-   ],
-   "note": "unit separator at the start (Cc, and Python strips it)",
-   "name": "\u001fRafii"
+   "reason": "spacing",
+   "note": "inner ideographic space",
+   "name": "a\u3000b"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "reserved_word"
-   ],
+   "reason": "spacing",
+   "note": "inner em space",
+   "name": "a\u2003b"
+  },
+  {
+   "kind": "webhook",
+   "reason": "invisible",
+   "note": "Hangul filler",
+   "name": "\u3164"
+  },
+  {
+   "kind": "webhook",
+   "reason": "invisible",
+   "note": "blank Braille",
+   "name": "\u2800\u2800"
+  },
+  {
+   "kind": "webhook",
+   "reason": "invisible",
+   "note": "Hangul choseong filler inside",
+   "name": "a\u115fb"
+  },
+  {
+   "kind": "webhook",
+   "reason": "invisible",
+   "note": "only a combining mark",
+   "name": "\u0301"
+  },
+  {
+   "kind": "bot",
+   "reason": "invisible",
+   "note": "halfwidth Hangul filler",
+   "name": "\uffa0"
+  },
+  {
+   "kind": "webhook",
+   "reason": "forbidden_character",
+   "note": "mention",
+   "name": "@everyone"
+  },
+  {
+   "kind": "bot",
+   "reason": "forbidden_character",
+   "note": "mention inside",
+   "name": "Team @here"
+  },
+  {
+   "kind": "webhook",
+   "reason": "forbidden_character",
+   "note": "user mention",
+   "name": "<@123456789012345678>"
+  },
+  {
+   "kind": "bot",
+   "reason": "forbidden_character",
+   "note": "channel mention",
+   "name": "<#123456789012345678>"
+  },
+  {
+   "kind": "webhook",
+   "reason": "forbidden_character",
+   "note": "hash",
+   "name": "#general"
+  },
+  {
+   "kind": "webhook",
+   "reason": "forbidden_character",
+   "note": "colon",
+   "name": "News: Daily"
+  },
+  {
+   "kind": "bot",
+   "reason": "forbidden_character",
+   "note": "emoji syntax",
+   "name": ":smile:"
+  },
+  {
+   "kind": "webhook",
+   "reason": "forbidden_character",
+   "note": "code fence",
+   "name": "```code```"
+  },
+  {
+   "kind": "webhook",
+   "reason": "url_like",
+   "note": "www host",
+   "name": "www.example.com"
+  },
+  {
+   "kind": "bot",
+   "reason": "url_like",
+   "note": "www inside",
+   "name": "Visit www.example.com"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
    "note": "reserved",
    "name": "Discord"
   },
   {
-   "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "reserved_word"
-   ],
-   "note": "reserved lower case",
-   "name": "discord"
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "reserved on a bot too",
+   "name": "DISCORD Support"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "reserved_word"
-   ],
-   "note": "reserved upper case",
-   "name": "DISCORD"
+   "reason": "reserved_word",
+   "note": "full-width letters",
+   "name": "\uff44\uff49\uff53\uff43\uff4f\uff52\uff44"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "reserved_word"
-   ],
-   "note": "reserved inside words",
-   "name": "My Discord Bot"
+   "reason": "reserved_word",
+   "note": "accents",
+   "name": "D\u00efsc\u00f6rd"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "reserved_word"
-   ],
-   "note": "reserved as a substring",
+   "reason": "reserved_word",
+   "note": "Cyrillic i",
+   "name": "d\u0456scord"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "several Cyrillic look-alikes",
+   "name": "d\u0456s\u0441\u043erd clone"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "digit one for i",
+   "name": "D1scord"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "spaced letters",
+   "name": "d i s c o r d"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "separator",
+   "name": "dis_cord"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "clyde",
+   "name": "Clyde"
+  },
+  {
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "clyde with a dash",
+   "name": "Cl-yde"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "digit one for l",
+   "name": "C1yde"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "whole name everyone",
+   "name": "Everyone"
+  },
+  {
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "whole name here",
+   "name": "HERE"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "whole name here with a space",
+   "name": "he re"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "the product name",
+   "name": "Rafii Support"
+  },
+  {
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "the product name on a bot",
+   "name": "rafii"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "the old product name",
+   "name": "PostRiff Official"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "digit swaps",
+   "name": "P0stR1ff"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "long s",
+   "name": "di\u017fcord"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "dotted capital I",
+   "name": "D\u0130SCORD"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "dotless i is a look-alike",
+   "name": "d\u0131scord"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "inside a word",
    "name": "xdiscordx"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "reserved_word"
-   ],
-   "note": "reserved",
-   "name": "Clyde"
+   "reason": "reserved_word",
+   "note": "mixed case",
+   "name": "cLyDe Bot"
   },
   {
    "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "reserved_word"
-   ],
-   "note": "reserved mixed case",
-   "name": "cLyDe"
-  },
-  {
-   "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "reserved_word"
-   ],
-   "note": "reserved inside words",
-   "name": "Clyde Bot"
-  },
-  {
-   "kind": "webhook",
-   "accepted": false,
-   "issues": [
-    "reserved_word"
-   ],
-   "note": "long s casefolds to s",
-   "name": "di\u017fcord"
+   "reason": null,
+   "note": "the capital sharp s is not a reserved word",
+   "name": "Di\u1e9e"
   }
  ]
 }

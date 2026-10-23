@@ -1,59 +1,77 @@
 import type { DiscordCopy } from './discord-copy';
-import { formatRetryTime, type SenderNameIssue, type SenderStateKey } from './discord-sender-name';
+import { formatRetryTime, formatWait, type BlockedSenderState, type SenderNameIssue } from './discord-sender-name';
 
 type CopyKey = keyof DiscordCopy;
-export type BlockedStateKey = Exclude<SenderStateKey, 'ready'>;
 
 /**
- * Which copy lines explain each state. Four states reuse the long-standing lines the editor already shipped
- * (`senderChangePending`, `senderSessionError`, `senderPermissionError`, `senderSaveFailed`) as their body, so
- * existing wording and tests keep meaning the same thing. Every state has a title, a body and a "what you can do".
+ * Which copy lines explain each state. Three states reuse the long-standing lines the editor already shipped
+ * (`senderChangePending`, `senderSessionError`, `senderSaveFailed`) as their body, so existing wording keeps meaning
+ * the same thing. Every state has a title, a body and a "what you can do".
  */
-export const SENDER_STATE_COPY: Record<BlockedStateKey, { title: CopyKey; body: CopyKey; next: CopyKey }> = {
-  feature_disabled: { title: 'senderStateFeatureDisabledTitle', body: 'senderStateFeatureDisabledBody', next: 'senderStateFeatureDisabledNext' },
+export const SENDER_STATE_COPY: Record<BlockedSenderState, { title: CopyKey; body: CopyKey; next: CopyKey }> = {
+  sender_names_disabled: { title: 'senderStateSenderNamesDisabledTitle', body: 'senderStateSenderNamesDisabledBody', next: 'senderStateSenderNamesDisabledNext' },
   bot_nickname_disabled: { title: 'senderStateBotNicknameDisabledTitle', body: 'senderStateBotNicknameDisabledBody', next: 'senderStateBotNicknameDisabledNext' },
   not_authorizing_member: { title: 'senderStateNotAuthorizingMemberTitle', body: 'senderStateNotAuthorizingMemberBody', next: 'senderStateNotAuthorizingMemberNext' },
-  member_lacks_manage_nicknames: {
-    title: 'senderStateMemberLacksManageNicknamesTitle',
-    body: 'senderStateMemberLacksManageNicknamesBody',
-    next: 'senderStateMemberLacksManageNicknamesNext'
+  session_reverification_required: { title: 'senderStateSessionReverificationRequiredTitle', body: 'senderSessionError', next: 'senderStateSessionReverificationRequiredNext' },
+  person_missing_manage_nicknames: {
+    title: 'senderStatePersonMissingManageNicknamesTitle',
+    body: 'senderStatePersonMissingManageNicknamesBody',
+    next: 'senderStatePersonMissingManageNicknamesNext'
   },
-  bot_lacks_change_nickname: { title: 'senderStateBotLacksChangeNicknameTitle', body: 'senderStateBotLacksChangeNicknameBody', next: 'senderStateBotLacksChangeNicknameNext' },
-  nickname_managed_elsewhere: {
-    title: 'senderStateNicknameManagedElsewhereTitle',
-    body: 'senderStateNicknameManagedElsewhereBody',
-    next: 'senderStateNicknameManagedElsewhereNext'
+  person_role_below_bot: { title: 'senderStatePersonRoleBelowBotTitle', body: 'senderStatePersonRoleBelowBotBody', next: 'senderStatePersonRoleBelowBotNext' },
+  bot_missing_change_nickname: { title: 'senderStateBotMissingChangeNicknameTitle', body: 'senderStateBotMissingChangeNicknameBody', next: 'senderStateBotMissingChangeNicknameNext' },
+  nickname_authority_other_workspace: {
+    title: 'senderStateNicknameAuthorityOtherWorkspaceTitle',
+    body: 'senderStateNicknameAuthorityOtherWorkspaceBody',
+    next: 'senderStateNicknameAuthorityOtherWorkspaceNext'
   },
   edit_pending: { title: 'senderStateEditPendingTitle', body: 'senderChangePending', next: 'senderStateEditPendingNext' },
   stale: { title: 'senderStateStaleTitle', body: 'senderStateStaleBody', next: 'senderStateStaleNext' },
-  step_up_required: { title: 'senderStateStepUpRequiredTitle', body: 'senderSessionError', next: 'senderStateStepUpRequiredNext' },
   reconnect_required: { title: 'senderStateReconnectRequiredTitle', body: 'senderStateReconnectRequiredBody', next: 'senderStateReconnectRequiredNext' },
-  permission_unclear: { title: 'senderStatePermissionUnclearTitle', body: 'senderPermissionError', next: 'senderStatePermissionUnclearNext' },
+  rate_limited: { title: 'senderStateRateLimitedTitle', body: 'senderStateRateLimitedBody', next: 'senderStateRateLimitedNext' },
+  upstream_unavailable: { title: 'senderStateUpstreamUnavailableTitle', body: 'senderStateUpstreamUnavailableBody', next: 'senderStateUpstreamUnavailableNext' },
+  workspace_permission: { title: 'senderStateWorkspacePermissionTitle', body: 'senderStateWorkspacePermissionBody', next: 'senderStateWorkspacePermissionNext' },
   failed: { title: 'senderStateFailedTitle', body: 'senderSaveFailed', next: 'senderStateFailedNext' }
 };
 
-export const BLOCKED_STATES = Object.keys(SENDER_STATE_COPY) as BlockedStateKey[];
+export const BLOCKED_STATES = Object.keys(SENDER_STATE_COPY) as BlockedSenderState[];
 
-export function senderStateCopy(copy: DiscordCopy, key: BlockedStateKey): { title: string; body: string; next: string } {
+export function senderStateCopy(copy: DiscordCopy, key: BlockedSenderState): { title: string; body: string; next: string } {
   const lines = SENDER_STATE_COPY[key];
   return { title: copy[lines.title], body: copy[lines.body], next: copy[lines.next] };
 }
 
-/** "Rafii can check again at 2:32 PM." / "...in about two minutes." / "...now." for a change that is still being confirmed. */
-export function recheckLine(copy: DiscordCopy, retryAt: number | null, locale: string, timeZone?: string, nowMs: number = Date.now()): string {
-  if (retryAt === null) return copy.senderRecheckSoon;
-  if (retryAt * 1000 <= nowMs) return copy.senderRecheckNow;
-  const time = formatRetryTime(retryAt, locale, timeZone);
-  return time ? copy.senderRecheckAt.replace('{time}', time) : copy.senderRecheckSoon;
+/**
+ * "Rafii can check again in about 90 seconds, at 2:32 PM." for a held change or a throttle: the wait the server named
+ * (`retryAfterSeconds`) and the clock time it ends; "...now." once that time has passed; "...in about two minutes."
+ * when the server named no wait.
+ */
+export function recheckLine(
+  copy: DiscordCopy,
+  state: { retryAtMs: number | null; retryAfterSeconds: number | null },
+  locale: string,
+  timeZone?: string,
+  nowMs: number = Date.now()
+): string {
+  if (state.retryAtMs === null) return copy.senderRecheckSoon;
+  if (state.retryAtMs <= nowMs) return copy.senderRecheckNow;
+  const time = formatRetryTime(state.retryAtMs, locale, timeZone);
+  if (!time) return copy.senderRecheckSoon;
+  if (state.retryAfterSeconds === null) return copy.senderRecheckAt.replace('{time}', time);
+  return copy.senderRecheckIn.replace('{wait}', formatWait(state.retryAfterSeconds, locale)).replace('{time}', time);
 }
 
 const ISSUE_COPY: Record<SenderNameIssue, CopyKey> = {
   empty: 'senderIssueEmpty',
   surrounding_space: 'senderIssueSpace',
+  not_normalized: 'senderIssueNotNormalized',
   too_long: 'senderIssueTooLong',
-  not_nfc: 'senderIssueNotNfc',
-  control_character: 'senderIssueControl',
-  reserved_word: 'senderRuleWebhookReserved'
+  control_or_format: 'senderIssueControl',
+  spacing: 'senderIssueSpacing',
+  invisible: 'senderIssueInvisible',
+  forbidden_character: 'senderIssueForbidden',
+  url_like: 'senderIssueUrl',
+  reserved_word: 'senderIssueReserved'
 };
 
 /** The message for one broken rule, with the numbers filled in. */

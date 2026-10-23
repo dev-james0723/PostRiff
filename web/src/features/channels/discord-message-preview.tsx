@@ -7,11 +7,12 @@ import { DISCORD_PREVIEW_PALETTE, type PreviewTheme } from '../../lib/channels/d
 import type { SenderKind } from '../../lib/channels/discord-sender-name';
 
 /**
- * Where the shown name comes from. `draft`: what the person is typing, not saved. `saved`: a name Rafii stored for a
- * webhook connection. `observed`: a bot nickname as Rafii last read it. `unknown`: Rafii does not know the name, so
- * the preview says so instead of making one up.
+ * Where the shown name comes from. `draft`: what the person is typing, not saved. `saved`: a custom name Rafii stored
+ * for a webhook connection. `webhook_default`: the name saved on the webhook itself in Discord (no custom name).
+ * `observed`: a bot nickname as Rafii last read it. `bot_username`: the bot has no nickname there, so Discord shows
+ * its own username. `unknown`: Rafii does not know the name, so the preview says so instead of making one up.
  */
-export type PreviewNameSource = 'draft' | 'saved' | 'observed' | 'unknown';
+export type PreviewNameSource = 'draft' | 'saved' | 'webhook_default' | 'observed' | 'bot_username' | 'unknown';
 
 export interface PreviewMediaItem {
   url: string;
@@ -30,6 +31,11 @@ export interface DiscordMessagePreviewProps {
   media?: readonly PreviewMediaItem[];
   copy: DiscordCopy;
   locale: string;
+  /** The tag Discord puts next to app and webhook authors, as the server reports it (`preview.badge`). */
+  badge?: string;
+  /** `preview.queuedPostsKeepApprovedName` (webhook) and `preview.queuedPostsFollowCurrentNickname` (bot); default by kind. */
+  queuedKeepsName?: boolean;
+  queuedFollowsNickname?: boolean;
   /** Heading text; the editor says "Sender preview", reviews say "How it will look in Discord". */
   heading: string;
   headingLevel?: 'h3' | 'h4';
@@ -99,6 +105,9 @@ export function DiscordMessagePreview({
   media,
   copy,
   locale,
+  badge,
+  queuedKeepsName,
+  queuedFollowsNickname,
   heading,
   headingLevel = 'h3',
   themeToggle = false,
@@ -121,9 +130,14 @@ export function DiscordMessagePreview({
   const Heading = headingLevel;
   const when = previewTimeLabel(copy, locale, at, timeZone);
 
-  const nameNotes: string[] = [kind === 'bot' ? copy.previewBotNote : copy.previewWebhookNote];
+  const nameNotes: string[] =
+    kind === 'bot'
+      ? [copy.previewBotNote, ...((queuedFollowsNickname ?? true) ? [copy.previewBotQueuedNote] : [])]
+      : [copy.previewWebhookNote, ...((queuedKeepsName ?? true) ? [copy.previewWebhookQueuedNote] : [])];
   if (nameSource === 'unknown') nameNotes.push(kind === 'bot' ? copy.previewBotNameUnknownNote : copy.previewWebhookDefaultNote);
+  if (nameSource === 'webhook_default') nameNotes.push(copy.previewWebhookDefaultNote);
   if (nameSource === 'observed') nameNotes.push(copy.previewBotNameAsOf);
+  if (nameSource === 'bot_username') nameNotes.push(copy.previewBotUsernameNote);
   if (nameSource === 'draft') nameNotes.push(copy.senderPreviewUnsaved);
 
   return (
@@ -178,7 +192,7 @@ export function DiscordMessagePreview({
               className='rounded px-1 text-[10px] leading-[15px] font-semibold tracking-wide'
               style={{ background: palette.appTagBackground, color: palette.appTagText }}
             >
-              {copy.previewAppTag}
+              {badge || copy.previewAppTag}
             </span>
             <time data-preview-time dateTime={at.toISOString()} className='text-xs' style={{ color: palette.muted }}>
               {when}
@@ -193,6 +207,7 @@ export function DiscordMessagePreview({
             {body}
           </p>
           {media?.map((item) => (
+            // eslint-disable-next-line @next/next/no-img-element -- a private object URL of the person's own upload
             <img key={item.url} src={item.url} alt={item.alt} className='mt-2 max-h-64 max-w-full rounded-lg object-contain' />
           ))}
         </div>

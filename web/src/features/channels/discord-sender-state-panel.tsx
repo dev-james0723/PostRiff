@@ -2,11 +2,13 @@
 
 import type { ReactNode, Ref } from 'react';
 import type { DiscordCopy } from '../../lib/channels/discord-copy';
-import { formatRetryTime, type SenderState } from '../../lib/channels/discord-sender-name';
-import { recheckLine, senderStateCopy, type BlockedStateKey } from '../../lib/channels/discord-sender-state-copy';
+import { formatRetryTime, type BlockedState, type SenderKind } from '../../lib/channels/discord-sender-name';
+import { recheckLine, senderStateCopy } from '../../lib/channels/discord-sender-state-copy';
 
 export interface SenderStatePanelProps {
-  state: SenderState & { key: BlockedStateKey };
+  state: BlockedState;
+  /** Which kind of connection this is; the held-post sentence of the master switch is only true for webhooks. */
+  kind?: SenderKind;
   copy: DiscordCopy;
   locale: string;
   timeZone?: string;
@@ -30,9 +32,9 @@ export interface SenderStatePanelProps {
  * One availability state in plain words: what is wrong (title and body) and what the person can do next (or that
  * nothing can be done). Each state has a stable test id, `discord-sender-state-<key>`, and `data-state`.
  */
-export function SenderStatePanel({ state, copy, locale, timeZone, id, role, headingRef, actions, nowMs, checkedAtMs }: SenderStatePanelProps) {
+export function SenderStatePanel({ state, kind, copy, locale, timeZone, id, role, headingRef, actions, nowMs, checkedAtMs }: SenderStatePanelProps) {
   const lines = senderStateCopy(copy, state.key);
-  const checked = typeof checkedAtMs === 'number' ? formatRetryTime(checkedAtMs / 1000, locale, timeZone) : null;
+  const checked = typeof checkedAtMs === 'number' ? formatRetryTime(checkedAtMs, locale, timeZone) : null;
   return (
     <section
       role={role}
@@ -48,9 +50,14 @@ export function SenderStatePanel({ state, copy, locale, timeZone, id, role, head
       <p id={`${id}-body`} className='text-sm'>
         {lines.body}
       </p>
-      {state.key === 'edit_pending' && (
-        <p data-recheck className='text-sm font-medium'>
-          {recheckLine(copy, state.retryAt, locale, timeZone, nowMs)}
+      {state.key === 'sender_names_disabled' && kind === 'webhook' && (
+        <p data-held-note className='text-sm'>
+          {copy.senderStateHeldNote}
+        </p>
+      )}
+      {(state.key === 'edit_pending' || state.key === 'rate_limited') && (
+        <p id={`${id}-recheck`} data-recheck data-retry-after-seconds={state.retryAfterSeconds ?? undefined} className='text-sm font-medium'>
+          {recheckLine(copy, state, locale, timeZone, nowMs)}
         </p>
       )}
       <div className='flex flex-col gap-0.5'>
