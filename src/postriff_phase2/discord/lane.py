@@ -222,23 +222,56 @@ def status(social, now, values=None):
             'maxSteps': steps, 'shards': SHARDS, 'policyDaysLeft': days}
 
 
-def warn_if_lagging(result, reason=None):
-    """One WARNING, discord.lane.lagging, when this tick's Discord report shows due work later than the threshold.
+_NOT_READ = object()
 
-    tick() calls it whenever the flag is on, with the readiness verdict it acted on. It reads only the report the tick
-    already made (discordWorker.queue, the existing sample of at most 256 workspaces), so it adds no query, and it
-    logs counts and codes only. Returns whether it warned.
+
+def projected_lag(worker):
+    """How long the oldest due Discord work in the projection has waited, in seconds (0.0 when none is overdue), or
+    None when the projection cannot be read. Every workspace, in one indexed statement (the shards' due probe).
+    Never raises: a monitoring read cannot fail the minute cron."""
+    try:
+        with worker.connection_factory() as db, db.cursor() as cur:
+            cur.execute(_SOONEST)
+            now, soonest = cur.fetchone()
+    except Exception:
+        return None
+    if not discord_worker.finite(now):
+        return None
+    return 0.0 if soonest is None else max(0.0, now - soonest)
+
+
+def warn_if_lagging(result, reason=None, projected=_NOT_READ):
+    """One WARNING, discord.lane.lagging, when due Discord work has waited longer than the threshold, or when the
+    tick could not see its Discord queue.
+
+    tick() calls it whenever the flag is on, with the readiness verdict it acted on and, when the lane owns Discord,
+    the projection's lag (projected_lag(): every workspace). The tick's own report (discordWorker.queue) samples only
+    the first 256 workspaces, so it alone cannot see lagging work beyond them, and when that report fails its status
+    is 'unavailable'. It warns when either lag passes the threshold, when the report is unavailable, or when the lane
+    owns Discord and the projection cannot be read; the line says which. Counts and codes only. Returns whether it
+    warned.
     """
     report = result.get('discordWorker') if isinstance(result, dict) else None
     queue = report.get('queue') if isinstance(report, dict) else None
-    lag = queue.get('oldestEligibleLagSeconds') if isinstance(queue, dict) else None
-    if not discord_worker.finite(lag) or lag <= LAG_WARNING_SECONDS:
+    queue = queue if isinstance(queue, dict) else {}
+    sampled = queue.get('oldestEligibleLagSeconds')
+    sampled = sampled if discord_worker.finite(sampled) else None
+    read = projected is not _NOT_READ
+    projected = projected if read and discord_worker.finite(projected) else None
+    unavailable = queue.get('status') == 'unavailable'
+    lags = [lag for lag in (sampled, projected) if lag is not None]
+    if not (lags and max(lags) > LAG_WARNING_SECONDS or unavailable or read and projected is None):
         return False
     counts = {key: queue[key] for key in ('depth', 'held', 'uncertain', 'deadLetters') if type(queue.get(key)) is int}
     # No workspace, job, channel, content, credential or lease owner id.
     logging.getLogger('postriff.request').warning(json.dumps({
-        'event': 'discord.lane.lagging', 'oldestEligibleLagSeconds': round(lag, 1),
-        'thresholdSeconds': LAG_WARNING_SECONDS, 'laneOwnsDiscord': reason is None, 'laneBlocker': reason, **counts}))
+        'event': 'discord.lane.lagging',
+        'oldestEligibleLagSeconds': None if sampled is None else round(sampled, 1),
+        'projectedLagSeconds': None if projected is None else round(projected, 1),
+        'thresholdSeconds': LAG_WARNING_SECONDS,
+        'report': 'unavailable' if unavailable else 'sample',
+        'projection': ('unreadable' if projected is None else 'read') if read else 'not_read',
+        'laneOwnsDiscord': reason is None, 'laneBlocker': reason, **counts}))
     return True
 
 
@@ -287,9 +320,35 @@ def soonest_due(lane):
 
 
 def _projection_ready(lane):
-    with lane.connection_factory() as db, db.cursor() as cur:
-        cur.execute("SELECT to_regclass('public.pr_discord_worker_projection')")
-        return cur.fetchone()[0] is not None
+    """Whether this invocation's loop starts (True) or why not: blocker()'s reason, False when the projection table
+    (migration 126) is missing, or 'idle'. It replaced a bare schema check, hence the name.
+
+    A shard that cannot run opens no connection; an idle one opens one, for one statement. First blocker() on this
+    process's clock, pure as before, so a broken configuration still ends every invocation with its WARNING. Then
+    one statement: the database clock and the soonest next_at in the projection. The loop claims only through
+    due_workspaces_sql on that projection (a row whose next_at has passed), so when nothing is due within the idle
+    horizon it could claim nothing: it stops as idle before the coordinator read (outlook) and before any claim,
+    which is where it stopped before, one claim miss and two queries later. Otherwise the loop runs exactly as
+    before. The second blocker() is outlook()'s: at a policy's edges the coordinator's own clock decides.
+    """
+    values = getattr(lane, 'environment', None)
+    reason = blocker(lane.social, lane.clock(), values)
+    if reason:
+        return reason
+    try:
+        with lane.connection_factory() as db, db.cursor() as cur:
+            cur.execute(_SOONEST)
+            now, soonest = cur.fetchone()
+    except Exception as error:
+        if getattr(error, 'sqlstate', None) == '42P01' or type(error).__name__ == 'UndefinedTable':
+            return False
+        raise
+    reason = blocker(lane.social, now, values)
+    if reason:
+        return reason
+    if soonest is None or soonest - now > IDLE_HORIZON_SECONDS:
+        return 'idle'
+    return True
 
 
 def run(worker, number, values=None, *, started=None, request_id=None, sleep=time.sleep, monotonic=time.monotonic,
@@ -307,8 +366,9 @@ def run(worker, number, values=None, *, started=None, request_id=None, sleep=tim
     waited = {'rate': 0.0, 'idle': 0.0}
     stopped, error, misses = None, None, 0
     try:
-        if not _projection_ready(lane):
-            stopped = 'schema'
+        ready = _projection_ready(lane)
+        if ready is not True:
+            stopped = ready or 'schema'
         while stopped is None:
             remaining = deadline - monotonic()
             if lane._stopping:

@@ -340,7 +340,7 @@ class LaneReadiness(unittest.TestCase):
             with self.subTest(name):
                 result, statements, entry = self.run_shard(discord_social(**setup))
                 self.assertEqual((result['stoppedBy'], result['processed'], result['counters']['steps']), (reason, 0, 0))
-                self.assertEqual(len(statements), 1, 'no claim and no coordinator read')
+                self.assertEqual(len(statements), 0, 'no connection at all: no claim, coordinator read or due probe')
                 self.assertEqual((entry['event'], entry['stoppedBy']), ('discord.lane.completed', reason))
                 self.assertEqual((result['status']['ready'], result['status']['blocker']), (False, reason))
 
@@ -437,9 +437,10 @@ class HealthStatus(unittest.TestCase):
 
 
 class LagWarning(unittest.TestCase):
-    """With the flag on, the minute tick warns from its own Discord report when due work waits too long."""
-    KEYS = {'event', 'oldestEligibleLagSeconds', 'thresholdSeconds', 'laneOwnsDiscord', 'laneBlocker',
-            'depth', 'held', 'uncertain', 'deadLetters'}
+    """With the flag on, the minute tick warns when due Discord work waits too long: from its own report (a sample
+    of 256 workspaces) and, when the lane owns Discord, from the projection (every workspace, one statement)."""
+    KEYS = {'event', 'oldestEligibleLagSeconds', 'projectedLagSeconds', 'thresholdSeconds', 'report', 'projection',
+            'laneOwnsDiscord', 'laneBlocker', 'depth', 'held', 'uncertain', 'deadLetters'}
 
     def setUp(self):
         for item in (patch.dict(security_holds._INSTALLED, {'readable': True, 'checked': float('-inf')}),
@@ -448,7 +449,30 @@ class LagWarning(unittest.TestCase):
             item.start()
             self.addCleanup(item.stop)
 
-    def tick(self, lag, *, setup=None, environment=ON):
+    def projection(self, lag):
+        """A database that answers only the projection's due probe: the oldest due work `lag` seconds ago (None:
+        nothing due; 'unreadable': the read fails). Any other statement fails the test."""
+        statements = self.statements = []
+
+        @contextmanager
+        def factory():
+            class Cursor:
+                def execute(self, sql, params=()):
+                    statements.append(sql)
+                    assert sql == lane._SOONEST, sql
+                    if lag == 'unreadable':
+                        raise RuntimeError('synthetic projection read failure')
+
+                def fetchone(self):
+                    return (NOW, None if lag is None else NOW - lag)
+
+            class Connection:
+                def cursor(self):
+                    return contextmanager(lambda: (yield Cursor()))()
+            yield Connection()
+        return factory
+
+    def tick(self, lag, *, setup=None, environment=ON, projected=0.0):
         report = {'version': 1, 'queue': {'status': 'observed_sample', 'sampled': True, 'workspaceLimit': 256,
                                           'jobLimit': 4096, 'depth': 7, 'oldestEligibleLagSeconds': lag, 'held': 1,
                                           'uncertain': 2, 'deadLetters': 0}}
@@ -456,7 +480,7 @@ class LagWarning(unittest.TestCase):
             report['queue'] = {'status': 'unavailable', 'sampled': True}
         worker = recording_worker(lambda **kw: False, social=discord_social(**(setup or {})))
         worker.discord_report = lambda: copy.deepcopy(report)
-        worker.connection_factory = Mock(side_effect=AssertionError('the warning opened a connection'))
+        worker.connection_factory = self.projection(projected)
         with patch.dict('os.environ', environment):
             result = worker.tick()
         self.assertEqual(result['discordWorker'], report, 'the report is returned unchanged')
@@ -472,17 +496,42 @@ class LagWarning(unittest.TestCase):
         entry = json.loads(record.getMessage())
         self.assertEqual(set(entry), self.KEYS)
         self.assertEqual(entry, {'event': 'discord.lane.lagging', 'oldestEligibleLagSeconds': 301.0,
-                                 'thresholdSeconds': 300, 'laneOwnsDiscord': True, 'laneBlocker': None,
+                                 'projectedLagSeconds': 0.0, 'thresholdSeconds': 300, 'report': 'sample',
+                                 'projection': 'read', 'laneOwnsDiscord': True, 'laneBlocker': None,
                                  'depth': 7, 'held': 1, 'uncertain': 2, 'deadLetters': 0})
+        self.assertEqual(self.statements, [lane._SOONEST], 'one statement: the projection due probe')
 
-    def test_at_or_below_five_minutes_or_without_a_report_nothing_is_logged(self):
-        for lag in (300.0, 299.9, 0.0, None):
+    def test_at_or_below_five_minutes_nothing_is_logged(self):
+        for lag in (300.0, 299.9, 0.0):
             with self.subTest(lag=lag), self.assertNoLogs('postriff.request', 'WARNING'):
-                self.tick(lag)
+                self.tick(lag, projected=lag)
+
+    def test_lagging_work_outside_the_reports_sample_is_seen_in_the_projection(self):
+        with self.assertLogs('postriff.request', 'WARNING') as logged:
+            self.tick(0.0, projected=901.0)
+        entry = json.loads(logged.records[-1].getMessage())
+        self.assertEqual((entry['oldestEligibleLagSeconds'], entry['projectedLagSeconds'], entry['projection']),
+                         (0.0, 901.0, 'read'))
+
+    def test_a_report_that_failed_is_a_warning_of_its_own(self):
+        with self.assertLogs('postriff.request', 'WARNING') as logged:
+            self.tick(None)
+        entry = json.loads(logged.records[-1].getMessage())
+        self.assertEqual((entry['report'], entry['oldestEligibleLagSeconds'], entry['projectedLagSeconds']),
+                         ('unavailable', None, 0.0))
+
+    def test_a_projection_that_cannot_be_read_while_the_lane_owns_discord_is_a_warning(self):
+        with self.assertLogs('postriff.request', 'WARNING') as logged:
+            result = self.tick(0.0, projected='unreadable')
+        self.assertTrue(result['discordParallelLane'], 'the tick itself goes on')
+        entry = json.loads(logged.records[-1].getMessage())
+        self.assertEqual((entry['projection'], entry['projectedLagSeconds']), ('unreadable', None))
 
     def test_with_the_flag_off_the_frozen_tick_never_warns(self):
         with self.assertNoLogs('postriff.request', 'WARNING'):
-            self.tick(10_000.0, environment={lane.ENV_ENABLED: 'false', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'})
+            self.tick(10_000.0, environment={lane.ENV_ENABLED: 'false', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'},
+                      projected=10_000.0)
+        self.assertEqual(self.statements, [], 'the frozen tick reads no projection')
 
     def test_a_tick_that_kept_discord_says_why_the_lane_could_not_run(self):
         with self.assertLogs('postriff.request', 'WARNING') as logged:
@@ -502,6 +551,7 @@ class LagWarning(unittest.TestCase):
         statements, warnings = {}, {}
         for late in (10, 700):
             db = MemoryDatabase(FlagOffIsTheFrozenBase.queue())
+            db.projection_ready = True  # the production schema (migration 126): the tick also reads its due probe
             db.now = NOW + 300 + late
             worker = PostgresWorker(db.connection, discord_social(db.connection), clock=lambda: db.now,
                                     worker_id='minute-worker', discord_workers=True)
@@ -512,9 +562,11 @@ class LagWarning(unittest.TestCase):
             statements[late] = [sql for sql, _ in db.queries]
             warnings[late] = [record.getMessage() for record in logged.records if 'discord.lane.lagging' in record.getMessage()]
         self.assertEqual(statements[700], statements[10], 'warning or not, the tick runs the same statements')
+        self.assertEqual(statements[10].count(lane._SOONEST), 1, 'plus one statement: the projection due probe')
         self.assertEqual(warnings[10], [])
         (message,) = warnings[700]
         self.assertEqual(json.loads(message)['oldestEligibleLagSeconds'], 700.0)
+        self.assertEqual(json.loads(message)['projectedLagSeconds'], 700.0)
         private = {WORKSPACE, 'minute-worker'}
         for job in db.state['phase2']['jobs']:
             target = job['manifest']['discord']['target']

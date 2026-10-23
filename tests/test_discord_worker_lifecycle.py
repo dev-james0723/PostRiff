@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.discord import worker as policy
+from postriff_phase2.discord.lane import _SOONEST as DUE_PROBE
 from postriff_phase2 import security_holds
 from postriff_phase2.hosted_social import HostedSocial
 from postriff_phase2.hosted_worker import PostgresWorker, due_workspaces_sql
@@ -19,6 +20,10 @@ from test_discord_publish_authorization import (
     ACTOR, APP, FIRST, GENERATION, NOW, WORKSPACE, SyntheticGrants,
     SyntheticWire, approve, fixture, review,
 )
+
+
+class UndefinedTable(Exception):
+    sqlstate = '42P01'
 
 
 class MemoryDatabase:
@@ -44,6 +49,12 @@ class MemoryDatabase:
             self.rows = [(True,)]
         elif sql.startswith('SELECT hold_active FROM public.pr_security_account_controls WHERE user_id='):
             self.rows = [(self.security_hold,)]
+        elif sql == DUE_PROBE:  # the W-02 lane's projection probe: the clock and the soonest due Discord work
+            if not self.projection_ready:
+                raise UndefinedTable('relation "public.pr_discord_worker_projection" does not exist')
+            live = [j for j in self.state['phase2']['jobs'] if j.get('manifest', {}).get('platform') == 'Discord'
+                    and j['state'] not in ('verified', 'failed', 'canceled', 'held')]
+            self.rows = [(self.now, min((max(j.get('leaseUntil', 0), j.get('nextAt', 0)) for j in live), default=None))]
         elif sql.startswith('SELECT extract(epoch from clock_timestamp()'):
             self.rows = [(self.now,)]
         elif sql.startswith('SELECT pg_try_advisory'):
