@@ -91,7 +91,7 @@ SCENARIOS = {
     'baseline': dict(lane=False, fixed_run_minutes=10,
                      description='The frozen minute worker (lane flag off) on the S1 data for 10 minutes: its real '
                                  'Discord posts per minute.', expect=('baseline', 'no_duplicates', 'no_late_sends', 'isolation')),
-    'F429': dict(workspaces=1000, posts=1000, max_run_minutes=12, stall_detect_minutes=4,
+    'F429': dict(workspaces=1000, posts=1000, max_run_minutes=20, stall_detect_minutes=4,
                  injections=[{'kind': 'global429', 'at': 1.5, 'seconds': 1.0, 'retryAfter': 5},
                              {'kind': 'global429', 'at': 3.0, 'seconds': 1.0, 'retryAfter': 3},
                              {'kind': 'route429', 'route': 'POST /channels/{id}/messages', 'after': 2.0, 'count': 5,

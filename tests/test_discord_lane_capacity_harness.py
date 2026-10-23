@@ -100,6 +100,8 @@ class MockCounters(unittest.TestCase):
         self.assertNotIn('retry-after', headers)
         self.assertIn('_html', body)
         self.assertEqual(record['injected'], 'html429')
+        # The injected answer still names its server, so the analysis can follow that server's posts.
+        self.assertEqual(record['guild'], 1)
 
 
 class LatenessComesFromTheMock(unittest.TestCase):

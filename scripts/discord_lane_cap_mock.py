@@ -186,6 +186,17 @@ class World:
                   'route': template, 'credential': kind or 'none'}
         if kind == 'user' and person is not None:
             record['tenant'] = person  # the workspace whose person's bearer this is (request ledger)
+        # Which tenant a server or channel route serves, before any injection decides the answer (an injected ban page
+        # on a server route must still name its server).
+        parts = path.strip('/').split('/')
+        if len(parts) >= 2 and parts[0] == 'guilds':
+            index = index_of(parts[1], GUILD0)
+            if index is not None:
+                record['guild'] = index
+        elif len(parts) >= 2 and parts[0] == 'channels':
+            index = index_of(parts[1], CHANNEL0)
+            if index is not None:
+                record['tenant'] = index
         with self.lock:
             self.counters['requests'] += 1
             count_all = self._trail(self.trail_all, now)
