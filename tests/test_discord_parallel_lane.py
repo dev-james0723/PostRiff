@@ -92,6 +92,40 @@ class FlagAndBudget(unittest.TestCase):
         self.assertLessEqual(lane.SHARDS, lane.MAX_SHARDS)
 
 
+class HostedPreflight(unittest.TestCase):
+    """scripts/check_postriff_hosted_preflight.py refuses a lane flag the lane cannot act on."""
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location('w02_hosted_preflight', ROOT / 'scripts/check_postriff_hosted_preflight.py')
+        self.preflight = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.preflight)
+
+    def lane_check(self, values):
+        return {item['name']: item for item in self.preflight.validate_environment(values)}['discord-parallel-lane']
+
+    def test_the_lane_flag_without_rate_limits_fails_the_preflight(self):
+        on = {lane.ENV_ENABLED: 'true', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}
+        for rate in (None, 'false', 'TRUE', '1'):
+            with self.subTest(rate=rate):
+                check = self.lane_check({**on, **({'POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED': rate} if rate else {})})
+                self.assertEqual(check['status'], 'fail')
+                self.assertIn('POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED', check['detail'])
+        ready = {**on, 'POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED': 'true'}
+        self.assertEqual(self.lane_check(ready)['status'], 'pass')
+        self.assertEqual(self.lane_check({**ready, 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'false'})['status'], 'fail')
+        for off in ({}, {lane.ENV_ENABLED: 'TRUE'}, {lane.ENV_ENABLED: 'false', 'POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED': 'false'}):
+            with self.subTest(off=off):
+                self.assertEqual(self.lane_check(off)['status'], 'pass')
+
+    def test_the_failed_lane_check_fails_the_command(self):
+        values = {lane.ENV_ENABLED: 'true', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}
+        with patch.dict('os.environ', values, clear=True), patch('sys.stdout', io.StringIO()) as printed:
+            self.assertEqual(self.preflight.main([]), 1)
+        report = json.loads(printed.getvalue())
+        self.assertEqual(report['status'], 'fail')
+        self.assertIn({'name': 'discord-parallel-lane', 'status': 'fail'},
+                      [{key: item[key] for key in ('name', 'status')} for item in report['checks']])
+
+
 def invoke(app, suffix, authorization='', method='GET'):
     result = {}
     environ = {'REQUEST_METHOD': method, 'PATH_INFO': lane.ROUTE + suffix, 'QUERY_STRING': '',

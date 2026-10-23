@@ -110,10 +110,22 @@ def validate_structure(root=ROOT):
     return checks
 
 
+def validate_discord_lane(values):
+    """W-02: the parallel Discord lane flag is only meaningful with the coordinator and lease protocol it runs on."""
+    if values.get("POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED") != "true":
+        return _result("discord-parallel-lane", "pass", "W-02 parallel Discord lane off")
+    if values.get("POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED") != "true":
+        return _result("discord-parallel-lane", "fail", "lane flag on without POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true: the lane cannot run (the minute worker keeps Discord, and without rate limits the hosted runtime pauses Discord publishing)")
+    if values.get("POSTRIFF_DISCORD_WORKER_V1_ENABLED", "").lower() not in ("1", "true"):
+        return _result("discord-parallel-lane", "fail", "lane flag on without POSTRIFF_DISCORD_WORKER_V1_ENABLED: the flag has no effect")
+    return _result("discord-parallel-lane", "pass", "lane on with rate limits and the worker lease protocol; judge the policy with scripts/discord_rate_policy.py and confirm 12 discord.lane.completed lines a minute after promotion")
+
+
 def validate_environment(values):
     checks = []
     missing = [key for key in REQUIRED_ENV if not values.get(key) or any(marker in values.get(key, "") for marker in PLACEHOLDERS)]
     checks.append(_result("required-environment", "pass" if not missing else "pending", "all required names are populated" if not missing else "missing or placeholder: " + ", ".join(missing)))
+    checks.append(validate_discord_lane(values))
     if missing:
         return checks
 
