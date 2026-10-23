@@ -32,7 +32,7 @@ Started 2026-10-23 about 04:40Z under owner reply 13 ("continue engineering unti
 | Independent code review of the final SHA, closed finding by finding | W-02 review round 1 closed (3 findings, 1 re-rated); delta re-review pending; final-SHA review not started | `SECURITY-FIX-EVIDENCE.md` |
 | Exact-SHA CI | NOT RUN | - |
 | Security configuration checks (required and forbidden names, flags, policy valid, crons registered, cron secret length, upload set clean, Git deployments off, dependency audits) | NOT RUN for RC2. The build route's preflight exists and passed for RC1 (run 39882363204); W-02 added the lane check to `scripts/check_postriff_hosted_preflight.py` | `BUILD-VIA-GITHUB-ACTIONS.md` |
-| Customer-impact inventory (no observable regression or side effect for existing customers while Discord is off for them) | IN PROGRESS | branch `claude/discord-impact-20261023` |
+| Customer-impact inventory (no observable regression or side effect for existing customers while Discord is off for them) | IN PROGRESS: **first findings are not clean.** FB-1 HIGH (Facebook approvals break in RC1: half-carried integration, fix in progress on `claude/discord-rc2-fixes-20261023`), CH-1 and BG-1 and WB-1 MEDIUM, PR-1 and SC-1 LOW to MEDIUM | branch `claude/discord-impact-20261023` (`docs/CUSTOMER-IMPACT-INVENTORY.md`) |
 | Build workflow v4 (dark gate list of up to five workspaces) | written, 165 offline checks, independent delta review running | `BUILD-VIA-GITHUB-ACTIONS.md` section 8 |
 
 ## 3. Stage 5b (private canary) and 5c (pre-public)
@@ -47,6 +47,8 @@ Not started; both need the owner's separate approvals (section 5).
 4. Restore hazard: a database restore can make already-sent posts look unsent and cause duplicates; every restore starts with the operator hold (`M-03-BACKUP-ASSESSMENT.md` section 4).
 5. The open setting lives on the build command; a later build that omits it silently closes Discord (`DURABLE-OPEN-CONFIG-PROPOSAL.md`).
 6. Pre-existing and outside this release: with the YouTube fleet on, the minute worker's invalidation lacks the deployment-binding filter (W-4 in the register).
+7. **FB-1 (HIGH, found by the impact inventory, confirmed by probe):** RC1 breaks Facebook approvals and holds approved Facebook posts (the integration took two of the three pieces of one change). Existing customers with a Facebook Page would be hit as soon as RC1 or RC2 serves them. Fix for RC2 in progress; whether any Production workspace has a Facebook connection or queued post is unknown from here (a read-only count can answer it).
+8. Other customer-visible or background side effects of the candidate with Discord off (CH-1, BG-1, WB-1, PR-1, SC-1) are listed in the inventory; WB-1 needs a Production decision at Packet 3 (the two worker-budget variables set on 2026-10-23 apply to every provider on any new build).
 
 ## 5. Production operations that will need the owner's explicit approval (none requested yet)
 
@@ -55,3 +57,4 @@ To be written as an exact numbered list in Packet 3 once sections 1 and 2 are gr
 ## 6. Change log
 
 - 2026-10-23 04:40Z skeleton created from the state after owner reply 13.
+- 2026-10-23 05:10Z impact inventory first findings recorded (FB-1 HIGH); RC1 receipt corrected; fixes agent started.
