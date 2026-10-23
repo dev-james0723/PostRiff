@@ -1,0 +1,329 @@
+# W-02 Discord lane: request budget per post
+
+Status: analysis for an independent reviewer. **Nothing here is implemented.** Each candidate below says what the
+check it touches defends against, whether a cheaper form still defends against it, and what it would do to the
+requests per post and to the section 4 lateness. Some candidates keep the permission witness and the grant check
+exactly as they are; this document marks those as equivalent. Others would change what a check guarantees; this
+document marks those as **not equivalent** and leaves them to the reviewer. The application ceiling stays at the
+reviewed 25 requests per second. No candidate raises it.
+
+Code references are to the W-02 tree `62f68c56d5d04cd90d2b0668501226408a5d4a73`. Its `src/` is identical to the
+current head `d80d6eaf678591b3818f384f6d9c9ed92c6dc474`. "Measured" means a capacity receipt says so. "Inference" marks
+a model or an argument.
+
+## 1. The arithmetic that binds
+
+Section 4 asks for 5,000 posts due in the same minute with lateness P50 ≤ 12 min, P95 ≤ 25 and max ≤ 40. Every post
+needs its own requests, and the application may send at most C requests per second. With r requests per post
+(overheads included), the k-th post is sent about k·r/C seconds after the burst starts. So:
+
+- P50 ≈ 2,500·r/C, P95 ≈ 4,750·r/C, max ≈ 5,000·r/C (seconds), plus the first-create delay, measured at about 0.1 min.
+- At C = 25: P50 ≤ 12 min needs r ≤ **7.14**. P95 ≤ 25 needs r ≤ 7.86. The max ≤ 40 needs r ≤ 11.97. **P50 binds.**
+  This matches the coordinator's figure of 7.2. At r = 7 the P50 is 11.7 min (no margin). At r = 9.3 it is 15.5 min
+  (fail).
+
+**The effective ceiling is below 25 (inference from the code, to be confirmed by the GitHub-hosted S1 receipt).**
+The application row of the coordinator is a window of 1 s that restarts at the first request after the last one
+expired (`rate_limits.py` `_roll`, lines 547-557). At each restart it allows `cap − pending` new admissions, and
+`_pending` (lines 504-512) counts every admission that is still `sent` (in flight, not yet observed) or `uncertain`,
+plus unexpired `reserved` or `sealed` permits. A request in flight across a window restart is therefore charged in
+two windows. By Little's law the sustained admission rate is about C/(1 + d), where d is the mean time from admission
+to observation (the Discord answer plus the observe transaction):
+
+- d = 0.1 s gives 22.7 requests/s;
+- d = 0.2 s gives **20.8 requests/s**, which needs r ≤ 5.95 for P50 ≤ 12;
+- d = 0.3 s gives 19.2 requests/s.
+
+This is conservative, not unsafe. It does not stop a trailing second above 25 either: up to 27 were seen in the
+coordinator's own table. A separate agent is making the ceiling exact (sliding). That change decides how in-flight
+requests are charged, so it decides whether 25 or about 21 is the real budget. Section 5 gives both columns.
+
+## 2. The ledger: every Discord request of one post on the real path
+
+One post takes two claims of its workspace: the claim that sends it, and a later claim that reads it back. The read-back
+is due 5 s after the create (`hosted_worker.py:871`) but waits for its workspace's turn (section 4.2).
+
+| # | Request | Credential | Where | What it proves |
+|---|---|---|---|---|
+| 1 | `GET /oauth2/@me` | the person's bearer | `OAuthService.discord_grant_for_worker` (`oauth.py:1131`) → `DiscordConnections.installation_identity` (`discord/oauth.py:532`) → `_fresh_identity` fast path (`:403-424`) → `verified_authorization` (`:135-150`) | the person still authorizes Rafii (token not revoked), it is the same Discord user, the same application, with the required scopes. The code says: "Local expiry is not proof that Discord still authorizes this user." |
+| 2 | `GET /guilds/{g}` | bot | `authorize_destination` → `destinations` (`social_connectors.py:661-699`, line 670) | the server, its owner and its roles' permissions |
+| 3 | `GET /guilds/{g}/members/{bot}` | bot | `_member_roles` (`:612-613`), line 675 | the bot is still a member, and its roles |
+| 4 | `GET /guilds/{g}/members/{person}` | bot | line 679 | the person is still a member, their roles; the person must have MANAGE_GUILD (line 682) |
+| 5 | `GET /guilds/{g}/channels` | bot | line 684 | the target channel exists, is text or announcement, and its permission overwrites. Together with 2-4: the bot has VIEW, SEND and READ_HISTORY, and the person has VIEW and SEND, in that channel at send time (lines 686-693, 718-723) |
+| 6 | `POST /channels/{c}/messages` | bot, with a publish permit bound to the sealed intent | `_submit_discord` (`hosted_social.py:429-505`) | the create; the answer must carry the channel, the exact content and the bot as author (lines 479-494), else `uncertain` |
+| 7 | `GET /channels/{c}/messages/{m}` | bot | `reconcile_discord` (`hosted_social.py:517-575`, line 558) | read-back by id: same id, channel, author (and `bot: true`), exact content, no `@everyone`, no user or role mentions, reply reference (lines 563-569) → `verified` |
+
+Requests 1-5 are the preflight (`prepare_discord_dispatch`, `hosted_social.py:362-391`). They run outside SQL locks,
+**before** the create is admitted. Per process, not per post:
+
+| Request | Credential | Where | Cost |
+|---|---|---|---|
+| `GET /oauth2/applications/@me` and `GET /users/@me` | bot | `_bot_identity` (`social_connectors.py:638-660`), cached 60 s per process | each lane invocation is a fresh process of at most 50 s, so each makes the pair once: 12 shards × 2 = 24 requests a minute (F429 measured 156 pairs, about 12 a minute), about 0.11 per post at 3.5 posts/s |
+
+The step order is in `hosted_worker.py:1196-1232`: claim → preflight (1-5) → renew lease → **reserve the create**
+(`reserve_discord_send`, `hosted_social.py:393-415`) → seal the intent → create. If the create's admission is denied
+(`RateDelayed`), or any preflight read is denied for more than 1 s (`social_connectors.py:415-444`), the step releases
+the job unsent (`discord/worker.py:100-130`, `nextAt = now + cooldown`). The **next claim runs the whole preflight
+again.**
+
+**Measured:**
+
+| Source | Requests per verified post | Breakdown |
+|---|---|---|
+| GitHub-hosted smoke, run 39904592955 (tree 62f68c56, harness 920991d6, 30 posts; as reported by the coordinator) | 10.3 | members 3.0, `/oauth2/@me` 1.5, guild 1.5, channels 1.5, create 1.0, read-back 1.0, bot identity 0.4 + 0.4 |
+| Sandbox smoke runs, tree 62f68c56 (30 posts each) | 10.5 and 10.8 | the same shape: preflight 1.53 and 1.6 passes per post |
+| Sandbox F429, tree 62f68c56 (1,000 one-post workspaces, injected 429s, machine load 8 to 14: **not throughput evidence**) | 12.5 per verified, 10.2 per sent | preflight passes per sent post: one pass 621, two passes 229, three passes 37 (mean 1.34) |
+
+So today the preflight runs 1.34 to 1.6 times per post, and that repetition is the largest overhead. The S1, S2 and
+S0 receipts on the GitHub-hosted runner (harness 22e3257e) will give the same ledger at scale. Every receipt now has a
+request-ledger table that separates the essential path from the overhead.
+
+**Ideal minimum with every check per post, at send time: 7 requests** (6 in the send claim, 1 in the read-back
+claim), plus about 0.11 for the bot identity. Section 5 rounds this to 7.12. Getting below 7 needs one of two things: a check covers more than one
+post (sections 4.5 and 4.6, not equivalent), or the read-back is dropped (section 4.4).
+
+## 3. Grant custody in the measurement
+
+The capacity harness runs the application's real grant path against the mock Discord: OAuthService →
+DiscordConnections.installation_identity → `GET /oauth2/@me` with the person's bearer. It does not use the lane
+fixture's `Grants` stub (`tests/discord_lane_fixture.py`), which hides request 1. Every receipt states the measured
+count: for example "1430 identity checks answered for 887 sent posts (real path)". Below one check per sent post, the
+receipt would say so.
+
+## 4. Candidates
+
+### 4.1 One preflight per sent post: admit the post before its preflight (first)
+
+**What happens today.** Twelve loops compete for the application window. A loop sees room, starts a preflight of 5
+requests, and by the time it asks for the create permit other loops have used the window. The step is released unsent
+and its 5 requests are spent. The re-claim does them again. In the GitHub smoke, half of the posts paid twice: 2.5
+extra requests per post, 24% of all requests.
+
+**What the preflight defends against.** It defends against sending a post when the grant was revoked (1), when the bot
+or the person lost access (2-5), when the channel is gone, or when the person is no longer a server manager. It must
+hold **at send time**, so it runs immediately before the create.
+
+**Forms, and whether each is equivalent:**
+
+- **A1. Reserve the post's admissions before the preflight (a bundle).** Reserve the 5 read admissions and the
+  publish permit in one coordinator transaction, then run the preflight and the create on those permits. The checks do
+  not change at all: the same 5 reads, in the same order, still immediately before the create. Only the admission
+  moves earlier, so the witness ends even closer to the create than today. **Equivalent for the witness and the grant
+  check.** One cost from the code: a reserved, unsent permit is pending (`_pending`), so it is charged again at every
+  window restart until it is used. A bundle held for about 1 s (6 sequential requests at about 150 ms) would often be
+  charged in two windows. A permit would be pending for about 0.4 s + d on average instead of d, so by the section 1
+  model the usable budget would fall to about 25/(1 + 0.6) ≈ 16 requests/s. That costs more than the repeats it
+  removes (inference). A1 therefore needs the
+  bundle to be charged once, for example consumed into the window in which each request is sent. That is a
+  coordinator change for the reviewer, together with the sliding-window work.
+- **A1'. A post gate in front of the claim, with no new admission semantics.** Before the preflight, a step takes a
+  post token from a shared token bucket whose rate is the request budget divided by the measured requests per post
+  (25/7.1 ≈ 3.5 posts/s, with headroom). Every request is still admitted one by one, at send time, exactly as today.
+  The gate only keeps the steps that start from asking for more than the window can give, so a started preflight
+  almost always gets its create permit. **Equivalent:** no check changes, and no request can be admitted that today's
+  coordinator would refuse. The cost is the gate's own small transaction per post, a database round trip and no
+  Discord request.
+- **A2. Keep the preflight evidence for a re-claim within a freshness window** (for example 10 s). This saves the
+  repeat, but the witness may then be up to 10 s older than the create. **Not equivalent:** it changes "at send time"
+  to "within 10 s of send time". It is the reviewer's decision, and not needed if A1 or A1' is taken.
+
+**Effect.** Requests per post go to about 7.1 (7 plus 0.11 bot identity). It also removes the
+`RateDelayed`-after-preflight releases, whose cooldown can push a post's create behind later posts.
+
+**Predicted for 5,000 posts** (section 5): P50 12.0 / P95 22.6 / max 23.8 min at 25 requests/s. That meets the
+standard with almost no margin. At the effective 20.8 requests/s it is 14.3 / 27.2 / 28.6, which **fails P50 and
+P95**. With A1/A1' alone, the outcome depends on how in-flight requests are charged (section 1).
+
+### 4.2 Claim order: the read-back waits for a full pass over the backlog (customer-visible)
+
+**Fact.** The Discord claim (`hosted_worker.py:57-60`) orders by `hint.last_claimed_at, w.id`: a round robin over
+workspaces. After its create, a workspace has just been claimed, so its read-back (due 5 s later) waits behind every
+workspace not yet served in this pass.
+
+Measured in the sandbox F429 run (1,000 one-post workspaces):
+
+- 478 creates and 0 read-backs at T+6 min;
+- create to verified read-back: median 5.9 min, max 7.6 min;
+- 276 of 1,000 posts were sent but not confirmed when the last create happened.
+
+In S1 at 5,000 posts, a post sent in the first minute would show as not yet confirmed for most of the burst
+(inference).
+
+**What the order defends.** Fairness between tenants: a small tenant is not starved by a large one (the S2 measure).
+The order of creates is the fairness property. The read-back is the second half of a post already sent.
+
+**Candidate.** Claim a workspace whose read-back is due ahead of workspaces that only have new creates, with fairness
+between tenants kept for the creates. For example, order by (a verification is due, `last_claimed_at`), or serve due
+verifications from their own small share. **No extra request:** every read-back is made either way.
+
+**But the lateness moves.** Today the burst's creates run first, at about r − 1 requests per post, and the read-backs
+come after. Serving read-backs as they fall due spends their requests during the burst, so creates go at r requests
+per post. The P50 lateness rises by about r/(r − 1): at r = 7.12 and 25 requests/s, from 10.3 to 12.0 min. So the
+section 4 lateness gets **worse** while time-to-verified becomes about lateness + 5 s.
+
+A middle form keeps both inside bounds: give due read-backs at most one request in eight, or serve a read-back first
+only once it has waited more than X minutes. The receipts now show both sides: time to verified next to lateness, and
+the posts unverified at the last create. That trade-off is for the reviewer, with section 5's numbers.
+
+### 4.3 Discovery admissions on routes without a server: a product-level fact
+
+**Fact (code).** The coordinator learns a route's Discord bucket per (credential identity, route, major parameter)
+(`_map`, `rate_limits.py:357-373`). Until that row has a bucket, every request on it also needs a discovery admission
+shared by that identity and major: one per `unknown_window_seconds`, which is 1 s (`_keys`, lines 375-390). The
+provider waits at most 1 s for a read admission and then raises `ReadAdmissionDelayed` (no request was sent).
+
+The bot's own routes, `GET /users/@me` and `GET /oauth2/applications/@me`, have no major. Every process shares them.
+Several fresh processes asking at the same moment meet a 1-per-second admission. That killed a seeding process on the
+GitHub-hosted runner (reproduced here). For the lane it means a delayed step, not a failure: the step is released
+unsent with a short cooldown (`discord/worker.py:100-130`).
+
+**Does the production steady state meet it again after the routes are learned? No.** Facts from the code:
+
+- the route-to-bucket row is only ever set (`rate_limits.py:904-905`). No code path clears it, and nothing prunes
+  `pr_discord_route_buckets`; only the test fixture truncates it;
+- the bot's identity key is `digest('bot:' + application id)`, not the token (`RequestIdentity.make`, lines 265-273).
+  A bot token rotation keeps every learned route;
+- a new reviewed policy revision re-caps only the policy, invalid and discovery scope rows (`_roll`, lines 537-546).
+  It does not clear the learned routes, so a cold start of the 12 shards on a new policy revision does not meet
+  discovery on routes already learned.
+
+It does meet discovery in these cases:
+
+- **once per new (route, major)**: each new server's first preflight read, and each new channel's first create and
+  first read-back. These are per server or per channel, so there is no contention across tenants;
+- on the bot's own routes only when the table is empty: the first deployment, a database restored to before the first
+  learning, or a new application id;
+- the person's `GET /oauth2/@me` is keyed by the Discord user id when it is known, so it is learned once per person.
+
+Not exercised by the harness (inference): the mock answers the bot identity routes with a bucket of 1,000 per second.
+Real Discord's bucket for them is unknown. If it is small, the 12 cold shard processes at each minute boundary could be
+delayed on a learned route as well. That is a minute-boundary latency, not a discovery problem, and section 4.8
+removes it.
+
+### 4.4 No read-back when the create's answer proves the message (request 7)
+
+**What the read-back defends against.**
+
+1. The create answer is accepted with fewer checks than the read-back. The create check (`hosted_social.py:490-494`)
+   compares channel, content and author id. The read-back (lines 563-569) also requires `author.bot`,
+   `mention_everyone == false`, `mentions == []` and `mention_roles == []`.
+2. It shows that the message still exists at least 5 s after the create.
+3. `verified` means "found by id" in the product. That is a promise to the customer.
+
+**Cheaper form.** Apply the read-back's full field checks to the create answer. Discord's create answer is the stored
+message object, the same serialization a GET returns, over the same authenticated connection. Then mark the post
+verified from the create receipt.
+
+**Equivalent for (1)** once the create check takes all of the read-back's fields. **Not equivalent for (2) and (3).**
+It no longer shows that the message survived its first seconds, for example deleted by a moderator or a moderation
+bot. AutoMod blocks happen at create, as a 4xx, so they are already covered. If the product's "verified" must mean
+"seen after the fact", this is not equivalent and stays a reviewer decision.
+
+**Effect:** −1 request per post (7.1 → 6.1). Predicted with A: 10.3 / 19.5 / 20.5 min at 25 requests/s, and
+12.3 / 23.4 / 24.6 at 20.8 (P50 just over).
+
+### 4.5 The grant check once per workspace per claim (request 1)
+
+**What it defends against.** The person revoked Rafii in Discord, the token was invalidated, the identity changed, or
+scopes were reduced, between approval and send.
+
+**Cheaper form.** If one claim sends several due posts of the same workspace (today a claim sends one), check once per
+claim, with the claim's lease (seconds) as the bound. That is equivalent to "at send time" within the claim's duration.
+**Not equivalent in the strict sense:** the second post's check is up to one lease older.
+
+It needs batched claims, and a batch must be capped (for example 3 posts per claim) to keep the S2 fairness. The
+saving is (k − 1)/k of a request per post: 0.6 at the S1 layout of 2.5 posts per workspace. A one-post workspace saves
+nothing.
+
+**Effect** with A: 6.5 per post → 11.0 / 20.7 / 21.8 min at 25 requests/s.
+
+### 4.6 Server-level reads once per server with a short TTL (requests 2, 3, 5; request 4 is per person)
+
+**What they defend against.** The server's roles, the bot's membership or roles, and the target channel's overwrites
+changed since the last post: a permission removed, a channel deleted, the bot kicked.
+
+**Cheaper form.** Cache them per server for a TTL (for example 30 s), or once per claim of several posts as in 4.5.
+**Not equivalent:** the witness becomes "within TTL of send time". For the bot side Discord itself refuses a create
+without permission, with a 403. But 403s count toward Discord's invalid-request limit (10,000 per 10 minutes, then a
+Cloudflare ban of the egress IP), so the preflight also keeps invalid requests away. The person's side (request 4)
+must stay per post or per claim.
+
+**Effect.** It depends on posts per server per TTL. In S1 a workspace's posts are claimed one per pass, minutes apart,
+so a 30 s TTL almost never hits. In S2's hot server (3,000 posts) every post after the first would skip 3 reads, but
+that tenant is capped anyway by Discord's 5 creates per 5 s per channel.
+
+**Per claim** together with 4.5 (2.5 posts per claim): 4.1 per post → 7.0 / 13.1 / 13.8 min. This changes what the
+witness guarantees, so it needs the reviewer.
+
+### 4.7 Collapse the four permission reads (requests 2-5) into fewer
+
+**No equivalent collapse exists.** The witness needs:
+
+- the server's role permissions and owner (2);
+- the bot's roles (3);
+- the person's roles (4);
+- the channel's overwrites (5).
+
+Discord's bot API has no endpoint that returns a member's effective channel permissions. Interactions carry them, but
+the lane does not run in an interaction. `GET /channels/{c}` could replace the channel list (5) with the single channel
+(a smaller answer), but it is still one request. Dropping 3 turns a lost bot permission into a 403 create (an invalid
+request), which is not equivalent (4.6). The 4 reads are the minimum for an exact per-send witness of both the bot and
+the person.
+
+### 4.8 The bot identity pair once per minute for all processes (per process today)
+
+**What it defends against.** The bot token in use belongs to the reviewed application and to a bot user, not to a
+swapped token. Today each process caches the pair for 60 s.
+
+**Cheaper form.** Keep the result in the database for 60 s, keyed by (application id, token digest). Each process reads
+it in its first transaction and asks Discord only when it is older than 60 s. **Equivalent:** the bound stays "at most
+60 s old", and the token digest in the key still catches a swapped token.
+
+**Effect:** about −0.11 per post at scale, and it removes the minute-boundary burst of 24 requests on two routes
+(section 4.3). Predicted with A: 11.8 / 22.3 / 23.5 min.
+
+### 4.9 Charge an in-flight request in one window only (accounting, not requests)
+
+Described in section 1. **Equivalent** for "at most 25 admissions per window": a request admitted in window k counts in
+window k. Whether it also protects a trailing second, the separate sliding-window work must settle. **Effect:** the
+usable budget goes from about 25/(1 + d) back to 25. At d = 0.2 s that is 20.8 → 25, worth as much as 1.2 requests per
+post at r = 7. **Not a request reduction**, and nothing here proposes raising 25.
+
+## 5. Predicted lateness for 5,000 posts due at once
+
+Model (inference): the policy binds throughout the burst, so the lane sustains the budget, which the GitHub-hosted S1
+must confirm. Read-backs are interleaved, which is conservative; deferring them, as today's claim order does in a
+first pass, lowers each figure by 1.7 / 3.2 / 3.3 min at 25 requests/s and by 2.0 / 3.8 / 4.0 min at 20.8. The first
+create is at T + 0.1 min, and every post is sent once.
+
+| Case | requests/post | P50 / P95 / max at 25 requests/s (min) | at 25/(1+0.2) = 20.8 requests/s (min) | posts/s at 25 |
+|---|---|---|---|---|
+| today, small-scale ledger (GitHub smoke 10.3/post, identity pair 0.8) | 10.30 | 17.3 / 32.7 / 34.4 | 20.7 / 39.2 / 41.3 | 2.43 |
+| today at scale, 1.5 preflight passes per post (smoke share) | 9.62 | 16.1 / 30.6 / 32.2 | 19.3 / 36.7 / 38.6 | 2.60 |
+| today at scale, 1.34 passes per post (sandbox F429 share) | 8.82 | 14.8 / 28.0 / 29.5 | 17.7 / 33.6 / 35.4 | 2.83 |
+| **A** (4.1): one preflight per sent post | 7.12 | 12.0 / 22.6 / 23.8 | 14.3 / 27.2 / 28.6 | 3.51 |
+| A + 4.8 (bot identity shared) | 7.01 | 11.8 / 22.3 / 23.5 | 14.1 / 26.7 / 28.1 | 3.57 |
+| A + 4.4 (no read-back) | 6.12 | 10.3 / 19.5 / 20.5 | 12.3 / 23.4 / 24.6 | 4.08 |
+| A + 4.5 (grant check per claim of 2.5 posts) | 6.52 | 11.0 / 20.7 / 21.8 | 13.1 / 24.9 / 26.2 | 3.83 |
+| A + 4.4 + 4.5 | 5.52 | 9.3 / 17.6 / 18.5 | 11.1 / 21.1 / 22.2 | 4.53 |
+| A + 4.5 + 4.6 (grant check and witness per claim of 2.5 posts) | 4.12 | 7.0 / 13.1 / 13.8 | 8.3 / 15.8 / 16.6 | 6.07 |
+| A + 4.4 + 4.5 + 4.6 | 3.12 | 5.3 / 10.0 / 10.5 | 6.3 / 12.0 / 12.6 | 8.01 |
+
+Section 4 limits: P50 ≤ 12, P95 ≤ 25, max ≤ 40.
+
+**Reading the table (inference):**
+
+- Only the equivalent changes (A with 4.8) reach P50 ≤ 12, with no margin, and only if the full 25 requests/s is
+  usable (4.9, or the sliding-window work charging in-flight requests once).
+- At the effective 20.8 requests/s, every combination that keeps all checks per post at send time misses P50.
+- Margin under that budget needs at least one non-equivalent change: 4.4, or 4.5 with batched claims.
+- The choice between them is the reviewer's. Nothing here proposes raising 25.
+
+## 6. What the measured runs must confirm
+
+- **Requests per post at scale**, from the S1/S2/S0 receipts' ledger: how often the preflight repeats under the policy
+  limit, rather than under machine load as in the sandbox.
+- **Achieved requests per second while the policy binds**, and the admission-to-observation time d. Both are visible
+  in the receipts' mock log and the coordinator's admission table. They decide which column of section 5 applies.
+- **Whether the lane's 12 loops can sustain 25 requests/s at all** (the lock benchmark, profile `lockbench`). If the
+  loops or the coordinator lock top out below the budget, every row above moves right.
