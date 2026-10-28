@@ -238,8 +238,14 @@ class RoutesOnPostgres(unittest.TestCase):
         calls = len(self.r.m.hooks.calls)
         outcome = r.attempt(r.get, self.A, self.ta, self.wa.connection)
         self.assertEqual(outcome[:2], (429, 'rate_limited'))
+        self.assertIn(outcome[3]['retryAfterSeconds'], range(590, 601), 'the window opened a moment ago (the real SQL answers)')
         self.assertEqual(len(self.r.m.hooks.calls), calls)
         r.get(self.A, self.ta, self.ia.connection)
+        with self.cluster.connect(autocommit=True) as db:
+            db.execute("UPDATE public.pr_auth_throttle SET window_start=now()-interval '250 seconds'")
+        outcome = r.attempt(r.get, self.A, self.ta, self.wa.connection)
+        self.assertEqual(outcome[:2], (429, 'rate_limited'))
+        self.assertIn(outcome[3]['retryAfterSeconds'], (349, 350), 'what is left of the window: 600 - 250')
         with self.cluster.connect(autocommit=True) as db:
             db.execute("UPDATE public.pr_auth_throttle SET window_start=now()-interval '11 minutes'")
         r.get(self.A, self.ta, self.wa.connection)

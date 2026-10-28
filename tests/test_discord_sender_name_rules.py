@@ -19,7 +19,10 @@ class Accepted(unittest.TestCase):
                            ('webhook', 'Дайджест новостей'), ('webhook', 'الأخبار'), ('webhook', '週刊ニュース'),
                            ('webhook', '🎵 Daily Notes'), ('bot', 'D Festival 助手'), ('bot', 'Acme Bot'),
                            ('webhook', 'a' * 80), ('bot', 'a' * 32), ('webhook', 'Here Maps'), ('webhook', 'Everyone Welcome'),
-                           ('webhook', 'Traffic Updates'), ('webhook', 'Safari News'), ('webhook', 'Star ★ Team')]:
+                           ('webhook', 'Traffic Updates'), ('webhook', 'Safari News'), ('webhook', 'Star ★ Team'),
+                           # Discord restricts these in webhook usernames only; a server nickname may carry them (SNR2-9)
+                           ('bot', 'Discord Devs Bot'), ('bot', 'Clyde Fan Club'), ('bot', 'Here'), ('bot', 'EVERYONE'),
+                           ('bot', 'D1scord Helper'), ('bot', 'd\U00000456scord news'), ('bot', 'He re')]:
             with self.subTest(kind=kind, name=name):
                 self.assertEqual(names.validate_name(name, kind), name)
 
@@ -70,15 +73,17 @@ class Refused(unittest.TestCase):
         ('```code```', 'webhook', 'forbidden_character'),
         ('www.example.com', 'webhook', 'url_like'), ('Visit www.example.com', 'bot', 'url_like'),
         # reserved words after folding: case, full-width, accents, other-script look-alikes, separators, digits
-        ('Discord', 'webhook', 'reserved_word'), ('DISCORD Support', 'bot', 'reserved_word'),
+        ('Discord', 'webhook', 'reserved_word'), ('DISCORD Support', 'webhook', 'reserved_word'),
         ('\U0000ff44\U0000ff49\U0000ff53\U0000ff43\U0000ff4f\U0000ff52\U0000ff44', 'webhook', 'reserved_word'), ('D\U000000efsc\U000000f6rd', 'webhook', 'reserved_word'),
         ('d\U00000456scord', 'webhook', 'reserved_word'), ('d\U00000456s\U00000441\U0000043erd clone', 'webhook', 'reserved_word'),
         ('D1scord', 'webhook', 'reserved_word'), ('d i s c o r d', 'webhook', 'reserved_word'),
         ('dis_cord', 'webhook', 'reserved_word'), ('Clyde', 'webhook', 'reserved_word'),
-        ('Cl-yde', 'bot', 'reserved_word'), ('C1yde', 'webhook', 'reserved_word'),
-        ('Everyone', 'webhook', 'reserved_word'), ('HERE', 'bot', 'reserved_word'), ('he re', 'webhook', 'reserved_word'),
+        ('Cl-yde', 'webhook', 'reserved_word'), ('C1yde', 'webhook', 'reserved_word'),
+        ('Everyone', 'webhook', 'reserved_word'), ('HERE', 'webhook', 'reserved_word'), ('he re', 'webhook', 'reserved_word'),
+        # the product's own names stay reserved for both kinds
         ('Rafii Support', 'webhook', 'reserved_word'), ('rafii', 'bot', 'reserved_word'), ('PostRiff Official', 'webhook', 'reserved_word'),
-        ('P0stR1ff', 'webhook', 'reserved_word'),
+        ('P0stR1ff', 'webhook', 'reserved_word'), ('Rafii Helper', 'bot', 'reserved_word'), ('p0stR1ff bot', 'bot', 'reserved_word'),
+        ('r\U00000430fii', 'bot', 'reserved_word'),
     ]
 
     def test_every_case_reports_its_stable_reason(self):

@@ -7,6 +7,7 @@ production. The real-PostgreSQL equivalents are in test_discord_sender_name_post
 """
 import copy
 import json
+import math
 import secrets
 import uuid
 from contextlib import contextmanager
@@ -75,6 +76,10 @@ class Cursor:
             start, count = (world.now, 1) if start < world.now - window else (start, count + 1)
             self.throttle[bucket] = (start, count)
             self.result = (count,)
+        elif text.startswith('SELECT greatest(1, ceil(extract(epoch FROM (window_start + make_interval(secs=>%s) - now())))) FROM public.pr_auth_throttle WHERE bucket='):
+            window, bucket = params
+            entry = self.throttle.get(bucket) or world.throttles.get(bucket)
+            self.result = None if entry is None else (max(1, math.ceil(entry[0] + window - world.now)),)
         elif text.startswith("SELECT count(*) FROM public.pr_encrypted_credentials WHERE provider='discord' AND provider_account_id="):
             guild, workspace, connection = params
             self.result = (sum(1 for (w, c), cred in world.credentials.items()

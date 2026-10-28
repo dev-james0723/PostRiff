@@ -130,6 +130,40 @@ class ObservedRefusal(Claims):
         self.assertEqual(saved['savedName'], 'Claim Bot')
         self.assertEqual(len(self.config.patches), 2)
 
+    def test_a_discord_rate_limit_has_its_own_code_discords_own_retry_hint_and_is_never_replayed(self):
+        """SNR2-2: a 429 used to be reported as a refusal ("check the permissions") with no hint of when to retry."""
+        cases = [({'message': 'You are being rate limited.', 'retry_after': 2.5, 'global': False}, {}, 3),   # the body hint, rounded up
+                 ({'retry_after': 64.57}, {}, 65), ({'message': 'x'}, {'Retry-After': '7'}, 7),           # the header when the body has none
+                 ({'retry_after': 'soon'}, {'retry-after': '9'}, 9), ({'retry_after': 0.2}, {}, 1),        # a malformed body hint; never below one
+                 ({}, {}, 60), ({'retry_after': 'soon'}, {'Retry-After': 'tomorrow'}, 60),                 # no usable hint: one minute
+                 ({'retry_after': True}, {}, 60), ({'retry_after': -3}, {}, 60), ({'retry_after': float('inf')}, {}, 60)]
+        for body, headers, seconds in cases:
+            with self.subTest(body=body, headers=headers):
+                self.w.throttles.clear()        # the write throttle is not what is tested here; the clock is left alone
+                self.config.refuse_with = {'status': 429, 'body': dict(body), 'headers': dict(headers)}
+                attempts = len(self.config.patches)
+                outcome = self.post()
+                self.assertEqual(outcome[:2], (429, 'discord_sender_write_rate_limited'))
+                self.assertEqual(outcome[3], {'retryAfterSeconds': seconds})
+                self.assertNotIn('permission', outcome[2].lower(), 'a rate limit is not a permission problem')
+                self.assertIsNone(self.claim(), 'nothing was changed, so the claim is released')
+                self.assertEqual(len(self.config.patches), attempts + 1, 'one attempt only: never replayed')
+                self.assertIsNone(self.w.channel(self.A, self.ia.connection).get('discordSenderName'))
+        self.config.refuse_with = None
+        self.w.throttles.clear()
+        self.assertEqual(self.w.post(self.A, self.ta, self.ia.connection,
+                                     {'name': 'Claim Bot', 'fingerprint': self.profile['fingerprint'], **BODY})['savedName'], 'Claim Bot')
+
+    def test_other_client_errors_keep_the_refusal_code(self):
+        for status in (400, 401, 403, 404, 422):
+            with self.subTest(status=status):
+                self.w.throttles.clear()
+                self.config.refuse_with = {'status': status, 'body': {'message': 'Refused'}, 'headers': {'Retry-After': '9'}}
+                outcome = self.post()
+                self.assertEqual(outcome[:2], (409, 'discord_sender_write_refused'))
+                self.assertIsNone(outcome[3])
+                self.assertIsNone(self.claim())
+
     def test_the_refusal_code_is_not_the_unconfirmed_or_pending_code(self):
         codes = {'discord_sender_write_refused', 'discord_sender_write_unconfirmed', 'discord_sender_edit_pending'}
         self.assertEqual(len(codes), 3)
@@ -533,6 +567,49 @@ class WhatDiscordSays(RouteBase):
                 config = self.w.hooks.guild_config[self.ia.guild]
                 config.report_guild_id, config.bot_member_missing = None, False
 
+    def test_evidence_discord_gives_that_cannot_be_relied_on_has_a_stable_code_on_both_routes(self):
+        """SNR2-2: the adapter reports an unusable membership, role or permission answer as a bare 409 `conflict`."""
+        adapter = self.w.s.adapter
+
+        def stored():
+            return json.dumps({w.id: w.state for w in self.w.workspaces.values()}, sort_keys=True) + json.dumps(self.w.audit)
+        profile = self.w.get(self.A, self.ta, self.ia.connection)
+        webhook = self.w.get(self.A, self.ta, self.wa.connection)
+        start = stored()
+        bot_cases = {'membership': ('_member_roles', 'Discord did not confirm this server membership.'),
+                     'roles': ('_permissions', 'Discord role evidence is incomplete.'),
+                     'permissions': ('_permissions', 'Discord permission evidence is incomplete. Reconnect or restore access.')}
+        for label, (method, message) in bot_cases.items():
+            with self.subTest(label), patch.object(adapter, method, side_effect=AlphaError(message, 409)):
+                get = self.w.attempt(self.w.get, self.A, self.ta, self.ia.connection)
+                self.assertEqual(get[:2], (409, 'discord_sender_evidence_invalid'))
+                self.assertNotIn(message, get[2], 'the adapter wording is not echoed')
+                self.w.now += 601
+                post = self.w.attempt(self.w.post, self.A, self.ta, self.ia.connection,
+                                      {'name': 'Evidence Bot', 'fingerprint': profile['fingerprint'], **BODY})
+                self.assertEqual(post[:2], (409, 'discord_sender_evidence_invalid'))
+                self.assertEqual(self.w.hooks.guild_config[self.ia.guild].patches, [])
+                self.assertEqual(stored(), start, 'a refusal changes no state and writes no audit event')
+        with patch('postriff_phase2.discord.webhooks.verify_resource',
+                   side_effect=AlphaError('Discord did not verify this exact webhook and channel. Reconnect it.', 409)):
+            for operation in ('GET', 'POST'):
+                with self.subTest('webhook ' + operation):
+                    self.w.now += 601
+                    outcome = (self.w.attempt(self.w.get, self.A, self.ta, self.wa.connection) if operation == 'GET' else
+                               self.w.attempt(self.w.post, self.A, self.ta, self.wa.connection,
+                                              {'name': 'Evidence Hook', 'fingerprint': webhook['fingerprint'], **BODY}))
+                    self.assertEqual(outcome[:2], (409, 'discord_connection_required'))
+                    self.assertEqual(stored(), start)
+        self.assertEqual(self.w.channel(self.A, self.wa.connection)['discordSenderName'], 'Alpha Weekly')
+
+    def test_errors_that_already_have_a_stable_code_pass_through_unchanged(self):
+        adapter = self.w.s.adapter
+        for error in (AlphaError('Synthetic.', 409, code='discord_connection_required'),
+                      AlphaError('Synthetic.', 502), AlphaError('Synthetic.', 403, code='permission_denied'),
+                      AlphaError('Synthetic.', 409, code='some_other_code')):
+            with self.subTest(code=error.code), patch.object(adapter, '_member_roles', side_effect=error):
+                self.assertEqual(self.w.attempt(self.w.get, self.A, self.ta, self.ia.connection)[:2], (error.status, error.code))
+
     def test_a_person_who_is_no_longer_in_the_server_is_a_reason_not_an_error(self):
         self.w.hooks.guild_config[self.ia.guild].user_member_missing = True
         profile = self.w.get(self.A, self.ta, self.ia.connection)
@@ -554,7 +631,7 @@ class WhatDiscordSays(RouteBase):
     def test_a_name_discord_returns_that_cannot_be_shown_is_an_upstream_error(self):
         def stored():
             return json.dumps({w.id: w.state for w in self.w.workspaces.values()}, sort_keys=True) + json.dumps(self.w.audit)
-        for bad in ('', None, 'x' * 81, 5, ['a']):
+        for bad in ('', 'x' * 81, 5, ['a']):
             with self.subTest(bad=bad):
                 self.w.hooks.webhook_name = bad
                 before = stored()
@@ -564,6 +641,41 @@ class WhatDiscordSays(RouteBase):
                 self.assertEqual(stored(), before)
         self.w.hooks.webhook_name = 'Spare Webhook'
         self.assertEqual(self.w.get(self.A, self.ta, self.wa.connection)['observedName'], 'Spare Webhook')
+
+
+class UnnamedWebhook(RouteBase):
+    """SNR2-9: Discord's webhook object may carry no name (null). That is a state to show, not an upstream error."""
+    def test_a_webhook_with_no_own_name_is_shown_and_editable(self):
+        self.w.hooks.webhook_name = None
+        profile = self.w.get(self.A, self.ta, self.wa.connection)
+        self.assertEqual((profile['observedName'], profile['savedName'], profile['effectiveName'], profile['nameSource']),
+                         (None, 'Alpha Weekly', 'Alpha Weekly', 'saved_override'))
+        self.assertEqual((profile['editable'], profile['unavailable']), (True, []))
+        self.assertEqual(profile['preview']['currentDisplayName'], 'Alpha Weekly')
+        saved = self.w.post(self.A, self.ta, self.wa.connection, {'name': 'Renamed Weekly', 'fingerprint': profile['fingerprint'], **BODY})
+        self.assertEqual((saved['savedName'], saved['observedName']), ('Renamed Weekly', None))
+
+    def test_without_a_saved_name_either_nothing_is_shown_and_nothing_is_invented(self):
+        other = self.w.webhook(self.A, 5, self.ua)            # no saved name
+        self.w.hooks.webhook_name = None
+        profile = self.w.get(self.A, self.ta, other.connection)
+        self.assertEqual((profile['name'], profile['savedName'], profile['effectiveName'], profile['nameSource'], profile['observedName']),
+                         ('', None, None, 'none', None))
+        self.assertIsNone(profile['preview']['currentDisplayName'])
+        self.assertTrue(profile['editable'])
+
+    @staticmethod
+    def member_without_a_name(guild, user, member_out=None, **kwargs):
+        if member_out is not None:
+            member_out.update(nick=None, user={})          # no nickname, no global name, no username
+        return ['22334455']
+
+    def test_a_bot_with_no_usable_name_is_still_an_upstream_error(self):
+        config = self.w.hooks.guild_config[self.ia.guild]
+        config.nick, config.bot_global_name = None, None
+        with patch.object(self.w.s.adapter, '_member_roles', side_effect=self.member_without_a_name):
+            outcome = self.w.attempt(self.w.get, self.A, self.ta, self.ia.connection)
+        self.assertEqual(outcome[:2], (502, 'upstream_error'))
 
 
 class Shapes(RouteBase):

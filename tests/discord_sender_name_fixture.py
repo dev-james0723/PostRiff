@@ -217,6 +217,8 @@ class Hooks:
             config.patch_headers.append(dict(headers or {}))
             if config.reject_patch:
                 return {'status': 403, 'body': {'message': 'Missing Permissions', 'code': 50013}, 'headers': {}}
+            if config.refuse_with is not None:
+                return copy.deepcopy(config.refuse_with)
             config.nick = body['nick']
             if self.lose_patch_response:
                 self.lose_patch_response = False
@@ -315,6 +317,7 @@ class GuildConfig:
         self.nick = None
         self.patches, self.patch_headers = [], []
         self.reject_patch = False
+        self.refuse_with = None           # a whole response (for instance a 429) that a nickname PATCH is refused with, applying nothing
         self.patch_response = None        # callable(body) -> response, to answer a nickname PATCH differently from Discord
         self.report_guild_id = None       # the id the server read answers with, when it should be another server
         self.user_member_missing = self.bot_member_missing = False

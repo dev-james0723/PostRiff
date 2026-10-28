@@ -48,7 +48,8 @@ POST /api/workspaces/{workspace}/channels/{connection}/discord-sender-name
   member who authorized the webhook still may). A bot nickname changes a shared Discord object, so ONLY the member whose Discord
   account installed the bot may change it; everybody else sees it read-only with `not_authorizing_member`.
 * Throttle: GET 12 per 10 minutes and POST 6 per 10 minutes per connection (plus 40 and 15 per workspace). Over it:
-  `429 rate_limited` with `retryAfterSeconds`. Do not poll: one GET when the dialog opens, one after a save.
+  `429 rate_limited` with `retryAfterSeconds`, which is what is left of that fixed 10-minute window (1 to 600): a retry after it
+  is counted afresh, a retry before it is refused again. Do not poll: one GET when the dialog opens, one after a save.
 * **The GET is read-only.** It changes no Rafii state (apart from the throttle counters and settling an expired earlier write)
   and no Discord object. Cost of one call (docs/sender-name/CAPACITY-NOTES.md): webhook 1 Discord request, bot 5 cold / 3 warm.
 * Server time unit: epoch seconds (float) everywhere.
@@ -66,13 +67,13 @@ POST /api/workspaces/{workspace}/channels/{connection}/discord-sender-name
   "maxLength": 80 | 32,                   // webhook 80, bot nickname 32 (Unicode code points; the server also keeps UTF-16 units within the limit)
   "rules": { "minLength": 1, "maxLength": 80, "lengthUnit": "codepoints",
              "surroundingSpace": false, "forbiddenCharacters": ["@", "#", ":", "```", "<", ">"],
-             "reservedWords": true, "singleSpacesOnly": true },
+             "reservedWords": true, "singleSpacesOnly": true },    // reservedWords: webhook names may not contain "discord", "clyde", "rafii", "postriff" or be "everyone"/"here" (Discord's own username rules plus the product's names, after case, accent, look-alike and digit folding); bot nicknames only "rafii" and "postriff" (Discord restricts usernames, not server nicknames)
 
   "name": "…",                            // v1 field, always a string: effectiveName, else savedName, else "" (never null)
-  "effectiveName": "…" | null,            // what Discord shows for the next message; null when no Discord read was made (see below)
+  "effectiveName": "…" | null,            // what Discord shows for the next message; null when no Discord read was made (see below), or a webhook has neither a saved name nor a name of its own
   "nameSource": "saved_override" | "webhook_default" | "observed_nickname" | "bot_username" | "none",
   "savedName": "…" | null,                // webhook: the override Rafii freezes into future reviews. bot: the nickname Rafii last set or observed (or null)
-  "observedName": "…" | null,             // what Discord itself reported at observedAt (webhook: the webhook's own name; bot: the member nickname or username)
+  "observedName": "…" | null,             // what Discord itself reported at observedAt (webhook: the webhook's own name, null when the webhook has none; bot: the member nickname or username)
   "observedAt": 1800000000.0 | null,      // null when no provider read was made
   "externalChange": false,                // bot only: observedName differs from savedName, i.e. someone else (a server admin, Discord, another tool) renamed the bot
 
@@ -124,10 +125,12 @@ Discord (a webhook: its own resource, 1 request; a bot: the server, the installi
 | 404 | `not_found` | that connection does not exist in this workspace, is revoked, or is not a Discord connection. One response for all four. A connection id of another workspace is "does not exist". |
 | 409 | `discord_connection_required` | the stored authorization no longer matches (reconnect needed) |
 | 409 | `discord_sender_edit_pending` | a nickname write has an unknown outcome; `retryAfterSeconds` (number) says when a reload may settle it (60 when the request coordinator cannot settle it yet) |
-| 429 | `rate_limited` | throttle; `retryAfterSeconds` (60) |
+| 429 | `rate_limited` | throttle; `retryAfterSeconds` is what is left of the fixed 10-minute window (1 to 600) |
 | 429 | `discord_rate_delayed` | the shared Discord request budget is momentarily used up; `retryAfterSeconds`; nothing was changed |
+| 503 | `discord_rate_coordinator_unavailable` | the shared request coordinator failed after the readiness check passed (it is restarting or degraded); nothing was sent or changed; "temporarily unavailable", retry later, not in a loop |
+| 409 | `discord_sender_evidence_invalid` | bot: Discord's answer about the server, the installing member's roles or the bot's permissions was incomplete or not usable (nothing was changed): reload once; if it persists, reconnect the installation |
 | 503 | `discord_connection_required` | Discord is paused or connection authorization is not enabled for the whole provider (the same answer every Discord connection route gives) |
-| 409/502/503 | `discord_connection_required` / `upstream_error` / `service_unavailable` | Discord did not answer or no longer confirms the connection; nothing changed |
+| 409/502/503 | `discord_connection_required` / `upstream_error` / `service_unavailable` | Discord did not answer or no longer confirms the connection (a webhook that is not the connected one is `discord_connection_required`: reconnect); nothing changed |
 
 ## POST
 
@@ -161,11 +164,14 @@ Request body (exactly these keys, nothing else):
 | 503 | `discord_sender_name_unavailable` | `reasons: [{code: "provider_unavailable"}]` | the request coordinator cannot admit the write (also when it fails before the write is admitted); nothing was sent | none |
 | 409 | `discord_sender_name_required` | | **stale settings**: the fingerprint no longer matches (another save, a reconnect, a permission change, a different member, a pending write, or a bot nickname Discord reports differently). Reload with a GET and review again. | none |
 | 409 | `discord_sender_edit_pending` | `retryAfterSeconds` | bot: a write whose outcome is unknown (timeout, lost response) is unresolved for up to 2 minutes; a GET after the deadline reads Discord and settles it. The POST itself can return this when its own write was not confirmed. | claim kept until settled |
-| 409 | `discord_sender_write_refused` | | bot: Discord answered the write with a refusal (permission lost between the check and the write, hierarchy, rate limit). The nickname is unchanged and nothing waits: reload, look at `unavailable` / `observedName`, fix the permission, try again. Never retried by Rafii. | none (claim released) |
+| 409 | `discord_sender_write_refused` | | bot: Discord answered the write with a client error other than 429 (permission lost between the check and the write, hierarchy). The nickname is unchanged and nothing waits: reload, look at `unavailable` / `observedName`, fix the permission, try again. Never retried by Rafii. | none (claim released) |
+| 429 | `discord_sender_write_rate_limited` | `retryAfterSeconds` | bot: Discord answered the write with a rate limit. The nickname is unchanged and nothing waits; try again after `retryAfterSeconds`, which is Discord's own hint rounded up (its `retry_after`, else the `Retry-After` header; 60 when it gave none). Not a permission problem and never retried by Rafii. | none (claim released) |
+| 409 | `discord_sender_evidence_invalid` | | bot: Discord's answer about the server, roles or permissions was not usable (as for GET); nothing was written | none |
+| 503 | `discord_rate_coordinator_unavailable` | | the shared request coordinator failed after the readiness check passed; nothing was sent | none (a claim made for the write is released) |
 | 409 | `discord_sender_write_unconfirmed` | | bot: Discord accepted the write but did not confirm the requested nickname, or the read-back failed. The nickname may have changed: reload before anything else. | claim kept until settled |
 | 429 | `discord_rate_delayed` | `retryAfterSeconds` | the shared request budget was used up before the write; nothing was sent | none (claim released) |
 | 409 | `discord_connection_required` | | reconnect the connection first | none |
-| 429 | `rate_limited` | `retryAfterSeconds` | throttle | none |
+| 429 | `rate_limited` | `retryAfterSeconds` | throttle; what is left of the fixed 10-minute window (1 to 600) | none |
 
 Every denial above leaves Rafii state (except the throttle counters), the Discord side and the audit log unchanged, and
 issues no Discord request, except that a refusal found only after Discord was read (`bot_missing_change_nickname`,
@@ -188,6 +194,15 @@ staleness from any other.
   last reported (`manifest.discordBotNickname`, `null` meaning "no nickname"); at dispatch the post is HELD, nothing sent, with the event
   line "The Rafii bot's server nickname is no longer the one this post was approved under. Nothing was posted." when Discord
   reports a different one. Posts approved while the capability was off carry no frozen nickname and are never held for it.
+* **The freeze and the hold need a prior observation.** A review freezes a bot nickname only if this connection has already
+  observed the server's nickname: from a member verification (the connection's verify action), from its own verified nickname
+  write, or from a GET that settled an expired write. Installing the bot records none, so posts approved before the first observation
+  carry no guard and are never held for a nickname change. Once an observation exists it is what every later review freezes: if a
+  server admin renames the bot afterwards, the next dispatch fails closed (the post is held, `discord_bot_nickname_changed`) and
+  re-reviewing freezes the same old value again until a member verification (or a successful save in the dialog) refreshes the
+  observation. A page that offers the nickname editor should offer "Verify" once after the bot is connected and again after a
+  `discord_bot_nickname_changed` hold. A verification that overlaps a save of the same connection answers
+  `verification_unavailable` (nothing is extended): repeat it.
 * **One writer per server**: Rafii changes a server's nickname from a workspace only while that workspace is the only live Rafii
   installation of the server. With two, both see `nickname_authority_other_workspace` and neither can write.
 * **The server's own audit log** shows each Rafii nickname change with the reason "Rafii shared bot nickname change (ref
@@ -210,3 +225,17 @@ For the UI agent, because they could break a page built against the earlier text
 4. New request body key `reset`. A webhook reconnect by the same member now keeps the saved name.
 5. The GET no longer verifies the connection (it used to run the member-verification actions as a side effect), so a settings page can
    no longer flip a connection to unverified or write audit rows by being opened.
+
+## Changes since f7075432 (delta review SNR2)
+
+1. A name with an unpaired surrogate (JSON `"\ud800"`) is a `400 discord_sender_name_invalid` with `reason: control_or_format`, on both kinds
+   (it used to be an unhandled server error).
+2. The master switch is on only for the exact string `true`, in every environment; unset is off (it used to be on outside hosted
+   production). The provider view and the `sender_names_disabled` reason follow it.
+3. `retryAfterSeconds` of `429 rate_limited` is now the time left in the 10-minute window (1 to 600), not a constant 60.
+4. New codes: `discord_sender_write_rate_limited` (429, `retryAfterSeconds`; a Discord 429 on the nickname write, no longer
+   `discord_sender_write_refused`), `discord_sender_evidence_invalid` (409, bot), and the already existing
+   `discord_rate_coordinator_unavailable` (503) is now documented for GET and POST.
+5. A webhook with no name of its own: `observedName` is `null`, `nameSource` is `saved_override` or `none`, and the form works (it used to be
+   a 502 `upstream_error`).
+6. Reserved words: `discord`, `clyde`, `everyone` and `here` are refused in webhook names only; bot nicknames refuse the product's names only.

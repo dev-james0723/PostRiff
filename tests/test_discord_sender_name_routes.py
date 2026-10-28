@@ -363,7 +363,7 @@ class Switches(Base):
         calls = len(self.w.hooks.calls)
         outcome = self.w.attempt(self.w.get, self.A, self.ta, self.wa.connection)
         self.assertEqual(outcome[:2], (429, 'rate_limited'))
-        self.assertEqual(outcome[3], {'retryAfterSeconds': 60})
+        self.assertEqual(outcome[3], {'retryAfterSeconds': 600}, 'the window opened with the first read and nothing has elapsed')
         self.assertEqual(len(self.w.hooks.calls), calls)
         # Another connection of the same workspace and another workspace are not affected by it.
         self.w.get(self.A, self.ta, self.ia.connection)
@@ -371,6 +371,27 @@ class Switches(Base):
         # The window passes.
         self.w.now += 601
         self.w.get(self.A, self.ta, self.wa.connection)
+
+    def test_a_throttle_refusal_says_how_long_the_window_has_left(self):
+        """SNR2-2: the counter is a fixed ten-minute window, so a retry hint of one minute was a lie for most of it."""
+        for _ in range(12):
+            self.w.get(self.A, self.ta, self.wa.connection)
+        for elapsed, expected in ((0, 600), (250, 350), (599.2, 1), (599.9, 1)):
+            with self.subTest(elapsed=elapsed):
+                self.w.now = F.NOW + elapsed
+                outcome = self.w.attempt(self.w.get, self.A, self.ta, self.wa.connection)
+                self.assertEqual(outcome[:2], (429, 'rate_limited'))
+                self.assertEqual(outcome[3], {'retryAfterSeconds': expected})
+        self.w.now = F.NOW + 600.5
+        self.w.get(self.A, self.ta, self.wa.connection)          # and when the hint has passed the read is counted afresh
+
+    def test_a_write_throttle_refusal_also_reports_the_rest_of_its_window(self):
+        for index in range(6):
+            self.assertEqual(self.w.attempt(self.save, self.ta, self.A, self.wa, f'Name {index} Weekly')[0], 'ok')
+        self.w.now += 100
+        outcome = self.w.attempt(self.save, self.ta, self.A, self.wa, 'Name 7 Weekly')
+        self.assertEqual(outcome[:2], (429, 'rate_limited'))
+        self.assertEqual(outcome[3], {'retryAfterSeconds': 500})
 
     def test_writes_are_throttled_after_six_per_connection(self):
         outcomes = []

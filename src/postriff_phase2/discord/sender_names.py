@@ -27,6 +27,7 @@ import os
 import re
 import unicodedata
 import uuid
+from contextlib import contextmanager
 
 from postriff_alpha.domain import AlphaError
 from .authorization import digest, snowflake
@@ -37,6 +38,8 @@ LIMITS = {'webhook': 80, 'bot': 32}
 MANAGE_NICKNAMES, CHANGE_NICKNAME = 1 << 27, 1 << 26
 PENDING_SECONDS = 120
 CLAIM_GRACE_SECONDS = 900
+THROTTLE_WINDOW_SECONDS = 600     # the fixed window of the per-connection and per-workspace counters
+RATE_LIMIT_FALLBACK_SECONDS = 60  # what a 429 without a usable hint is reported as
 CONTRACT_VERSION = 2
 # Evaluation order of the reasons an edit is unavailable (docs/sender-name/UI-API-CONTRACT.md).
 REASON_ORDER = ('sender_names_disabled', 'bot_nickname_disabled', 'provider_unavailable', 'not_authorizing_member',
@@ -141,8 +144,9 @@ _HOMOGLYPHS = str.maketrans({
 _BLANKS = frozenset('\U0000115f\U00001160\U00003164\U0000ffa0\U00002800\U000017b4\U000017b5\U0000034f\U0000180e')
 ZWNJ, ZWJ = '\U0000200c', '\U0000200d'
 _VARIATION = frozenset('\U0000fe0e\U0000fe0f')
-_RESERVED_PARTS = ('discord', 'clyde', 'rafii', 'postriff')   # Discord's own webhook rule, plus the product's names
-_RESERVED_WHOLE = ('everyone', 'here')                         # Discord's reserved whole names
+_RESERVED_PARTS = ('discord', 'clyde', 'rafii', 'postriff')   # a webhook name: Discord's own rule, plus the product's names
+_BOT_RESERVED_PARTS = ('rafii', 'postriff')                   # a bot nickname: Discord restricts only usernames, the product's names stay
+_RESERVED_WHOLE = ('everyone', 'here')                         # Discord's reserved whole usernames (webhook names only)
 _FORBIDDEN = ('@', '#', ':', '```', '<', '>')                  # Discord's username substrings, plus mention/emoji syntax
 _LEET = ({'0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't'}, {'0': 'o', '1': 'l', '3': 'e', '4': 'a', '5': 's', '7': 't'})
 
@@ -199,7 +203,8 @@ def name_problem(name, kind):
     if '://' in name or re.search(r'(?i)(^|[^a-z0-9])www\.', name):
         return 'url_like'
     skeletons = _skeletons(name)
-    if any(part in skeleton for skeleton in skeletons for part in _RESERVED_PARTS) or skeletons & set(_RESERVED_WHOLE):
+    parts, whole = (_RESERVED_PARTS, _RESERVED_WHOLE) if kind == 'webhook' else (_BOT_RESERVED_PARTS, ())
+    if any(part in skeleton for skeleton in skeletons for part in parts) or skeletons & set(whole):
         return 'reserved_word'
     return None
 
@@ -267,11 +272,25 @@ class SenderNames:
     # Throttles (pr_auth_throttle, no schema change): bound the provider reads a settings page can cause.
     def _limit(self, cur, kind, scope, limit):
         from ..hosted import throttle
+        key = f'discord-sender-name:{kind}:{scope}'
         try:
-            throttle(cur, f'discord-sender-name:{kind}:{scope}', limit, 600)
+            throttle(cur, key, limit, THROTTLE_WINDOW_SECONDS)
         except AlphaError:
             fail('Too many sender-name requests. Wait a few minutes and try again.', 429, code='rate_limited',
-                 retryAfterSeconds=60)
+                 retryAfterSeconds=self._throttle_wait(cur, key))
+
+    @staticmethod
+    def _throttle_wait(cur, key):
+        """Seconds until the fixed window of this counter ends, the first moment a retry is counted afresh: between 1 and the
+        whole window. If the counter cannot be read back, the whole window (always enough)."""
+        from ..hosted import bucket
+        try:
+            cur.execute('SELECT greatest(1, ceil(extract(epoch FROM (window_start + make_interval(secs=>%s) - now())))) '
+                        'FROM public.pr_auth_throttle WHERE bucket=%s', (THROTTLE_WINDOW_SECONDS, bucket(key)))
+            row = cur.fetchone()
+            return max(1, min(THROTTLE_WINDOW_SECONDS, int(row[0])))
+        except Exception:
+            return THROTTLE_WINDOW_SECONDS
 
     # ----------------------------------------------------------------------------------------------------------------
     def authorizing(self, state, channel, envelope, actor):
@@ -387,6 +406,21 @@ class SenderNames:
             fail('Discord is waiting for shared request capacity. Try again shortly; nothing was changed.', 429,
                  code='discord_rate_delayed', retryAfterSeconds=max(1, math.ceil(delayed.retry_after_seconds)))
 
+    @contextmanager
+    def _evidence(self, kind):
+        """The adapter reports Discord evidence it cannot rely on (a membership, role or permission answer that is incomplete;
+        a webhook that is not the one connected) as a bare 409 `conflict`. The page gets a stable code instead: a webhook is
+        asked to reconnect, a bot installation is told to reload or reconnect. Errors that already carry a code pass on."""
+        try:
+            yield
+        except AlphaError as error:
+            if error.status != 409 or error.code != 'conflict':
+                raise
+            if kind == 'webhook':
+                fail('Reconnect this Discord connection before changing its sender name.', 409, code='discord_connection_required')
+            fail('Discord returned server details Rafii cannot rely on. Reload; if it persists, reconnect the installation.', 409,
+                 code='discord_sender_evidence_invalid')
+
     def observe(self, *, reconcile=False, writing=False, precheck=None):
         """One custody transaction, the Discord reads (no workspace transaction open, none per read), one final
         transaction. A read persists nothing except the throttle counters and the reconciliation of an expired claim."""
@@ -435,8 +469,9 @@ class SenderNames:
         member_nick = None
         if kind == 'webhook':
             from .webhooks import verify_resource
-            resource = self._provider_reads(lambda: verify_resource(adapter, envelope))
-            observed = resource.get('senderName')
+            with self._evidence(kind):
+                resource = self._provider_reads(lambda: verify_resource(adapter, envelope))
+            observed = resource.get('senderName')       # None when the webhook has no name of its own
         else:
             def read_server():
                 bot = adapter._bot_identity()
@@ -452,16 +487,19 @@ class SenderNames:
                     fail('The bot is not an active member of this server. Reconnect the installation.', 409,
                          code='discord_connection_required')
                 return bot, guild, roles, bot_roles, member
-            bot, guild, roles, bot_roles, member = self._provider_reads(read_server)
-            if roles is None or not adapter._permissions(guild, roles, envelope['user']) & MANAGE_NICKNAMES:
-                reasons.append({'code': 'person_missing_manage_nicknames'})
-            elif not _above(guild, roles, bot_roles, envelope['user']):
-                reasons.append({'code': 'person_role_below_bot'})
-            if not adapter._permissions(guild, bot_roles, bot) & CHANGE_NICKNAME:
-                reasons.append({'code': 'bot_missing_change_nickname'})
+            with self._evidence(kind):
+                bot, guild, roles, bot_roles, member = self._provider_reads(read_server)
+                if roles is None or not adapter._permissions(guild, roles, envelope['user']) & MANAGE_NICKNAMES:
+                    reasons.append({'code': 'person_missing_manage_nicknames'})
+                elif not _above(guild, roles, bot_roles, envelope['user']):
+                    reasons.append({'code': 'person_role_below_bot'})
+                if not adapter._permissions(guild, bot_roles, bot) & CHANGE_NICKNAME:
+                    reasons.append({'code': 'bot_missing_change_nickname'})
             observed = member.get('nick') or (member.get('user') or {}).get('global_name') or (member.get('user') or {}).get('username')
             member_nick = member.get('nick') if isinstance(member.get('nick'), str) else None
-        if not isinstance(observed, str) or not observed or len(observed) > 80:
+        if observed is None and kind == 'webhook':
+            pass      # Discord's webhook object may have no name (null): shown as such, and a saved override is still editable
+        elif not isinstance(observed, str) or not observed or len(observed) > 80:
             fail('Discord did not return a valid current sender name.', 502, code='upstream_error')
         # The final transaction: re-prove custody (the reads above ran without one), reconcile an expired claim, then
         # (bot) consult the other workspaces' installations under the guild lock.
@@ -614,6 +652,24 @@ class SenderNames:
             raise caught    # for instance custody changing while the admission was recorded: its own, honest refusal
         unavailable([{'code': 'provider_unavailable'}])
 
+    @staticmethod
+    def _retry_after(response):
+        """Discord's own hint for a 429, in whole seconds (rounded up, at least 1): the body's `retry_after`, else the
+        `Retry-After` header. A missing or malformed hint is reported as a minute; the shared coordinator keeps its own record."""
+        body = response.get('body')
+        headers = response.get('headers') if isinstance(response.get('headers'), dict) else {}
+        for raw in (body.get('retry_after') if isinstance(body, dict) else None,
+                    next((v for k, v in headers.items() if isinstance(k, str) and k.lower() == 'retry-after'), None)):
+            if isinstance(raw, bool):
+                continue
+            try:
+                seconds = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(seconds) and seconds > 0:
+                return max(1, math.ceil(seconds))
+        return RATE_LIMIT_FALLBACK_SECONDS
+
     def audit_reason(self, guild):
         """X-Audit-Log-Reason for the nickname PATCH: Discord shows it in the server's audit log, so a server admin can
         see that Rafii (not a person) changed the nickname and which opaque reference to quote to Rafii. A one-way
@@ -688,6 +744,9 @@ class SenderNames:
                 # Discord answered and refused (permission, hierarchy, rate limit): the nickname is unchanged, so the
                 # claim must not make the next attempt wait. Never retried here: the person decides after fixing it.
                 self.release_claim(claim_id)
+                if status == 429:
+                    fail('Discord is rate limiting this change. Nothing was changed; try again after the wait below.', 429,
+                         code='discord_sender_write_rate_limited', retryAfterSeconds=self._retry_after(response))
                 fail('Discord refused the nickname change. Check the permissions of the bot and of your role, then try again.',
                      409, code='discord_sender_write_refused')
             if (status != 200 or not isinstance(member, dict)
