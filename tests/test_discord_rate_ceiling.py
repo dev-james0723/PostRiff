@@ -279,6 +279,18 @@ class DefaultHeadroom(Base):
         self.assertAlmostEqual(25 / (1 + GUARD), 22.73, places=2)
 
 
+class ShippedConstants(unittest.TestCase):
+    """The classes above patch the headroom (Base.setUp) and so cannot see what production ships; this one reads it.
+
+    Both numbers were chosen with measurements (tests/discord_ceiling_probe.py; the leak receipts of the unanswered-request
+    lock-outs) and the launch gate is judged against them: changing either must be deliberate, which means changing this
+    file in the same commit."""
+
+    def test_the_shipped_slot_headroom_and_unanswered_request_margin_are_the_reviewed_ones(self):
+        self.assertEqual(SharedPostgresBudget.SLOT_GUARD_SECONDS, GUARD)
+        self.assertEqual(SharedPostgresBudget.UNOBSERVED_MARGIN_SECONDS, MARGIN)
+
+
 class PolicyAndHold(Base):
     def test_tightening_applies_at_once_and_counts_what_was_already_admitted(self):
         self.make(5, 1)
