@@ -678,8 +678,11 @@ def health_summary(samples):
     resetSeconds; with booking `remaining` is the number of slots bookings may still fill and `resetSeconds` when a booking is
     possible again, not "the window is nearly spent") and coordinator.traffic.admissions60s.
 
-    The spreads are taken over the busy readings only (admissions60s at least half of the largest reading), so the idle ends of
-    a run do not dilute them; every reading is counted in 'readings'. A tree without the route answers 404: said so."""
+    The spreads are taken over the busy readings only, so the idle ends of a run (and the seeding minute before it, whose
+    admissions are still in the first reading's 60 seconds under a policy of 20,000 a second) do not dilute them: a reading is
+    busy when the lane had work due (queue.dueWorkspaces > 0; every reading, when the payload has no queue section) and its
+    admissions60s is at least half of the largest of those; every reading is counted in 'readings'. A tree without the route
+    answers 404: said so."""
     if not samples:
         return None
     statuses = Counter(str(s.get('status')) if s.get('status') is not None else 'exception' for s in samples)
@@ -692,9 +695,11 @@ def health_summary(samples):
     if not usable:
         return out
     traffic = lambda s: ((s.get('coordinator') or {}).get('traffic') or {})
-    admitted = [traffic(s).get('admissions60s') for s in usable if isinstance(traffic(s).get('admissions60s'), (int, float))]
+    due = lambda s: (s.get('queue') or {}).get('dueWorkspaces')
+    with_work = [s for s in usable if not isinstance(due(s), (int, float)) or due(s) > 0]
+    admitted = [traffic(s).get('admissions60s') for s in with_work if isinstance(traffic(s).get('admissions60s'), (int, float))]
     peak = max(admitted, default=0)
-    busy = [s for s in usable if peak and isinstance(traffic(s).get('admissions60s'), (int, float))
+    busy = [s for s in with_work if peak and isinstance(traffic(s).get('admissions60s'), (int, float))
             and traffic(s)['admissions60s'] >= 0.5 * peak] or usable
     booking = lambda s: ((s.get('coordinator') or {}).get('booking') or {})
     policy = lambda s: (((s.get('coordinator') or {}).get('guards') or {}).get('policy') or {})
@@ -724,6 +729,24 @@ def health_summary(samples):
     return out
 
 
+def reads_ahead(admissions):
+    """How many reads lay ahead of the clock (a wire time not yet reached) when each read was reserved: the booked horizon
+    as the reads themselves saw it, not sampled once a minute like the health payload. Reads only: a booked create permit is
+    stored with its slot as its reservation time, so its true reservation instant is not in the table. Returns the spread of
+    the counts, or None without reads."""
+    import heapq
+    reads = sorted((r[0], r[2]) for r in admissions or [] if len(r) > 8 and not r[8] and r[0] is not None and r[2] is not None)
+    if not reads:
+        return None
+    heap, ahead = [], []
+    for reserved, wire in reads:
+        while heap and heap[0] <= reserved:
+            heapq.heappop(heap)
+        ahead.append(len(heap))
+        heapq.heappush(heap, wire)
+    return _spread(ahead)
+
+
 def booking_summary(lane_counters, created_posts, admissions, attempts, health):
     """Booking (rate_limits.booking: a lane caller that finds the application window full books the next free slot and sleeps
     in the call until it comes) from four independent sources, so each can be checked against the others:
@@ -745,7 +768,7 @@ def booking_summary(lane_counters, created_posts, admissions, attempts, health):
                                                           'claimed', 'posted', 'verified') if k in counters},
            'admittedReads': len(reads), 'bookedReads': len(waits),
            'bookedReadShare': (len(waits) / len(reads)) if reads else None, 'bookedReadWait': _spread(waits),
-           'bookedReadSeconds': sum(waits),
+           'bookedReadSeconds': sum(waits), 'readsAhead': reads_ahead(admissions),
            'attempts': {k: (attempts or {}).get(k) for k in ('withBookingColumns', 'booked', 'bookedByOperation',
                                                               'bookedPlannedSeconds', 'bookedSleptSeconds', 'bookedPlanned',
                                                               'bookedSlept', 'refusedWithRoomToBook')} if attempts else None,
@@ -772,6 +795,12 @@ def booking_lines(result):
                  'in this count: a booked create permit is stored reserved at its slot.' % (
                      _count(b.get('bookedReads')), _count(b.get('admittedReads')), 100 * (b.get('bookedReadShare') or 0),
                      ' / '.join(_fmt((w or {}).get(k)) for k in ('p50', 'p90', 'p99', 'max')), _fmt(b.get('bookedReadSeconds'))))
+    ra = b.get('readsAhead')
+    if ra:
+        lines.append('- **Booked horizon as the reads saw it:** the number of reads lying ahead of the clock (a wire time not yet reached) '
+                     'when a read was reserved, p50 / p90 / p99 / max %s (n = %s reads; with the reviewed 25 a second and a 0.1 s guard a '
+                     'full horizon holds about 21).' % (
+                         ' / '.join(_fmt(ra.get(k)) for k in ('p50', 'p90', 'p99', 'max')), _count(ra.get('n'))))
     a = b.get('attempts')
     if a and a.get('withBookingColumns'):
         lines.append('- **Booked calls, from the attempt log:** %s (by operation %s); planned wait p50 / p90 / max %s s, seconds '

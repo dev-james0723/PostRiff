@@ -84,6 +84,11 @@ SCENARIOS = {
     # S1 with one lever moved at a time; judged against section 4 as S1 is. No code or policy change: the loop budget
     # is the existing POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS (the lane clamps it at 90), warm is how the
     # invocation is started.
+    'S1-lane56': dict(lane_max_seconds=56, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
+                      description='S1 with each lane loop budgeted 56 s instead of 50 (POSTRIFF_DISCORD_PARALLEL_WORKER_'
+                                  'MAX_SECONDS=56, a Production variable that needs its own approval but may be measured): '
+                                  'the duty-cycle lever alone, as the owner\'s capacity decisions (reply 16) leave it open. '
+                                  "A loop stops 4 s before the next minute's loop of the same shard starts."),
     'S1-lane58': dict(lane_max_seconds=58, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
                       description='S1 with each lane loop budgeted 58 s instead of 50 (POSTRIFF_DISCORD_PARALLEL_WORKER_'
                                   'MAX_SECONDS=58): the duty-cycle lever alone. A loop now stops about when the next '

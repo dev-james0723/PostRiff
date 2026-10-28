@@ -767,6 +767,18 @@ class BookingReceipts(unittest.TestCase):
         self.assertEqual(summary['bookedReads60s']['p50'], 900)
         self.assertEqual(summary['policyLimit'], 25)
 
+    def test_the_seeding_minute_and_the_idle_end_are_not_busy_readings(self):
+        r = self.reading
+        seeding = r(30, 1313, 0, 0.0, 0, 19944)
+        seeding['coordinator']['guards']['policy']['limit'] = 20000
+        seeding['queue'] = {'dueWorkspaces': 0}
+        busy = [dict(r(90 + 60 * i, 1000 + 10 * i, 5, 0.3, 800, 10), queue={'dueWorkspaces': 900}) for i in range(4)]
+        idle = dict(r(400, 0, 0, 0.0, 0, 25), queue={'dueWorkspaces': 0})
+        summary = analysis.health_summary([seeding] + busy + [idle])
+        self.assertEqual((summary['readings'], summary['busyReadings']), (6, 4))
+        self.assertEqual(summary['policyLimit'], 25)
+        self.assertEqual(summary['policyRemaining']['max'], 10)
+
     def test_a_tree_without_the_health_route_says_so_instead_of_inventing_a_reading(self):
         summary = analysis.health_summary([{'at': 1.0, 'status': 404, 'answer': {'message': 'This hosted route is unavailable.'}},
                                            {'at': 2.0, 'status': None, 'exception': 'TimeoutExpired: 90'}])
@@ -800,6 +812,19 @@ class BookingReceipts(unittest.TestCase):
                          'the number of slots bookings may still fill', 'coordinator.guards.policy'):
             self.assertIn(expected, lines)
         self.assertIsNone(analysis.booking_summary({}, 0, [], None, None), 'a tree with no booking shows none')
+
+    def test_the_horizon_is_counted_from_the_reads_own_reservations(self):
+        # [reserved, sealed, sent, outcome, expires, state, method, path, publish, publication, kind, id]
+        def read(reserved, wire):
+            return [reserved, None, wire, wire + 0.1, reserved + 5, 'observed', 'GET', 'a' * 16, False, None, 'bot', 'x%s' % reserved]
+        # four reads reserved within 30 ms and booked 0, 0.1, 0.2 and 0.3 s ahead; a fifth reserved at 10.25 finds only the
+        # last one still ahead: the reads saw 0, 0, 1, 2 and 1 reads ahead of the clock
+        rows = [read(10.0, 10.0), read(10.01, 10.1), read(10.02, 10.2), read(10.03, 10.3), read(10.25, 10.4)]
+        ahead = analysis.reads_ahead(rows)
+        self.assertEqual((ahead['n'], ahead['min'], ahead['p50'], ahead['max']), (5, 0, 1, 2))
+        create = [10.0, 10.5, 10.5, 10.9, 15.0, 'observed', 'POST', 'b' * 16, True, 'pub', 'bot', 'c1']
+        self.assertEqual(analysis.reads_ahead(rows + [create])['n'], 5, 'a create is not a read')
+        self.assertIsNone(analysis.reads_ahead([]))
 
     def test_the_peak_of_a_booked_read_is_counted_by_wire_time_not_by_reservation(self):
         # 30 reads reserved inside one second but booked across three: by reservation 30 in a second, by wire time 10.

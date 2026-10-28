@@ -239,6 +239,7 @@ mode. It uses no secret and no environment, has a read-only token, fetches exact
 | `s2sizes` | S2-100, S2-300, S2-1000 (S2 with a hot workspace of 100, 300 and 1,000 posts) |
 | `devset` | the development measurement set: S1, S0-100, Fdb, Fcrash, F429, one runner each, all at once |
 | `s0100`, `fdb`, `fcrash`, `f429` | one scenario of the development set alone, to run it again after a failure or a change (the branch name is `claude/discord-capacity-run-<profile>-<suffix>` as for every profile) |
+| `s1lane56` | S1 with each lane loop budgeted 56 s (`POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS=56`) instead of 50: the duty-cycle lever alone, to read next to the S1 of the same tree |
 | `faults` | F429, F5xx, Fcrash, Fdb, Fexpiry, Fstall, Fflip, Nmisroute, Ndup, Nceiling |
 | `release` | every scenario, baseline included |
 | `baseline` | the frozen minute worker on the request's baseline SHA (default RC1) |
