@@ -16,7 +16,9 @@ jobs:
     # The expanded ordinary catalog plus the bounded15m Discord runner and
     # remaining build/browser steps need an explicit CI execution budget.
     # This changes no capacity workload, traffic duration or latency target.
-    timeout-minutes: 75
+    # RC2: the Python step alone takes about 35 minutes (the lane, booking and coordinator tests run on PostgreSQL;
+    # RC1 took 6), and the steps after it about 30, so 75 left no margin.
+    timeout-minutes: 100
     env:
       PYTHONPATH: src:tests
       POSTRIFF_RESEARCH: '0'

@@ -11,7 +11,8 @@ concurrency:
 jobs:
   qualification:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    # RC2: the full Python suite inside this job takes about 35 minutes on its own (RC1: 6), the other gates about 20.
+    timeout-minutes: 90
     env:
       PYTHONPATH: src:tests
       POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
