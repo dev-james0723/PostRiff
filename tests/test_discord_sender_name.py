@@ -412,7 +412,9 @@ class SenderTransportBoundary(unittest.TestCase):
         ledger = MemoryLedger()
         h.s.adapter.rate_limiter = SharedPostgresBudget(ledger.connection, APP, policy=synthetic_policy())
         consent = Mock(side_effect=[True, False])
-        with self.assertRaises(AlphaError):
+        # The coordinator may admit the nickname route only while the capability is on (R1); this test is about what
+        # happens after the admission, so it turns the capability on itself and passes with or without R1.
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}), self.assertRaises(AlphaError):
             h.s.adapter._bot('PATCH', f'/guilds/{GUILD}/members/@me', body={'nick': 'Blocked'}, write_authorize=consent)
         self.assertEqual(consent.call_count, 2)
         self.assertEqual(h.patches, [])

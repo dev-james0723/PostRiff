@@ -5,17 +5,25 @@ The route's own tests use a scriptable stand-in (discord_sender_name_fixture.Fak
 class in test_discord_sender_name_postgres.py); these pin the coordinator contract the stand-in imitates, so a change on the
 rate limiter's side that breaks the route fails here first. See docs/sender-name/REQUESTS-TO-RATE-LIMITER.md.
 """
+import os
 import unittest
 from unittest.mock import patch
 
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.discord.rate_limits import RateCoordinatorUnavailable, SharedPostgresBudget
+from postriff_phase2.discord.rate_limits import RateCoordinatorUnavailable, SharedPostgresBudget, route_identity
 from test_discord_rate_limits import MemoryLedger, synthetic_policy
 from test_discord_sender_name import SettingsHarness, GUILD, APP, NOW
+
+NICKNAME_FLAG = 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED'
 
 
 class NicknameAdmissions(unittest.TestCase):
     def setUp(self):
+        # The coordinator may admit the nickname route only while the capability is on (R1, REQUESTS-TO-RATE-LIMITER.md).
+        # These tests are about the admissions, so they turn it on themselves and pass with or without R1.
+        patcher = patch.dict(os.environ, {NICKNAME_FLAG: 'true'})
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.h = SettingsHarness('bot')
         self.ledger = MemoryLedger(now=NOW)
         self.h.s.oauth.clock = lambda: self.ledger.now
@@ -93,6 +101,74 @@ class NicknameAdmissions(unittest.TestCase):
             self.ledger.now = NOW + seconds
             with self.subTest(seconds=seconds), self.assertRaises(RateCoordinatorUnavailable):
                 self.limiter.reconcile_nickname(self.ledger, permit, GUILD)
+
+
+class RouteAdmission(unittest.TestCase):
+    """R1: the coordinator admits PATCH:/guilds/{id}/members/@me only while the nickname capability is on, read at call time.
+
+    rate_limits.py does not have R1 yet (it is not part of this branch). Until it does this test is SKIPPED with that
+    reason, so it neither fails the suite nor claims something that is not true; the moment R1 merges it starts asserting."""
+    PATH = f'/guilds/{GUILD}/members/@me'
+
+    def admitted(self, value):
+        """The route template the coordinator admits with the flag set to `value` (None: unset), or None when it refuses."""
+        env = {k: v for k, v in os.environ.items() if k != NICKNAME_FLAG}
+        if value is not None:
+            env[NICKNAME_FLAG] = value
+        with patch.dict(os.environ, env, clear=True):
+            try:
+                return route_identity('PATCH', self.PATH)[0]
+            except RateCoordinatorUnavailable:
+                return None
+
+    def test_the_nickname_route_is_admitted_only_while_the_capability_is_on(self):
+        if self.admitted(None) is not None:
+            self.skipTest('R1 is not in rate_limits.py yet (docs/sender-name/REQUESTS-TO-RATE-LIMITER.md): the coordinator still '
+                          'admits PATCH:/guilds/{id}/members/@me whatever POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED says')
+        for value in (None, 'false', '1', 'True', 'TRUE', ' true', 'true ', ''):
+            with self.subTest(flag=value):
+                self.assertIsNone(self.admitted(value))
+        self.assertEqual(self.admitted('true'), 'PATCH:/guilds/{id}/members/@me')
+        # the whole reservation refuses too, and leaves no admission behind
+        ledger = MemoryLedger(now=NOW)
+        limiter = SharedPostgresBudget(ledger.connection, APP, policy=synthetic_policy(NOW))
+        identity = SettingsHarness('bot').s.adapter._rate_identity('bot')
+        with patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != NICKNAME_FLAG}, clear=True):
+            with self.assertRaises(RateCoordinatorUnavailable):
+                limiter.reserve('PATCH', self.PATH, identity=identity)
+        self.assertEqual(ledger.admissions, {})
+
+    def test_reading_the_flag_is_not_part_of_settling_what_already_exists(self):
+        """R1 must not strand an admission made while the capability was on: reconciling and abandoning work with it off."""
+        with patch.dict(os.environ, {NICKNAME_FLAG: 'true'}):
+            h = SettingsHarness('bot')
+            ledger = MemoryLedger(now=NOW)
+            limiter = SharedPostgresBudget(ledger.connection, APP, policy=synthetic_policy(NOW))
+            h.s.adapter.rate_v1_enabled, h.s.adapter.rate_limiter = True, limiter
+            transport = h.s.adapter.transport
+
+            def rated(method, url, **kwargs):
+                result = transport(method, url, **kwargs)
+                result['headers'] = {'X-RateLimit-Bucket': 'synthetic-' + method, 'X-RateLimit-Limit': '100',
+                                     'X-RateLimit-Remaining': '90', 'X-RateLimit-Reset-After': '1'}
+                return result
+            h.s.adapter.transport = rated
+            permits = []
+
+            def lose():
+                raise TimeoutError('Synthetic lost response')
+            h.before_patch = lose
+            with patch('postriff_phase2.hosted.audit'):
+                try:
+                    h.s.adapter._bot('PATCH', self.PATH, body={'nick': 'Flag Bot'}, write_authorize=lambda: True, write_admitted=permits.append)
+                except (AlphaError, TimeoutError):
+                    pass
+        self.assertEqual(len(permits), 1)
+        ledger.now += 121
+        with patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != NICKNAME_FLAG}, clear=True):
+            limiter.reconcile_nickname(ledger, permits[0], GUILD)           # capability off: the existing admission still settles
+            limiter.abandon_unsent_nickname(permits[0])
+        self.assertEqual(ledger.admissions[permits[0].id]['state'], 'observed')
 
 
 if __name__ == '__main__':
