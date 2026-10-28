@@ -182,6 +182,22 @@ class MemoryLedger:
         elif "SET state='sent'" in sql:
             pid,expected=params;r=self.admissions[pid];self.rowcount=int(r['state']==expected)
             if self.rowcount:r.update(state='sent',sent=self.workspace.now if self.workspace else self.now)
+        elif sql.startswith('SELECT coalesce(bool_or(r.manual_hold)'):   # consume: is any scope of the permit held, embargoed or open (_stopped)
+            moment=self.workspace.now if self.workspace else self.now
+            scopes=[self.states[k] for k in params[0] if k in self.states and (
+                self.states[k]['hold'] or (self.states[k]['blocked'] or 0)>moment or (self.states[k]['circuit'] or 0)>moment)]
+            until=max([max(x['blocked'] or 0,x['circuit'] or 0) for x in scopes]+[0]) or None
+            self.result=[(any(x['hold'] for x in scopes),until,moment)]
+        elif sql.startswith('SELECT a.sent_at IS NULL,'):   # _blocked_unsent_wait: unsent, and when the embargoes on its scopes end
+            r=self.admissions[params[0]]
+            until=max([max(self.states[k]['blocked'] or 0,self.states[k]['circuit'] or 0) for k in r['keys'] if k in self.states]+[0]) or None
+            self.result=[(r.get('sent') is None,until)]
+        elif sql.startswith('SELECT sent_at IS NULL AND sealed_at IS NOT NULL AND is_publish'):   # confirm_blocked_publish
+            r=self.admissions[params[0]]
+            self.result=[(r.get('sent') is None and r['intent'] is not None and bool(r['publish']),)]
+        elif sql.startswith("UPDATE public.pr_discord_request_admissions SET outcome_at=clock_timestamp(),state='blocked'"):   # consume: closed unsent
+            pid,expected=params;r=self.admissions[pid];self.rowcount=int(r['state']==expected and r.get('sent') is None)
+            if self.rowcount:r['state']='blocked'
         elif sql.startswith("UPDATE public.pr_discord_request_admissions a SET state='blocked'"):   # the gate before a booked read is sent
             r=self.admissions[params[0]];moment=self.workspace.now if self.workspace else self.now
             scopes=[self.states[k] for k in r['keys'] if k in self.states]

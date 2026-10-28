@@ -1278,12 +1278,26 @@ class SharedPostgresBudget:
         if cur.rowcount != 1:
             raise RateCoordinatorUnavailable()
 
+    def _stopped(self, cur, scope_keys):
+        """(held, until, now) when a manual hold, an embargo or an open circuit is on any of these scopes now, else None. One
+        statement, no lock: it only reads the state rows, so it can take no part in a deadlock and delays no reservation."""
+        cur.execute(f'''SELECT coalesce(bool_or(r.manual_hold),false),
+                extract(epoch from max(greatest(r.blocked_until,r.circuit_until)))::double precision,
+                extract(epoch from clock_timestamp())::double precision
+            FROM {STATE} r WHERE r.scope_key=ANY(%s::text[])
+                AND (r.manual_hold OR r.blocked_until>clock_timestamp() OR r.circuit_until>clock_timestamp())''', (scope_keys,))
+        held, until, now = cur.fetchone()
+        if not valid_number(now) or (until is not None and not valid_number(until)) or held not in (True, False):
+            raise RateCoordinatorUnavailable()
+        return (held, until, now) if held or until is not None else None
+
     def consume(self, permit, method, path, *, binding=None, intent_id=None, authorize=None):
         if (not isinstance(permit,Permit) or method != permit.method or _digest(path) != permit.path_key
                 or binding_hash(binding) != permit.binding_hash):
             raise RateCoordinatorUnavailable()
         if self.policy is None:
             raise RateCoordinatorUnavailable()
+        stopped = None
         with self._transaction() as cur:
             if permit.binding_hash:
                 self._policy(cur)
@@ -1310,9 +1324,27 @@ class SharedPostgresBudget:
                 # A booked permit is not to be used before its slot: its slot is where the ceiling counts it. reserve() returns
                 # only when the slot has come, so nothing in the shipped flow gets here; this is the defence if something does.
                 raise RateDelayed(row['reserved']-now,cause='permit_early',scope='permit')
-            cur.execute(f"UPDATE {ADMISSIONS} SET state='sent',sent_at=clock_timestamp() WHERE id=%s::uuid AND state=%s", (permit.id,expected_state))
+            # A hold, an embargo or a circuit may have begun on any scope this permit was admitted under since it was reserved
+            # (the runbook's hold is an UPDATE of the state row; it touches no admission), and observe() blocks the permits still
+            # unused only when it sees one. Looked at here, just before the permit would be marked sent: the admission is closed
+            # `blocked` in this transaction, which commits, and the caller is refused after the commit (below), so the refusal
+            # is the one observe() gives a sealed permit it blocked and confirm_blocked_publish proves the intent unsent.
+            stopped = self._stopped(cur,row['keys'])
+            if stopped:
+                cur.execute(f"UPDATE {ADMISSIONS} SET outcome_at=clock_timestamp(),state='blocked' WHERE id=%s::uuid AND state=%s AND sent_at IS NULL",
+                            (permit.id,expected_state))
+            else:
+                cur.execute(f"UPDATE {ADMISSIONS} SET state='sent',sent_at=clock_timestamp() WHERE id=%s::uuid AND state=%s", (permit.id,expected_state))
             if cur.rowcount != 1:
                 raise RateCoordinatorUnavailable()
+        if stopped:
+            held, until, at = stopped
+            wait = max(.05,until-at) if until is not None else .05
+            if permit.binding_hash:
+                raise RateDelayed(wait,cause='permit_blocked',scope='embargo')
+            if held:
+                raise RateDelayed(HOLD_WAIT_SECONDS,cause='hold',scope='embargo')
+            raise RateDelayed(wait,cause='embargo',scope='embargo')
         # Transaction is committed BEFORE provider I/O. A crash now retains the
         # intent and spent admission. It can never manufacture a fresh POST.
 

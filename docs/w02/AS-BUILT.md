@@ -233,7 +233,9 @@ but is a separate setting.
 ## A permit an embargo blocks before it is used
 
 An embargo or hold that the coordinator observes after a create's intent was sealed blocks that unused permit
-(`observe()`: every reserved or sealed admission in the blocked scope becomes `blocked`). The post used to end
+(`observe()`: every reserved or sealed admission in the blocked scope becomes `blocked`; and, since G2E-B-16, `consume()` looks
+itself at the holds, embargoes and circuits of the permit's scopes before it marks the admission sent: "Consume looks too", in
+Booking, below). The post used to end
 `uncertain` though nothing was sent, waiting for manual reconciliation: one global 429 could strand about one post
 per running loop. The invariant now: a sealed intent is retried only when `consume()` itself refuses its permit in the
 same call, before any transport, and the worker then proves from the admission row, under its lock in the workspace
@@ -735,7 +737,21 @@ one short statement of its own, with no application or scope lock, closes it `bl
 has a manual hold, an embargo or an open circuit, and the caller is told as at admission (a hold: `RateDelayed(300,
 cause='hold', scope='embargo')`; an embargo: what is left of it). Its slot stays spent. What can still reach Discord after an
 embargo begins is what could before: whatever lies between this look (for a wait under 25 ms, the commit) and the wire. A
-booked create's permit is blocked by the existing rule for unused permits and refused at seal or consume.
+booked create's permit has the same look at `consume()`, whether it was booked or not (below).
+
+*Consume looks too.* `consume()` used to read no hold, embargo or circuit: the rule for unused permits lived in `observe()`, which
+blocks every reserved or sealed admission of a scope it sees embargoed, so a hold set by the runbook's UPDATE after a permit was
+reserved stopped it only if some other answer happened to be observed before it was consumed, and a permit lives up to
+`permit_ttl_seconds` (5 s) and a booked create's wait adds up to one second (the independent review's G2E-B-16). Now, just before
+it would mark the admission sent, `consume()` asks in one statement without a lock whether any scope the admission was made under
+has a manual hold, an embargo or an open circuit (`_stopped`; a read of the state rows, so it joins no deadlock and delays no
+reservation). If so the admission is closed `blocked` in that transaction, which commits, and the caller is refused after the
+commit: a publish permit with `permit_blocked` and what is left of the embargo (0.05 s for a hold), the signal "A permit an embargo
+blocks before it is used" already turns into a release, with `confirm_blocked_publish` proving the intent unsent from the
+admission row; a permit without a binding with `hold` (300 s) or `embargo`. A hold that ends afterwards does not revive the permit.
+What it cannot do is what nothing can: a hold committed after this look and before the wire (the time between the statement and the
+transport, a few milliseconds) and a cancel, hold or revoke in the workspace between the seal and the POST (the next paragraph's
+limit, G2E-B-10). One more statement in the consume transaction, which holds only the admission's row lock.
 
 *A process that dies in the wait* is in the failure table: nothing is sent, at most one slot per shard is held, for at most 31
 seconds.

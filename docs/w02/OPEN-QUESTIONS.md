@@ -323,10 +323,12 @@ What to know before relying on it.
 - **What can happen during a wait.** A process that dies leaves the booked read stored `sent` with a wire time ahead: it is never
   sent, keeps its slot for the window plus 30 s (31 s) and then stops counting, at most one per shard (12 of 25 at the very worst).
   A hold, an embargo or an open circuit that begins during a wait of 25 ms or more is found by the read's last look just before it
-  is sent (one statement, no lock): the read is closed unsent and the post waits as for a refusal at admission; a booked create is
-  stopped by the existing block of unused permits at seal or consume. What can still leave after an embargo begins is what could
-  before: the time between that look (or the commit, for a wait under 25 ms) and the wire. The F429 and B4 tests are unchanged and
-  pass.
+  is sent (one statement, no lock): the read is closed unsent and the post waits as for a refusal at admission; a booked create's
+  permit is stopped by the same look at `consume()` (it was said to be stopped by the existing block of unused permits, which
+  `observe()` applies only when some answer is observed: the independent review found a permit consumed after the runbook's hold,
+  G2E-B-16, fixed; AS-BUILT "Consume looks too"). What can still leave after an embargo begins is what
+  could before: the time between that look (or the commit, for a wait under 25 ms) and the wire. The F429 and B4 tests are unchanged
+  and pass.
 - **What the application row's `remaining` means now.** It is the room the booked horizon still has, as of the last admission (a
   refusal writes nothing): the cap, less the held, less `IMMEDIATE_RESERVE`, less the permits still to be used (each counts in every
   window, as for a booking), less the other wire times that still hold their slot when the horizon ends, one `BOOK_AHEAD_SECONDS`
