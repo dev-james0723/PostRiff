@@ -717,13 +717,17 @@ so a web request, which cannot wait, always finds one (4 percent of the ceiling 
 than the book-ahead plus 50 ms (the database clock stepped back) is waited out as before: every wire counts and the quote is
 the wait.
 
-*What the application row stores.* The same whoever wrote it. `remaining` is the free slots that bookings may still fill
-(`cap` less the held, less `IMMEDIATE_RESERVE`, less the wire times up to now; never below 0), and `reset_at`, while none is
-free, the instant from which a booking within the book-ahead is possible (the next wire to leave its span, less the
-book-ahead; an instant already past means possible now). `lane.outlook`, which waits while `remaining` is 0 and `reset` lies
-ahead, is unchanged and now waits only while the booked horizon is full. For a monitor this changes the meaning: a busy lane
-keeps the window full and `remaining` no longer approaches 0 with it; it reaches 0 when the horizon is full and callers are
-refused again. With `BOOK_AHEAD_SECONDS` 0 the row is what it has always been.
+*What the application row stores.* The same whoever wrote it, as of the last admission (a refused call writes nothing).
+`remaining` is the room the booked horizon still has: `cap` less the held, less `IMMEDIATE_RESERVE`, less the permits still to be
+used (each counts in every window, as for a booking), less the other wire times that still hold their slot when the horizon
+ends, one book-ahead after the write; never below 0. It is 0 exactly when a booking of the whole horizon would be refused, and
+`reset_at` is then the instant from which one would not be (the wire time whose leaving makes room, less the book-ahead); while
+there is room `reset_at` is the write's own time, nothing to wait for. `lane.outlook`, which waits while `remaining` is 0 and
+`reset` lies ahead, is unchanged and now waits only while the booked horizon is full. For a monitor this changes the meaning: a
+busy lane keeps the window full of wire times, and an earlier version, which counted only those up to now, read 0 in 21 of 35
+busy health readings of the first hosted run with the horizon never full. The twelve loops hold at most twelve bookings at once
+of the 24 the horizon takes, so a lane that fills the budget reads about 11 [from the count], and 0 means callers are being
+refused; a stored 0 whose reset has passed is old. With `BOOK_AHEAD_SECONDS` 0 the row is what it has always been.
 
 *The gate.* A booked read that slept at least 25 ms (`BOOK_GATE_MIN_SECONDS`) is looked at once more just before it is sent:
 one short statement of its own, with no application or scope lock, closes it `blocked` if any scope it was admitted under now

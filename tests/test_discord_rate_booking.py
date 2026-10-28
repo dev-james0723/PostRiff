@@ -223,9 +223,42 @@ class StoredRow(Booked):
         self.fill()
         self.at(.9)
         row = self.policy_row()
-        self.assertEqual(row['left'], 0, 'the window is full')
-        self.assertLessEqual(row['reset'], T0 + .9 + 1e-9, 'and a booking within the horizon is possible now: reset is not in the future')
-        self.assertAlmostEqual(row['reset'], T0 + 1 + SPAN_EPS - 1.0, places=9, msg='the next wire leaves a horizon after this')
+        self.assertEqual(row['left'], 2, 'as of the last admission (at .6): its window holds three wires, its horizon has two bookings left')
+        self.assertEqual(row['reset'], T0 + .6, 'and a booking is possible: reset is that instant, not ahead')
+
+    def test_remaining_is_the_room_of_the_horizon_and_is_zero_exactly_when_a_booking_is_not_possible(self):
+        """Found on the first hosted run: remaining was 0 in 21 of 35 busy readings while a booking was possible at once, because it
+        counted only the wires up to now, and a saturated lane always has a full span of them. A reader (an alert, the ops ratio)
+        takes 0 for spent: it has to mean that no booking is possible, which is when `reset` lies ahead. Three callers book at
+        one instant (.9), each into the horizon that ends at 1.9; the row is as of the last of them."""
+        self.fill()
+        for room in (2, 1, 0):
+            self.at(.9)
+            self.book()
+            row = self.policy_row()
+            self.assertEqual(row['left'], room, 'the horizon has %d booking(s) left' % room)
+            self.assertEqual(row['left'] == 0, row['reset'] > T0 + .9, 'remaining is 0 exactly when reset lies ahead')
+        self.at(.9)
+        self.denied(lambda: self.book())
+
+    def test_a_permit_still_to_be_used_takes_room_in_every_window_as_it_does_for_a_booking(self):
+        """The same count as _booking_slot: a create permit reserved long before the horizon's last span can be used at any later
+        time, so it takes one booking's room however old it is. Counting it only where it was reserved published 2 here, and the
+        second booking at .9 would have been refused."""
+        self.at(0)
+        self.create()                                      # reserved at 0, never used in this test
+        self.at(.3)
+        self.read()
+        self.at(.9)
+        self.read()                                        # an immediate admission; its row is the one read below
+        row = self.policy_row()
+        self.assertEqual(row['left'], 1, 'cap 3 less the permit less the wire at .9 (the wire at .3 leaves before the horizon ends)')
+        self.at(.9)
+        self.book()
+        self.assertEqual(self.policy_row()['left'], 0, 'one booking was left, and the row says so')
+        self.assertGreater(self.policy_row()['reset'], T0 + .9)
+        self.at(.9)
+        self.denied(lambda: self.book())
 
     def test_a_booked_horizon_that_is_full_shows_when_a_booking_is_possible_again(self):
         self.fill()
@@ -251,14 +284,18 @@ class StoredRow(Booked):
             self.assertAlmostEqual(row['reset'], T0 + 1 + SPAN_EPS, places=9, msg='the oldest wire\'s departure')
 
     def test_whoever_wrote_last_the_row_means_the_same(self):
-        """A web request (no booking) and a booking caller store the same thing for the same ledger."""
-        self.fill()
-        self.at(.9)
-        self.read(ahead=0.0) if False else None
-        a = dict(self.policy_row())
-        self.book()
-        self.assertEqual(self.policy_row()['left'], 0)
-        self.assertGreater(self.policy_row()['reset'], a['reset'], 'one more booking pushes the point at which another is possible')
+        """A web request (no booking) and a booking caller that find a free slot leave the same row for the same ledger."""
+        stored = []
+        for ahead in (0.0, 1.0):
+            self.setUp()
+            for offset in (0, .3):
+                self.at(offset)
+                self.read()
+            self.at(.6)
+            self.book(ahead=ahead)
+            stored.append(dict(self.policy_row()))
+        self.assertEqual(stored[0], stored[1])
+        self.assertEqual((stored[0]['left'], stored[0]['reset']), (2, T0 + .6))
 
     def test_the_lane_s_reading_of_the_row_waits_only_while_the_horizon_is_full(self):
         """The rule lane.outlook applies to a capped row: wait (reset - now) when remaining <= 0."""
@@ -266,11 +303,11 @@ class StoredRow(Booked):
             row = self.policy_row()
             return max(0.0, row['reset'] - now) if row['left'] <= 0 else 0.0
         self.fill()
-        self.at(.9)
         self.assertEqual(waits(T0 + .9), 0.0)
-        for _ in range(3):
+        for taken in (1, 2, 3):
+            self.at(.9)
             self.book()
-        self.assertGreater(waits(T0 + .9), 0.0)
+            self.assertEqual(waits(T0 + .9) > 0.0, taken == 3, 'only the booking that fills the horizon makes the lane wait')
         self.assertLess(waits(T0 + .9), 1.0)
 
 
@@ -568,6 +605,28 @@ class Lives(unittest.TestCase):
                 return t
         return now
 
+    def check_row(self, db, probe, identity, now, where):
+        """The application row has just been written, at `now`: it must say what a booking of the whole horizon would find. The
+        decision is tried on the ledger as it stands, with a probe of the same policy, and rolled back."""
+        (row,) = [dict(r) for r in db.states.values() if r['kind'] == 'policy']   # a copy: the probe changes the ledger's own dicts
+
+        class Rollback(Exception):
+            pass
+        try:
+            with db.connection():
+                probe.reserve_read('GET', '/guilds/999999999999999999', identity=identity, book_ahead=SharedPostgresBudget.BOOK_AHEAD_SECONDS)
+                raise Rollback()
+        except Rollback:
+            possible = True
+        except RateDelayed:
+            possible = False
+        self.assertEqual(row['left'] > 0, possible, where + ': remaining is above 0 exactly when a booking of the horizon is possible')
+        if row['left'] > 0:
+            self.assertLessEqual(row['reset'], now, where + ': and then nothing is ahead')
+        else:
+            self.assertGreaterEqual(row['reset'], now - 1e-6, where + ': and then reset is when it is')
+        return possible
+
     def run_seed(self, seed):
         rng = random.Random(seed)
         capacity, window = rng.choice((2, 3, 5, 8)), rng.choice((1, 1, .5, 2))
@@ -581,6 +640,8 @@ class Lives(unittest.TestCase):
                 mono[0] += seconds
             limiter = SharedPostgresBudget(db.connection, APP, policy=policy(capacity, window), sleep=sleep, monotonic=lambda: mono[0])
             identity = RequestIdentity.make(APP, 'bot', 'lives-bot')
+            probe = SharedPostgresBudget(db.connection, APP, policy=policy(capacity, window), sleep=lambda seconds: None, monotonic=lambda: 0.0)
+            probed = [0, 0]
             span = self.span(window, guard)
             permits, serial, booked, refused = [], 0, 0, 0
             for step in range(self.STEPS):
@@ -596,11 +657,13 @@ class Lives(unittest.TestCase):
                 before = sorted(MemoryLedger.wire_time(r) for r in db.admissions.values())
                 roll = rng.random()
                 now = db.now
+                admitted = False
                 if roll < .3:    # a web read: immediate or refused with an exact quote
                     try:
                         permit = limiter.reserve_read('GET', path, identity=identity)
                         limiter.observe(permit, OK)
                         self.assertFalse(limiter.booking_stats()['bookings'] > booked, where)
+                        admitted = True
                     except RateDelayed as error:
                         refused += 1
                         held = sum(1 for r in db.admissions.values() if MemoryLedger.wire_time(r) <= now - span and (
@@ -615,14 +678,18 @@ class Lives(unittest.TestCase):
                     try:
                         permit = limiter.reserve_read('GET', path, identity=identity, book_ahead=rng.choice((.25, .5, 1.0)))
                         limiter.observe(permit, OK)
+                        admitted = True
                     except RateDelayed:
                         refused += 1
                 else:            # a booked create, used later or abandoned
                     try:
                         permit = limiter.reserve('GET', path, identity=identity, book_ahead=1.0, valid_until=now + rng.choice((3, 30, 300)))
                         permits.append((permit, path))
+                        admitted = True
                     except RateDelayed:
                         refused += 1
+                if admitted:   # the row was written just now, at `now`
+                    probed[self.check_row(db, probe, identity, now, where)] += 1
                 after = sorted(MemoryLedger.wire_time(r) for r in db.admissions.values())
                 new = [w for w in after if w not in before]
                 for w in new:
@@ -642,16 +709,21 @@ class Lives(unittest.TestCase):
                 self.assertLessEqual(busiest_closed_window(wires, window), capacity, where + ': the ceiling over every wire')
                 self.assertLessEqual(max((sum(1 for w in wires if a <= w < a + span - EPS) for a in wires), default=0), capacity,
                                      where + ': and the same in every span (window and headroom), which is what the guard rests on')
-        return booked, refused
+        return booked, refused, probed
 
     def test_the_ceiling_and_the_quotes_hold_over_random_lives(self):
         total_booked = total_refused = 0
+        full = open_ = 0
         for seed in self.SEEDS:
-            booked, refused = self.run_seed(seed)
+            booked, refused, (closed, opened) = self.run_seed(seed)
             total_booked += booked
             total_refused += refused
+            full += closed
+            open_ += opened
         self.assertGreater(total_booked, 50, 'the lives were busy enough to book')
         self.assertGreater(total_refused, 50, 'and to refuse')
+        self.assertGreater(full, 50, 'and the stored row was checked against a booking that was refused as well as against one that was not')
+        self.assertGreater(open_, 50)
 
 
 if __name__ == '__main__':

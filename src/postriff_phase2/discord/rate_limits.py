@@ -842,18 +842,33 @@ class SharedPostgresBudget:
             slot = max(slot, rest[len(rest) - free] + span)
         return slot
 
-    def _published(self, row, wires, now, window, span, slots, create_slot=None):
+    def _published(self, row, wires, unused, now, window, span, slots):
         """The values the application row keeps for those who read it (lane.outlook, the health payload), the same whatever the
-        writer's own mode, for the capacity bookings may fill (`slots`: the cap less the held and less IMMEDIATE_RESERVE):
-        `left`, the free slots among the wires at or before `now`; `reset`, while none is free, the instant from which a
-        booking within BOOK_AHEAD_SECONDS is possible (the next wire to leave, less that horizon; an instant already past
-        means possible now), else now + window. With no booking (BOOK_AHEAD_SECONDS 0) that is the next wire to leave,
-        which is what the row has always held. `wires` are the wires after this admission."""
-        row['left'] = max(0, slots - bisect_right(wires, now))
-        row['reset'] = now + window
-        if row['left'] == 0 and slots > 0:
-            horizon = self.BOOK_AHEAD_SECONDS
-            row['reset'] = (wires[len(wires) - slots] + span - horizon) if len(wires) >= slots else now + window
+        writer's own mode, as of this write (a refusal writes nothing). They answer one question for the capacity bookings may
+        fill (`slots`: the cap less the held and less IMMEDIATE_RESERVE): can a booking of the whole BOOK_AHEAD_SECONDS be made?
+
+        `left` is the room the booked horizon still has, the bookings that could still be made at its end: `slots` less the
+        permits still to be used (each counts in every window, as in _booking_slot) less the other wires that still hold their
+        slot when the horizon ends. It is 0 exactly when _booking_slot would refuse a booking of the whole horizon, and then
+        `reset` is the instant from which one would not be (the wire whose leaving makes room, less the horizon); otherwise
+        `reset` is now, nothing to wait for. It used to count only the wires up to now, which a saturated lane always fills:
+        remaining was 0 in 21 of 35 busy readings of the first hosted run while a booking was possible at once. With no
+        booking (BOOK_AHEAD_SECONDS 0) the horizon ends now: `left` is the free slots and `reset` the next wire to leave, or
+        now + window, as the row has always held. `wires` are the wires after this admission; `unused` the permits among them."""
+        horizon = self.BOOK_AHEAD_SECONDS
+        rest = list(wires)
+        for w in unused:
+            rest.remove(w)
+        free = slots - len(unused)
+        busy = 0  # the wires still in their slot when the horizon ends, in the arithmetic of the booking decision (_slide)
+        for w in reversed(rest):
+            if w + span - now <= horizon:
+                break
+            busy += 1
+        row['left'] = max(0, free - busy)
+        row['reset'] = now if horizon > 0 else now + window
+        if row['left'] == 0:
+            row['reset'] = (rest[len(rest) - free] + span - horizon) if 0 < free <= len(rest) else now + window
 
     def _slide(self, cur, row, now, reading, book=0.0, create=False):
         """Set the application row's `left` and `reset` from the admissions themselves (an exact sliding window).
@@ -907,7 +922,7 @@ class SharedPostgresBudget:
         slots_b = slots - (min(self.IMMEDIATE_RESERVE, slots - 1) if self.BOOK_AHEAD_SECONDS > 0 else 0)
         mine = slots if book <= 0 else slots_b
         if self._fits(wires, now, span, mine):
-            self._published(row, sorted(wires + [now]), now, window, span, slots_b)
+            self._published(row, sorted(wires + [now]), unused + [now] if create else unused, now, window, span, slots_b)
             row['left'] += 1  # published as it will stand once this admission is debited (_reserve debits every capped row)
             return None
         if book <= 0:
@@ -919,7 +934,7 @@ class SharedPostgresBudget:
         if slot - now > book:
             row['reset'] = slot - book  # a booking is possible from here
             return None
-        self._published(row, sorted(wires + [slot]), now, window, span, slots_b)
+        self._published(row, sorted(wires + [slot]), unused + [slot] if create else unused, now, window, span, slots_b)
         row['left'] += 1  # the booking is the admission; the debit takes it back
         return slot
 

@@ -327,11 +327,18 @@ What to know before relying on it.
   stopped by the existing block of unused permits at seal or consume. What can still leave after an embargo begins is what could
   before: the time between that look (or the commit, for a wait under 25 ms) and the wire. The F429 and B4 tests are unchanged and
   pass.
-- **Operators see a different `remaining`.** The application row now stores the slots bookings may still fill and when a booking is
-  possible again, so with a busy lane it stays high and falls to 0 only when the horizon is full and callers are refused again;
-  `lane.outlook` is unchanged and waits only then. Any reading of the row's `remainingRatio` or `resetSeconds` as
-  "the window is nearly spent" is now wrong: use `coordinator.booking` (below). The most a saturated lane sends is (cap - 1) /
-  1.05 a second, 22.9 of 25 (91 percent of the nominal ceiling, 96 of the 23.8 that the guard alone allows); the alert on a spent
+- **What the application row's `remaining` means now.** It is the room the booked horizon still has, as of the last admission (a
+  refusal writes nothing): the cap, less the held, less `IMMEDIATE_RESERVE`, less the permits still to be used (each counts in every
+  window, as for a booking), less the other wire times that still hold their slot when the horizon ends, one `BOOK_AHEAD_SECONDS`
+  from then. It is 0 exactly when a booking of the whole horizon would be refused; `resetSeconds` is then how long until it would
+  not be, and 0.0 while there is room. The first version counted only the wire times up to now, which a saturated lane always
+  fills: the first hosted run (S1 of 02fd679b) read `remaining` 0 in 21 of 35 busy health readings with the horizon never full,
+  and the alert guidance below would have fired on a lane that was working. Now a lane that fills the budget shows the horizon
+  about half full, not empty: its twelve loops hold at most twelve bookings at once of the 24 the horizon takes, so `remaining`
+  should read about 11 of 25 [from the count; S2 will show it] and 0 only when callers are being refused. `lane.outlook` is
+  unchanged and waits only then. A stored 0 whose `resetSeconds` is 0.0 is old (nothing has been admitted since): nothing is
+  pending. Booking time and refusals are in `coordinator.booking` (below). The most a saturated lane sends is (cap - 1) / 1.05 a
+  second, 22.9 of 25 (91 percent of the nominal ceiling, 96 of the 23.8 that the guard alone allows); the alert on a spent
   budget (`saturation_warn`, Q18) must divide by that.
 - **Fields.** The lane's `bookedWaits` (bookings) and `bookedSeconds` (their total wait) in the invocation result and the
   `discord.lane.completed` line; the health payload's `coordinator.booking`: `bookAheadSeconds`, `aheadNow`, `horizonSeconds`,

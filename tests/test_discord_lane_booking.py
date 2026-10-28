@@ -217,8 +217,8 @@ class TheLoopWithBlockingReservations(unittest.TestCase):
 
 class OutlookReadsTheBookedHorizon(unittest.TestCase):
     """lane.outlook waits for the policy row's `reset` while `remaining` is 0. With bookings the coordinator stores, for a window
-    that is full but bookable within the horizon, a `reset` that has already passed: the loop does not wait; once the horizon is
-    full, `reset` is when a booking is possible again."""
+    that is full but bookable within the horizon, the room the horizon has left and a `reset` that is not ahead: the loop does
+    not wait; once the horizon is full, `remaining` is 0 and `reset` is when a booking is possible again."""
     def setUp(self):
         exact_arithmetic(self)
         self.fixture = Outlook('test_it_reads_the_four_application_wide_rows_without_locking')   # its fake cursor and worker
@@ -252,7 +252,7 @@ class OutlookReadsTheBookedHorizon(unittest.TestCase):
             self.book(offset)
         self.ledger.now = T0 + .9
         state, found = self.outlook()
-        self.assertEqual(state['left'], 0, 'the window is full')
+        self.assertEqual(state['left'], 2, 'the window holds three wires (the cap) but the horizon of the last admission has room for two')
         self.assertEqual(found, (None, 0.0), 'and a booking is possible now: the loop claims')
         for _ in range(3):
             self.ledger.now = T0 + .9

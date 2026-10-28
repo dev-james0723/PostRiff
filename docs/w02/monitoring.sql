@@ -94,8 +94,9 @@ ORDER BY is_publish;
 -- M6. The four application-wide coordinator rows every loop reads before it claims (policy, bot global, bot
 -- credential, invalid-request budget). A manual hold on the policy row is the runbook's stop; while any hold is set,
 -- every loop ends with stoppedBy operator_hold or coordinator_hold. An active block or circuit is slept out.
--- policy_remaining_now: since booking (Q19) the free slots that bookings may still fill, not the window's free slots; a
--- busy lane keeps it high and it is 0 only when the booked horizon is full (see M8).
+-- policy_remaining_now: since booking (Q19) the room the booked horizon still has as of the last admission, not the
+-- window's free slots; 0 exactly when a booking would be refused (see M8). A lane that fills the budget reads about half
+-- of the 24 bookable, because its twelve loops hold at most twelve bookings at once.
 SELECT kind,
        count(*) FILTER (WHERE manual_hold) AS holds,
        count(*) FILTER (WHERE blocked_until > now()) AS blocks_active,
