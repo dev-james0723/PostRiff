@@ -1,0 +1,209 @@
+name: W-02 Discord lane capacity (synthetic, no secrets)
+# INERT on the harness branch: this text runs only as .github/workflows/discord-lane-capacity.yml on an orphan request
+# branch claude/discord-capacity-run-<profile>-<suffix> made by docs/w02/ci/make_request_branch.sh, which holds exactly
+# this workflow, capacity/REQUEST.json and a vercel.json that keeps Git deployments off. No secret, no environment and a
+# read-only token: the run uses synthetic data only (a mock Discord on 127.0.0.1, a throwaway PostgreSQL 17 behind
+# PgBouncer in transaction mode), so the public log, step summary and artifact hold no token, account id or customer
+# data, because none exist in it. It deploys nothing and changes no setting.
+on:
+  push:
+    branches:
+      - 'claude/discord-capacity-run-*'
+permissions:
+  contents: read
+env:
+  HARNESS_BRANCH: claude/discord-w02-capacity-20261023
+jobs:
+  plan:
+    if: github.repository == 'dev-james0723/PostRiff' && github.actor == 'dev-james0723'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.req.outputs.matrix }}
+      sha: ${{ steps.req.outputs.sha }}
+      baseline: ${{ steps.req.outputs.baseline }}
+      harness: ${{ steps.req.outputs.harness }}
+      latency: ${{ steps.req.outputs.latency }}
+    steps:
+      - name: Fetch the request commit (manual exact-SHA fetch; the repository holds orphan vendor gitlinks)
+        env:
+          REQUEST_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git init -q request
+          git -C request remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git -C request -c protocol.version=2 fetch -q --depth=1 origin "$REQUEST_SHA"
+          git -C request checkout -q --detach FETCH_HEAD
+          test "$(git -C request rev-parse HEAD)" = "$REQUEST_SHA"
+      - name: Read the request and refuse anything malformed
+        id: req
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$REF_NAME" =~ ^claude/discord-capacity-run-(smoke|s0|s1|s2|faults|release|lockbench|baseline|s1levers|s2sizes|devset|s0100|fdb|fcrash|f429|s1lane56|sens|pool)-[a-z0-9]{1,12}$ ]] || { echo 'unexpected branch name'; exit 1; }
+          branch_profile="${BASH_REMATCH[1]}"
+          age=$(( $(date +%s) - $(git -C request log -1 --format=%ct) ))
+          { [ "$age" -ge -60 ] && [ "$age" -le 43200 ]; } || { echo "the request commit is not from the last twelve hours (age ${age}s); push a new request"; exit 1; }
+          files="$(git -C request ls-files | tr '\n' ' ')"
+          [ "$files" = '.github/workflows/discord-lane-capacity.yml capacity/REQUEST.json vercel.json ' ] || { echo "the request branch holds unexpected files: $files"; exit 1; }
+          read_field() { python3 -I -c 'import json,sys; v=json.load(open("request/capacity/REQUEST.json")).get(sys.argv[1], ""); print(v if isinstance(v, str) else "")' "$1"; }
+          sha="$(read_field sha)"; baseline="$(read_field baseline_sha)"; harness="$(read_field harness_sha)"
+          profile="$(read_field profile)"; pools="$(read_field pools)"; latency="$(read_field db_latency_ms)"
+          # Whole-string matches only (a value with a line break can never pass), before anything reaches the step outputs.
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'sha: need 40 lower-case hex characters'; exit 1; }
+          [[ "$baseline" =~ ^[0-9a-f]{40}$ ]] || { echo 'baseline_sha: need 40 lower-case hex characters'; exit 1; }
+          [[ "$harness" =~ ^[0-9a-f]{40}$ ]] || { echo 'harness_sha: need 40 lower-case hex characters'; exit 1; }
+          [ "$profile" = "$branch_profile" ] || { echo 'the request profile differs from the branch name'; exit 1; }
+          [[ "$pools" =~ ^(1[5-9]|[2-9][0-9]|1[01][0-9]|120)(,(1[5-9]|[2-9][0-9]|1[01][0-9]|120)){0,3}$ ]] || { echo 'pools: one to four pool sizes of 15 to 120, comma separated'; exit 1; }
+          [[ "$latency" =~ ^(0|[1-9][0-9]?)(\.[0-9])?$ ]] || { echo 'db_latency_ms: 0 to 99.9'; exit 1; }
+          case "$profile" in
+            smoke) scenarios='smoke' ;;
+            s0) scenarios='S0-100 S0-250' ;;
+            s1) scenarios='S1' ;;
+            s2) scenarios='S2' ;;
+            faults) scenarios='F429 F5xx Fcrash Fdb Fexpiry Fstall Fflip Nmisroute Ndup Nceiling' ;;
+            release) scenarios='smoke S1 S2 S0-100 S0-250 baseline F429 F5xx Fcrash Fdb Fexpiry Fstall Fflip Nmisroute Ndup Nceiling' ;;
+            lockbench) scenarios='lockbench' ;;
+            baseline) scenarios='baseline' ;;
+            s1levers) scenarios='S1 S1-lane58 S1-lane70 S1-warm' ;;
+            s2sizes) scenarios='S2-100 S2-300 S2-1000' ;;
+            devset) scenarios='S1 S0-100 Fdb Fcrash F429' ;;
+            s0100) scenarios='S0-100' ;;
+            fdb) scenarios='Fdb' ;;
+            fcrash) scenarios='Fcrash' ;;
+            f429) scenarios='F429' ;;
+            s1lane56) scenarios='S1-lane56' ;;
+            sens) scenarios='S1-lane56 S1-16 S1-24' ;;
+            pool) scenarios='S1-conn S1-conn-pool' ;;
+          esac
+          matrix="$(python3 -I -c 'import json,sys; print(json.dumps([{"scenario": s, "pool": int(p)} for s in sys.argv[1].split() for p in sys.argv[2].split(",")]))' "$scenarios" "$pools")"
+          # The harness commit must be on the harness branch: the run uses the harness as it was pushed, unchanged.
+          git -C request -c protocol.version=2 fetch -q --depth=100 origin "+refs/heads/${HARNESS_BRANCH}:refs/remotes/origin/harness"
+          if ! git -C request merge-base --is-ancestor "$harness" refs/remotes/origin/harness 2>/dev/null; then
+            echo 'harness_sha is not among the last 100 commits of the harness branch'; exit 1
+          fi
+          echo "request: profile $profile, tree ${sha:0:12}, baseline ${baseline:0:12}, harness ${harness:0:12}, pools $pools, database round trip ${latency} ms"
+          { echo "sha=$sha"; echo "baseline=$baseline"; echo "harness=$harness"; echo "latency=$latency"; echo "matrix=$matrix"; } >> "$GITHUB_OUTPUT"
+  capacity:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      PYTHONDONTWRITEBYTECODE: '1'
+      SCENARIO: ${{ matrix.scenario }}
+      POOL: ${{ matrix.pool }}
+    steps:
+      - name: Fetch the harness and the tree under test at their exact SHAs (manual fetch, no generic checkout)
+        env:
+          HARNESS_SHA: ${{ needs.plan.outputs.harness }}
+          TREE_SHA: ${{ matrix.scenario == 'baseline' && needs.plan.outputs.baseline || needs.plan.outputs.sha }}
+        run: |
+          set -euo pipefail
+          for pair in "harness:$HARNESS_SHA" "tree:$TREE_SHA"; do
+            dir="${pair%%:*}"; want="${pair#*:}"
+            git init -q "$dir"
+            git -C "$dir" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+            git -C "$dir" -c protocol.version=2 fetch -q --depth=1 origin "$want"
+            git -C "$dir" checkout -q --detach FETCH_HEAD
+            test "$(git -C "$dir" rev-parse HEAD)" = "$want"
+            test -z "$(git -C "$dir" status --porcelain)"
+          done
+          echo "harness $(git -C harness rev-parse --short=12 HEAD), tree under test $(git -C tree rev-parse --short=12 HEAD)"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: tree/.python-version
+      - name: The tree's own pinned Python dependencies
+        run: python -m pip install -r tree/requirements.txt
+      - name: PostgreSQL 17 from its signed official repository, and PgBouncer
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17 pgbouncer
+          sudo mkdir -p /var/run/postgresql
+          sudo chmod 1777 /var/run/postgresql
+          "$POSTRIFF_PG_BIN/postgres" --version
+          /usr/sbin/pgbouncer --version
+      - name: Run the scenario (real time, separate processes, synthetic data, nothing beyond 127.0.0.1)
+        if: matrix.scenario != 'lockbench'
+        env:
+          LATENCY: ${{ needs.plan.outputs.latency }}
+        run: |
+          set -euo pipefail
+          uptime
+          nice -n 10 python -B harness/scripts/discord_lane_capacity_run.py run --scenario "$SCENARIO" \
+            --source-tree "$GITHUB_WORKSPACE/tree" --out "$RUNNER_TEMP/capacity" --label "gha-pool${POOL}" \
+            --pooler pgbouncer --pgbouncer-bin /usr/sbin/pgbouncer --max-db-connections "$POOL" --db-latency-ms "$LATENCY"
+          uptime
+      - name: Run the coordinator lock benchmark (only the shared request coordinator, K processes, synthetic data)
+        if: matrix.scenario == 'lockbench'
+        run: |
+          set -euo pipefail
+          uptime
+          out="$RUNNER_TEMP/capacity/lockbench"
+          bench() { nice -n 10 python -B harness/scripts/discord_lane_cap_lockbench.py --source-tree "$GITHUB_WORKSPACE/tree" --out "$out" --pool-size "$POOL" --seconds 20 "$@"; }
+          # 1. The ceiling of the coordinator alone: locks and round trips, no policy limit.
+          bench --routes learned --policy unbounded --processes 1,4,12,24 --latency-ms 0,2,5
+          # 2. The same with a Discord answer time between admission and observation (the HTTP request).
+          bench --routes learned --policy unbounded --processes 12,24 --latency-ms 2 --think-ms 120
+          # 3. Cold routes: discovery probe and exclusive observation.
+          bench --routes cold --policy unbounded --processes 1,4,12 --latency-ms 2
+          # 4. The reviewed policy, 25 per second: it should bind before the lock does.
+          bench --routes learned --policy 25 --processes 12,24 --latency-ms 2
+          uptime
+      - name: The receipt in the step summary
+        if: always()
+        run: |
+          set -uo pipefail
+          for receipt in "$RUNNER_TEMP"/capacity/*/RECEIPT.md "$RUNNER_TEMP"/capacity/*/LOCKBENCH.md; do
+            [ -f "$receipt" ] || continue
+            head -c 900000 "$receipt" >> "$GITHUB_STEP_SUMMARY"
+          done
+          if ! compgen -G "$RUNNER_TEMP/capacity/*/RECEIPT.md" > /dev/null && ! compgen -G "$RUNNER_TEMP/capacity/*/LOCKBENCH.md" > /dev/null; then
+            echo "no receipt: the run did not get far enough to write one" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Keep the receipt and the raw evidence (synthetic; the per-run environment files are not uploaded)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: capacity-${{ matrix.scenario }}-pool${{ matrix.pool }}
+          path: |
+            ${{ runner.temp }}/capacity/*/RECEIPT.md
+            ${{ runner.temp }}/capacity/*/result.json
+            ${{ runner.temp }}/capacity/*/config.json
+            ${{ runner.temp }}/capacity/*/harness.log
+            ${{ runner.temp }}/capacity/*/seed-*.out
+            ${{ runner.temp }}/capacity/*/seed-plan.json
+            ${{ runner.temp }}/capacity/*/pooler.out
+            ${{ runner.temp }}/capacity/*/pooler.json
+            ${{ runner.temp }}/capacity/*/pgbouncer.out
+            ${{ runner.temp }}/capacity/*/mock.out
+            ${{ runner.temp }}/capacity/*/mock/mock-live.json
+            ${{ runner.temp }}/capacity/*/lockbench.json
+            ${{ runner.temp }}/capacity/*/LOCKBENCH.md
+            ${{ runner.temp }}/capacity/*/lockbench-pooler-*.json
+            ${{ runner.temp }}/capacity/*/seed-manifest.jsonl
+            ${{ runner.temp }}/capacity/*/samples.jsonl
+            ${{ runner.temp }}/capacity/*/invocations.jsonl
+            ${{ runner.temp }}/capacity/*/invocations-summary.json
+            ${{ runner.temp }}/capacity/*/admissions.jsonl
+            ${{ runner.temp }}/capacity/*/attempts.jsonl
+            ${{ runner.temp }}/capacity/*/health-samples.jsonl
+            ${{ runner.temp }}/capacity/*/final-states.json
+            ${{ runner.temp }}/capacity/*/database-final.json
+            ${{ runner.temp }}/capacity/*/pooler-final.json
+            ${{ runner.temp }}/capacity/*/mock/mock-summary.json
+            ${{ runner.temp }}/capacity/*/mock/mock-requests.jsonl
+            ${{ runner.temp }}/capacity/*/pgbouncer/pgbouncer.log
+            ${{ runner.temp }}/capacity/*/postgres.log
+          if-no-files-found: warn
+          retention-days: 14
+# Standard public runner only (ubuntu-24.04, 4 vCPU, 16 GB): no secret, no environment, no cache, no deployment.
