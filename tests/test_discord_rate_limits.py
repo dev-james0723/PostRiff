@@ -152,6 +152,9 @@ class MemoryLedger:
                 'route','major','bucket','keys','binding','state','intent','expires','reserved'))]
             if r and sql.startswith('WITH adm AS MATERIALIZED'):   # the clock, read after the row lock (_admission, clock=True)
                 self.result=[self.result[0]+(self.workspace.now if self.workspace else self.now,)]
+        elif sql.startswith('SELECT method,is_publish,credential_kind'):   # reconcile_nickname_by_id: the row by id and application
+            r=self.admissions.get(params[0])
+            self.result=[(r['method'],r['publish'],r['kind'],r['binding'],r['intent'],r['route'],r['path'],r['state'],r['expires'],r['reserved'])] if r and r['application']==params[1] else []
         elif sql.startswith('SELECT route_key,major_key'):
             r=self.admissions.get(params[0]);self.result=[(r['route'],r['major'])] if r else []
         elif sql.startswith('SELECT scope_keys'):

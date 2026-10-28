@@ -20,6 +20,7 @@ import unittest
 from unittest.mock import patch
 
 import psycopg
+from dataclasses import replace
 
 import discord_lane_fixture as F
 from postriff_phase2 import providers
@@ -419,6 +420,47 @@ class ExactCeilingOnPostgres(unittest.TestCase):
             blocks[history] = total(plan['Plan'])
         self.assertLessEqual(blocks[60000], blocks[2000] + 40, 'the same few blocks whether 2,000 or 60,000 rows are retained (%r)' % blocks)
         self.assertLess(blocks[60000], 400)
+
+    # --- the nickname route's admissions, on real SQL -----------------------------------------------------------------
+
+    def test_a_lost_nickname_write_is_retired_by_id_after_a_token_rotation_and_every_reader_tolerates_the_result(self):
+        """The sender claim keeps only the admission id. After the bot token changed, the permit-based reconcile refuses for
+        good (the credential digest differs); by id it settles the row: `observed`, no status invented (NULL), scope
+        `unknown`. The reader in ops.py and report() must not trip over a settled row without a status."""
+        from postriff_phase2.discord import ops
+        stack = Stack(self.cluster, capacity=25)
+        guild = '740000000000009001'
+        path = '/guilds/%s/members/@me' % guild
+        permit = stack.limiter.reserve('PATCH', path, identity=stack.identity)
+        stack.limiter.consume(permit, 'PATCH', path)
+        stack.limiter.note_transport_failure(permit)               # the response never came
+        self.assertEqual(self.states(stack), {'uncertain': 1})
+        with stack.limiter._transaction() as cur:
+            with self.assertRaises(RateCoordinatorUnavailable):
+                stack.limiter.reconcile_nickname_by_id(cur, permit.id, guild)      # too young: the 120 s have not passed
+        with self.cluster.connect(autocommit=True) as db:             # the 120 seconds, and the permit's own deadline, pass
+            db.execute("UPDATE public.pr_discord_request_admissions SET reserved_at=reserved_at-interval '3 minutes',"
+                       "expires_at=expires_at-interval '3 minutes',sent_at=sent_at-interval '3 minutes' WHERE id=%s", (permit.id,))
+        rotated = replace(permit, identity=RequestIdentity.make(stack.app, 'bot', 'the-rotated-bot-token'))
+        with stack.limiter._transaction() as cur:
+            with self.assertRaises(RateCoordinatorUnavailable):
+                stack.limiter.reconcile_nickname(cur, rotated, guild)             # for ever, by permit
+            with self.assertRaises(RateCoordinatorUnavailable):
+                stack.limiter.reconcile_nickname_by_id(cur, permit.id, '740000000000009002')   # another server
+        with stack.limiter._transaction() as cur:
+            stack.limiter.reconcile_nickname_by_id(cur, permit.id, guild)
+        with stack.limiter._transaction() as cur:
+            stack.limiter.reconcile_nickname_by_id(cur, permit.id, guild)         # a duplicate is silent
+        with self.cluster.connect(autocommit=True) as db:
+            row = db.execute('SELECT state,status_code,rate_scope,outcome_at IS NOT NULL FROM public.pr_discord_request_admissions '
+                             'WHERE id=%s', (permit.id,)).fetchone()
+        self.assertEqual(row, ('observed', None, 'unknown', True))
+        report = stack.limiter.report()
+        self.assertEqual(report['status'], 'sampled')
+        self.assertIn(('observed', 'unknown'), {(c['state'], c['scope']) for c in report['counts']})
+        with self.cluster.connect(autocommit=True) as db, db.cursor() as cur:
+            now = float(db.execute('SELECT extract(epoch from clock_timestamp())').fetchone()[0])
+            ops.read_ledger(cur, now, {})                                         # raises on a type it cannot read
 
     # --- the leak that used to stall everything for good ------------------------------------------------------------
 

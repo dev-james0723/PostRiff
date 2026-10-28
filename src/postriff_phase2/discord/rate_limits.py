@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import uuid
 from contextlib import contextmanager
@@ -29,6 +30,8 @@ MAX_PERMIT_SECONDS = 10.0  # SafetyPolicy.parse refuses a longer permit_ttl_seco
 # its lock (statement_timeout is 5 s). Bounding the unresolved scan by expires_at, which the partial index holds, as
 # well as by the sent time keeps it to the unresolved rows of the last window plus margin, however many old ones leaked.
 SENT_SLACK = 6.0
+NICKNAME_TEMPLATE = 'PATCH:/guilds/{id}/members/@me'   # the one Discord write the sender-name feature makes
+NICKNAME_ENV = 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED'
 _ID = re.compile(r'^[0-9]{5,25}$')
 _HASH = re.compile(r'^[a-f0-9]{64}$')
 _LABEL = re.compile(r'^[A-Za-z0-9_.:-]{1,64}$')
@@ -163,7 +166,7 @@ def route_identity(method, path):
         'GET:/oauth2/@me', 'GET:/oauth2/applications/@me', 'POST:/oauth2/token', 'POST:/oauth2/token/revoke',
         'GET:/channels/{id}', 'GET:/channels/{id}/messages', 'GET:/channels/{id}/messages/{id}',
         'POST:/channels/{id}/messages', 'GET:/guilds/{id}', 'GET:/guilds/{id}/channels',
-        'GET:/guilds/{id}/members/{id}', 'PATCH:/guilds/{id}/members/@me'}
+        'GET:/guilds/{id}/members/{id}', NICKNAME_TEMPLATE}
     if template not in allowed:
         raise RateCoordinatorUnavailable()
     return template, _digest(major)
@@ -1238,19 +1241,20 @@ class SharedPostgresBudget:
 
         No quota refund or fabricated provider response. Otherwise a known
         unsent request would retain a discovery slot after its window expires.
+        Silent for an admission that is already settled (`observed`, `blocked`): a late denied writer must not degrade it.
         """
         if (not isinstance(permit, Permit) or permit.method != 'PATCH' or permit.binding_hash is not None
                 or permit.identity.kind != 'bot'):
             raise RateCoordinatorUnavailable()
         with self._transaction() as cur:
             row = self._admission(cur, permit)
-            if row['intent'] is not None or row['route'] != _digest('PATCH:/guilds/{id}/members/@me'):
+            if row['intent'] is not None or row['route'] != _digest(NICKNAME_TEMPLATE):
                 raise RateCoordinatorUnavailable()
             if row['state'] in ('observed', 'blocked'):
                 return  # A late denied writer cannot degrade an already reconciled admission.
             if row['state'] != 'sent':
                 raise RateCoordinatorUnavailable()
-            cur.execute(f"UPDATE {ADMISSIONS} SET state='blocked',outcome_at=clock_timestamp() WHERE id=%s::uuid AND state='sent' AND NOT is_publish AND method='PATCH' AND route_key=%s", (permit.id, _digest('PATCH:/guilds/{id}/members/@me')))
+            cur.execute(f"UPDATE {ADMISSIONS} SET state='blocked',outcome_at=clock_timestamp() WHERE id=%s::uuid AND state='sent' AND NOT is_publish AND method='PATCH' AND route_key=%s", (permit.id, _digest(NICKNAME_TEMPLATE)))
             if cur.rowcount != 1:
                 raise RateCoordinatorUnavailable()
 
@@ -1266,17 +1270,45 @@ class SharedPostgresBudget:
                 or not _ID.fullmatch(guild_id) or permit.path_key != _digest(path)):
             raise RateCoordinatorUnavailable()
         row = self._admission(cur, permit)
-        now = self._now(cur)
-        if (row['intent'] is not None or row['route'] != _digest('PATCH:/guilds/{id}/members/@me')
-                or row['reserved'] + 120 > now or row['expires'] > now):
+        if row['intent'] is not None or row['route'] != _digest(NICKNAME_TEMPLATE):
             raise RateCoordinatorUnavailable()
-        if row['state'] in ('observed', 'blocked'):
-            return
-        if row['state'] not in ('reserved', 'sent', 'uncertain'):
+        self._settle_nickname(cur, permit.id, row['state'], row['reserved'], row['expires'])
+
+    def reconcile_nickname_by_id(self, cur, admission_id, guild_id):
+        """reconcile_nickname for a caller that kept only the admission's id, independent of the bot token.
+
+        The permit-based method compares the credential digest, so after a token rotation it refuses for good and an
+        uncertain nickname admission could never be retired. Everything else is required of the row itself: this
+        application's, a bot's unbound non-publish PATCH of this exact path and the nickname route, no intent."""
+        if not isinstance(admission_id, str) or not isinstance(guild_id, str) or not _ID.fullmatch(guild_id):
+            raise RateCoordinatorUnavailable()
+        try:
+            admission_id = str(uuid.UUID(admission_id))
+        except (ValueError, AttributeError, TypeError):
+            raise RateCoordinatorUnavailable() from None
+        cur.execute(f'''SELECT method,is_publish,credential_kind,binding_hash,intent_id,route_key,path_key,state,
+            extract(epoch from expires_at)::double precision,extract(epoch from reserved_at)::double precision
+            FROM {ADMISSIONS} WHERE id=%s::uuid AND application_key=%s FOR UPDATE''', (admission_id, self.application_key))
+        value = cur.fetchone()
+        if not value or len(value) != 10:
+            raise RateCoordinatorUnavailable()
+        method, publish, kind, binding, intent, route, path, state, expires, reserved = value
+        if (method != 'PATCH' or publish is not False or kind != 'bot' or binding is not None or intent is not None
+                or route != _digest(NICKNAME_TEMPLATE) or path != _digest(f'/guilds/{guild_id}/members/@me')
+                or not valid_number(expires) or not valid_number(reserved)):
+            raise RateCoordinatorUnavailable()
+        self._settle_nickname(cur, admission_id, state, reserved, expires)
+
+    def _settle_nickname(self, cur, admission_id, state, reserved, expires):
+        """Settle an already validated nickname admission; silent when it is settled, refused while it may still be live."""
+        if state in ('observed', 'blocked'):
+            return  # first: a late duplicate of a settled admission is silent, however young it is
+        now = self._now(cur)
+        if state not in ('reserved', 'sent', 'uncertain') or reserved + 120 > now or expires > now:
             raise RateCoordinatorUnavailable()
         # `observed` records the later member read, not the original PATCH's
         # HTTP result. Keep status_code NULL and preserve every spent scope.
-        cur.execute(f"UPDATE {ADMISSIONS} SET state='observed',outcome_at=clock_timestamp(),status_code=NULL,rate_scope='unknown' WHERE id=%s::uuid AND state IN ('reserved','sent','uncertain') AND NOT is_publish AND method='PATCH' AND route_key=%s", (permit.id, _digest('PATCH:/guilds/{id}/members/@me')))
+        cur.execute(f"UPDATE {ADMISSIONS} SET state='observed',outcome_at=clock_timestamp(),status_code=NULL,rate_scope='unknown' WHERE id=%s::uuid AND state IN ('reserved','sent','uncertain') AND NOT is_publish AND method='PATCH' AND route_key=%s", (admission_id, _digest(NICKNAME_TEMPLATE)))
         if cur.rowcount != 1:
             raise RateCoordinatorUnavailable()
 
