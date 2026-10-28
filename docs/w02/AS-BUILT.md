@@ -505,7 +505,8 @@ which carries no status.
 | A loop dies inside a booked wait | nothing was sent: a booked read is stored `sent` but had not left, so it is never sent, keeps its slot until its scope's window plus 30 s (31 s on the application row) and then stops counting; a booked create's permit expires unused (5 s) and the post is released when its lease expires and sent once later. A loop is in one booked wait at a time: at most one slot per shard, 12 of 25 for at most 31 s if every shard dies at once |
 | Budget exhausted | the lane's reads and creates are booked the next exact slot, at most one second ahead, and wait for it inside the coordinator; beyond that horizon they wait for the next window (bounded) as before; web requests are refused as before ("Booking") |
 | Approval expires in the queue | held for a fresh approval when next claimed (monitor M7) |
-| Coordinator observation fails in a process | that process's provider refuses every later request; its loops stop with `coordinator_degraded`; its minute cron still leaves Discord to the lane (it could not send either); loops in other processes continue |
+| Coordinator observation fails in a process | an observation (or the retirement of a request that was not sent) whose own lock or statement timed out is a rollback and is asked once more; a failure that remains makes that process's provider refuse every request for 45 seconds (`DEGRADED_SECONDS`), not for good: its loops stop with `coordinator_degraded` for that time and the next invocation, or the same process after the rest, asks again; its minute cron still leaves Discord to the lane (it could not send either); loops in other processes continue. A flag set at setup (the reviewed policy does not parse) is for good until the runtime attaches a coordinator |
+| The database does not give a reservation its lock in 2 s, or does not finish its statement in 5 s | nothing was admitted and nothing sent: a `RateDelayed` of 1.5 s, cause `coordinator_busy`, scope `application` (it was a `RateCoordinatorUnavailable`, which a worker turns into a release of 300 s); the lane waits for it as for a spent window and keeps the post's place; a read through the provider is released after 1.5 s with nothing sent. The same timeout in an observation, a seal or a consume is a failure of the coordinator (`RateCoordinatorBusy`, a `RateCoordinatorUnavailable`), as before [measured on PostgreSQL: `test_discord_coordinator_busy_postgres.py`] |
 | Database unavailable | the loop's exception is logged and the request returns 500; leases expire and are recovered |
 | Flag on, projection missing | `schema`, nothing claimed (migration 126 is applied in production); the minute cron cannot see it without a query, so it still leaves Discord to the lane and `discord.lane.lagging` fires after five minutes |
 | Flag on, shard crons not reaching the lane (not registered, a 401, a 404, Deployment Protection, a platform skip; a `CRON_SECRET` under 16 characters fails the minute cron's own route too) | no `discord.lane.completed` lines; the minute cron (the lane able to run) leaves Discord alone, so posts wait; `discord.lane.lagging` fires after five minutes; after an hour their approvals lapse and they are held when next claimed |
@@ -613,11 +614,13 @@ platform before any claim is made to customers.
   `_invalidate_owned`'s filter (which also leaves out jobs bound to another deployment), so it can still hold a
   scheduled, approved or claimed Discord job whose approval, channel or entitlement changed (it never claims or
   sends one). The same in `2a5a523d`; W-02 changes nothing about it [reasoned].
-- A degraded coordinator stays degraded for the life of its process (the flag is cleared only when the runtime
-  attaches the coordinator) [reasoned]. If every process that runs lane loops is degraded, every loop stops and every
-  minute cron still leaves Discord to the lane, so due posts wait unsent. Nothing could be sent in that state either
-  way; the signals are the shard lines (`coordinator_degraded`, at WARNING) and, after five minutes, the lag warning
-  with `laneOwnsDiscord` true, which does not name the cause.
+- A coordinator that failed to record an outcome rests for 45 seconds in that process and then asks again; one set at setup
+  because the reviewed policy does not parse stays degraded until the runtime attaches a coordinator (a configuration to
+  restore). If every process that runs lane loops is degraded, every loop stops and every minute cron still leaves Discord to the
+  lane, so due posts wait unsent. Nothing could be sent in that state either way; the signals are the shard lines
+  (`coordinator_degraded`, at WARNING) and, after five minutes, the lag warning with `laneOwnsDiscord` true, which does not name
+  the cause. (Before: for the life of the process, so one lock timeout in an observation under 24 loops and 20 ms of statement
+  latency disabled Discord there until a restart: the independent review's G2E-B-09, second half.)
 - A learned route used to close until the policy expired when the permits reserved after its refill all expired unused.
   Resolved on the limiter branch: such a route is probed again at once (`_window_unused`), and one whose requests were
   sent but never answered waits at most a window plus the margin; see "The shared request coordinator after the limiter

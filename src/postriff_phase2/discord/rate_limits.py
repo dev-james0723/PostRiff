@@ -41,6 +41,11 @@ HOLD_WAIT_SECONDS = 300.0
 # attached, degraded, its policy ended, its database down). Nothing was sent and the receipt is kept: the lookup is asked again
 # later and its check is refunded (hosted_social.reconcile_discord). Creates are not affected: they stay fail-closed.
 COORDINATOR_WAIT_SECONDS = 300.0
+# What a reservation is told to wait when the database did not give it its lock or finish its statement in time (RateCoordinatorBusy):
+# nothing was admitted and nothing was sent, so the caller asks again soon. It used to be an unavailable coordinator, which a worker
+# turns into a release of 300 s for the post, and which the review reproduced as 253 such errors in 12 seconds at 24 loops and 20 ms
+# of statement latency.
+BUSY_WAIT_SECONDS = 1.5
 # The transaction-level advisory lock that serializes the retention purge (purge_settled): one deleter at a time, the others
 # return at once. Not a row or table lock; it conflicts with nothing the coordinator does.
 PURGE_LOCK = int.from_bytes(hashlib.sha256(b'postriff.discord.admissions.purge').digest()[:8], 'big') >> 1
@@ -83,6 +88,13 @@ class RateCoordinatorUnavailable(AlphaError):
     def __init__(self):
         super().__init__('Discord request coordination is unavailable. Restore the reviewed rate policy or reconnect; no request was sent.',
                          503, code='discord_rate_coordinator_unavailable')
+
+
+class RateCoordinatorBusy(RateCoordinatorUnavailable):
+    """The database did not give a coordinator transaction its lock (lock_timeout) or did not finish its statement
+    (statement_timeout) in the time the coordinator allows (_transaction). The transaction was rolled back, so nothing it was to
+    record was recorded: a reservation admitted nothing (its caller is told to ask again soon: RateDelayed 'coordinator_busy'), an
+    observation can be tried once more. Anything else that fails stays a plain RateCoordinatorUnavailable."""
 
 
 class _ExclusiveObservationRequired(RateCoordinatorUnavailable):
@@ -494,7 +506,9 @@ class SharedPostgresBudget:
                 yield cur
         except (RateCoordinatorUnavailable, RateDelayed):
             raise
-        except Exception:
+        except Exception as error:
+            if getattr(error, 'sqlstate', None) in ('55P03', '57014'):   # lock_not_available, query_canceled: a rollback
+                raise RateCoordinatorBusy() from None
             raise RateCoordinatorUnavailable() from None
 
     @staticmethod
@@ -1091,6 +1105,17 @@ class SharedPostgresBudget:
             tally['bookedWaitSeconds'] += increments['bookedWaitSeconds']
 
     def _reserve(self, method, path, *, identity, binding=None, valid_until=None, read_sent=False, book_ahead=0.0):
+        """Admit one request (or reserve one permit), and for a booking wait for its slot. A database that gives the reservation
+        no lock in time or does not finish its statement (RateCoordinatorBusy) rolled the transaction back: nothing was admitted
+        and nothing sent, so the caller is told to ask again soon, as for any other spent budget, and not that the coordinator is
+        unavailable (which a worker turns into a 300-second release of the post)."""
+        try:
+            return self._reserve_once(method, path, identity=identity, binding=binding, valid_until=valid_until,
+                                      read_sent=read_sent, book_ahead=book_ahead)
+        except RateCoordinatorBusy:
+            raise RateDelayed(BUSY_WAIT_SECONDS, cause='coordinator_busy', scope='application') from None
+
+    def _reserve_once(self, method, path, *, identity, binding=None, valid_until=None, read_sent=False, book_ahead=0.0):
         template, major = route_identity(method,path)
         route = _digest(template)
         if not isinstance(identity, RequestIdentity):
