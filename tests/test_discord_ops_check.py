@@ -800,6 +800,14 @@ class LaterBranches(unittest.TestCase):
         self.assertIn('read-backs wait', newer['message'])
         self.assertEqual(newer['evidence'].get('holdReadWaitSeconds'), 300.0)
 
+    def test_route_circuits_name_a_403_refusal_as_a_cause(self):
+        """On the limiter head a 403 opens a bounded route circuit too (7f8eacb6, B2): D3's sixteen 403 answers open
+        sixteen. The message must not call every circuit a server error."""
+        snapshot = with_(('coordinator', 'kinds'), {'route': {'holds': 0, 'blocks': 0, 'circuits': 16, 'persistentCircuits': 0,
+                                                              'openOver5Min': 0}})
+        alert = [a for a in alerts(snapshot) if a['id'] == 'RATE_ROUTE_CIRCUITS'][0]
+        self.assertIn('403', alert['message'])
+
     def retention(self, **values):
         snapshot = healthy()
         snapshot['coordinator']['retention'] = {

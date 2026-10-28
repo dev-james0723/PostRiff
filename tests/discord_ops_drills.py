@@ -68,6 +68,13 @@ def source_revision():
         return None
 
 
+def receipt_revision():
+    """The run's commit for a receipt, as 'git:<id>': a bare 40-digit hex id in a quoted JSON string reads to the secret
+    scan as a high-entropy hex string at random (b193adce did not, f062157a did); the prefix keeps the whole id."""
+    revision = source_revision()
+    return 'git:' + revision if revision else None
+
+
 VALUES = {**F.LANE_ENV, 'VERCEL_ENV': 'production', 'POSTRIFF_DISCORD_CONNECT_WORKSPACES': '*',
           'POSTRIFF_DISCORD_GUILD_CAP': '10000', 'VERCEL_GIT_COMMIT_SHA': source_revision() or ''}
 
@@ -840,7 +847,7 @@ DRILLS = (d0_baseline, d1_backlog, d2_delivery, d3_rate_limit, d4_silent_halt, d
 
 def run(out=None, only=None, composition=None):
     receipt = {'kind': 'rafii.discord.ops.drill-receipt', 'version': 1, 'environment': 'isolated',
-               'sourceRevision': source_revision(), 'composition': composition, 'startedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+               'sourceRevision': receipt_revision(), 'composition': composition, 'startedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
                'python': platform.python_version(), 'postgres': None, 'thresholds': 'docs/ops/discord-alert-thresholds.json',
                'command': 'POSTRIFF_PG_BIN=/usr/lib/postgresql/16/bin PYTHONPATH=src:tests python tests/discord_ops_drills.py',
                'drills': []}

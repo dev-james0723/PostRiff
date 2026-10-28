@@ -464,7 +464,7 @@ ROWS = (r01_roster, r02_r03_r04_p0, r05_p1, r06_p2, r07_ack, r08_delivery, r09_d
 
 
 def run(out=None, only=None):
-    receipt = {'kind': 'rafii.oncall.drill-receipt', 'version': 1, 'environment': 'isolated', 'sourceRevision': D.source_revision(),
+    receipt = {'kind': 'rafii.oncall.drill-receipt', 'version': 1, 'environment': 'isolated', 'sourceRevision': D.receipt_revision(),
                'startedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'python': platform.python_version(),
                'postgres': None, 'policy': 'docs/ops/h07-oncall-policy.json',
                'command': 'POSTRIFF_PG_BIN=/usr/lib/postgresql/16/bin PYTHONPATH=src:tests python tests/oncall_drills.py',

@@ -315,7 +315,9 @@ def rate_limit(snapshot, t, out):
                             - int((kinds.get(kind) or {}).get('persistentCircuits') or 0)) for kind in ('route', 'resource'))
         if transient >= t['transient_route_circuits_warn']:
             out.append(_alert('RATE_ROUTE_CIRCUITS', 'RATE_LIMIT', 'warn',
-                              '%d Discord routes have a short circuit open after repeated server errors.' % transient,
+                              '%d Discord routes have a short circuit open: repeated server errors, or (limiter B2) a '
+                              '403 refusal on that route. Many 403s at once usually mean the bot lost access to servers.'
+                              % transient,
                               transientCircuits=transient))
     retention(snapshot, t, out)
     if config and config.get('rateLimitsV1'):
