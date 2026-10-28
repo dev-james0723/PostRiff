@@ -134,6 +134,8 @@ class ObservedRefusal(Claims):
         """SNR2-2: a 429 used to be reported as a refusal ("check the permissions") with no hint of when to retry."""
         cases = [({'message': 'You are being rate limited.', 'retry_after': 2.5, 'global': False}, {}, 3),   # the body hint, rounded up
                  ({'retry_after': 64.57}, {}, 65), ({'message': 'x'}, {'Retry-After': '7'}, 7),           # the header when the body has none
+                 ({'message': 'x'}, {'X-RateLimit-Reset-After': '99', 'Retry-After': '7'}, 7),            # only that header, not another one
+                 ({'message': 'x'}, {5: 'junk', 'Retry-After': '8'}, 8),                                    # a key that is not text is ignored
                  ({'retry_after': 'soon'}, {'retry-after': '9'}, 9), ({'retry_after': 0.2}, {}, 1),        # a malformed body hint; never below one
                  ({}, {}, 60), ({'retry_after': 'soon'}, {'Retry-After': 'tomorrow'}, 60),                 # no usable hint: one minute
                  ({'retry_after': True}, {}, 60), ({'retry_after': -3}, {}, 60), ({'retry_after': float('inf')}, {}, 60)]
