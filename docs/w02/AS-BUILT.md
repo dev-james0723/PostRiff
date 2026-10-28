@@ -717,8 +717,9 @@ ordinary read-back unbooked, as the first hosted run measured: 1,559 read-backs,
 02fd679b) in `rate_limits.booking(BOOK_AHEAD_SECONDS, tally)`, a context variable. `DiscordProvider._book_ahead(room)` hands its seconds (never more than `BOOK_AHEAD_SECONDS`, 1.0, and not
 more than a read's own remaining wait; nothing under 5 ms) to `reserve_read` / `reserve` as `book_ahead`, and passes no
 keyword at all outside the context. A direct provider call, another thread, the minute worker (it shares a warm instance's
-provider and never sees the context), and every web request (connect, destinations, installation checks, webhook set-up, the
-message-content check, reply reads, the sender-name routes) get the immediate answer or refusal they always got.
+provider and never sees the context), and every web request except four (below) get the immediate answer or refusal they always
+got: the server list, installation checks, webhook set-up, the message-content check, reply reads, the sender-name routes and
+the other single reads. The four that make several reads in a row book too, as "Web calls that read several times" says.
 
 *The rule.* A booking caller is admitted at once when one more wire time now is exact in every window that holds it. If not,
 `_booking_slot` gives the earliest instant at or after now, and not before any wire time already stored, at which it is exact
@@ -737,7 +738,7 @@ sleep in `seal` or `consume` (F5), and `consume` refuses a booked permit before 
 
 *Exactness.* Unchanged: at every instant at most `cap` wire times lie in any half-open span, so no closed second of wire times
 holds more than `cap`; only a wire time may now lie ahead of the clock. Bookings fill all but `IMMEDIATE_RESERVE` (1) slots,
-so a web request, which cannot wait, always finds one (4 percent of the ceiling at saturation). A wire time further ahead
+so a web request that does not book, which cannot wait, always finds one (4 percent of the ceiling at saturation). A wire time further ahead
 than the book-ahead plus 50 ms (the database clock stepped back) is waited out as before: every wire counts and the quote is
 the wait.
 
@@ -813,6 +814,65 @@ the gate against a 429, a hold and a circuit; a dying process; `consume` before 
 reservation still ends the invocation inside budget plus one step, `outlook`); `tests/test_discord_lane_booking_postgres.py`
 (12 and 16 loops at a full window: about one pass a post, nothing posted twice; an approval ending inside a pass; a loop killed
 inside a booked sleep; no sleep between the seal and the consume; a pause during booked waits).
+
+## Web calls that read several times
+
+*Why.* While the lane saturates the application window, a web request has the one slot kept for callers that cannot wait
+(`IMMEDIATE_RESERVE`, 1 of 25) and the slack the twelve loops leave (about 3 a second), and nothing else. A call that reads four to
+six times in a row needs all of its reads inside the second `_discord_http` allows itself (a refused read is asked again only while
+the quote fits in that second), so once the web asks for more than the slack it is refused after the first read or two and the
+person sees "Discord is waiting for shared request capacity". The independent review measured it: 5-read calls from three threads
+completed 4 to 10 percent of the time at reserve 1 and 65 at reserve 3, and 33 percent for one call a second. Measured here with the
+real `DiscordProvider.destinations` against the mock: 25 to 28 percent for three threads asking back to back. A reserve that could
+carry five reads would cost the lane 4 percent of the ceiling a slot, and still would not let a call wait.
+
+*What.* `rate_limits.web_reads()` (`web_booked(call, ...)` is the same around one call): inside it a caller that is not booking is
+booked like the lane. Where the window is full each read is given the earliest exact slot up to one second ahead and waits for it
+after the commit with no lock held; a read the horizon cannot take is refused with the wait, as before. A caller that is already
+booking (the lane) keeps its own horizon and tally. `hosted_app.py` runs four calls inside it: `GET .../destinations` (the channel
+list), `POST .../destination` (choosing a channel, which reads the list again), `POST .../verify` (the re-check) and `POST
+.../oauth/complete` (the last step of a connection, which lists the channels). Everything else stays immediate: a single read (the
+server list, creator info, the start of a connection, the sender-name routes, webhook set-up, the message-content check, reply
+reads), the minute worker and every write. `BOOK_AHEAD_SECONDS = 0` turns all booking off, this included.
+
+*Measured* (twelve booking loops, the real `destinations` (four reads) against the mock, cap 25; two 20-second runs of each; the
+busiest closed second of the stamps was 24 or 25 in every phase, so the ceiling was exact; the lane alone made 3.2 creates and 18.1
+reads a second; `test_discord_web_booking_postgres.py` prints the same lines):
+
+| web demand | calls completed, immediate | booked | seconds a call, p50, immediate | booked | lane creates a second, immediate | booked | lane reads a second, immediate | booked |
+|---|---|---|---|---|---|---|---|---|
+| 1 thread, 0.3 s between calls | 92, 92% | 90, 80% | 1.5 | 2.1 to 2.2 | 2.95, 3.02 | 3.01, 2.96 | 16.9, 16.8 | 16.9, 17.0 |
+| 2 threads, 0.3 s between calls | 45, 57% | 83, 88% | 2.5, 1.9 | 2.3, 2.4 | 3.02, 2.85 | 2.75, 2.61 | 16.9, 16.5 | 15.8, 15.8 |
+| 3 threads, back to back | 28, 25% | 89, 89% | 2.0, 2.2 | 2.5 (p90 3.1, longest 3.7) | 2.87, 2.79 | 2.56, 2.55 | 16.2, 15.8 | 14.2, 14.3 |
+
+Booking helps once the web asks for more than the slack: at light demand a call completes either way and booking only adds the wait
+for a slot (0.7 s); at two threads it moves completion from about half to 85 percent and at three from a quarter to 89, in about
+2.5 s. The lane pays what the web uses: at three threads the web made 5.1 reads a second (23 percent of the window; 3.6 immediate,
+most of them spent on calls that were then refused) and the lane's creates fell 21 percent against running alone, 10 against the
+immediate web, and its reads 21 and 11 percent.
+
+*The bound.* G2a puts a throttle in front of any request to Discord: a member 30 calls a minute, a workspace 120, and a
+connection's channel list and re-check answer are reused for 45 seconds (10 while the connection is unhealthy). With that throttle in
+the tree, `OneWorkspacesFlood` runs twelve threads from one workspace against limits scaled to 10 and 20 calls, so that a few seconds
+reach them: 20 calls passed and 4,321 attempts were refused by the throttle before any request to Discord; the 20 calls made 89 reads
+(4.5 a call) in two waves, 5.4 a second over the 16 seconds and about a third of the window while they ran, and waited 6.6 s each
+(p50); the lane lost 26 percent of its reads and 15 percent of its creates over the 16 seconds, no create expired, and the ceiling held. At the production numbers one workspace
+can ask for at most 120 calls a minute, about 540 reads, 40 percent of the window at the extreme, and only with more than 20
+connections that stay unhealthy (a healthy connection is read once in 45 seconds: 30 connections give 3 reads a second, 13 percent).
+There is no global throttle, so several workspaces add up. A flood by an authenticated customer therefore slows the lane by at most
+its throttle share and cannot stop it (the lane's bookings take their turn like any other), and `bookedReads60s` and the wait
+counters of the payload show it; before this change the same customer could only take the slack. That is the price of a channel list
+that completes. [measured on a shared box at load 6 to 9; the shape, not the third digit]
+
+*If isolation is worth more.* Revert the four `web_booked` calls and set `IMMEDIATE_RESERVE` to 2: the lane's bookable rate falls from
+(25 - 1) / 1.05 = 22.9 to (25 - 2) / 1.05 = 21.9 a second (1.0, 4.4 percent; nearly nothing while twelve loops bind at 21.8), the
+guaranteed web rate doubles, and a call of four reads still cannot wait (the review: 30 percent of heavy 5-read calls at 2, 65 at 3).
+
+*Evidence.* `tests/test_discord_web_booking.py` (12 offline: the context and its restoring, the lane's horizon and tally kept, other
+threads, the provider's `book_ahead` only inside it and only for reads, the four routes through the real handler book and the
+others do not, nothing left booked after a failure); `tests/test_discord_web_booking_postgres.py` (the phases above with
+assertions: the ceiling over every admission of both, booked calls complete in seconds, the lane is not starved; and, where the
+G2a throttle is merged, the one-workspace flood, skipped until then and run on a scratch merge of this branch with G2a's 217a2c8f).
 
 ## The bearer budget
 

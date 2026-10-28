@@ -326,7 +326,12 @@ What to know before relying on it.
   and a call that needs several reads (the destination picker and the verification make 4 to 6) completed 4 to 10 percent of the
   time under heavy demand and 33 percent under light demand at reserve 1 (one 5-read call needs 5 of the 0.9 admissions a
   second). A reserve of 3 costs the lane about 4 percent of its ceiling per slot, and the loops, not the window, bind the lane at
-  about 21.8 a second, so 3 would bind at 20.95.
+  about 21.8 a second, so 3 would bind at 20.95. The four web calls that make such a series (the channel list, choosing a channel,
+  the re-check, the last step of a connection) now book like the lane (`rate_limits.web_reads`; AS-BUILT, "Web calls that read
+  several times"): measured with twelve loops, three threads asking back to back completed 25 to 28 percent immediate and 89 booked,
+  in about 2.5 s, and the lane paid what they used (creates down 10, reads 11 percent). The price is that a workspace's web reads
+  now take a turn in the line instead of only the slack, bounded by G2a's per-workspace read throttle (at most about 40 percent of
+  the window for a workspace at the extreme). A reserve of 2 instead would cost 1 a second of the 22.9.
 - **What can happen during a wait.** A process that dies leaves the booked read stored `sent` with a wire time ahead: it is never
   sent, keeps its slot for the window plus 30 s (31 s) and then stops counting, at most one per shard (12 of 25 at the very worst).
   A hold, an embargo or an open circuit that begins during a wait of 25 ms or more is found by the read's last look just before it

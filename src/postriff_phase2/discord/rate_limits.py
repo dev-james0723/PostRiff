@@ -77,6 +77,27 @@ def current_book_ahead():
     return _BOOK_AHEAD.get()[0]
 
 
+@contextmanager
+def web_reads(seconds=BOOK_AHEAD_SECONDS):
+    """Within this block a WEB call that makes several reads in a row (a server's channel list, a re-check, the last step of a
+    connection: four to six requests to Discord) is booked like the lane: where the window is full each read is given the
+    earliest exact slot up to `seconds` ahead instead of the immediate refusal. While the lane saturates the window, the slot kept
+    for immediate callers cannot carry five reads in a row, so such a call almost never completed; booked, it waits its turn.
+    A call that makes one read stays immediate: this is for the others. A caller that is already booking (the lane) keeps its own
+    horizon and tally. AS-BUILT, "Web calls that read several times"."""
+    if current_book_ahead() > 0:
+        yield
+        return
+    with booking(seconds):
+        yield
+
+
+def web_booked(call, *args, **kwargs):
+    """`call(*args, **kwargs)` inside web_reads()."""
+    with web_reads():
+        return call(*args, **kwargs)
+
+
 NICKNAME_TEMPLATE = 'PATCH:/guilds/{id}/members/@me'   # the one Discord write the sender-name feature makes
 NICKNAME_ENV = 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED'
 _ID = re.compile(r'^[0-9]{5,25}$')
