@@ -1380,13 +1380,17 @@ class PostgresWorker:
         """Server-only opt-in lane inside the existing scheduler, no other IO."""
         return self._tick(max_jobs, max_seconds, discord_only=True)
 
-    def discord_report(self):
-        """Internal aggregates only; bounded sample, never a tenant-facing list."""
+    def discord_report(self, split=False):
+        """Internal aggregates only; bounded sample, never a tenant-facing list.
+
+        split=True (the lane-owned minute tick only; the frozen tick keeps the statement below byte for byte) adds the
+        lag of the oldest due create and of the oldest due read-back (a job in a state the claim reconciles) next to
+        the unchanged mixed oldestEligibleLagSeconds: read-backs are deferred behind creates by design."""
         queue = {'status': 'unavailable', 'sampled': True, 'workspaceLimit': discord_worker.QUEUE_WORKSPACE_LIMIT,
                  'jobLimit': 4096}
         try:
             with self.connection_factory() as db, db.cursor() as cur:
-                cur.execute('''WITH sample AS MATERIALIZED (
+                sql = ('''WITH sample AS MATERIALIZED (
                     SELECT state FROM public.pr_workspaces WHERE state ? 'phase2'
                       AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock'
                     ORDER BY id LIMIT 256), jobs AS MATERIALIZED (
@@ -1400,10 +1404,19 @@ class PostgresWorker:
                           AND coalesce((j->>'leaseUntil')::double precision,0)<=observed.at),0),
                       count(*) FILTER(WHERE j->>'state'='held'),count(*) FILTER(WHERE j->>'state'='uncertain'),
                       count(*) FILTER(WHERE j#>'{discordWorker,deadLetter}' IS NOT NULL)
-                    FROM jobs CROSS JOIN observed''', (json.dumps(self.worker_binding),))
+                    FROM jobs CROSS JOIN observed''')
+                if split:
+                    reconciling = "('" + "','".join(IN_FLIGHT) + "')"
+                    lag = ("coalesce(max(greatest(0,observed.at-coalesce((j->>'nextAt')::double precision,observed.at)))"
+                           "FILTER(WHERE j->>'state' %s " + reconciling + " AND j->>'state' NOT IN ('verified','failed','canceled','held')"
+                           " AND coalesce((j->>'leaseUntil')::double precision,0)<=observed.at),0)")
+                    sql = sql.replace('FROM jobs CROSS JOIN observed', ',' + (lag % 'NOT IN') + ',' + (lag % 'IN') + ' FROM jobs CROSS JOIN observed', 1)
+                cur.execute(sql, (json.dumps(self.worker_binding),))
                 row = cur.fetchone()
                 queue.update(status='observed_sample', depth=int(row[0]), oldestEligibleLagSeconds=float(row[1]),
                              held=int(row[2]), uncertain=int(row[3]), deadLetters=int(row[4]))
+                if split:
+                    queue.update(oldestEligibleCreateLagSeconds=float(row[5]), oldestEligibleReadbackLagSeconds=float(row[6]))
         except Exception:
             pass  # Monitoring failure cannot activate or weaken dispatch.
         provider = getattr(self.social,'providers',{}).get('discord')
@@ -1455,5 +1468,5 @@ class PostgresWorker:
                 **({'mastodonMaintenance': mastodon_maintenance} if mastodon_maintenance is not None else {}),
                 "budget": {"maxJobs": max_jobs, "maxSeconds": max_seconds}}
         if self.discord_workers or discord_only:
-            result['discordWorker'] = self.discord_report()
+            result['discordWorker'] = self.discord_report(split=True) if exclude_discord else self.discord_report()
         return result

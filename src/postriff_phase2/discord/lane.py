@@ -62,6 +62,11 @@ MAX_IDLE_MISSES = 6
 # unleased Discord job in its bounded sample) is later than this: shard crons that do not fire or cannot claim, a lane
 # that cannot keep up with a burst, or a minute tick that kept Discord because the lane could not run anywhere.
 LAG_WARNING_SECONDS = 300
+# Read-backs are deferred behind creates by design (a workspace's never-claimed posts are claimed first, and in a burst the
+# rotation takes minutes to come round), so a read-back waiting longer than the create threshold is not a failure by
+# itself: in the 5,000-post run a created post was confirmed 18 minutes later at the median and 32 at the slowest. Its
+# own threshold is one hour.
+READBACK_LAG_WARNING_SECONDS = 3600
 # A document the claim cannot read (a null where a list belongs, a missing key) is set aside, not retried: its workspace
 # is skipped this long, behind every other workspace, and at most this many are set aside by one claim; one more is
 # not a document but the claim code itself, and raises as before.
@@ -393,34 +398,61 @@ def projected_lag(worker):
 
 
 def warn_if_lagging(result, reason=None, projected=_NOT_READ):
-    """One WARNING, discord.lane.lagging, when due Discord work has waited longer than the threshold, or when the
-    tick could not see its Discord queue.
+    """One WARNING, discord.lane.lagging, when due Discord work has waited too long, or when the tick could not see its
+    Discord queue.
 
     tick() calls it whenever the flag is on, with the readiness verdict it acted on and, when the lane owns Discord,
     the projection's lag (projected_lag(): every workspace). The tick's own report (discordWorker.queue) samples only
     the first 256 workspaces, so it alone cannot see lagging work beyond them, and when that report fails its status
-    is 'unavailable'. It warns when either lag passes the threshold, when the report is unavailable, or when the lane
-    owns Discord and the projection cannot be read; the line says which. Counts and codes only. Returns whether it
-    warned.
+    is 'unavailable'. Creates and read-backs are told apart where the data allows (M5):
+
+    - creates: the report's oldestEligibleCreateLagSeconds (a lane-owned tick's report carries it) over
+      LAG_WARNING_SECONDS; a report without the split (the frozen tick's) counts its whole oldestEligibleLagSeconds
+      here, as before;
+    - read-backs: oldestEligibleReadbackLagSeconds over READBACK_LAG_WARNING_SECONDS, because a long burst defers them;
+    - the projection (every workspace, one indexed statement) cannot tell a create from a read-back, so its lag counts
+      against LAG_WARNING_SECONDS unless the sample shows the deferral signature, a read-back waiting longer than that
+      and no create that late; then against READBACK_LAG_WARNING_SECONDS. A late create hidden beyond the sample while
+      read-backs drain is therefore seen at the read-back threshold.
+
+    It also warns when the report is unavailable, or when the lane owns Discord and the projection cannot be read; the
+    line says which. Counts and codes only. Returns whether it warned.
     """
     report = result.get('discordWorker') if isinstance(result, dict) else None
     queue = report.get('queue') if isinstance(report, dict) else None
     queue = queue if isinstance(queue, dict) else {}
     sampled = queue.get('oldestEligibleLagSeconds')
     sampled = sampled if discord_worker.finite(sampled) else None
+    creates = queue.get('oldestEligibleCreateLagSeconds')
+    readbacks = queue.get('oldestEligibleReadbackLagSeconds')
+    split = discord_worker.finite(creates) and discord_worker.finite(readbacks)
+    if not split:
+        creates, readbacks = sampled, None  # the report does not tell them apart: all of it is the create threshold's
     read = projected is not _NOT_READ
     projected = projected if read and discord_worker.finite(projected) else None
     unavailable = queue.get('status') == 'unavailable'
-    lags = [lag for lag in (sampled, projected) if lag is not None]
-    if not (lags and max(lags) > LAG_WARNING_SECONDS or unavailable or read and projected is None):
+    late = []
+    if creates is not None and creates > LAG_WARNING_SECONDS:
+        late.append('creates' if split else 'sample')
+    if readbacks is not None and readbacks > READBACK_LAG_WARNING_SECONDS:
+        late.append('readbacks')
+    if projected is not None:
+        deferral = split and readbacks > LAG_WARNING_SECONDS and creates <= LAG_WARNING_SECONDS
+        if projected > (READBACK_LAG_WARNING_SECONDS if deferral else LAG_WARNING_SECONDS):
+            late.append('projection')
+    if not (late or unavailable or read and projected is None):
         return False
     counts = {key: queue[key] for key in ('depth', 'held', 'uncertain', 'deadLetters') if type(queue.get(key)) is int}
     # No workspace, job, channel, content, credential or lease owner id.
     logging.getLogger('postriff.request').warning(json.dumps({
         'event': 'discord.lane.lagging',
         'oldestEligibleLagSeconds': None if sampled is None else round(sampled, 1),
+        'oldestEligibleCreateLagSeconds': round(creates, 1) if split else None,
+        'oldestEligibleReadbackLagSeconds': round(readbacks, 1) if split else None,
         'projectedLagSeconds': None if projected is None else round(projected, 1),
         'thresholdSeconds': LAG_WARNING_SECONDS,
+        'readbackThresholdSeconds': READBACK_LAG_WARNING_SECONDS,
+        'lateKinds': late,
         'report': 'unavailable' if unavailable else 'sample',
         'projection': ('unreadable' if projected is None else 'read') if read else 'not_read',
         'laneOwnsDiscord': reason is None, 'laneBlocker': reason, **counts}))

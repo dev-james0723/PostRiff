@@ -16,9 +16,9 @@ read from the code.
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. A `discord-worker-protocol` check fails when any Discord feature flag is on (authorization v2, connections v2, rate limits, webhook, user install, engagement, the lane) and `POSTRIFF_DISCORD_WORKER_V1_ENABLED` is not 1 or true ("The worker flag and migration 128"). |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
-| `tests/test_discord_parallel_lane.py` (new) | 94 offline tests (run under the synthetic fence). |
+| `tests/test_discord_parallel_lane.py` (new) | 99 offline tests (run under the synthetic fence). |
 | `tests/test_discord_worker_lifecycle.py` | Its in-memory database double answers the lane's projection due probe. |
-| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 61 real-PostgreSQL tests and their fixture; skipped under the fence. |
+| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 62 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
 | `docs/w02/*` (new) | This file, the corrected plan, open questions, monitors, simulation results. |
 
@@ -490,22 +490,38 @@ one whose wait outlasts its approval: `discord_worker.release_unsent` sets the s
 `discordWorker.queue.held` count every held post in their samples.
 
 The minute cron's lag warning, for the failures no lane line reports (a cron that never fires logs nothing): with the
-flag on, every tick logs one `discord.lane.lagging` line at WARNING when due Discord work is more than 300 seconds late
-(`lane.LAG_WARNING_SECONDS`), or when it could not see the queue. It reads two sources. The Discord report the tick
-already makes (`discordWorker.queue`) samples the first 256 workspaces by id (at most 4,096 Discord jobs); its
-`oldestEligibleLagSeconds` is the oldest due, unleased job there, and when the report fails its status is
-`unavailable`. When the lane owns Discord the tick also reads the projection's oldest due work, every workspace, in one
-indexed statement (`lane.projected_lag`, the shards' own due probe): `projectedLagSeconds`. A tick that kept Discord
-(the lane cannot run anywhere) runs only the frozen path's statements and does not read the projection. The line
-fires when either lag passes the threshold, when the report is `unavailable`, or when the lane owns Discord and the
-projection cannot be read, and says which: `report` (`sample` or `unavailable`) and `projection` (`read`,
-`unreadable`, or `not_read` when the tick kept Discord). Other fields, counts and codes only: `thresholdSeconds`,
-`laneOwnsDiscord`, `laneBlocker` (the readiness reason when the tick kept Discord; null, with `laneOwnsDiscord` true,
-when only the tick's own process has a degraded coordinator, whose shard lines then say `coordinator_degraded`),
-`depth`, `held`, `uncertain`, `deadLetters` [tested on PostgreSQL: 300 workspaces with the only due post outside the
-sample, and a report that fails]. The projection's lag counts a post waiting for manual reconciliation (`uncertain`)
-as due, as the report does, and it does not know which deployment a post is bound to. Alert on any such line. It also
-fires while a large burst drains (5,000 posts take about 23 minutes), which is worth knowing too (Q1).
+flag on, every tick logs one `discord.lane.lagging` line at WARNING when due Discord work has waited too long, or when it
+could not see the queue. It reads two sources. The Discord report the tick already makes (`discordWorker.queue`) samples
+the first 256 workspaces by id (at most 4,096 Discord jobs); its `oldestEligibleLagSeconds` is the oldest due, unleased
+job there, create or read-back (unchanged), and when the report fails its status is `unavailable`. When the lane owns
+Discord the report also tells creates from read-backs: `oldestEligibleCreateLagSeconds` (the oldest due post not yet
+created) and `oldestEligibleReadbackLagSeconds` (the oldest due post the claim would reconcile: a created post waiting for
+its read-back), because read-backs are deferred behind creates by design. When the lane owns Discord the tick also reads
+the projection's oldest due work, every workspace, in one indexed statement (`lane.projected_lag`, the shards' own due
+probe): `projectedLagSeconds`. A tick that kept Discord (the lane cannot run anywhere) runs only the frozen path's
+statements, reads no projection and has no split.
+
+The thresholds (M5): a create more than 300 s late (`LAG_WARNING_SECONDS`); a read-back more than 3,600 s late
+(`READBACK_LAG_WARNING_SECONDS`; in the 5,000-post run a created post was confirmed 18 minutes later at the median and 32 at
+the slowest); the projection's lag against 300 s, because it cannot tell a create from a read-back, unless the sample shows
+the deferral signature (a read-back waiting more than 300 s and no create that late), when it counts against 3,600 s. A
+report without the split (the frozen tick's) counts its whole `oldestEligibleLagSeconds` as before. The line also fires when
+the report is `unavailable`, or when the lane owns Discord and the projection cannot be read, and says which: `report`
+(`sample` or `unavailable`), `projection` (`read`, `unreadable`, or `not_read` when the tick kept Discord) and `lateKinds`
+(`creates`, `readbacks`, `projection`, or `sample` for a report without the split). Other fields, counts and codes only:
+`oldestEligibleLagSeconds`, `oldestEligibleCreateLagSeconds`, `oldestEligibleReadbackLagSeconds`, `projectedLagSeconds`,
+`thresholdSeconds`, `readbackThresholdSeconds`, `laneOwnsDiscord`, `laneBlocker` (the readiness reason when the tick kept
+Discord; null, with `laneOwnsDiscord` true, when only the tick's own process has a degraded coordinator, whose shard lines
+then say `coordinator_degraded`), `depth`, `held`, `uncertain`, `deadLetters` [tested on PostgreSQL: 300 workspaces with the
+only due post outside the sample, a report that fails, and a deferred read-back that no longer keeps the warning on while a
+late create or a read-back past an hour still does]. The projection's lag counts a post waiting for manual reconciliation
+(`uncertain`) as due, as the report does, and it does not know which deployment a post is bound to. Alert on any such line.
+A large burst still warns while its creates are late (5,000 posts take about 23 minutes), which is worth knowing (Q1); it no
+longer keeps warning for read-backs that wait behind them. Known limit: the projection (migration 126) holds one `next_at`
+per workspace, so the split is the sample's, and a late create hidden beyond the sample while read-backs drain is seen at the
+read-back threshold. An exact split over every workspace needs a projection column (a new migration, not made). Without a
+migration, a reader of the projection can take the oldest due `next_at` among workspaces with `last_claimed_at = 0`: a
+workspace the lane never served can only hold a create.
 
 ## Capacity
 

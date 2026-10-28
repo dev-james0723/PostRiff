@@ -263,7 +263,7 @@ def recording_worker(step, *, discord=True, social=None):
     instance.social = SimpleNamespace() if social is None else social
     instance.clock = lambda: NOW
     instance.discord_workers = discord
-    instance.discord_report = lambda: {}
+    instance.discord_report = lambda **kw: {}
     instance.step = step
     return instance
 
@@ -471,7 +471,8 @@ class HealthStatus(unittest.TestCase):
 class LagWarning(unittest.TestCase):
     """With the flag on, the minute tick warns when due Discord work waits too long: from its own report (a sample
     of 256 workspaces) and, when the lane owns Discord, from the projection (every workspace, one statement)."""
-    KEYS = {'event', 'oldestEligibleLagSeconds', 'projectedLagSeconds', 'thresholdSeconds', 'report', 'projection',
+    KEYS = {'event', 'oldestEligibleLagSeconds', 'oldestEligibleCreateLagSeconds', 'oldestEligibleReadbackLagSeconds',
+            'projectedLagSeconds', 'thresholdSeconds', 'readbackThresholdSeconds', 'lateKinds', 'report', 'projection',
             'laneOwnsDiscord', 'laneBlocker', 'depth', 'held', 'uncertain', 'deadLetters'}
 
     def setUp(self):
@@ -511,7 +512,7 @@ class LagWarning(unittest.TestCase):
         if lag is None:
             report['queue'] = {'status': 'unavailable', 'sampled': True}
         worker = recording_worker(lambda **kw: False, social=discord_social(**(setup or {})))
-        worker.discord_report = lambda: copy.deepcopy(report)
+        worker.discord_report = lambda **kw: copy.deepcopy(report)
         worker.connection_factory = self.projection(projected)
         with patch.dict('os.environ', environment):
             result = worker.tick()
@@ -528,7 +529,9 @@ class LagWarning(unittest.TestCase):
         entry = json.loads(record.getMessage())
         self.assertEqual(set(entry), self.KEYS)
         self.assertEqual(entry, {'event': 'discord.lane.lagging', 'oldestEligibleLagSeconds': 301.0,
-                                 'projectedLagSeconds': 0.0, 'thresholdSeconds': 300, 'report': 'sample',
+                                 'oldestEligibleCreateLagSeconds': None, 'oldestEligibleReadbackLagSeconds': None,
+                                 'projectedLagSeconds': 0.0, 'thresholdSeconds': 300, 'readbackThresholdSeconds': 3600,
+                                 'lateKinds': ['sample'], 'report': 'sample',
                                  'projection': 'read', 'laneOwnsDiscord': True, 'laneBlocker': None,
                                  'depth': 7, 'held': 1, 'uncertain': 2, 'deadLetters': 0})
         self.assertEqual(self.statements, [lane._SOONEST], 'one statement: the projection due probe')
@@ -558,6 +561,58 @@ class LagWarning(unittest.TestCase):
         self.assertTrue(result['discordParallelLane'], 'the tick itself goes on')
         entry = json.loads(logged.records[-1].getMessage())
         self.assertEqual((entry['projection'], entry['projectedLagSeconds']), ('unreadable', None))
+
+    def split_tick(self, creates, readbacks, projected=0.0, mixed=None):
+        """A lane-owned tick whose report tells creates from read-backs (M5)."""
+        worker = recording_worker(lambda **kw: False, social=discord_social())
+        queue = {'status': 'observed_sample', 'sampled': True, 'workspaceLimit': 256, 'jobLimit': 4096, 'depth': 7,
+                 'oldestEligibleLagSeconds': max(creates, readbacks) if mixed is None else mixed,
+                 'oldestEligibleCreateLagSeconds': creates, 'oldestEligibleReadbackLagSeconds': readbacks,
+                 'held': 0, 'uncertain': 0, 'deadLetters': 0}
+        worker.discord_report = lambda **kw: {'version': 1, 'queue': queue}
+        worker.connection_factory = self.projection(projected)
+        with patch.dict('os.environ', ON):
+            return worker.tick()
+
+    def lagging_kinds(self, *args, **kwargs):
+        """The lateKinds of the one warning the tick logs, or None when it logs nothing."""
+        with self.assertLogs('postriff.request', 'DEBUG') as logged:
+            logging.getLogger('postriff.request').debug('marker')
+            self.split_tick(*args, **kwargs)
+        lines = [json.loads(record.getMessage()) for record in logged.records if 'discord.lane.lagging' in record.getMessage()]
+        return lines[0]['lateKinds'] if lines else None
+
+    def test_read_backs_deferred_behind_creates_do_not_keep_the_warning_on(self):
+        # The burst case the mixed field could not tell apart: nothing is late to be created, read-backs wait.
+        self.assertIsNone(self.lagging_kinds(0.0, 1500.0, projected=1500.0, mixed=1500.0))
+        self.assertIsNone(self.lagging_kinds(120.0, 3000.0, projected=3000.0))
+
+    def test_a_create_later_than_five_minutes_warns_whatever_the_read_backs_do(self):
+        self.assertEqual(self.lagging_kinds(301.0, 0.0, projected=0.0), ['creates'])
+        self.assertEqual(self.lagging_kinds(301.0, 3000.0, projected=3000.0), ['creates', 'projection'])
+        self.assertIsNone(self.lagging_kinds(300.0, 0.0, projected=300.0))
+
+    def test_a_read_back_later_than_an_hour_warns(self):
+        self.assertEqual(self.lagging_kinds(0.0, 3601.0, projected=3601.0), ['readbacks', 'projection'])
+        self.assertIsNone(self.lagging_kinds(0.0, 3600.0, projected=3600.0))
+
+    def test_the_projection_counts_at_five_minutes_unless_the_sample_shows_the_deferral(self):
+        # Work beyond the sample, nothing late in it: as before, the projection decides at five minutes.
+        self.assertEqual(self.lagging_kinds(0.0, 0.0, projected=301.0), ['projection'])
+        # The sample shows read-backs waiting and no late create: the projection is held to the read-back threshold.
+        self.assertIsNone(self.lagging_kinds(10.0, 900.0, projected=1800.0))
+        self.assertEqual(self.lagging_kinds(10.0, 900.0, projected=3601.0), ['projection'])
+        # A late create in the sample is not deferral.
+        self.assertEqual(self.lagging_kinds(400.0, 900.0, projected=1800.0), ['creates', 'projection'])
+
+    def test_the_old_field_is_kept_and_the_new_ones_say_which_kind_waited(self):
+        with self.assertLogs('postriff.request', 'WARNING') as logged:
+            self.split_tick(450.0, 1200.0, projected=450.0)
+        entry = json.loads(logged.records[-1].getMessage())
+        self.assertEqual((entry['oldestEligibleLagSeconds'], entry['oldestEligibleCreateLagSeconds'],
+                          entry['oldestEligibleReadbackLagSeconds']), (1200.0, 450.0, 1200.0))
+        self.assertEqual((entry['thresholdSeconds'], entry['readbackThresholdSeconds'], entry['lateKinds']),
+                         (300, 3600, ['creates', 'projection']))
 
     def test_with_the_flag_off_the_frozen_tick_never_warns(self):
         with self.assertNoLogs('postriff.request', 'WARNING'):

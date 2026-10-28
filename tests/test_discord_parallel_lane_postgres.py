@@ -1274,6 +1274,48 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual((warning['projection'], warning['report'], warning['laneOwnsDiscord']), ('read', 'sample', True))
         self.assertEqual(self.wire.calls, [], 'the tick itself still leaves Discord to the lane')
 
+    def test_read_backs_deferred_behind_creates_keep_the_lag_warning_off_until_an_hour_but_late_creates_do_not(self):
+        """M5: a post created long ago whose read-back still waits is deferred by design (creates are claimed first);
+        it must not keep the five-minute warning on. The report tells creates from read-backs; the old field is the
+        mixed lag as before."""
+        tenants = [F.Tenant(n) for n in range(2)]
+        now = self.cluster.now()
+        F.seed(self.cluster, tenants[:1], 1)
+        F.seed(self.cluster, tenants[1:], 1)  # the second workspace's create; park_create moves its due time
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
+        worker = F.base_worker(self.cluster, self.hosted)
+        late = tenants[1].id
+
+        def read_back(age):  # the first workspace's post was created `age` seconds ago; its read-back waits
+            self.corrupt(tenants[0].id, lambda job: job.update(state='provider_accepted', nextAt=self.cluster.now() - age))
+
+        def park_create(parked):  # the second workspace's create: due long ago, or not due for an hour
+            when = self.cluster.now() - 400 if not parked else self.cluster.now() + 3600
+            self.corrupt(late, lambda job: job.update(nextAt=when))
+        park_create(True)
+        read_back(1500)
+        tick, warnings = self.lagging(worker)
+        queue = tick['discordWorker']['queue']
+        self.assertAlmostEqual(queue['oldestEligibleReadbackLagSeconds'], 1500, delta=30)
+        self.assertEqual(queue['oldestEligibleCreateLagSeconds'], 0.0)
+        self.assertAlmostEqual(queue['oldestEligibleLagSeconds'], 1500, delta=30, msg='the old field is the mixed lag')
+        self.assertEqual(warnings, [], 'only a deferred read-back waits: no warning, as the burst needs')
+        # A create due 400 s ago is late whatever the read-back does.
+        park_create(False)
+        tick, warnings = self.lagging(worker)
+        (warning,) = warnings
+        self.assertEqual(warning['lateKinds'], ['creates', 'projection'])
+        self.assertAlmostEqual(warning['oldestEligibleCreateLagSeconds'], 400, delta=30)
+        self.assertAlmostEqual(warning['oldestEligibleReadbackLagSeconds'], 1500, delta=30)
+        # A read-back that waits more than an hour is late too.
+        park_create(True)
+        read_back(3700)
+        tick, warnings = self.lagging(worker)
+        (warning,) = warnings
+        self.assertEqual(warning['lateKinds'], ['readbacks', 'projection'])
+        self.assertEqual(self.wire.calls, [], 'the tick itself still leaves Discord to the lane')
+
     def test_a_queue_report_that_fails_is_a_warning(self):
         self.start([F.Tenant(0)], 1)  # due now: nothing lags
         broken = Counted(self.cluster, refuse=lambda sql: sql.lstrip().startswith('WITH sample AS MATERIALIZED'))
