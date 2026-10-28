@@ -463,6 +463,7 @@ which carries no status.
 | Flag on, shard crons not reaching the lane (not registered, a 401, a 404, Deployment Protection, a platform skip; a `CRON_SECRET` under 16 characters fails the minute cron's own route too) | no `discord.lane.completed` lines; the minute cron (the lane able to run) leaves Discord alone, so posts wait; `discord.lane.lagging` fires after five minutes; after an hour their approvals lapse and they are held when next claimed |
 | Flag on, rate limits off, no coordinator, policy expired or not yet valid, or a bad lane budget | the lane cannot run anywhere: every loop stops at once with the reason (a bad budget answers 503 `discord_lane_configuration`), and the minute cron keeps the frozen Discord path |
 | A job document the claim cannot read (a null where a list belongs) | that workspace is set aside for 300 s, counted (`quarantined`) and logged once; every other workspace is claimed as usual; a third such failure in one claim is raised |
+| A route answers with a bucket id outside Discord's alphabet (`[A-Za-z0-9_-]{1,128}`: a test double's template, an intermediary rewriting headers), or with rate-limit numbers that cannot be read | that one route of that one server is held (`manual_hold`, kind `route`): nothing is sent to it, its posts stay `scheduled` ("Await Discord shared rate budget; no POST occurred") and are claimed again every five minutes, every other server is untouched, the health payload counts it under `coordinator.kinds.route.holds`; only an operator lifts it ("Releasing a held route", below). Proven by `tests/test_discord_route_429_postgres.py` (the capacity harness's F429 sent `injected-guilds-{id}`; the same 429 with a well-formed bucket delays the post two seconds and it is verified) |
 | Build-level kill switch (`POSTRIFF_OAUTH_DISCORD_DISABLED`) | unchanged: a claimed post is held, as today |
 
 ## Turning it off
@@ -477,6 +478,25 @@ which carries no status.
 - **Minutes:** a build without the flag (environment changes reach new deployments only), or promote the previous
   deployment. The minute cron then claims Discord again exactly as before, and the shard routes answer
   `{"enabled": false}` without starting the runtime.
+
+## Releasing a held route
+
+The coordinator holds a route (not the application) when Discord, or something between us and Discord, answers it with a
+bucket id outside `[A-Za-z0-9_-]{1,128}` or with rate-limit numbers it cannot read. This is a reviewed fail-closed rule: a
+header it cannot trust is not learned, and the route waits for a person. Only that route of that server is affected. To see
+whether any are held, and to lift them (statements for the operator, read the first before running the second; they never
+touch the application-wide row of the kill switch, which is `kind = 'policy'`):
+
+```sql
+SELECT kind, count(*) AS held, round(min(extract(epoch FROM now() - updated_at))) AS seconds_since_change
+FROM public.pr_discord_rate_state WHERE manual_hold GROUP BY kind;
+UPDATE public.pr_discord_rate_state SET manual_hold = false WHERE manual_hold AND kind = 'route';
+```
+
+Run the second statement only after the cause is understood (a bad intermediary or a test double is the usual one; if the
+cause persists the next answer holds the route again). Posts of that server go out on their next claim, at most five
+minutes later. The hold of the shared bot credential after a 401 (`kind = 'credential'`) and the kill switch (`kind =
+'policy'`) are separate decisions and are not lifted by this.
 
 ## What to monitor
 
