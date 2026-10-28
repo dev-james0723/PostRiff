@@ -83,3 +83,26 @@ starts. New infrastructure and cost.
 four permission reads, so each refused post spends four reads again in the next window (the existing step order reserves
 the create permit last) [reasoned; seen in the one-channel test]. Bounded by one workspace, one post at a time. Reserving
 the create permit before the permission reads would avoid it; that is a protocol change.
+
+**Q13. The minute worker with the worker flag off and migration 128 installed.** Found by the independent review of the
+send path: with `POSTRIFF_DISCORD_WORKER_V1_ENABLED` unset or mistyped, the minute worker claims a due Discord post the old
+way, migration 128's guard refuses it (CheckViolation) and the whole claim aborts on every attempt for every provider
+[reasoned and reproduced by the review]. Built: the hosted preflight now fails a build with any Discord feature flag on and
+the worker flag not 1 or true. Not built, because it touches the frozen path: a reactive guard in `PostgresWorker.claim`
+(react to that one CheckViolation, claim again without Discord for the rest of the process, count it, log one WARNING;
+`FlagOffIsTheFrozenBase` stays green, the minute worker would then leave Discord posts unsent instead of raising).
+Decide whether to build it (AS-BUILT, "The worker flag and migration 128").
+
+**Q14. What a paused Discord does to read-backs.** A paused Discord (kill switch, authorization off) now releases creates
+unsent and demotes nothing (AS-BUILT, "A paused Discord is a wait"), and the lane claims nothing while paused. An existing
+rule is unchanged: a read-back (reconciliation) of an already created post that meets a disabled execution is completed
+`uncertain` ("The original Discord application is unavailable. Keep the receipt for manual review."), and five such checks
+push it to a one-day wait. The minute cron's frozen path can still claim read-backs while paused. Options: leave as is (the
+kill switch is an emergency brake); or make a paused Discord skip read-backs too, in the frozen path (a protocol decision).
+
+**Q15. An exact split of creates and read-backs for monitoring.** The lag warning tells them apart in the report's sample
+and treats the projection's lag (one `next_at` per workspace, migration 126) as a create's unless the sample shows
+read-backs waiting. An exact split over every workspace, and the same split in the ops health payload (which reads the
+projection), needs two columns in the projection (a new migration, not made). Without one, the oldest due `next_at` among
+workspaces with `last_claimed_at = 0` is an exact create lag for workspaces the lane never served.
+
