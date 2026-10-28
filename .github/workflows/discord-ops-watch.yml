@@ -53,7 +53,7 @@ jobs:
         if: steps.cfg.outputs.configured == 'true'
         with:
           # The reviewed checker: the release candidate commit; change it by pull request when the checker changes.
-          ref: 94bb61da8c5870f8249b75c89e899299bf5687f0
+          ref: abca8b7104ef5885b5879c8b828da481bb4a63c8
           sparse-checkout: |
             scripts/discord_ops_check.py
             docs/ops/discord-alert-thresholds.json
