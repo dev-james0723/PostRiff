@@ -249,12 +249,16 @@ class ExactCeilingOnPostgres(unittest.TestCase):
                 self.assertGreaterEqual(rate, .8 * capacity, 'sustained admissions per second (steady middle of the run)')
 
     def test_the_owners_cap_holds_with_many_threads_and_the_mock_sees_no_more(self):
-        """cap 25 across 32 threads, each answered after 50 ms: the mock's own trailing second never sees more than 25."""
+        """cap 25 across 32 threads, each answered after 50 ms. The coordinator's guarantee is strict: no closed second of wire
+        times holds more than 25. The mock's own trailing second is the arrival side, which the owner's D-16 reads as reported
+        and not failed (Discord's real limit is 50): it stays within two requests of the cap and almost never above it. (Asserted
+        strictly it failed once in a run on a loaded shared box, when a thread was descheduled for more than the 50 ms the guard
+        absorbs between a request's wire time and its arrival; tests/discord_ceiling_probe.py reports the distribution.)"""
         stack, counts, stamps, rate = self.run_hammer(25, .05, workers=32, seconds=8)
         self.assertEqual(counts['other'], [])
         self.assertLessEqual(busiest_closed(stamps, 1.0), 25)
-        self.assertEqual(stack.wire.over_ceiling, 0, 'no trailing second above 25 at the mock')
-        self.assertLessEqual(stack.wire.peak_second, 25)
+        self.assertLessEqual(stack.wire.over_ceiling, max(2, len(stamps) // 50), 'almost no trailing second above 25 at the mock')
+        self.assertLessEqual(stack.wire.peak_second, 27)
         self.assertEqual(stack.wire.route429, 0)
 
     def mixed_credentials(self, **policy):
