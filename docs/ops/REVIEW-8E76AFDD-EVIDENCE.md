@@ -134,6 +134,22 @@ Control (the same probe, `HOLD_ON` replaced by nothing; the read-back shows held
 
 Read: the probe's threads wait inside `consume` longer than the permit lifetime on this loaded machine, so the reviewer's interleaving (A posts, A's observation blocks B) is not reached. One sealed post that was never sent ends "uncertain, target or message ID missing" with or without the hold: a loop stalled between sealing and sending past its permit and lease, the case W-02 documents as uncertain by design. The hold-blocked case itself is covered by W-02 `466232ab` and `f525aa17` and their tests.
 
+### E5 (the Discord-paused build: no coordinator), from the second review (N-1)
+
+The second reviewer's probe `exp_runbook2.py e5`, unchanged, re-run on this branch at `762551f0` (no limiter): after a create was accepted, the process loses its coordinator as under the paused build (`rate_limiter` None, `rate_coordinator_degraded` True); each tick forces the posts due and runs the worker twice; then the coordinator comes back. `(due)` replaces a large negative `nextIn` (due now).
+
+```
+  paused tick  1 (the created post only): [{'state': 'provider_accepted', 'checks': 0, 'nextIn': (due), 'nextAction': 'Await provider reconciliation; do not resubmit'}]
+  paused tick  2 (the created post only): [{'state': 'uncertain', 'checks': 1, 'nextIn': 5.0, 'nextAction': 'Await provider reconciliation; do not resubmit'}]
+  paused tick  4 (the created post only): [{'state': 'uncertain', 'checks': 2, 'nextIn': 5.0, 'nextAction': 'Await provider reconciliation; do not resubmit'}]
+  paused tick 10 (the created post only): [{'state': 'uncertain', 'checks': 5, 'nextIn': 86399.9, 'nextAction': 'Manual provider review required; do not resubmit'}]
+  paused tick 14 (the created post only): [{'state': 'uncertain', 'checks': 7, 'nextIn': 86400.0, 'nextAction': 'Manual provider review required; do not resubmit'}]
+  promote the normal build back (coordinator restored), 4 passes:
+    [{'state': 'verified', 'checks': 1, 'nextIn': (due)}, {'state': 'provider_accepted', 'checks': 0, 'nextIn': 4.9}, {'state': 'provider_accepted', 'checks': 7, 'nextIn': 86400.0}, {'state': 'scheduled', 'checks': 0, 'nextIn': (due)}] POSTs 3 duplicates 0
+```
+
+Read: the created post (the third job) is marked `uncertain` at the first claim that reaches it, spends a check per claim and is parked for 86,400 s at the fifth; when the coordinator returns it stays parked (`checks 7`, `nextIn 86400.0`) while the unsent posts resume and verify. The runbook's lever 2 and `H07-EVIDENCE.md` section 3 said the paused build strands nothing; they now say this. The code fix (defer such a read when the coordinator is missing or degraded) is with the limiter lane, open.
+
 ## 3. The reviewer's vacuous mutants re-run on this branch
 
 Command: the reviewer's `mutate.py` (copy of the worktree with one change, then `tests/discord_ops_drills.py --only ...`). Before (reviewer, `8e76afdd`): both PASS, so the drills did not test these properties. Now:
