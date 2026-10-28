@@ -168,3 +168,264 @@ Every run: 5,000 of 5,000 verified, 0 duplicates, 0 creates after expiry, 0 429s
   (`docs/w02/REQUEST-BUDGET.md` section 7.7) has to make them self-healing, and every receipt now states the open
   admissions by state and probes the budget after the run (launch gates).
 
+
+## The limiter head `3dac3ccf`: development measurement 1028
+
+**A development measurement, not G5 evidence.** Every source change shifts the capacity-source digest, so the final evidence
+needs the integrated SHA. Tree `3dac3ccfe9a793cc6a412b01d8de87dc17fc2b7e` (the head of `claude/discord-rc2-limiter-20261023`),
+harness `ffdab63c66264e38074d687bf7b9b1f92de72cbd`, standard ubuntu-24.04 runners, pool 20, 2 ms. Requests
+`claude/discord-capacity-run-devset-1028a` (run 40657396377: S1, S0-100, Fdb, Fcrash, F429) and
+`claude/discord-capacity-run-s2sizes-1028b` (run 40657448334: S2-100, S2-300, S2-1000). The figures below were re-read
+from the artifacts with the harness analysis of this branch (`analyze` on the downloaded directory), which adds lines the
+runner's own receipt did not have (guard sizing, preflight passes). Local copies of the receipts:
+`/tmp/claude-0/-home-user-PostRiff/3cb76cca-883c-52d5-850d-5dab5e917b4a/scratchpad/cap-1028/x-<scenario>/`.
+
+### Against the standard and the earlier S1 rounds
+
+| | S1 1023b | S1 1023d | **S1 1028 (limiter head)** |
+|---|---|---|---|
+| Lateness median / p95 / max (min), limits 12 / 25 / 40 | 17.19 / 36.79 / 40.73 | 13.79 / 27.26 / 32.57 | **19.77 / 37.87 / 43.52** |
+| Drain, T to the last verified (min) | 40.82 | 32.66 | 43.61 |
+| Duplicates, creates after expiry, misroutes, organic 429s | 0, 0, 0, 0 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| Requests per verified post | 7.85 | 7.32 | 8.95 |
+| Plateau duty cycle x active-window rate x requests per created post | 0.78 x 20.9 x 6.75 | 0.82 x 23.1 x 6.32 | 0.80 x 21.3 x 8.19 |
+| Implied median from those three (min) | 17.35 | 14.03 | 20.05 |
+| Busiest 10 s / 60 s / 300 s (requests/s) | 22.5 / n/a / n/a | 25.0 / 19.5 / 19.2 | 22.4 / 17.5 / 17.3 |
+| Requests above 25 in a trailing second at the mock (peak) | 856 (29) | 6,741 (35) | 56 (28) |
+| Peak in a calendar second at the mock; by the coordinator's sent_at (trailing / calendar) | 28; 29 / 28 | 31; 33 / 31 | 27; **25 / 25** |
+| Create permits that died unused | not measured | not measured | 0 of 5,000 |
+| Admissions left without an answer; budget probe after 3 s and 90 s | not measured | not measured | none; 25 of 25 and 25 of 25 |
+| Lane releases (`rateDelayed`), steps | not measured | 20, 10,258 | 4,714, 15,021 |
+
+The median is 6.0 minutes worse than 1023d and 2.6 worse than 1023b; the spread between those two rounds on the same code
+was 3.4, so the gap to the better round is outside the spread and the gap to the worse one is inside it. The decomposition says why: the duty cycle and the active-window rate are those of the earlier
+rounds, the **requests per created post rose from 6.3 to 8.2**, and the implied median (20.05) reproduces the measured one
+(19.77). The extra requests are repeated preflight passes: 8,655 successful witness requests beyond one pass per post
+(1.73 per post; 1023b 0.65, 1023d 0.17), 1.53 server reads per post.
+
+| Other scenarios, same run | Result |
+|---|---|
+| S0-100 | All normal-load measures PASS (sent within 2 / 5 / 15 min 100 / 100 / 100%; lateness 0.32 / 0.62 / 0.87 min). 20 requests above 25 (7 wire jitter, 13 the mock's processing order, 0 coordinator; 1023b 2,117); 0 permits died; no open admissions. 866 of 2,866 passes released. |
+| Fdb (pool 6, 8 ms, pinned) | 1,500 of 1,500 verified, no starvation, 0 above 25 (peak 19), 0 permits died. 98 admissions left without an answer (54 bot reads, 14 user reads, 30 creates, all older than 60 s) and the budget probe is still 25 of 25 at 3 s and at 90 s: the age bound works. Lock timeouts 210 (808 at pool 20), 1 statement timeout. Lateness 9.52 / 20.80 / 27.77 min. |
+| Fcrash | 10 kills planned, 10 delivered (6 random, 4 during a create), 0 missed. 4,995 verified, 5 uncertain (4 killed creates that reached the mock, 1 sealed and never sent), none held (1023b: 5 held, 4 channels locked). 1 permit died after the seal (the kill). 6 admissions left without an answer, budget 25 of 25. 16 above 25. Lateness 17.63 / 33.89 min. |
+| F429 | 986 of 1,000 sent and verified; 7 held by design after a create 429; 6 above 25 (1023b 255). 5 posts stay `scheduled` for 20 minutes after an injected route 429 on `GET /guilds/{id}` (see the open items). 0 permits died, no open admissions. |
+| S2-100, S2-300, S2-1000 | See "S2 with a hot workspace" below. |
+
+### Wire jitter and the guard
+
+`sent_at` of every admission against its arrival at the mock (S1: 44,750 of 44,750 paired). Admission to arrival, p50 / p90 / p99 /
+p99.9 / max: 51.2 / 64.6 / 169.1 / 285.7 / 364.0 ms; all but about 1 ms of it is inside the application (admission to the HTTP
+call p50 50.3, p99.9 280.6 ms; call to arrival p50 0.8, p99.9 14.7 ms). The floor of about 40 to 50 ms is not jitter. A guard has
+to cover the spread: for each request and the 26th after it in send order (windows at the ceiling, 41,780 of them), the later
+one arrived under a second after the first in 54 windows (0.129%); the delay of the first minus the delay of the later one was
+p99 38, p99.9 148, p99.99 193, max 214 ms, against a smallest slack of 103.7 ms (the 0.1 s guard in force). The same on F429
+(0.088%, p99.9 145 ms) and S0-100 (0.106%, p99.9 159 ms). So 0.1 s holds the ceiling at the mock in about 99.9% of the windows
+at the ceiling, about 0.15 s in 99.9% and 0.2 s in 99.99% (inference from these delays). The runner is CPU-saturated, which
+inflates application-side variance, and the real network variance between Vercel and Discord is not modelled.
+
+### Why S1 got slower: released posts and repeated passes
+
+**What the receipts hold.** The mock's log gives every request with its time and workspace; `admissions.jsonl` gives every
+admission (reserved, sent, answered); the database statistics give the coordinator's lock statements; the lane counters give
+the releases. **A refused reservation leaves no row anywhere**, so the wait the coordinator quoted to it is in none of them. What
+follows is measured where it says measured and inferred where it says inferred. The harness now records every reservation
+attempt with its outcome and quoted wait (`attempts.jsonl`, written by the invocation wrapper), so the next hosted run answers the rest.
+
+**(a) Reservation attempts, outcomes and waits.**
+
+1. *Attempts and refusals, per run (inferred from the database statements).* One reservation attempt runs one lock statement
+   on the scope rows (`_locked`, the `scope_lock` statement without a `guarded` part); an observation runs the same statement
+   only when it cannot share the lock, which is a create's. So attempts are about those statements minus the creates; a cross-check
+   from the route-bucket lookup (once per attempt and once per observation) gives 5 to 7 thousand more in S1, so the refused count
+   is between 41 and 48 thousand.
+
+| Run | Admissions | Reservation attempts | Refused (estimate) | Refused per admission | Refused per created post | Releases (`rateDelayed`) |
+|---|---|---|---|---|---|---|
+| S1 | 44,750 | 87,793 | 43,043 (41 to 48 thousand) | 0.96 | 8.6 | 4,714 |
+| S0-100 | 16,584 | 29,467 | 12,883 | 0.78 | 6.4 | 1,052 |
+| F429 | 8,743 | 16,897 | 8,154 | 0.93 | 8.2 | 833 |
+| S2-100 | 39,162 | 62,624 | 23,462 | 0.60 | 4.7 | 1,608 |
+| Fcrash | 39,279 | 63,089 | 23,810 | 0.61 | 4.8 | 1,630 |
+| Fdb (pool 6, 8 ms) | 11,442 | 12,412 | 970 | 0.08 | 0.6 | 142 |
+
+   About half of all reservation attempts in S1 are refused (43,043 of 87,793 = 49%). The provider gives a read three attempts
+   inside one second (`read_attempts` 3, a one-second wait deadline); if every attempt were refused with probability p
+   independently, the 12% of reads that end in a release (below) would mean p near 0.5, which agrees.
+
+2. *Where the releases fall, by the request that was refused (measured from the mock log; the first row inferred).* A pass
+   starts at the grant check and goes on to the server read, two member reads and the channel list, then the create permit. The
+   last request a released pass completed names the next one, which was refused:
+
+| Request refused (credential) | Admitted in the run | Posts released at it | Share of attempts at this step that ended in a release | Wait from the previous answer to the admission, p50 / p90 / p99 (share over 100 ms / over 1 s) |
+|---|---|---|---|---|
+| grant check (user) | 8,730 | about 984 (releases whose pass never reached the mock: 4,714 - 3,730) | about 10% | n/a (first request of a claim) |
+| server read (bot) | 7,652 | 1,078 | 12% | 174 / 381 / 547 ms (95% / 0%) |
+| first member read (bot) | 6,468 | 1,184 | 15% | 156 / 406 / 1,374 ms (68% / 3.4%) |
+| second member read (bot) | 5,780 | 688 | 11% | 122 / 316 / 459 ms (61% / 0%) |
+| channel list (bot) | 5,025 | 755 | 13% | 131 / 343 / 524 ms (64% / 0%) |
+| create permit (bot) | 5,000 | 25 | 0.5% | 224 / 595 / 964 ms (98% / 0.6%) |
+
+   So 99.3% of the visible releases are a refused witness read, not the create. The wait column is the time between the answer
+   to the previous request being observed and this request's admission: it holds every refused attempt, every sleep and the
+   reservation's own lock wait, so it is the cost of getting a slot, not the quoted wait. S0-100 shows the same medians
+   (127 to 207 ms), so most of it is the cost of an admission at 2 ms per round trip with twelve loops queueing on the
+   application row, not only refusals.
+
+3. *The quoted wait.* Not recorded. What bounds it: after a refusal the lane releases the post with a cooldown equal to the wait
+   that was quoted (`release_unsent`, `job['nextAt'] = now + retry_after`), so the time from the last answer of a released pass
+   to the next pass of the same workspace is that wait plus the claim latency: p10 0.72 s, p50 0.92 s for the 87% of re-claims
+   that take under 2 s. The quotes that release a read are the long ones: the provider (`social_connectors.py`, the read
+   loop) raises `ReadAdmissionDelayed` as soon as a quoted wait does not fit in what is left of its one-second deadline, so a
+   post is released at a quote of about 0.7 s or more and a shorter quote is slept through. A quote that long means the window's
+   sends are bunched into the last few hundred milliseconds (the loops retry at the same instant and are admitted in waves).
+
+**(b) Released posts: how often the whole pass repeats, and the sequences.**
+
+| S1 | |
+|---|---|
+| Passes / created posts / released passes | 8,730 / 5,000 / 3,730 (43% of passes; 0 open at the end) |
+| Posts by number of passes | 1: 2,882; 2: 1,214; 3: 508; 4: 208; 5: 117; 6: 41; 7: 17; 8: 7; 9: 4; 10: 1; 12: 1 (mean 1.746) |
+| Re-claim of the same post after a release, p10 / p50 / p90 / p99 / max | 0.72 / 0.92 / 124 / 1,016 / 1,375 s; 87% within 2 s |
+| Release by second of the minute (5 s bins, seconds 5 to 50) | 385 to 429 per bin: flat, not a burst at the start of the minute |
+| Releases per minute after T | 84 to 139 until minute 28, then falling to 4 to 11 by minute 38 |
+| Application window (25 sends within 1.1 s) over the second after a release | full at some instant 3,224 (86%), never full 500 (13%, maximum 20 to 24), full throughout 6 |
+
+Typical sequences (S1, seconds after T; the sends column is the application window's occupancy at the moment of the admission,
+the wait column the time since the previous answer was observed):
+
+**one quick release: workspace 0**
+
+| t after T (s) | request | shard | wait after the previous answer (ms) | sends in the last 1.1 s at admission | note |
+|---|---|---|---|---|---|
+| 193.301 | grant check (user) | lane0 |  | 23 | status 200 |
+| 193.984 | server read | lane0 | 409 | 25 | status 200 |
+| 194.539 | member read | lane0 | 321 | 22 | status 200 |
+| 194.600 | **released** after grant+guild+member | | | 24 / 25 / 23 / 24 / 23 at +0 / +0.25 / +0.5 / +0.75 / +1 s | next pass 0.80 s later |
+| 195.403 | grant check (user) | lane2 |  | 25 | status 200 |
+| 195.808 | server read | lane2 | 184 | 22 | status 200 |
+| 196.293 | member read | lane2 | 289 | 24 | status 200 |
+| 196.663 | member read | lane2 | 179 | 23 | status 200 |
+| 197.052 | channel list | lane2 | 120 | 24 | status 200 |
+| 198.289 | CREATE | lane2 | 784 | 24 | status 200 |
+
+**several releases in a row: workspace 7**
+
+| t after T (s) | request | shard | wait after the previous answer (ms) | sends in the last 1.1 s at admission | note |
+|---|---|---|---|---|---|
+| 334.594 | grant check (user) | lane11 |  | 25 | status 200 |
+| 334.716 | **released** after grant | | | 25 / 23 / 22 / 25 / 25 at +0 / +0.25 / +0.5 / +0.75 / +1 s | next pass 0.70 s later |
+| 335.414 | grant check (user) | lane11 |  | 25 | status 200 |
+| 335.497 | **released** after grant | | | 25 / 25 / 24 / 23 / 23 at +0 / +0.25 / +0.5 / +0.75 / +1 s | next pass 0.85 s later |
+| 336.346 | grant check (user) | lane11 |  | 24 | status 200 |
+| 336.448 | **released** after grant | | | 24 / 22 / 24 / 25 / 25 at +0 / +0.25 / +0.5 / +0.75 / +1 s | next pass 0.89 s later |
+| 337.337 | grant check (user) | lane0 |  | 24 | status 200 |
+| 337.699 | server read | lane0 | 160 | 24 | status 200 |
+| 337.807 | **released** after grant+guild | | | 23 / 25 / 23 / 23 / 24 at +0 / +0.25 / +0.5 / +0.75 / +1 s | next pass 884.98 s later |
+| 1222.787 | grant check (user) | lane8 |  | 25 | status 200 |
+| 1223.165 | server read | lane8 | 147 | 25 | status 200 |
+| 1223.469 | member read | lane8 | 35 | 23 | status 200 |
+| 1223.978 | member read | lane8 | 238 | 24 | status 200 |
+| 1224.271 | channel list | lane8 | 127 | 25 | status 200 |
+| 1224.861 | CREATE | lane8 | 149 | 21 | status 200 |
+
+**a long wait for the re-claim: workspace 7**
+
+| t after T (s) | request | shard | wait after the previous answer (ms) | sends in the last 1.1 s at admission | note |
+|---|---|---|---|---|---|
+| 2312.182 | grant check (user) | lane1 |  | 22 | status 200 |
+| 2312.576 | server read | lane1 | 120 | 23 | status 200 |
+| 2313.202 | member read | lane1 | 337 | 24 | status 200 |
+| 2313.490 | member read | lane1 | 65 | 25 | status 200 |
+| 2313.600 | **released** after grant+guild+member+member | | | 24 / 24 / 24 / 23 / 23 at +0 / +0.25 / +0.5 / +0.75 / +1 s | next pass 283.53 s later |
+| 2597.130 | grant check (user) | lane8 |  | 24 | status 200 |
+| 2597.574 | server read | lane8 | 213 | 25 | status 200 |
+| 2598.122 | member read | lane8 | 301 | 24 | status 200 |
+| 2598.546 | member read | lane8 | 198 | 25 | status 200 |
+| 2598.894 | channel list | lane8 | 70 | 24 | status 200 |
+| 2599.604 | CREATE | lane8 | 272 | 24 | status 200 |
+
+**released at the create: workspace 34**
+
+| t after T (s) | request | shard | wait after the previous answer (ms) | sends in the last 1.1 s at admission | note |
+|---|---|---|---|---|---|
+| 2107.570 | grant check (user) | lane2 |  | 24 | status 200 |
+| 2107.956 | server read | lane2 | 195 | 23 | status 200 |
+| 2108.042 | **released** after grant+guild | | | 23 / 24 / 23 / 25 / 25 at +0 / +0.25 / +0.5 / +0.75 / +1 s | next pass 0.78 s later |
+| 2108.825 | grant check (user) | lane2 |  | 25 | status 200 |
+| 2109.168 | server read | lane2 | 105 | 24 | status 200 |
+| 2109.263 | **released** after grant+guild | | | 24 / 25 / 24 / 24 / 25 at +0 / +0.25 / +0.5 / +0.75 / +1 s | next pass 1.07 s later |
+| 2110.330 | grant check (user) | lane3 |  | 25 | status 200 |
+| 2110.776 | server read | lane3 | 151 | 23 | status 200 |
+| 2110.879 | **released** after grant+guild | | | 24 / 23 / 24 / 22 / 23 at +0 / +0.25 / +0.5 / +0.75 / +1 s | next pass 0.64 s later |
+| 2111.519 | grant check (user) | lane3 |  | 25 | status 200 |
+| 2111.884 | server read | lane3 | 100 | 25 | status 200 |
+| 2112.461 | member read | lane3 | 341 | 25 | status 200 |
+| 2112.881 | member read | lane3 | 167 | 24 | status 200 |
+| 2113.595 | channel list | lane3 | 398 | 23 | status 200 |
+| 2113.683 | **released** after grant+guild+member+member+channels | | | 22 / 24 / 24 / 25 / 23 at +0 / +0.25 / +0.5 / +0.75 / +1 s | next pass 447.67 s later |
+| 2561.349 | grant check (user) | lane9 |  | 25 | status 200 |
+| 2561.672 | server read | lane9 | 96 | 23 | status 200 |
+| 2562.234 | member read | lane9 | 299 | 24 | status 200 |
+| 2562.475 | member read | lane9 | 79 | 25 | status 200 |
+| 2562.884 | channel list | lane9 | 235 | 23 | status 200 |
+| 2563.387 | CREATE | lane9 | 137 | 24 | status 200 |
+
+**Reading (inference).**
+
+- The application window sits at 22 to 25 of 25 slots throughout the active seconds. A request needs a slot to free, and
+  the slot goes to whichever of the twelve loops asks first; with three attempts inside one second, a read that loses twice or
+  three times is released (12% of read steps), and the post starts again from the grant check at its next claim.
+- A release costs the reads already admitted (1.73 extra preflight requests per post on average) and, in 13% of the cases, a
+  wait behind the round-robin: p90 124 s, p99 1,016 s, longest 1,375 s. That tail is the p95 and maximum lateness. Of the
+  3,245 re-claims within 2 s, 1,784 (55%) went on to create and 1,461 (45%) were released again, up to 12 passes for one
+  post; of the 485 slower ones, 334 created and 151 were released again.
+- The same shard re-claims the same workspace three times in a row (workspace 7 above) at 0.70, 0.85 and 0.89 s, each time
+  released after the grant check: the cooldown matches the quote but the quote is as long as the slot's remaining life, so the
+  retry meets a full window again.
+- Releases are not a start-of-minute burst: they run flat from second 5 to second 50, at about 400 per five-second bin, and
+  fall only when the backlog drains.
+- The first member read waits over one second in 3.4% of S1's steps and 7.1% of S0-100's, against 0% for the other reads: a
+  different cap, probably the one-per-second admission of a route or major the coordinator has not learned yet (the discovery
+  scope); the attempt log will show the scope.
+
+### Open items found by these runs
+
+- **F429, five posts never retried their server read.** Workspaces 259, 298, 305, 301 and 558: the injected route 429 on
+  `GET /guilds/{id}` (Retry-After 2 s, bucket header `injected-guilds-{id}`, limit 5, remaining 0, reset 2 s) was answered once.
+  For the next 1,000 seconds the lane asks only for the grant check every 300 s (+466 s, +785 s, +1,085 s after T) and sends no
+  request to the mock; the post stays `scheduled` with "Await Discord shared rate budget; no POST occurred". 1023b also ended
+  F429 with seven posts `scheduled` that way (its mock did not attribute injected answers to a server, so the workspaces
+  cannot be matched; the count is the same, five route-429 victims and two ban-page victims), so the limiter's stuck-route fix does
+  not cover this case. Reproduce with
+  `scripts/discord_lane_capacity_run.py run --scenario F429`.
+- **First member read, discovery or learned-route waits** (above).
+
+<!-- s2-sizes -->
+
+## S2 with a hot workspace of 100, 300 and 1,000 posts (profile `s2sizes`, 1028b, limiter head `3dac3ccf`)
+
+The same 5,000 posts: the hot workspace holds N, the other 5,000 - N are spread over 1,999 workspaces. Pool 20, 2 ms, judged as S2 (the standard is unchanged; the proposed measures are REPORTED lines only).
+
+| | S2-100 | S2-300 | S2-1000 |
+|---|---|---|---|
+| Hot workspace sent | 100 of 100 | 292 of 300 (the rest held when the approvals lapsed) | not finished |
+| Hot workspace lateness median / p95 / max (min) | 41.27 / 43.39 / 43.57 | 47.76 / 58.86 / never | not finished |
+| Hot workspace first / last create (min after T) | 13.74 / 43.57 | 3.32 / 59.83 | not finished |
+| Hot create rate from T to its last create (per second; share of the physical 1 per second) | 0.038 (4%) | 0.078 (8%) | not finished |
+| Hot create rate while it was the only workspace with work | median 21 per minute (range 13 to 23) over 5 minutes | median 15 per minute (range 8 to 19) over 19 minutes | not finished |
+| Document as seeded | 586,649 bytes (212,689 stored); idle read-modify-write 0.044 / 0.041 / 0.042 s | 1,625,357 bytes (606,967 stored); idle read-modify-write 0.105 / 0.104 / 0.103 s | not finished |
+| Document at the end of the run | 880,285 bytes (371,917 stored); idle read-modify-write 0.068 / 0.068 / 0.076 s | 2,512,875 bytes (1,085,831 stored); idle read-modify-write 0.159 / 0.158 / 0.157 s | not finished |
+| The application's UPDATE of a workspace document | mean 4.6 ms, max 304 ms, 28,291 calls | mean 10.6 ms, max 1025 ms, 30,537 calls | not finished |
+| Small workspaces (at most 5 posts): all sent by (min); their lateness median / p95 / max (min) | 37.35; 17.18 / 33.27 / 37.35 | 38.61; 17.40 / 33.45 / 38.61 | not finished |
+| Standard lateness lines for all posts, median / p95 / max (min) | 17.45 / 33.83 / 43.57 | 18.46 / 41.30 / never | not finished |
+| Drain, T to the last verified (min) | 44.67 | 62.48 | not finished |
+| Requests above 25 in a trailing second (peak by send time) | 10 (25) | 41 (25) | not finished |
+| Duplicates, misroutes; permits died unused; open admissions | 0, 0; 0; none | 0, 0; 0; none | not finished |
+
+**Reading (inference).**
+
+- The 1023b failure (the 3,000-post workspace sent nothing; the permit died before the seal) is gone at these sizes: no permit died and every create the hot workspace was given went out.
+- The document does not bind at 100 to 300 posts. One read-modify-write of it costs 0.04 to 0.16 s with nothing else running, and the application's own UPDATE of a workspace document averages 5 to 11 ms with a worst case of 0.3 to 1.0 s under load, against 2 to 3 ms and 40 ms for a one-post workspace.
+- What binds is the serial service of one workspace. A workspace is served one job per claim and one leased job at a time, and claims go round robin over the workspaces, so the hot workspace gets about one post per round while 2,000 workspaces have work (about one post every ten minutes) and only after the small workspaces are done (minute 38 to 39) does it get a loop to itself: a median of 21 (S2-100) and 15 (S2-300) posts per minute, 0.25 to 0.35 per second, one step of about 3 to 4 s per post while the other eleven loops idle. That is 25 to 35% of the physical one per second per channel, so the proposed target of 80% is not met at either size, and a workspace of 300 posts needs about 20 minutes after the others are done: 8 of its 300 lapsed at 60 minutes.
+- The small workspaces are not slowed by the hot one beyond the S1 effect (their lateness median 17.2 to 17.4 min against 19.8 in S1), but every workspace of at most five posts finished only at 37 to 39 minutes against the standard's 15.
+<!-- /s2-sizes -->
