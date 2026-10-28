@@ -16,8 +16,10 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2 import campaigns, publisher
 from postriff_phase2.discord import authorization as auth
 from postriff_phase2.discord.engagement import KEY
+from postriff_phase2.hosted_app import HostedApplication
 from test_discord_engagement import EngagementFixture
 from test_discord_publish_authorization import ACTOR, FIRST, NOW, SECOND, fixture, review, approve
+from test_postriff_phase2_hosted import FakeService, FakeWorker, invoke
 
 HOUR = 3600
 T = NOW + 300  # the time of the default review in the shared helpers
@@ -144,6 +146,20 @@ class Rule(unittest.TestCase):
             error = self.refused(stack(2, T))
         self.assertEqual(error.public_fields['limit'], 2)
         self.assertIn(' 2 ', str(error))
+
+
+class HttpBody(unittest.TestCase):
+    def test_the_json_body_carries_the_code_the_limit_and_the_window_and_no_retry_hint(self):
+        class Full(FakeService):
+            def get(self, workspace_id, token):
+                auth.assert_workspace_hourly_ceiling(bare(stack(300, T)), T)
+        status, headers, body = invoke(HostedApplication(Full(), FakeWorker(), {}, 'c' * 24), 'GET', '/api/workspaces/w',
+                                       headers={'Authorization': 'Bearer ' + 't' * 32})
+        self.assertEqual(status, 409)
+        self.assertEqual(set(body), {'error', 'code', 'limit', 'windowSeconds'})
+        self.assertEqual((body['code'], body['limit'], body['windowSeconds']), (CODE, 300, 3600))
+        self.assertIn('Approve fewer posts in that hour', body['error'])
+        self.assertNotIn('Retry-After', headers)
 
 
 class Approval(unittest.TestCase):
@@ -302,6 +318,34 @@ class AutomationItem(unittest.TestCase):
         queued = publisher.commit(self.engine, self.state, ACTOR, {'occurrenceId': run['id'], 'itemKey': item['key']}, NOW + 60)
         self.assertEqual(len(self.state['phase2']['jobs']), 300)
         self.assertTrue(queued['jobId'])
+
+
+class QueueFailure(unittest.TestCase):
+    def test_a_refusal_at_queue_time_is_retried_then_fails_visibly_and_keeps_the_draft(self):
+        """The scheduler's queue commit is the check that cannot be bypassed. Its 409 is retried like any queue conflict (a
+        place can come free as earlier posts are sent) and, after three attempts, fails the post with the English message."""
+        from types import SimpleNamespace
+        from postriff_phase2 import automation_runs
+        with self.assertRaises(AlphaError) as raised:
+            auth.assert_workspace_hourly_ceiling(bare(stack(300, T)), T)
+        item = {'key': 'k', 'platform': 'Discord', 'state': 'approved', 'attempts': 0, 'jobId': None, 'reason': None,
+                'decision': {'decision': 'approve'}, 'changedAt': NOW}
+        run, task = {'id': 'run', 'items': [item]}, {'id': 'task', 'createdBy': ACTOR}
+
+        def update(_service, _workspace, _occurrence, _key, change):
+            change({}, run, task, item)
+            return {'state': item['state']}
+        with patch.object(automation_runs, '_item_update', update), patch.object(automation_runs, 'notify') as notify:
+            for attempt in (1, 2):
+                automation_runs._commit_failed(SimpleNamespace(clock=lambda: NOW), 'w', 'run', 'k', task, raised.exception)
+                self.assertEqual((item['state'], item['attempts']), ('approved', attempt))
+                self.assertTrue(item['recovery']['automaticRetry'])
+            automation_runs._commit_failed(SimpleNamespace(clock=lambda: NOW), 'w', 'run', 'k', task, raised.exception)
+        self.assertEqual(item['state'], 'failed')
+        self.assertIn('This hour is full', item['reason'])
+        self.assertIn('The approved draft is kept.', item['reason'])
+        self.assertEqual(item['decision']['decision'], 'approve')
+        notify.assert_called()
 
 
 class ReplyApproval(unittest.TestCase):

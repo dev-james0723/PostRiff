@@ -62,6 +62,7 @@ product-wide incident, never as routine hygiene:
 | A-09 | The connection pool sets `autocommit = False` before it lends a connection again. | `postgres_pool._reset` |
 | C-03 | Manual drafts: 60,000 characters per save (text length x destinations), 2,000 manual variants and 12 MB of state per workspace, 30 saves/min/workspace. | `manual_drafts.py` |
 | C-05 | At most 30 servers per workspace and 15 per member (a disconnected server still counts). | `DiscordConnections.server_ceiling` |
+| Hourly ceiling (owner, reply 16) | At most 300 approved, non-terminal Discord posts of a workspace in any sliding hour of scheduled time; the 301st approval is refused with 409 `discord_workspace_hourly_ceiling`. Contract for the UI: `HOURLY-CEILING-CONTRACT.md`. | `assert_workspace_hourly_ceiling`; called from `Phase2Store.approve`, the reply approval and `campaigns._decide` |
 
 Read-only queries for an incident (workspace JSON; run with the usual read access):
 
