@@ -81,6 +81,7 @@ class SyntheticWire:
         self.malformed = None
         self.post_status = 200
         self.message = None
+        self.attachments = []
 
     def __call__(self, method, url, headers=None, form=None, body=None, data=None):
         path = url.removeprefix(DiscordProvider.API)
@@ -108,7 +109,7 @@ class SyntheticWire:
         elif method == 'GET' and path.endswith('/messages/4444444'):
             result = {**(self.message or {}), 'id': '4444444', 'channel_id': FIRST,
                       'content': 'Synthetic approval test @everyone', 'author': {'id': BOT, 'bot': True},
-                      'mention_everyone': False, 'mentions': [], 'mention_roles': [], 'attachments': []}
+                      'mention_everyone': False, 'mentions': [], 'mention_roles': [], 'attachments': self.attachments}
         else: raise AssertionError('Unexpected synthetic route: ' + method + ' ' + path)
         return {'status': status, 'body': result, 'headers': {}}
 
@@ -484,6 +485,38 @@ class DiscordP0(unittest.TestCase):
         social.assets = SimpleNamespace(storage=SimpleNamespace(get=lambda *_: b'new'))
         with self.assertRaises(AlphaError): social.prepare_discord_dispatch(entry['manifest'])
         self.assertFalse(any(c[0] == 'POST' for c in wire.calls))
+
+    def test_a_media_post_verifies_when_discord_returns_exactly_the_approved_attachment(self):
+        # Final review B-2: an image post could never verify, because any approved file made the read-back pending. Discord
+        # returns the name and the size of what it stored (never a hash), and Rafii uploads a fixed name, so those are checked.
+        engine, state, channel, variant = fixture(); entry = review(engine, state, channel, variant)
+        media = {'id': 'image', 'mime': 'image/png', 'bytes': 3, 'hash': hashlib.sha256(b'old').hexdigest(), 'alt': 'Synthetic image'}
+        entry['manifest']['media'] = [media]
+        auth.freeze_manifest(state, channel, entry['manifest'], entry['manifest']['destinationId'])
+        wire, grants, social, db, worker = transport_and_worker(state)
+        reference = {'providerReference': FIRST + '/4444444'}
+        stored = {'id': '5555555', 'filename': 'rafii.png', 'size': 3, 'content_type': 'image/png'}
+        wire.attachments = [stored]
+        result = social.reconcile(entry['manifest'], reference)
+        self.assertEqual(result['state'], 'verified')
+        self.assertIn('name and size', result['confirmed'])
+        self.assertEqual(result['reference'], FIRST + '/4444444')
+        for label, returned in (('another size', [{**stored, 'size': 4}]), ('another name', [{**stored, 'filename': 'other.png'}]),
+                                ('no size', [{k: v for k, v in stored.items() if k != 'size'}]), ('a size that is text', [{**stored, 'size': '3'}]),
+                                ('none arrived', []), ('two arrived', [stored, {**stored, 'id': '5555556'}]),
+                                ('not a record', ['rafii.png']), ('not a list', None)):
+            wire.attachments = returned
+            outcome = social.reconcile(entry['manifest'], reference)
+            self.assertEqual(outcome['state'], 'uncertain', label)
+            self.assertEqual(outcome['reference'], FIRST + '/4444444', label)
+
+    def test_a_text_post_still_needs_no_attachment_and_refuses_an_unexpected_one(self):
+        engine, state, channel, variant = fixture(); job = approve(engine, state, review(engine, state, channel, variant))
+        wire, grants, social, db, worker = transport_and_worker(state)
+        reference = {'providerReference': FIRST + '/4444444'}
+        self.assertEqual(social.reconcile(job['manifest'], reference)['state'], 'verified')
+        wire.attachments = [{'id': '5555555', 'filename': 'rafii.png', 'size': 3}]
+        self.assertEqual(social.reconcile(job['manifest'], reference)['state'], 'uncertain')
 
     def test_discord_versioned_envelope_accepts_v2_and_holds_legacy_authority(self):
         token = SyntheticGrants().discord_grant_for_worker(WORKSPACE, 'discord-connection')['accessToken']

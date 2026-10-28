@@ -526,6 +526,14 @@ class HostedSocial:
                 and reference.get('guild_id', target['guildId']) == target['guildId']
                 and body.get('type') == 19)
 
+    @staticmethod
+    def _discord_attachments_match(attachments, files):
+        """True when Discord returned exactly the approved files: the same count, the fixed name and the byte count of each.
+        No attachments approved and none returned is a match (a text post)."""
+        return (isinstance(attachments, list) and len(attachments) == len(files)
+                and all(isinstance(a, dict) and a.get('filename') == f['filename'] and type(a.get('size')) is int
+                        and a['size'] == f['bytes'] for a, f in zip(attachments, files)))
+
     def reconcile_discord(self, manifest, job, *, read_authorize=None):
         """Only GET a known message in the original channel; never use the default."""
         from .discord.authorization import SCHEMA, wire_content, digest, snowflake
@@ -580,13 +588,17 @@ class HostedSocial:
                     or body.get('mentions') != [] or body.get('mention_roles') != []
                     or ('message_reference' in wire and not self._discord_reply_reference_matches(body, manifest))):
                 return _uncertain('Discord read-back did not match the approved message, author, channel and mention policy.')
-            # Discord attachment metadata does not prove the original byte hash.
-            # Keep media receipts pending rather than overstating verification.
-            if wire['files'] or body.get('attachments') != []:
+            # Discord's attachment record carries the name and the size of what it stored, never a hash of the bytes. The
+            # approved file is checked against what Rafii uploaded (the count, the fixed file name and the byte count); anything
+            # else stays pending rather than overstating verification (final review B-2: an image post could never verify).
+            if not self._discord_attachments_match(body.get('attachments'), wire['files']):
                 return {**_uncertain('Discord media delivery needs byte-level reconciliation; do not resubmit.'), 'reference': reference}
             return {'state': 'verified', 'reference': reference, 'verification': 'provider_lookup',
                     'url': f"https://discord.com/channels/{target['guildId']}/{channel}/{message_id}",
-                    'confirmed': 'Discord read-back matched the approved text, bot, channel and mention policy.', 'discordDeliveryEvidence': 'accepted'}
+                    'confirmed': ('Discord read-back matched the approved text, bot, channel, mention policy and the image\'s name and size '
+                                  '(Discord returns no content hash).' if wire['files'] else
+                                  'Discord read-back matched the approved text, bot, channel and mention policy.'),
+                    'discordDeliveryEvidence': 'accepted'}
         except RateDelayed as error:
             # A denied GET cannot undo an existing create receipt. Resume only
             # this exact lookup, preserving the message ID and frozen target.
