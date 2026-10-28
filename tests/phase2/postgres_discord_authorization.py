@@ -179,6 +179,31 @@ def blocked_handoff(change, label):
     CHECKS.append(label)
 
 
+def prepare_reviews(f, count, first=NOW + 300):
+    """`count` exact reviews of the fixture draft, one minute apart: all inside one sliding hour."""
+    reviews = []
+    for i in range(count):
+        snapshot = f.service.repository.mutate(f.workspace, f.token, f.snapshot()['revision'], 'p2_review',
+            {'variantId': 'synthetic-draft', 'channelId': f.connection_id,
+             'destinationId': auth.destination_id(f.workspace, f.connection_id, GUILD, FIRST),
+             'localTime': datetime.fromtimestamp(first + 60 * i, timezone.utc).strftime('%Y-%m-%dT%H:%M'),
+             'timeZone': 'UTC', 'acknowledgedWarnings': []})
+        reviews.append(copy.deepcopy(snapshot['state']['phase2']['reviews'][-1]))
+    return reviews
+
+
+def approve_fresh(f, review, action='p2_approve', payload=None):
+    """Approve as the browser does after "Workspace changed; reload.": read the current revision and try again."""
+    for _ in range(200):
+        try:
+            return f.service.repository.mutate(f.workspace, f.token, f.snapshot()['revision'], action,
+                payload or {'reviewId': review['id'], 'digest': review['digest'], 'confirmed': True})
+        except AlphaError as error:
+            if error.code != 'workspace_revision_conflict':
+                raise
+    raise AssertionError('The approval kept losing the revision race.')
+
+
 started = time.monotonic()
 with connection() as db:
     assert db.execute('SELECT host(inet_server_addr()),inet_server_port(),current_database()').fetchone() == ('127.0.0.1', 55438, 'postgres')
@@ -262,6 +287,58 @@ with patch('postriff_phase2.billing.require_publishing', return_value=None), pat
     assert (current['leaseOwner'], current['leaseId'], current['state']) == ('new-worker', 'new-lease', 'uncertain')
     assert current['discordReceipts'][-1]['late'] and current['discordReceipts'][-1]['reference'] == FIRST + '/4444444'
     CHECKS.append('accepted late receipt retained without stealing newer lease')
+
+    # Owner ceiling (reply 16): at most 300 approved Discord posts in any one hour of a workspace. The approval command holds
+    # the workspace row lock, so counting and adding are one step. The gate lowers the ceiling to 3 to race for the last place.
+    with patch.object(auth, 'WORKSPACE_HOURLY_CEILING', 3):
+        f = Fixture(); reviews = prepare_reviews(f, 7)
+        for entry in reviews[:2]:
+            approve_fresh(f, entry)
+        gate = threading.Barrier(5)
+        def race(entry):
+            gate.wait(timeout=10)
+            try:
+                approve_fresh(f, entry)
+                return 'approved'
+            except AlphaError as error:
+                assert error.status == 409, error.status
+                return error.code
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            results = list(pool.map(race, reviews[2:]))
+        assert sorted(results) == sorted(['approved'] + [auth.WORKSPACE_HOURLY_CODE] * 4), results
+        durable = f.snapshot()['state']['phase2']
+        assert len(durable['jobs']) == 3 and {j['state'] for j in durable['jobs']} == {'scheduled'}, [j['state'] for j in durable['jobs']]
+        assert sum(r['status'] == 'approved' for r in durable['reviews']) == 3
+        assert sum(r['status'] == 'needs_review' for r in durable['reviews']) == 4
+        loser = next(r for r in durable['reviews'] if r['status'] == 'needs_review')
+        try:
+            approve_fresh(f, loser)
+        except AlphaError as error:
+            assert (error.status, error.code, error.public_fields) == (409, auth.WORKSPACE_HOURLY_CODE, {'limit': 3, 'windowSeconds': 3600})
+        else:
+            raise AssertionError('A fourth approval in one hour was accepted.')
+        # a place comes back when a post is cancelled: the loser can now be approved (a move is cancel + approval)
+        approve_fresh(f, None, 'p2_cancel', {'jobId': durable['jobs'][0]['id']})
+        approve_fresh(f, loser)
+        assert len(f.snapshot()['state']['phase2']['jobs']) == 4
+        # the ceiling belongs to one workspace: another workspace's same hour is not affected
+        other = Fixture(); approve_fresh(other, prepare_reviews(other, 1)[0])
+    CHECKS.append('hourly ceiling: five racing approvals for the last place on real row locks, one wins, the rest get 409 with the code')
+
+    with patch.object(auth, 'WORKSPACE_HOURLY_CEILING', 2):
+        f = Fixture(); reviews = prepare_reviews(f, 3)
+        batch = {'confirmed': True, 'reviews': [{'reviewId': r['id'], 'digest': r['digest']} for r in reviews]}
+        try:
+            approve_fresh(f, None, 'p2_approve_many', batch)
+        except AlphaError as error:
+            assert (error.status, error.code) == (409, auth.WORKSPACE_HOURLY_CODE), (error.status, error.code)
+        else:
+            raise AssertionError('A bulk approval past the ceiling was accepted.')
+        durable = f.snapshot()['state']['phase2']
+        assert durable['jobs'] == [] and {r['status'] for r in durable['reviews']} == {'needs_review'}, 'a refused bulk approval must change nothing'
+        approve_fresh(f, None, 'p2_approve_many', {**batch, 'reviews': batch['reviews'][:2]})
+        assert len(f.snapshot()['state']['phase2']['jobs']) == 2
+    CHECKS.append('hourly ceiling: a bulk approval that crosses it is refused whole (no job, no review changed); two of them fit')
 
 print(json.dumps({'status': 'PASS', 'execution': 'cloud-disposable-postgres-synthetic-discord',
                   'checks': CHECKS, 'durationSeconds': round(time.monotonic() - started, 3),
