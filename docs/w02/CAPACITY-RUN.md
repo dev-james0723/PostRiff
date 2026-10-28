@@ -163,7 +163,13 @@ no real secret.
   harness reserves reads on synthetic routes through the tree's own coordinator until it refuses, once at once and
   once after `budget_probe_delay_seconds` (90 s, longer than any age bound for an unanswered request), then observes
   them with a synthetic answer. Nothing is sent anywhere. A whole budget is 25 of 25. Create permits that died
-  unused (expired still reserved, or sealed and then blocked).
+  unused (expired still reserved, or sealed and then blocked). **Owner reply 16 (D-16), two more rows:** the
+  coordinator-stamped sends (`sent_at`, the instant the coordinator let a request leave) in any trailing second
+  must stay at or under 25 (PASS or FAIL), and the requests above 25 in a trailing second as they arrive at the
+  mock are REPORTED in full (count, peak and cause: the coordinator, wire jitter, the mock's processing order),
+  never turned into a pass. The standard's own line (`policy_ceiling`, "== 0" at the mock) is still computed as the
+  standard is written; reading it as REPORTED is the owner's decision, not the harness's, and
+  `docs/w02/capacity-standard.json` is not changed.
 - **Wire timing.** Each admission's `sent_at` (database clock) is joined, by path digest and in order, to the mock's
   arrival of that request. The invocation wrapper stamps every request it forwards with its cron source and with
   the time just before the HTTP call, so the delay splits into admission to call (inside the application) and call

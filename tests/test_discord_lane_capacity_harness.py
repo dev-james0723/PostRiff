@@ -388,15 +388,45 @@ class WireTimingAndPermits(unittest.TestCase):
             'permits': {'permits': 50, 'diedBeforeSeal': 4, 'diedAfterSeal': 1}}
         gates = {g['id']: g for g in analysis.launch_gates(failing)}
         self.assertEqual({k: g['verdict'] for k, g in gates.items()},
-                         {'open_admissions': 'FAIL', 'budget_restored': 'FAIL', 'permits_unused': 'FAIL'})
+                         {'open_admissions': 'FAIL', 'budget_restored': 'FAIL', 'coordinator_stamped_ceiling': 'NOT MEASURED',
+                          'permits_unused': 'FAIL'})
         self.assertIn('3: bot sent create: 3', gates['open_admissions']['measured'], 'expired reserved permits are not counted')
         whole = {'database': {'openAdmissions': [], 'budgetProbes': [{'admitted': 25, 'capacity': 25, 'waited': 93.0}],
-                              'jobRetries': {}}, 'permits': {'permits': 9, 'diedBeforeSeal': 0, 'diedAfterSeal': 0}}
+                              'jobRetries': {}}, 'permits': {'permits': 9, 'diedBeforeSeal': 0, 'diedAfterSeal': 0},
+                 'ceiling': {'policyCeiling': 25, 'aboveTwentyFiveAll': None,
+                             'coordinatorAdmissions': {'wire': {'peakTrailingSecond': 25, 'peakCalendarSecond': 25}}}}
         self.assertEqual({g['verdict'] for g in analysis.launch_gates(whole)}, {'PASS'})
         none = {k: g['verdict'] for k, g in {g['id']: g for g in analysis.launch_gates({'database': {}})}.items()}
-        self.assertEqual(none, {'open_admissions': 'NOT MEASURED', 'budget_restored': 'NOT MEASURED', 'permits_unused': 'NOT MEASURED'})
+        self.assertEqual(none, {'open_admissions': 'NOT MEASURED', 'budget_restored': 'NOT MEASURED',
+                                'coordinator_stamped_ceiling': 'NOT MEASURED', 'permits_unused': 'NOT MEASURED'})
         broken = {'database': {'budgetProbes': [{'error': 'boom', 'at': 1.0}]}}
         self.assertEqual({g['id']: g['verdict'] for g in analysis.launch_gates(broken)}['budget_restored'], 'NOT MEASURED')
+
+
+class OwnerReply16(unittest.TestCase):
+    """D-16: what the coordinator stamped must stay at or under 25; the arrivals above 25 at the mock are REPORTED, in full."""
+
+    def gates(self, stamped, above, by=None):
+        result = {'ceiling': {'policyCeiling': 25, 'aboveTwentyFiveAll': above, 'peakTrailingSecondAll': 27,
+                              'coordinatorAdmissions': {'wire': {'peakTrailingSecond': stamped, 'peakCalendarSecond': stamped}}},
+                  'wireJitter': {'aboveCeilingBy': by or {}}, 'database': {}}
+        return {g['id']: g for g in analysis.launch_gates(result)}
+
+    def test_the_coordinator_stamped_peak_is_checked_and_the_arrival_count_is_reported_whole(self):
+        gates = self.gates(25, 56, {'wire': 38, 'mock': 18})
+        self.assertEqual(gates['coordinator_stamped_ceiling']['verdict'], 'PASS')
+        self.assertEqual(gates['arrival_above_ceiling']['verdict'], 'REPORTED')
+        self.assertIn('56 requests', gates['arrival_above_ceiling']['measured'])
+        self.assertIn('wire jitter 38', gates['arrival_above_ceiling']['measured'])
+        self.assertEqual(self.gates(26, 0)['coordinator_stamped_ceiling']['verdict'], 'FAIL', 'one send over 25 by the coordinator fails')
+        self.assertEqual(self.gates(25, 0)['arrival_above_ceiling']['verdict'], 'REPORTED', 'zero is reported too, never turned into a pass')
+
+    def test_without_an_admissions_export_the_stamped_peak_is_not_measured_and_the_arrivals_are_still_reported(self):
+        result = {'ceiling': {'policyCeiling': 25, 'aboveTwentyFiveAll': 3, 'peakTrailingSecondAll': 26, 'coordinatorAdmissions': None},
+                  'wireJitter': None, 'database': {}}
+        gates = {g['id']: g for g in analysis.launch_gates(result)}
+        self.assertEqual(gates['coordinator_stamped_ceiling']['verdict'], 'NOT MEASURED')
+        self.assertIn('3 requests', gates['arrival_above_ceiling']['measured'])
 
 
 class AttemptLog(unittest.TestCase):

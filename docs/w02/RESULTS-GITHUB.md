@@ -400,6 +400,9 @@ the wait column the time since the previous answer was observed):
   cannot be matched; the count is the same, five route-429 victims and two ban-page victims), so the limiter's stuck-route fix does
   not cover this case. Reproduce with
   `scripts/discord_lane_capacity_run.py run --scenario F429`.
+  **Resolved in 1028c:** the mock's injected bucket id carried the template's braces, which is not a valid bucket id, and the coordinator (by
+  reviewed design) holds such a route as a manual hold that only an operator releases. It was a fault of the harness, not of the limiter; with
+  a valid id all five posts verify (cf9aaecd).
 - **First member read, discovery or learned-route waits** (above).
 
 <!-- s2-sizes -->
@@ -431,3 +434,162 @@ The same 5,000 posts: the hot workspace holds N, the other 5,000 - N are spread 
 - What binds is the serial service of one workspace. A workspace is served one job per claim and one leased job at a time, and claims go round robin over the workspaces, so the hot workspace gets about one post per round while 2,000 workspaces have work (about one post every ten minutes) and only after the small workspaces are done (minute 38 to 39) does it get a loop to itself: a median of 21 (S2-100), 15 (S2-300) and 12 (S2-1000) posts per minute, 0.2 to 0.35 per second, one step of about 3 to 5 s per post while the other eleven loops idle. That is 20 to 35% of the physical one per second per channel, so the proposed target of 80% is not met at any size, and a workspace of 300 posts needs about 20 minutes after the others are done: 8 of its 300 lapsed at 60 minutes, and of 1,000 posts only 236 were sent in the hour (764 held when their approvals lapsed), against the 16.7 minutes the one create per second of its channel would allow.
 - The small workspaces are not slowed by the hot one beyond the S1 effect (their lateness median 15.7 to 17.4 min against 19.8 in S1), but every workspace of at most five posts finished only at 35 to 39 minutes against the standard's 15.
 <!-- /s2-sizes -->
+
+<!-- booking-1028c -->
+
+## The limiter head `02fd679b` (booking, P2): development measurement 1028c
+
+**A development measurement, not G5 evidence.** Tree `02fd679b4a70ec501b4f68a6e3f6d30d6a8330ac` (`claude/discord-rc2-limiter-20261023`:
+booking in `reserve` and `reserve_read`, the lane books around its preflight reads and the create permit, N-1, retention B3), standard
+ubuntu-24.04 runners, PgBouncer pool 20. Requests: `claude/discord-capacity-run-devset-1028c` (run 40699076272, harness `cba323ea`:
+S1, S0-100, Fdb, Fcrash, F429), `claude/discord-capacity-run-fdb-1028d` (run 40701987691, harness `36675db7`: Fdb again, see below) and
+`claude/discord-capacity-run-s1lane56-1028e` (run 40705094663, harness `3bbc344c`). Local copies of the receipts:
+`/tmp/claude-0/-home-user-PostRiff/3cb76cca-883c-52d5-850d-5dab5e917b4a/scratchpad/cap-1028c/x-<scenario>/`. The limiter has since fixed
+two things this run found (the read-back of an ordinary post was not booked: `72ab8886`; migration 142's rollback file broke
+`postriff_migrate`: `8c1841bd`); **the next S1 is to be taken on its final head**.
+
+**What this harness assumes, plainly.** The 2 ms database round trip (a relay in front of PgBouncer adds it to every statement), the
+50 to 150 ms Discord latency (uniform, mean 100 ms), one 4-vCPU GitHub-hosted runner that also runs PostgreSQL, PgBouncer, the relay,
+the mock Discord and all twelve loops, and cold Python processes started every minute, are assumptions of the harness, not measurements
+of Vercel, Supabase or Discord. The runner is close to CPU-saturated while the lane is active (load average up to 6.9 on 4 vCPUs). The
+sensitivity to the first two is worked out below from the receipts and is to be measured at 5 and 10 ms on the final head (profile
+`release`), so that G5 does not rest on a favourable guess.
+
+### S1 against the standard and the earlier rounds
+
+| | S1 1023d | S1 1028a (`3dac3ccf`) | **S1 1028c (`02fd679b`)** | Limiter's prediction |
+|---|---|---|---|---|
+| Lateness median / p95 / max (min), limits 12 / 25 / 40 | 13.79 / 27.26 / 32.57 | 19.77 / 37.87 / 43.52 | **15.66 / 30.55 / 32.37** (median and p95 FAIL, max PASS) | median about 16 |
+| Drain, T to the last verified (min); last create | 32.66 | 43.61 | 36.76; T+32.37 | |
+| Time to verified, median / p95 (min); first read-back (min after T) | 29.78 / 32.34; 21.4 | 40.12 / 43.18; 29.3 | 34.24 / 36.56; 25.2 | |
+| Duplicates, creates after expiry, misroutes, organic 429s | 0, 0, 0, 0 | 0, 0, 0, 0 | 0, 0, 0, 0 | |
+| Posts a minute on the plateau (minutes 3 to 5) | not recorded | 132, 131, 119 | 159, 160, 159 (159 a minute for 24 minutes) | 150 to 158 |
+| Requests per verified post; per created post on the plateau | 7.32; 6.32 | 8.95; 8.19 | 7.18; 6.16 | 7.0 |
+| Plateau duty cycle x active-window rate x requests per created post | 0.82 x 23.1 x 6.32 | 0.80 x 21.3 x 8.19 | 0.78 x 20.7 x 6.16 | |
+| Implied median from those three (min) | 14.03 | 20.05 | 16.00 (measured 15.66) | |
+| Busiest 10 s / 60 s / 300 s (requests a second) | 25.0 / 19.5 / 19.2 | 22.4 / 17.5 / 17.3 | 22.0 / 16.7 / 16.5 | |
+| Requests above 25 in a trailing second at the mock (peak) | 6,741 (35) | 56 (28) | **7 (26)**: coordinator 0, wire jitter 2, the mock's processing order 5 | |
+| Peak by the coordinator's wire time (`sent_at`), trailing / calendar second | not recorded | 25 / 25 | **25 / 25** (by reservation instant 31 / 30: a booked read is stored at its slot) | at most 25 |
+| Create permits that died unused; admissions left unanswered; budget probe at 3 s and 90 s | not recorded | 0 of 5,000; none; 25 of 25 and 25 of 25 | 0 of 5,000; none; 25 of 25 and 25 of 25 | |
+| Lane releases (`rateDelayed`), permitWaits, rateWaits | 20, 1,563, 2,247 | 4,714, 4,864, 7,235 | **0, 0, 0** | 0 |
+| Lane steps; `positionsKept`; preflight passes a post | 10,258; none; not recorded | 15,021; 4,305; 1.746 | 10,177; 0; 1.000 | passes 1.0 |
+| `bookedWaits`, `bookedSeconds` | n/a | n/a | 26,829 (5.37 a post), 4,504 s (mean 0.168 s a booking, 0.90 s a post) | |
+| Reservation lock statements a created post, exclusive form (mean time) | not recorded | 18.6 (47.3 ms) | **8.85 (34.7 ms)** | 7.5 to 8 |
+| Shared lock form a created post (mean time) | not recorded | 7.55 (23.8 ms) | 5.78 (15.1 ms) | |
+| Witness age at the create, oldest witness read to the create at the mock, p50 / p90 / max (s) | not recorded | 2.34 / 2.89 / 4.58 | 2.72 / 3.02 / 4.33 | 1.3 to 2.3 (simulated) |
+| Wire jitter, `sent_at` to arrival at the mock, p50 / p99 / p99.9 / max (ms) | not recorded | 51 / 169 / 286 / 364 | 76 / 236 / 444 / 546 | |
+| Guard sizing: windows at the ceiling; the 26th arrived under a second after the first | not recorded | 41,780; 54 (0.129%) | 30,080; 11 (0.037%) | |
+
+The median is 4.1 minutes better than on `3dac3ccf` and the limiter's model (about 16) was right to a quarter of a minute; the
+maximum now passes. The standard's median (12) and p95 (25) still fail by 3.7 and 5.6 minutes. The decomposition says why the gain is what it
+is: the duty cycle and the active-window rate did not move (0.78 x 20.7), the whole gain is the requests per created post (8.19 to 6.16) and
+the end of the releases (4,714 to 0) and of the repeated passes (1.746 to 1.000 a post).
+
+**Lock statements.** Counted from `pg_stat_statements` by statement text (the `scope_lock` exclusive and shared forms): 44,263 and 28,889
+calls. The 18.6 of 1028a is the exclusive form (92,793 calls). The limiter's 7.5 to 8 is not reached: 8.85, of which about 0.27 are the
+1,371 refused attempts of the unbooked read-backs. The mean time of the exclusive form is lower (34.7 against 47.3 ms) but it is still the
+heaviest statement: 1,537 s of the run's 2,429 s of server time (63%), the shared form 435 s (18%).
+
+### The other scenarios of the same run
+
+| | S0-100 | Fdb | Fcrash | F429 |
+|---|---|---|---|---|
+| Result | all normal-load measures PASS; lateness 0.29 / 0.53 / 0.67 min (1028a 0.32 / 0.62 / 0.87) | 1,500 of 1,500 verified, no starvation; lateness 9.62 / 21.21 / 27.87 min (1028a 9.52 / 20.80 / 27.77) | 10 kills planned, 10 delivered (6 random, 4 during a create), 0 missed; 4,994 verified, 6 uncertain (kills hit sealed sends; 1028a 5), none held; lateness 15.83 / 30.69 min | 992 of 1,000 verified; 6 held by design after a create 429; 2 waiting behind the two ban pages; **the five posts that stayed scheduled in 1028a all verify** |
+| Requests above 25 at the mock (peak); 1028a | 15 (27); 20 (26): wire jitter 8, mock order 7, coordinator 0 | 0 (19); 0 (19) | 8 (26); 16 (27): wire jitter 2, mock order 6, coordinator 0 | 0 (25); 6 (27) |
+| Peak by the coordinator's wire time (`sent_at`), trailing second | 25 | 18 | 25 | 25 |
+| Releases, permitWaits, rateWaits, bookedWaits | 0, 0, 0, 9,948 (1028a 1,052, 1,399, 1,394) | 145, 0, 0, 0 (1028a 142, 0, 0) | 0, 0, 0, 26,976 (1028a 1,630, 2,925, 2,925) | 20, 0, 14, 5,830 (1028a 833, 890, 1,051) |
+| Requests per verified post; passes a post | 7.25; 1.000 (1028a 8.29; 1.43) | 7.63; 1.076 (1028a 7.63; 1.078) | 7.19; 1.001 (1028a 7.86; 1.263) | 7.29; 1.016 (1028a 8.87; 1.647) |
+| Permits died unused; admissions left unanswered | 0; none | 0; 91, all older than 60 s (1028a 98), budget probe 25 of 25 at 3 s and 90 s | 2 (1 before the seal, 1 after: the kills); 8 (2 booked reads killed during their wait that never left, 1 read and 5 creates that reached the mock with no answer observed), budget probe 25 of 25 | 0; none |
+| Lock statements a post, exclusive / shared (mean ms) | 9.38 / 5.25 (36.6 / 13.3) | 9.28 / 5.92 (86.6 / 50.0) | 8.88 / 5.78 (32.5 / 13.8) | 9.90 / 5.27 (21.4 / 6.3) |
+
+- **Fdb has no booking to show** (`bookedWaits` 0): at 11.5 requests a second, with a 6-connection pool and 8 ms round trips, the window never fills. Its
+  result is the result of `3dac3ccf`: the database is the limit, not the window. The 145 releases are lock timeouts (the attempt log now holds
+  the class and SQLSTATE of every error: `LockNotAvailable` 55P03, 97 on reads and 9 on reservations; the server log counts 197 lock timeouts and 1 statement timeout).
+- **Fdb was lost once.** In the devset run (1028c) one of the four seeding processes got `RateCoordinatorUnavailable` from its first `GET /oauth2/@me`
+  70 s into connecting the 1,000 workspaces and the run ended before anything was measured. The coordinator turns every failure inside its
+  transaction into that error and hides the cause (`raise ... from None`). A local seeding check of Fdb on the same tree passed, and the re-run
+  (1028d, one-scenario profile `fdb`) seeded without a single retry, so the cause is **not known**; seeding now tries a GET again up to five times and counts
+  each with the class and SQLSTATE of the hidden failure (`seed-N.out`), and the attempt log records the same for every error of the run.
+- **F429 now ends as designed.** The injected route 429 had carried `x-ratelimit-bucket: injected-guilds-{id}`, which is not a bucket id (the
+  coordinator accepts `[A-Za-z0-9_-]{1,128}`), and the coordinator holds a route whose 429 names an invalid bucket as a manual hold that only an operator
+  releases. The mock's id is now `injected-guilds-id` (cf9aaecd). Workspaces 184, 392, 631, 909 and 988 had their server read answered with the 429 and
+  all five posts verified; the only manual holds left are the two ban-page routes, which are by design.
+
+### Booking in the receipts
+
+- **Horizon.** Reads lying ahead of the clock (a wire time not yet reached) when a read was reserved, p50 / p90 / p99 / max: S1 1 / 5 / 7 / 10, S0-100 1 / 5 / 7 / 10
+  (a full horizon at 25 a second holds about 21). The health payload agrees: `horizonSeconds` p50 0, p90 0.161, max 0.225 of 1.0; `aheadNow` 0 / 3 / 5. **The booked
+  horizon was never full.** 70.7% of S1's admitted reads were booked, their wait p50 / p90 / p99 / max 0.161 / 0.279 / 0.358 / 0.428 s.
+- **Where the time goes.** 26,826 booked calls in the attempt log (22,416 reads, 4,410 create reservations), planned wait p50 0.166 s, slept in the call p50 0.172 s (the wait and the gate after it).
+  Per call kind (share booked): grant check 79%, server read 84%, member reads 93%, channel list 91%, create reserve 88%, bot identity 50%; **read-back 0%**.
+- **`coordinator.guards.policy remaining` under booking.** Q19 and AS-BUILT say it "stays high and falls to 0 only when the horizon is full". In S1 it was 0 in 21 of the 35 busy
+  readings, with `resetSeconds` 0.0 in all of them and the horizon empty or shallow (never above 0.225 s): `left` is the free slots among the wires at or before now, so it is 0
+  whenever the last 1.1 s holds 24 sent wires, which a saturated lane does all the time, while a booking is still possible at once. An alert that reads `remaining == 0` as
+  spent would fire in 60% of the busy minutes; `horizonSeconds` near `bookAheadSeconds` is the full-horizon signal. (Told to the limiter.)
+
+### The read-back of an ordinary post was not booked (found by this run, fixed at 72ab8886)
+
+In F429 and S1 not one of the read-backs (`GET /channels/{id}/messages/{id}`) carried `book_ahead`: S1 6,371 attempts for 5,000 read-backs, 1,371 refused (21.5%, quoted wait p50 41 ms, max 360 ms),
+562 needed two attempts, 160 three, 163 gave up after three; F429 1,559 attempts for 992, 567 refused (36%), 27 gave up. The bot identity reads inside the same step were unbooked too (49 of 202 in F429).
+Cause: the worker reconciles an ordinary Discord post with `social.reconcile`, `PacedSocial` wrapped only `reconcile_discord` (a reply's read-back), and `HostedSocial.reconcile` calls its own
+`reconcile_discord`. At saturation a caller that does not book can use roughly the one slot the booking leaves (about 0.9 a second) against about 2.5 read-backs a second in S1, so on this head the read-backs
+poll against the bookings; the figures above (time to verified 34.2 min) under-state booking. The limiter's fix puts `reconcile` inside `booking()`; it has to be measured.
+
+### One request cycle of a lane loop (arithmetic from the receipts of S1 1028c; no new run)
+
+Twelve loops at 20.7 requests a second in the active window is 0.58 s per request per loop. On the whole-run handler-time basis (all lane handler seconds
+over all requests the mock saw: 23,039 s over 35,889) it is 0.642 s. Per request:
+
+| | seconds per request | share | source |
+|---|---|---|---|
+| (a) mock Discord latency | 0.100 | 16% | the mock's own applied latency, mean over the run (uniform 50 to 150 ms: an assumption) |
+| (b) coordinator and other database time | 0.157 | 24% | every statement after seeding: 44.6 a request; server execution 0.068 s (the two lock statements 0.055) plus 44.6 round trips of 2 ms = 0.089 s |
+| (c) booked sleep | 0.128 | 20% | slept inside `reserve` and `reserve_read` (attempt log; the lane counter says 4,504 s, 0.125 s) |
+| (d) Python and the runner | 0.257 | 40% | the rest: the loop's own CPU 0.096 s (3,442 CPU-s), waiting for a CPU 0.161 s |
+| cycle | 0.642 | | |
+
+The coordinator's own calls without the sleep take 0.086 s per request (reservations) and 0.013 s (consumes); the observations after each answer are in (b) but not logged separately.
+CPU: lane processes 4,089 CPU-s, PostgreSQL 669, the latency relay 502, the mock 48: 5,308 of the 9,685 CPU-s four vCPUs give in 2,421 s (55% of the run, about 0.15 CPU-s per request, so
+the runner's own limit is about 27 requests a second at 100% busy and the lane reaches 20.7 in its active window).
+
+Closed-network arithmetic with N loops, a delay of Z = (a) + (b) + (d) = 0.513 s per request and one window that serves a slot every 45.8 ms (24 slots in 1.1 s, 21.8 a second); M/M/1//N, the same
+for a measured 18.7 a second on the handler basis (the model says 18.2):
+
+| | requests a second (handler basis) | change |
+|---|---|---|
+| 12 loops as measured | 18.7 (model 18.2) | |
+| no sleep at all, (c) = 0 | 23.4 | +25%, above the window's 21.8 |
+| guard 0.05 s (a slot every 43.8 ms, 22.9 a second) | 18.6 | +2% |
+| a separate bearer budget (the grant check, 1 of 7.18 requests, leaves the window) | 19.3 | +6% |
+| both | 19.6 | +8% |
+| 14 loops, same window | 19.8 | +9% |
+| 16 loops | 20.9 | +15% |
+| 24 loops | 21.8 (the window) | +17% |
+| database round trip 5 ms instead of 2 (+0.134 s a request) | 15.7 | -14% |
+| database round trip 10 ms | 12.5 | -31% |
+| Discord latency 150 ms instead of 100 | 17.2 | -5% |
+| Discord latency 250 ms | 15.5 | -15% |
+
+Reading (inference). **At twelve loops the loops and the window limit together, and the runner's CPU is a third limit.** The 12 loops could offer at most 23.4 requests a second even
+with no sleeping, 7% above the window's 21.8; the window is busy 83% of the time (18.2 of 21.8) and a request waits 0.10 to 0.13 s for its slot because the arrivals are
+bunched, not because the horizon is full. Widening the window by the 0.05 s guard (+5%) or taking the grant check out of it (+16% of window per post) therefore gains 2% to 8% at a fixed
+Z, and less on this runner, where (b) and (d) grow with the rate (the lock selects queue on the application row and the run queue lengthens). More loops raise the offered load
+(+9% at 14, +15% at 16) and, here, the CPU wait with it. The sensitivity to the two assumptions is larger than any lever: each millisecond of database round trip adds 45 ms to a request (44.6 statements),
+so 5 ms costs 14% of the rate and 10 ms 31%, which would move this run's median lateness from 15.7 to about 18 and about 23 minutes by the same arithmetic. The statements a request runs (44.6, about
+ten round trips for each coordinator transaction: begin, settings, route map, seed, lock, reading, store, commit) matter as much as the round trip.
+
+### Moved the wrong way, or not as modelled
+
+- **Wire jitter and witness age rose.** `sent_at` to arrival p50 76 ms (51), p99.9 444 ms (286), max 546 ms (364), spread above the median at p99.9 368 ms (234); the oldest witness read is 2.72 s old at the create (2.34),
+  against the 1.3 to 2.3 s of the limiter's simulation. Each booked read waits about 0.17 s and a pass has five of them, plus the create permit's wait (302 ms p50). The guard held better, not worse: 11 of 30,080 windows at the ceiling
+  (0.037%, 1028a 0.129%), because booked slots are 45.8 ms apart by construction; the delay difference p99.9 is 143 ms and the maximum 206 ms against a slack of 100 ms.
+- **The duty cycle did not rise**: 0.78 (0.80). The lane is active from second 6 to second 51 of each minute: a cold start of about 6 s on a loaded runner, then a 50 s budget. The 56 s cell is the lever.
+- **Read-backs** (above).
+- **The booked horizon is shallow** and the requests above 25 at the mock are 7: five are the mock's own processing order, two wire jitter, none the coordinator.
+- **Hosted runs that lost data**: Fdb once (above).
+
+### The 56-second lane loop (S1-lane56)
+
+The 56-second cell (S1-lane56, run 40705094663, tree 02fd679b, harness 3bbc344c) was still running when this section was written; its numbers are added below when it lands.
+
+<!-- /booking-1028c -->

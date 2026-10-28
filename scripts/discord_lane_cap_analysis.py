@@ -1619,6 +1619,30 @@ def launch_gates(result):
                 if waited >= 60 else 'The application budget right after the run (no delayed probe in this scenario)')
         _line(rows, 'budget_restored', name, last.get('admitted') == capacity if capacity else None, text,
               '%s of %s' % (capacity, capacity))
+    # Owner reply 16 (D-16): what the coordinator let leave must stay at or under the ceiling; the count of requests above it
+    # as the mock sees them arrive is REPORTED, not a failure. Both are printed, the second never softened.
+    admissions = (result.get('ceiling') or {}).get('coordinatorAdmissions') or {}
+    jitter = result.get('wireJitter') or {}
+    wire = admissions.get('wire') or {}
+    stamped = wire.get('peakTrailingSecond') if wire.get('peakTrailingSecond') is not None else jitter.get('sendPeakTrailingSecond')
+    stamped_calendar = wire.get('peakCalendarSecond') if wire.get('peakCalendarSecond') is not None else jitter.get('sendPeakCalendarSecond')
+    ceiling = (result.get('ceiling') or {}).get('policyCeiling') or 25
+    _line(rows, 'coordinator_stamped_ceiling',
+          'Coordinator-stamped sends (sent_at, the instant the coordinator let a request leave) in any trailing second (owner reply 16, D-16)',
+          None if stamped is None else stamped <= ceiling,
+          'not measurable here (no admissions export)' if stamped is None else 'most in a trailing second %s, in a calendar second %s' % (
+              stamped, stamped_calendar), '<= %s' % ceiling)
+    above = (result.get('ceiling') or {}).get('aboveTwentyFiveAll')
+    if above is not None:
+        by = jitter.get('aboveCeilingBy') or {}
+        rows.append({'id': 'arrival_above_ceiling',
+                     'name': 'Requests above %s in a trailing second as they arrive at the mock (owner reply 16, D-16: REPORTED, not a failure)' % ceiling,
+                     'expected': 'report',
+                     'measured': '%s requests (peak in a trailing second %s)%s' % (
+                         _count(above), (result.get('ceiling') or {}).get('peakTrailingSecondAll'),
+                         ('; by cause: the coordinator had sent more than %s %s, wire jitter %s, the mock\'s processing order %s, not paired %s' % (
+                             ceiling, by.get('coordinator', 0), by.get('wire', 0), by.get('mock', 0), by.get('unpaired', 0))) if by or jitter else ''),
+                     'verdict': 'REPORTED'})
     permits = result.get('permits')
     if permits is None:
         _line(rows, 'permits_unused', 'Create permits that died unused', None, 'no create permit in the admissions export', '0')
