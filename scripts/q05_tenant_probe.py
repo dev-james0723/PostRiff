@@ -850,6 +850,7 @@ def build_matrix(disc, config, flags):
             body={"action": "p2_refresh", "payload": {}, "expectedRevision": d_o.revision},
             mutation=True, expected=("200",)))
 
+    cases.extend(build_channel_cases(disc, config))
     cases.extend(build_sender_cases(disc, config))
     return cases
 
@@ -932,6 +933,86 @@ def _sender_clear(fingerprint):
     return {"reset": True, "fingerprint": fingerprint, "confirmed": True}
 
 
+CHANNEL_ROUTES = (
+    # (case id stem, method, path tail, kind, blast, scope, owner control that is the deferred differential)
+    ("channel_verify", "POST", "verify", "write", "state", "ws_scope", "control.channel_verify"),
+    ("channel_verify", "POST", "verify", "write", "state", "idor", None),
+    ("creator_info", "GET", "creator-info", "read", "", "ws_scope", None),
+    ("picture", "GET", "picture", "read", "", "ws_scope", None),
+    ("history_preview", "POST", "posts", "write", "inert", "ws_scope", None),
+    ("refresh_authorization", "POST", "refresh-authorization", "write", "state", "ws_scope", None),
+)
+
+
+def build_channel_cases(disc, config):
+    """Per-connection channel routes: verify (through the victim's workspace: the gate, with the victim owner's
+    own verify as the deferred differential; through the attacker's workspace: the credential lookup), and
+    creator-info, picture, history preview and refresh-authorization as workspace-scope denies. Every case
+    is compared with a never-existing id (workspace for the gate, connection for the lookup)."""
+    cases = []
+
+    def route(ws, conn, tail):
+        return f"/api/workspaces/{ws}/channels/{conn}/{tail}"
+
+    for attacker in ("A", "B"):
+        victim = OTHER[attacker]
+        a_ws, v_ws, d_v = config.workspace[attacker], config.workspace[victim], disc[victim]
+        arrow = f"{attacker}->{victim}"
+        vconn = (d_v.installations or d_v.connections or [None])[0]
+        for stem, method, tail, ck, blast, scope, control in CHANNEL_ROUTES:
+            cid = f"{ck}.{scope}.{stem}.{arrow}"
+            ws_ph = f"<{victim}.workspace>" if scope == "ws_scope" else f"<{attacker}.workspace>"
+            tmpl = f"/api/workspaces/{ws_ph}/channels/<{victim}.connection>/{tail}"
+            if not vconn:
+                cases.append(_not_built(cid, method, tmpl, arrow, ck, blast, victim,
+                                        "no discord connection discovered for victim"))
+                continue
+            twin = (route(NONEXISTENT_WORKSPACE, vconn, tail) if scope == "ws_scope"
+                    else route(a_ws, NONEXISTENT_CONNECTION["bot"], tail))
+            cases.append(Case(cid, method, tmpl, arrow, ck, blast,
+                              route(v_ws if scope == "ws_scope" else a_ws, vconn, tail), attacker,
+                              body={} if method == "POST" else None, mutation=(method == "POST"),
+                              victim_key=victim, scope=scope, twin_path=twin,
+                              deferred=f"{control}.{victim}" if control else None))
+    for owner in ("A", "B"):
+        d_o, o_ws = disc[owner], config.workspace[owner]
+        oconn = (d_o.installations or d_o.connections or [None])[0]
+        cid, tmpl = f"control.channel_verify.{owner}", f"/api/workspaces/<{owner}.workspace>/channels/<{owner}.connection>/verify"
+        if not oconn:
+            cases.append(_not_built(cid, "POST", tmpl, "control", "control", "", owner,
+                                    "owner has no discord connection to verify"))
+        else:
+            # the owner's own verify reads Discord (about five requests) and records the result: a control,
+            # run after the attack phase
+            cases.append(Case(cid, "POST", tmpl, "control", "control", "", route(o_ws, oconn, "verify"), owner,
+                              body={}, mutation=True, expected=("200",)))
+    return cases
+
+
+PREREQUISITE_NOTE = "build prerequisite: sender-name switch or webhook route is off"
+
+
+def _sender_prerequisite(disc, absent):
+    """One named case for the build the sender-name cases need: the master switch and the webhook route ON and an
+    incoming-webhook connection in each account. Without it a gate run fails with this one message instead of
+    a row of anonymous NOT RUN cases."""
+    c = Case("prerequisite.sender_names", "-", "(sender-name switch, webhook route, one webhook per account)",
+             "control", "control", "", None, None, expected=("on",), scope="prerequisite")
+    if all(absent.values()):
+        return _not_applicable(c.cid, c.method, c.template, "control", "control", "", None,
+                               "sender-name route not served by this build")
+    lacking = [k for k in ("A", "B") if absent[k] or (disc[k].sender_feature and (
+        not disc[k].webhooks or any(p.get("namesOn") is False for p in disc[k].sender.values())))]
+    if not lacking and any(disc[k].sender_feature is None for k in ("A", "B")):
+        # no Discord connection at all in an account: nothing to read the settings from (fresh accounts)
+        return _not_built(c.cid, c.method, c.template, "control", "control", "", None,
+                          "no discord connection discovered to read the sender-name settings from")
+    c.prereq_ok = not lacking
+    c.prereq_note = PREREQUISITE_NOTE + (f" (or account(s) {', '.join(lacking)} have no incoming-webhook connection)"
+                                         if lacking else "")
+    return c
+
+
 def build_sender_cases(disc, config):
     """Sender-name cases. Attacks (cross-tenant, mixed ids, other members of the same workspace,
     malformed ids) run in the attack phase and never reach the provider; the owner controls — which on
@@ -940,6 +1021,7 @@ def build_sender_cases(disc, config):
     cases = []
     absent = {k: disc[k].sender_feature is False for k in ("A", "B")}
     na_why = "sender-name route not served by this build"
+    cases.append(_sender_prerequisite(disc, absent))
 
     def route(ws, conn):
         return f"/api/workspaces/{ws}/channels/{conn}/{SENDER_ROUTE}"
@@ -965,8 +1047,10 @@ def build_sender_cases(disc, config):
                 (f"read.sender.idor.{kind}.{arrow}", "GET", t_idor, "read", "", "idor", a_ws, None, None),
                 (f"write.sender.idor.{kind}.{arrow}", "POST", t_idor, "write", "state", "idor", a_ws,
                  STALE_SENDER_BODY, None),
-                # the victim's REAL current fingerprint, replayed: only isolation can stop it (no owner
-                # differential: the owner's identical request would succeed and rename)
+                # the victim's REAL current fingerprint, replayed. The fingerprint also binds the member who
+                # read it, so without the gate this replay would still fail at the fingerprint compare (409);
+                # the case proves the GATE stops it first (403). No owner differential: the owner's identical
+                # request would succeed and rename.
                 (f"write.sender.replay_ws_scope.{kind}.{arrow}", "POST", t_ws, "write", "state", "ws_scope",
                  v_ws, "victim-fingerprint", None),
             ) + ((
@@ -1162,24 +1246,62 @@ def _full_discovery(config):
     return disc
 
 
-def expected_case_ids(config):
-    """The FIXED full set of case ids the matrix produces when every victim object is discovered.
-    Gate mode fails if any of these is missing from an actual run (M4)."""
+def _full_matrix(config):
+    """The matrix as it is when every victim object is discovered and every role principal is given."""
     saved, saved_tokens = dict(config.victim_oauth_state), dict(config.token)
     config.victim_oauth_state = {"A": "state-a", "B": "state-b"}
     for key in ("A", "B"):
         for role in ROLE_KEYS:
             config.token[f"{key}.{role}"] = config.token.get(f"{key}.{role}") or "role-token"
     try:
-        return {c.cid for c in build_matrix(_full_discovery(config), config, _FullFlags())}
+        return build_matrix(_full_discovery(config), config, _FullFlags())
     finally:
         config.victim_oauth_state = saved
         config.token = saved_tokens
 
 
+def expected_case_ids(config):
+    """The FIXED full set of case ids the matrix produces when every victim object is discovered.
+    Gate mode fails if any of these is missing from an actual run (M4)."""
+    return {c.cid for c in _full_matrix(config)}
+
+
+def case_manifest(config):
+    """Every row a complete run reports, as (case id, kind, blast, scope): the full matrix plus the two
+    no-side-effect snapshots. docs/q05/case-manifest.tsv is this list (python scripts/q05_tenant_probe.py
+    --print-manifest); a test compares the two, and a gate request pins the row count."""
+    rows = [(c.cid, c.kind, c.blast, c.scope or "") for c in _full_matrix(config)]
+    rows += [(f"snapshot.no_side_effect.{k}", "control", "", "") for k in ("A", "B")]
+    return sorted(rows)
+
+
 # --------------------------------------------------------------------------- #
 # Execution and verdicts
 # --------------------------------------------------------------------------- #
+def apply_deferred(cases):
+    """A refusal whose differential is a named owner control (run after the attack phase) counts only once
+    that control PASSED; otherwise the refusal is INCONCLUSIVE (the owner may be stopped by the same check)."""
+    by_id = {c.cid: c for c in cases}
+    for c in cases:
+        if c.kind in ("read", "write") and c.deferred and c.verdict == "PASS":
+            control = by_id.get(c.deferred)
+            if control is None or control.verdict != "PASS":
+                c.verdict = "INCONCLUSIVE"
+                c.note = f"deferred owner differential {c.deferred} did not pass"
+
+
+def missing_cases_case(config, cases):
+    """A FAIL case listing every expected case id absent from this run, or None when none is."""
+    missing_ids = sorted(expected_case_ids(config) - {c.cid for c in cases})
+    if not missing_ids:
+        return None
+    mc = Case("matrix.missing_cases", "-", "(fixed expected list)", "control", "control", "",
+              None, None, expected=("complete",))
+    mc.verdict, mc.observed = "FAIL", "missing"
+    mc.note = f"{len(missing_ids)} expected case id(s) absent from the run: " + ",".join(missing_ids)
+    return mc
+
+
 def gated_reason(case, flags):
     """Return a reason string if this case is intentionally gated off, else None."""
     if case.kind == "write" and not flags.allow_writes:
@@ -1203,6 +1325,14 @@ def error_code(obj):
 
 
 def run_case(client, case, disc, flags):
+    if case.scope == "prerequisite" and not case.needs:
+        case.observed = "on" if case.prereq_ok else "off"
+        if case.prereq_ok:
+            case.verdict = "PASS"
+        else:
+            case.verdict = "NOT_RUN" if flags.smoke else "FAIL"
+            case.note = ("undiscovered:" if flags.smoke else "") + case.prereq_note
+        return
     if case.needs:
         case.verdict = "NOT_RUN"
         case.note = ("not-applicable:" if getattr(case, "not_applicable", False)
@@ -1275,14 +1405,14 @@ def run_case(client, case, disc, flags):
         return
     _score_attack(client, case, status, text, obj, err, markers, inconclusive)
     if case.verdict == "PASS" and case.twin_path:
-        _check_twin(client, case, status, err, error_code(obj), inconclusive, obj=obj, elapsed=elapsed)
+        _check_twin(client, case, status, err, error_code(obj), inconclusive, obj=obj, elapsed=elapsed, text=text)
 
 
 TIMING_PAIRS = 2          # extra alternating (victim id, never-existing id) pairs for a sender-name GET twin
 TIMING_MARGIN = 0.025     # seconds: every victim-id answer slower than every twin answer by more than this fails
 
 
-def _check_twin(client, case, status, err, code, inconclusive, obj=None, elapsed=None):
+def _check_twin(client, case, status, err, code, inconclusive, obj=None, elapsed=None, text=None):
     """The same request at an id that never existed must get the same answer: the same status, error and
     code, and (JSON) the same whole body, so no extra field, reason or retry time can tell the two apart.
     For a sender-name GET the timing is compared too: a few alternating pairs, and the case fails only if
@@ -1299,7 +1429,7 @@ def _check_twin(client, case, status, err, code, inconclusive, obj=None, elapsed
         case.verdict, case.note = "FAIL", "the never-existing-id twin reached the provider"
         return
     if (t_status, error_body(t_obj, t_text), error_code(t_obj)) != (status, err, code) or (
-            isinstance(obj, dict) and obj != t_obj):
+            isinstance(obj, dict) and obj != t_obj) or (obj is None and t_obj is None and text != t_text):
         case.verdict = "FAIL"
         case.note = "existence oracle: the answer for the victim's id differs from a never-existing id"
         return
@@ -1307,10 +1437,10 @@ def _check_twin(client, case, status, err, code, inconclusive, obj=None, elapsed
         return
     v_times = [elapsed]
     for _ in range(TIMING_PAIRS):
-        for path, times in ((case.path, v_times), (case.twin_path, t_times)):
+        for path, times, first in ((case.path, v_times, (status, obj)), (case.twin_path, t_times, (t_status, t_obj))):
             r_status, _r_text, r_obj = client.request("GET", path, case.token_key)
             times.append(getattr(client, "last_elapsed", None))
-            if (r_status, r_obj) != (status, obj):
+            if (r_status, r_obj) != first:
                 case.verdict, case.note = "FAIL", "existence oracle: a repeated answer differs"
                 return
     if any(not isinstance(t, float) for t in v_times + t_times):
@@ -1348,7 +1478,11 @@ def run_sender_sequence(client, steps, flags):
     st, _t, prof = client.request("GET", path, tok)
     if st != 200 or not isinstance(prof, dict) or not isinstance(prof.get("fingerprint"), str):
         return fail_all(steps, "could not read the owner's own sender profile (INCONCLUSIVE)")
-    old_fp, original = prof["fingerprint"], prof.get("savedName") or prof.get("name")
+    old_fp = prof["fingerprint"]
+    # The name to restore: the saved override, or None when there is none (contract v2 reports savedName;
+    # a first connection starts without one). None is restored with the contract's "clear" (reset), never by
+    # saving the webhook's own name as an override.
+    original = prof.get("savedName") if "savedName" in prof else (prof.get("name") or None)
     renamed = f"Q05 renamed {owner}"
     st, _t, body = client.request("POST", path, tok, body=_sender_post(old_fp, renamed), mutation=True)
     save.observed = str(st)
@@ -1369,12 +1503,16 @@ def run_sender_sequence(client, steps, flags):
         replay.verdict = "FAIL"
         replay.note = ("an old fingerprint was accepted, or the name changed" if st == 200 or not unchanged
                        else f"stale replay answered {st} (expected the stale-settings 409) (INCONCLUSIVE)")
-    if not (isinstance(now_prof, dict) and isinstance(now_prof.get("fingerprint"), str) and isinstance(original, str)
-            and original):
+    if not (isinstance(now_prof, dict) and isinstance(now_prof.get("fingerprint"), str)
+            and (original is None or (isinstance(original, str) and original))):
         return fail_all([restore], "could not restore the original name (INCONCLUSIVE)")
-    st, _t, obj = client.request("POST", path, tok, body=_sender_post(now_prof["fingerprint"], original), mutation=True)
+    body = (_sender_clear(now_prof["fingerprint"]) if original is None
+            else _sender_post(now_prof["fingerprint"], original))
+    st, _t, obj = client.request("POST", path, tok, body=body, mutation=True)
     restore.observed = str(st)
-    if st == 200 and isinstance(obj, dict) and obj.get("name") == original:
+    restored = obj.get("savedName") if isinstance(obj, dict) and "savedName" in obj else (
+        obj.get("name") if isinstance(obj, dict) else None)
+    if st == 200 and isinstance(obj, dict) and (restored == original or (original is None and not restored)):
         restore.verdict = "PASS"
     else:
         fail_all([restore], f"restoring the original name answered {st} (INCONCLUSIVE)")
@@ -1571,8 +1709,11 @@ def write_markdown(path, cases, summary, flags, config):
     lines.append("")
     lines.append("| case | method | route template | dir | kind | blast | expected | observed | verdict | note |")
     lines.append("|---|---|---|---|---|---|---|---|---|---|")
+    def cell(value):
+        return ("" if value is None else str(value)).replace("|", "\\|").replace("\n", " ")
     for c in cases:
-        r = case_record(c)
+        r = {k: cell(v) for k, v in case_record(c).items()}
+        r["expected"] = cell("/".join(c.expected))
         lines.append("| {case} | {method} | `{route}` | {direction} | {kind} | {blast} | "
                      "{expected} | {observed} | {verdict} | {note} |".format(**r))
     lines.append("")
@@ -1595,7 +1736,7 @@ def summarize(cases, smoke=False):
     s = {k: 0 for k in ("total", "passed", "failed", "not_run_gated", "undiscovered",
                          "controls_passed", "controls_failed", "reads", "writes",
                          "blast_state", "blast_send", "blast_inert", "inconclusive",
-                         "not_applicable", "local_only", "sender_cases", "sender_passed")}
+                         "not_applicable", "local_only", "sender_cases", "sender_passed", "unscored")}
     for c in cases:
         s["total"] += 1
         if c.kind == "read":
@@ -1612,6 +1753,8 @@ def summarize(cases, smoke=False):
             s["sender_cases"] += 1
             if c.verdict == "PASS":
                 s["sender_passed"] += 1
+        if c.verdict not in ("PASS", "FAIL", "INCONCLUSIVE", "NOT_RUN"):
+            s["unscored"] += 1           # a case that ended without a verdict (a swallowed error): the run fails
         if c.verdict == "PASS":
             s["passed"] += 1
             if c.kind == "control":
@@ -1638,13 +1781,16 @@ def summarize(cases, smoke=False):
     # objects some cases need: undiscovered cases are still reported loudly as NOT RUN, they just
     # do not fail the exit. A FAIL or anything INCONCLUSIVE always fails, in any mode.
     s["smoke"] = bool(smoke)
-    ok = s["failed"] == 0 and s["inconclusive"] == 0 and (smoke or s["undiscovered"] == 0)
+    ok = (s["failed"] == 0 and s["inconclusive"] == 0 and s["unscored"] == 0
+          and (smoke or s["undiscovered"] == 0))
     s["exit"] = 0 if ok else 1
     return s
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Q-05 cross-tenant isolation probe")
+    parser.add_argument("--print-manifest", action="store_true",
+                        help="print the case manifest (id, kind, blast, scope per line) and exit")
     parser.add_argument("--dry-run", action="store_true",
                         help="print the matrix and coverage without sending anything")
     parser.add_argument("--allow-writes", action="store_true",
@@ -1665,6 +1811,14 @@ def main(argv=None):
     flags = Flags(args)
 
     config = Config(os.environ)
+
+    if args.print_manifest:
+        placeholder = Config({"Q05_BASE_URL": "http://127.0.0.1:9", "Q05_TOKEN_A": "a", "Q05_TOKEN_B": "b",
+                              "Q05_WORKSPACE_A": "<A.workspace>", "Q05_WORKSPACE_B": "<B.workspace>"})
+        print("case\tkind\tblast\tscope")
+        for row in case_manifest(placeholder):
+            print("\t".join(row))
+        return 0
 
     if args.dry_run:
         # Build the matrix with empty discovery so the shape is visible; objects
@@ -1698,10 +1852,18 @@ def main(argv=None):
     if config.workspace["A"] == config.workspace["B"]:
         print("refusing: Q05_WORKSPACE_A and Q05_WORKSPACE_B are the same workspace", file=sys.stderr)
         return 2
+    if config.token["A"] == config.token["B"]:
+        print("refusing: Q05_TOKEN_A and Q05_TOKEN_B are the same token", file=sys.stderr)
+        return 2
     sub_a, sub_b = jwt_sub(config.token["A"]), jwt_sub(config.token["B"])
     if sub_a and sub_b and sub_a == sub_b:
         print("refusing: the two access tokens belong to the same user (identical sub claim)", file=sys.stderr)
         return 2
+    config.same_user_checked = bool(sub_a and sub_b)
+    if not config.same_user_checked:
+        # never silent: opaque tokens (the local harness) carry no subject; the workspace guard still applies
+        print("note: the same-user guard could not read a subject from the tokens (opaque tokens); "
+              "identical tokens and identical workspaces are still refused", file=sys.stderr)
 
     budget = Budget(args.budget)
     client = Client(config, budget, args.delay)
@@ -1747,13 +1909,7 @@ def main(argv=None):
 
     # 5b. deferred owner differentials: a workspace-scope or same-workspace refusal only counts once the
     #     route's owner control (run above, after the attacks) proved the owner gets past those checks.
-    by_id = {c.cid: c for c in cases}
-    for c in attack_cases + late_cases:
-        if c.deferred and c.verdict == "PASS":
-            control = by_id.get(c.deferred)
-            if control is None or control.verdict != "PASS":
-                c.verdict = "INCONCLUSIVE"
-                c.note = f"deferred owner differential {c.deferred} did not pass"
+    apply_deferred(cases)
 
     # 6. no-side-effect verdict per tenant (attacks must not change the victim)
     snapshot_cases = []
@@ -1780,14 +1936,7 @@ def main(argv=None):
         snapshot_cases.append(sc)
 
     # M4: every expected case id must be present (a forgotten NOT RUN placeholder is a bug).
-    missing_ids = sorted(expected_case_ids(config) - {c.cid for c in cases})
-    extra_cases = []
-    if missing_ids:
-        mc = Case("matrix.missing_cases", "-", "(fixed expected list)", "control", "control", "",
-                  None, None, expected=("complete",))
-        mc.verdict, mc.observed = "FAIL", "missing"
-        mc.note = f"{len(missing_ids)} expected case id(s) absent from the run: " + ",".join(missing_ids)
-        extra_cases.append(mc)
+    extra_cases = [mc for mc in (missing_cases_case(config, cases),) if mc is not None]
 
     all_cases = attack_cases + late_cases + control_cases + snapshot_cases + extra_cases
     summary = summarize(all_cases, smoke=flags.smoke)

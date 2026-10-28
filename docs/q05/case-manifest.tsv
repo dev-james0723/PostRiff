@@ -1,0 +1,162 @@
+case	kind	blast	scope
+control.audit.A	control		
+control.audit.B	control		
+control.channel_verify.A	control		
+control.channel_verify.B	control		
+control.channels.A	control		
+control.channels.B	control		
+control.destinations.A	control		
+control.destinations.B	control		
+control.identity_guilds.A	control		
+control.identity_guilds.B	control		
+control.members.A	control		
+control.members.B	control		
+control.sender.audit_leak.A	control		audit_leak
+control.sender.audit_leak.B	control		audit_leak
+control.sender.get.bot.A	control		
+control.sender.get.bot.B	control		
+control.sender.get.webhook.A	control		
+control.sender.get.webhook.B	control		
+control.sender.post_stale.bot.A	control		
+control.sender.post_stale.bot.B	control		
+control.sender.post_stale.webhook.A	control		
+control.sender.post_stale.webhook.B	control		
+control.sender.reject_name.reserved.A	control		
+control.sender.reject_name.reserved.B	control		
+control.sender.restore.A	control	state	sequence
+control.sender.restore.B	control	state	sequence
+control.sender.save.A	control	state	sequence
+control.sender.save.B	control	state	sequence
+control.sender.stale_replay.A	control	state	sequence
+control.sender.stale_replay.B	control	state	sequence
+control.write_refresh.A	control	inert	
+control.write_refresh.B	control	inert	
+control.ws_get.A	control		
+control.ws_get.B	control		
+prerequisite.sender_names	control		prerequisite
+read.idor.destinations.A->B	read		idor
+read.idor.destinations.B->A	read		idor
+read.idor.identity_guilds.A->B	read		idor
+read.idor.identity_guilds.B->A	read		idor
+read.idor.private_review.A->B	read		idor
+read.idor.private_review.B->A	read		idor
+read.sender.idor.bot.A->B	read		idor
+read.sender.idor.bot.B->A	read		idor
+read.sender.idor.webhook.A->B	read		idor
+read.sender.idor.webhook.B->A	read		idor
+read.sender.malformed.dots.A	read		malformed
+read.sender.malformed.dots.B	read		malformed
+read.sender.malformed.long.A	read		malformed
+read.sender.malformed.long.B	read		malformed
+read.sender.malformed.quote.A	read		malformed
+read.sender.malformed.quote.B	read		malformed
+read.sender.malformed.short.A	read		malformed
+read.sender.malformed.short.B	read		malformed
+read.sender.malformed.ws.A	read		malformed
+read.sender.malformed.ws.B	read		malformed
+read.sender.mixed.A->B	read		ws_scope
+read.sender.mixed.B->A	read		ws_scope
+read.sender.role.admin.bot.A	read		role
+read.sender.role.admin.bot.B	read		role
+read.sender.role.admin.webhook.A	read		role
+read.sender.role.admin.webhook.B	read		role
+read.sender.role.connmgr.bot.A	read		role
+read.sender.role.connmgr.bot.B	read		role
+read.sender.role.connmgr.webhook.A	read		role
+read.sender.role.connmgr.webhook.B	read		role
+read.sender.role.editor.webhook.A	read		role
+read.sender.role.editor.webhook.B	read		role
+read.sender.role.removed.webhook.A	read		role
+read.sender.role.removed.webhook.B	read		role
+read.sender.role.viewer.webhook.A	read		role
+read.sender.role.viewer.webhook.B	read		role
+read.sender.ws_scope.bot.A->B	read		ws_scope
+read.sender.ws_scope.bot.B->A	read		ws_scope
+read.sender.ws_scope.webhook.A->B	read		ws_scope
+read.sender.ws_scope.webhook.B->A	read		ws_scope
+read.ws_scope.analytics.A->B	read		ws_scope
+read.ws_scope.analytics.B->A	read		ws_scope
+read.ws_scope.audit.A->B	read		ws_scope
+read.ws_scope.audit.B->A	read		ws_scope
+read.ws_scope.channels.A->B	read		ws_scope
+read.ws_scope.channels.B->A	read		ws_scope
+read.ws_scope.creator_info.A->B	read		ws_scope
+read.ws_scope.creator_info.B->A	read		ws_scope
+read.ws_scope.export.A->B	read		ws_scope
+read.ws_scope.export.B->A	read		ws_scope
+read.ws_scope.get.A->B	read		ws_scope
+read.ws_scope.get.B->A	read		ws_scope
+read.ws_scope.invitations.A->B	read		ws_scope
+read.ws_scope.invitations.B->A	read		ws_scope
+read.ws_scope.members.A->B	read		ws_scope
+read.ws_scope.members.B->A	read		ws_scope
+read.ws_scope.memory.A->B	read		ws_scope
+read.ws_scope.memory.B->A	read		ws_scope
+read.ws_scope.picture.A->B	read		ws_scope
+read.ws_scope.picture.B->A	read		ws_scope
+snapshot.no_side_effect.A	control		
+snapshot.no_side_effect.B	control		
+write.idor.channel_disconnect.A->B	write	state	idor
+write.idor.channel_disconnect.B->A	write	state	idor
+write.idor.channel_verify.A->B	write	state	idor
+write.idor.channel_verify.B->A	write	state	idor
+write.idor.destination_choose.A->B	write	state	idor
+write.idor.destination_choose.B->A	write	state	idor
+write.idor.destination_remove.A->B	write	state	idor
+write.idor.destination_remove.B->A	write	state	idor
+write.idor.identity_disconnect.A->B	write	state	idor
+write.idor.identity_disconnect.B->A	write	state	idor
+write.send.job_execute_idor.A->B	write	send	idor
+write.send.job_execute_idor.B->A	write	send	idor
+write.send.job_execute_ws_scope.A->B	write	send	ws_scope
+write.send.job_execute_ws_scope.B->A	write	send	ws_scope
+write.sender.idor.bot.A->B	write	state	idor
+write.sender.idor.bot.B->A	write	state	idor
+write.sender.idor.webhook.A->B	write	state	idor
+write.sender.idor.webhook.B->A	write	state	idor
+write.sender.idor_clear.webhook.A->B	write	state	idor
+write.sender.idor_clear.webhook.B->A	write	state	idor
+write.sender.mixed.A->B	write	state	ws_scope
+write.sender.mixed.B->A	write	state	ws_scope
+write.sender.replay_ws_scope.bot.A->B	write	state	ws_scope
+write.sender.replay_ws_scope.bot.B->A	write	state	ws_scope
+write.sender.replay_ws_scope.webhook.A->B	write	state	ws_scope
+write.sender.replay_ws_scope.webhook.B->A	write	state	ws_scope
+write.sender.role.admin.bot.A	write	state	role
+write.sender.role.admin.bot.B	write	state	role
+write.sender.role.admin.webhook.A	write	state	role
+write.sender.role.admin.webhook.B	write	state	role
+write.sender.role.editor.webhook.A	write	state	role
+write.sender.role.editor.webhook.B	write	state	role
+write.sender.role.removed.webhook.A	write	state	role
+write.sender.role.removed.webhook.B	write	state	role
+write.sender.role.viewer.webhook.A	write	state	role
+write.sender.role.viewer.webhook.B	write	state	role
+write.sender.ws_scope.bot.A->B	write	state	ws_scope
+write.sender.ws_scope.bot.B->A	write	state	ws_scope
+write.sender.ws_scope.webhook.A->B	write	state	ws_scope
+write.sender.ws_scope.webhook.B->A	write	state	ws_scope
+write.sender.ws_scope_clear.webhook.A->B	write	state	ws_scope
+write.sender.ws_scope_clear.webhook.B->A	write	state	ws_scope
+write.state_binding.oauth_complete.A->B	write	state	idor
+write.state_binding.oauth_complete.B->A	write	state	idor
+write.ws_scope.approve.A->B	write	state	ws_scope
+write.ws_scope.approve.B->A	write	state	ws_scope
+write.ws_scope.cancel.A->B	write	state	ws_scope
+write.ws_scope.cancel.B->A	write	state	ws_scope
+write.ws_scope.channel_verify.A->B	write	state	ws_scope
+write.ws_scope.channel_verify.B->A	write	state	ws_scope
+write.ws_scope.discord_connect_start.A->B	write	state	ws_scope
+write.ws_scope.discord_connect_start.B->A	write	state	ws_scope
+write.ws_scope.history_preview.A->B	write	inert	ws_scope
+write.ws_scope.history_preview.B->A	write	inert	ws_scope
+write.ws_scope.invite.A->B	write	state	ws_scope
+write.ws_scope.invite.B->A	write	state	ws_scope
+write.ws_scope.member_remove.A->B	write	state	ws_scope
+write.ws_scope.member_remove.B->A	write	state	ws_scope
+write.ws_scope.mutate_mode.A->B	write	state	ws_scope
+write.ws_scope.mutate_mode.B->A	write	state	ws_scope
+write.ws_scope.mutate_refresh.A->B	write	inert	ws_scope
+write.ws_scope.mutate_refresh.B->A	write	inert	ws_scope
+write.ws_scope.refresh_authorization.A->B	write	state	ws_scope
+write.ws_scope.refresh_authorization.B->A	write	state	ws_scope

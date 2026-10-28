@@ -19,6 +19,7 @@ Set Q05_PROBE_PATH to run these tests against another copy of the probe (e.g. an
 import importlib.util
 import json
 import os
+import shutil
 import re
 import tempfile
 import threading
@@ -40,7 +41,7 @@ GATE = {"error": "Workspace unavailable.", "code": "workspace_unavailable"}
 
 
 class FreshHostedFake:
-    def __init__(self, extra_members=None):
+    def __init__(self, extra_members=None, jobs=False):
         self.ws = {"A": "11111111-1111-4111-8111-111111111111", "B": "22222222-2222-4222-8222-222222222222"}
         self.user = {"A": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "B": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}
         self.token = {"A": "fresh-token-a-0123456789abcdef", "B": "fresh-token-b-0123456789abcdef"}
@@ -52,6 +53,8 @@ class FreshHostedFake:
         self.removed = []          # (workspace key, user id) actually removed by an authorized caller
         self.stale_revisions = []  # expectedRevision values that lost the compare-and-swap (owner side)
         self.lock = threading.Lock()
+        self.jobs = jobs           # an approved job in each workspace (the send-blast cases become buildable)
+        self.requests = []         # (caller, method, path) of every request the probe sent
 
     # -- helpers ------------------------------------------------------------ #
     def _who(self, environ):
@@ -71,7 +74,10 @@ class FreshHostedFake:
     def _state(self, key):
         return {"revision": self.revision[key],
                 "state": {"workspace": {"id": self.ws[key]},
-                          "phase2": {"channels": [], "discordIdentityLinks": [], "jobs": [], "reviews": []},
+                          "phase2": {"channels": [], "discordIdentityLinks": [],
+                                     "jobs": ([{"id": f"job-{key.lower()}-0001", "approvalDigest": "d" * 64,
+                                                "state": "scheduled"}] if self.jobs else []),
+                                     "reviews": []},
                           "variants": []}}
 
     # -- WSGI --------------------------------------------------------------- #
@@ -86,6 +92,7 @@ class FreshHostedFake:
         method = environ["REQUEST_METHOD"]
         parts = [p for p in environ.get("PATH_INFO", "").split("/") if p]
         caller = self._who(environ)
+        self.requests.append((caller, method, "/" + "/".join(parts)))
         if caller is None:
             return 401, {"error": "Verified session required."}
         if len(parts) < 3 or parts[:2] != ["api", "workspaces"]:
@@ -147,6 +154,7 @@ class FreshAccounts(unittest.TestCase):
         probe = load_probe()
         base = self.serve(fake)
         out = tempfile.mkdtemp(prefix="q05-fresh-")
+        self.addCleanup(shutil.rmtree, out, True)        # no leftover /tmp/q05-fresh-* (review Q05R2-13)
         env = {"Q05_BASE_URL": base, "Q05_TOKEN_A": fake.token["A"], "Q05_TOKEN_B": fake.token["B"],
                "Q05_WORKSPACE_A": fake.ws["A"], "Q05_WORKSPACE_B": fake.ws["B"]}
         saved = dict(os.environ)
@@ -167,8 +175,23 @@ class FreshAccounts(unittest.TestCase):
                     summary = obj["summary"]
                 else:
                     cases[obj["case"]] = obj
-        md = open(os.path.join(out, "receipt.md")).read()
+        with open(os.path.join(out, "receipt.md")) as fh:
+            md = fh.read()
         return rc, cases, summary, md
+
+    # ---- review Q05R2-5 (S06): the hosted configuration never sends ------------------------------- #
+    def test_hosted_configuration_never_executes_a_job(self):
+        """Writes ON, send flags OFF (exactly the hosted run's arguments), with an approved job discoverable in
+        each workspace: the probe must not issue a single POST .../jobs/<id>/execute, and the send-blast cases
+        must be reported gated."""
+        fake = FreshHostedFake(jobs=True)
+        rc, cases, summary, _md = self.run_probe(fake, "--smoke")
+        executes = [r for r in fake.requests if r[1] == "POST" and r[2].endswith("/execute")]
+        self.assertEqual(executes, [], "the hosted configuration sent a job-execute request")
+        send = [c for c in cases.values() if c["blast"] == "send"]
+        self.assertEqual(len(send), 4, send)
+        for c in send:
+            self.assertEqual((c["verdict"], c["note"].split(" ")[0]), ("NOT_RUN", "gated:send"), c)
 
     # ---- N1 ------------------------------------------------------------------ #
     def test_smoke_run_on_fresh_accounts_passes(self):
