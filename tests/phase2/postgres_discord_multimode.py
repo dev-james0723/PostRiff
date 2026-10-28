@@ -192,7 +192,9 @@ class QualifiedWire(Wire):
     def __call__(self, method, url, **kwargs):
         path = urlsplit(url).path.removeprefix('/api/v10')
         if self.mode == 'permission_removed' and path == '/guilds/' + GUILD + '/members/' + USER:
-            response = {'status': 404, 'body': {}}
+            # Discord's own answer for a user who is no longer a member (unknown member, code 10007). A bare {} is not
+            # Discord's verdict (a proxy or WAF page looks like that), so the worker rightly treats it as a transient answer.
+            response = {'status': 404, 'body': {'message': 'Unknown Member', 'code': 10007}}
         elif method == 'POST' and path.startswith('/webhooks/'):
             with self.post_lock:
                 self.post_count += 1

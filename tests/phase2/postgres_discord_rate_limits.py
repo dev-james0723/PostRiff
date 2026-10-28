@@ -248,7 +248,10 @@ checks.append('batchedscope seed/orderedlock/store:exactly3operations perreserve
 for mode in ('lock-missing','store-count','store-key'):
     limiter,identity,path,policy=setup(permit_ttl_seconds=10)
     trace=[];faulty=SharedPostgresBudget(scope_connection(mode,trace),limiter.application_id,policy=policy)
-    expect_denied(lambda:faulty.reserve('GET',path,identity=identity),RateCoordinatorUnavailable)
+    # The reservation writes the scope states and the admission in ONE statement (_store_and_insert): a short row count
+    # is read as an expired permit, a short wait that rolls everything back; a wrong returned key or a missing lock row
+    # is still a coordinator fault.
+    expect_denied(lambda:faulty.reserve('GET',path,identity=identity),RateDelayed if mode=='store-count' else RateCoordinatorUnavailable)
     template,major=route_identity('GET',path);keys=limiter._keys(identity,_digest(template),major,None)
     with connection() as db:
         assert db.execute('SELECT count(*) FROM public.pr_discord_rate_state WHERE scope_key=ANY(%s::text[])',
@@ -450,11 +453,15 @@ assert limiter.reserve('GET',path,identity=identity)
 expect_denied(lambda:limiter.reserve('GET',path,identity=identity),RateDelayed)
 checks.append('expiry/consume/aliasrace re-readssentrow:smallerbucket3 retains1slot;count and mapping agree,no excesspermit')
 
-limiter,identity,path,policy=setup(unknown_window_seconds=.05)
+# A permit lives as long as the policy's permit_ttl_seconds (no window ends it any more), so the short-life cases ask for the
+# shortest life the policy accepts (0.05 s): the 0.08 s delays below then outlive the permit.
+limiter,identity,path,policy=setup(unknown_window_seconds=.05,permit_ttl_seconds=.05)
 class LateInsert(SharedPostgresBudget):
-    def _insert(self,cur,*args,**kwargs):
+    def _store_and_insert(self,cur,*args,**kwargs):
+        # The admission is written inside the combined store+insert statement (and by _insert only when no scope state
+        # changed); delaying the combined call covers both.
         cur.execute('SELECT pg_sleep(.08)')  # deterministic owned-DB timing, no real API
-        return super()._insert(cur,*args,**kwargs)
+        return super()._store_and_insert(cur,*args,**kwargs)
 late=LateInsert(connection,limiter.application_id,policy=policy)
 error=expect_denied(lambda:late.reserve('GET',path,identity=identity),RateDelayed)
 assert error.rate_cause=='permit_expired' and error.rate_scope_kind=='permit'
@@ -849,10 +856,13 @@ expect_denied(lambda:limiter.reserve_read('POST','/channels/'+path.split('/')[2]
 limiter.note_transport_failure(permit)
 with connection() as db:
     db.execute("UPDATE public.pr_discord_rate_state SET reset_at=clock_timestamp()-interval '1 second' WHERE scope_key=ANY(%s::text[]) AND kind='discovery'",([k for k in limiter._keys(identity,_digest(route_identity('GET',path)[0]),route_identity('GET',path)[1],None) if k.startswith('30:')],))
-expect_denied(lambda:limiter.reserve_read('GET','/channels/'+path.split('/')[2],identity=identity),RateDelayed)
-checks.append('atomic GET admission commits sent state with debit;POST/reuse denied;ambiguous read retains major discovery debit across reset')
+# A transport failure on a READ is resolved at once, as an observed 503 (a read has no effect to be unsure of; commit 6e3ad9af,
+# finding A2): its discovery debit does not outlive the reset. A write (a bound create, a nickname PATCH) stays uncertain and
+# retains the debit; that half is pinned by test_discord_rate_ceiling_postgres.py and test_discord_rate_limits.py.
+assert limiter.reserve_read('GET','/channels/'+path.split('/')[2],identity=identity),'A failed read must not retain its discovery debit'
+checks.append('atomic GET admission commits sent state with debit;POST/reuse denied;a failed read is resolved at once and retains no major discovery debit across reset')
 
-limiter,identity,path,policy=setup(unknown_window_seconds=.05)
+limiter,identity,path,policy=setup(unknown_window_seconds=.05,permit_ttl_seconds=.05)
 late=LateInsert(connection,limiter.application_id,policy=policy)
 expired_read_keys=sorted(limiter._keys(identity,_digest(route_identity('GET',path)[0]),route_identity('GET',path)[1],None))
 with connection() as db:
@@ -903,7 +913,7 @@ def coordinator_snapshot(limiter,identity,path,extra=()):
 # Delay inside the actual scope UPDATE. The frozen permit clock must be
 # checked after storage before admission INSERT; suppressed rows roll back.
 for suppress in (False,True):
-    limiter,identity,path,policy=setup(unknown_window_seconds=.05)
+    limiter,identity,path,policy=setup(unknown_window_seconds=.05,permit_ttl_seconds=.05)
     before=coordinator_snapshot(limiter,identity,path)
     with connection() as db:
         db.execute("""CREATE FUNCTION public.pr_discord_test_scope_write() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -915,14 +925,20 @@ for suppress in (False,True):
         db.execute(sql.SQL('CREATE TRIGGER pr_discord_test_scope_write BEFORE UPDATE ON public.pr_discord_rate_state FOR EACH ROW EXECUTE FUNCTION public.pr_discord_test_scope_write({},{})').format(
             sql.Literal('00:'+_digest(limiter.application_id)),sql.Literal('suppress' if suppress else 'delay')))
     try:
-        error=expect_denied(lambda:limiter.reserve_read('GET',path,identity=identity),RateCoordinatorUnavailable if suppress else RateDelayed)
-        if not suppress:assert error.rate_cause=='permit_expired'
-        assert coordinator_snapshot(limiter,identity,path)==before,'Storage failure committed a debit,mapping or admission'
+        if suppress:
+            expect_denied(lambda:limiter.reserve_read('GET',path,identity=identity),RateCoordinatorUnavailable)
+            assert coordinator_snapshot(limiter,identity,path)==before,'Storage failure committed a debit,mapping or admission'
+        else:
+            # The scope UPDATE and the admission INSERT are ONE statement and its clock is read before the UPDATE runs, so a slow
+            # UPDATE no longer refuses the INSERT; the frozen expiry still ends the permit at its use: nothing can be sent with it.
+            permit=limiter.reserve('GET',path,identity=identity)
+            error=expect_denied(lambda:limiter.consume(permit,'GET',path),RateDelayed)
+            assert error.rate_cause=='permit_expired',error.rate_cause   # consume() names no scope for an expired permit
     finally:
         with connection() as db:
             db.execute('DROP TRIGGER pr_discord_test_scope_write ON public.pr_discord_rate_state')
             db.execute('DROP FUNCTION public.pr_discord_test_scope_write()')
-checks.append('real UPDATE trigger delay expires frozen permit after storage;missing UPDATE row fails closed;both fully roll back scopes,mapping,admission')
+checks.append('real UPDATE trigger delay inside the combined statement:permit is admitted but dead at use(consume refuses permit_expired);missing UPDATE row fails closed and rolls back scopes,mapping,admission')
 
 # Stable reservation reads every guard under the same locks but must not create
 # new heap/index versions for unchanged guards. Renewals and holds still apply.
@@ -944,7 +960,10 @@ assert all(new[1]==old[1]+1 and new[3]=='synthetic-scope-renewal' and new[4]>old
 with connection() as db:
     db.execute('UPDATE public.pr_discord_rate_state SET manual_hold=true WHERE scope_key=%s',(guard_keys[0],))
 before=coordinator_snapshot(limiter,identity,path)
-expect_denied(lambda:limiter.reserve_read('GET',path,identity=identity),RateCoordinatorUnavailable)
+# A hold is a wait for a read (a read has no effect to be unsure of) and a refusal for anything that is reserved to be used later.
+error=expect_denied(lambda:limiter.reserve_read('GET',path,identity=identity),RateDelayed)
+assert error.rate_cause=='hold',error.rate_cause
+expect_denied(lambda:limiter.reserve('GET',path,identity=identity),RateCoordinatorUnavailable)
 assert coordinator_snapshot(limiter,identity,path)==before,'Guard hold bypassed or committed a reservation'
 checks[-1]+=';unchanged guard versions retained,policy renewal stored,held guard blocks without writes'
 
