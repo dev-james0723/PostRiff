@@ -363,3 +363,71 @@ side would count a missing or policy-less coordinator as a pause: in `lane.pause
 leaves (limiter None, degraded, authorization on) and `FlagOffIsTheFrozenBase` unchanged (it pins states that do not pause). An
 expired policy would stay a release for five minutes, as documented, unless the owner wants that quiet too. That is W-02's code
 (`lane.paused()` and its suite); the N-1 fix does not touch it.
+
+**Q21. The bearer budget: the person's own bearer calls on a window of their own (the owner's D-2 option 1; built, 0658c58b).** The
+written budget was "25 requests a second across every credential". Of the 7 requests a post costs, 6 are made with the bot token and
+1, the grant check `GET /oauth2/@me`, with the person's own OAuth bearer, which does not touch the bot's global limit. The owner's
+reply 16 (AUTHORIZATION-RECORD.md, "I approve all") redefines the budget: bot-token requests at most 25 a second, the person's
+bearer calls budgeted separately. Nothing about what is checked changed; only which window the request is charged to.
+
+- **Every call site of a request authorized with a user bearer** (all reach the coordinator through `DiscordProvider._discord_http`
+  with `credential_kind='user'`; `tests/test_discord_rate_bearer.py::CallSites` drives the real helpers and checks the row each is
+  charged to).
+  In the lane's path: (1) the grant check, `GET /oauth2/@me`, once per preflight (`HostedSocial.prepare_discord_dispatch` →
+  `OAuthService.discord_grant_for_worker` → `DiscordConnections.installation_identity` → `_fresh_identity`, fast path →
+  `verified_authorization`): request 1 of the 7, the only bearer call of an ordinary post. (2) When the person's access token is
+  within a minute of its expiry (about once a week per identity) the same step first refreshes it: `POST /oauth2/token` (made with
+  the client secret, so not a bearer call: it stays in the application budget) and then, with the new token, `verified_user`:
+  `GET /oauth2/@me` and `GET /users/@me`. (3) A reply (engagement) and a webhook send run the grant check again before their
+  read-back or verification (`reconcile_discord`, `engagement.py:230`), and the webhook authorizer adds `GET /oauth2/@me` and
+  `GET /users/@me/guilds?limit=200` (`webhooks.owner_permissions`): both are dark (flags off, never run against real Discord).
+  Outside the lane, interactive only: the callback's token exchange verifies with `/oauth2/@me` and `/users/@me`; the server list
+  (`user_guilds`: `/users/@me/guilds`, five pages at most) when an installation starts or the dashboard lists servers; the older
+  `DiscordProvider.exchange` (`/users/@me`). Not bearer calls, so not moved: the bot's reads and creates (`bot`), the client secret's
+  `/oauth2/token` and `/oauth2/token/revoke` (`oauth`) and a webhook's execute and read (`webhook`, the secret is in the URL).
+- **What was built.** `SafetyPolicy` gains `bearer_capacity` and `bearer_window_seconds`, both or neither. Without the pair the policy
+  parses as before and the bearer calls stay in the application budget, so the policy in force today is still valid and the way
+  back is to issue one (`discord_rate_policy.py generate --no-bearer`). With it, a request of kind `user` is charged to a second row
+  (scope key `01:`; its kind is `policy`, so no schema changes and no migration) whose window counts only those admissions, and every
+  other credential to the application row (`00:`), whose window then counts those alone. Both are exact sliding windows with the
+  same guard (0.05 s), the same booking, the same slot kept for callers that cannot wait, the same published `remaining`/`reset`
+  and the same randomized brute-force proof, on each class's own wire times. A bearer request also locks the application row (it
+  sorts first) to see its hold and embargo without being charged: the runbook's stop, `UPDATE ... SET manual_hold = true WHERE kind
+  = 'policy'`, sets both rows and stops both classes, and a hold on the bearer row alone stops only the bearer calls. One statement
+  reads the newest admissions of both classes and the class picks its own from them (a filter inside the scan would read the whole
+  history of a class that has been quiet).
+- **Why 10 a second.** The lane makes one bearer call for every 6 bot requests of a post, so at the bot's full rate (23.8 stamped a
+  second) it needs 4.0 a second of them. The bearer budget has 10: 2.5 times that, with (10 - 1) / 1.05 = 8.6 a second of bookings
+  (one slot of the ten stays for a web caller, as for the bot), so twelve loops that all open a step at the same instant wait about
+  a second for their grant check once, and the bearer horizon does not fill at the lane's steady 4 a second. A smaller budget saves
+  nothing the lane can use (the model gives the same posts a minute from 8 up); a larger one is a raise nobody asked for. We hold
+  no figure from Discord for bearer calls; their route limits are learned per user from the headers like every other route, and the
+  invalid-request budget (401, 403, 429 outside a shared limit) stays one budget for the whole egress address, whichever class made
+  the request. The policy tool
+  refuses a bearer budget above 10 a second as a FAIL (a raise is a new review), warns when the two together pass 80 percent of the
+  bot limit or when 10 is lowered below what the lane needs, and says what a policy without the pair leaves out. As for the bot, a
+  renewal can only tighten the stored row; a deliberate raise is an operator's UPDATE of `limit_count` on the `01:` row.
+- **Per post.** 6 requests with the bot token (four reads, the create and the read-back; charged to 25 a second) and 1 with the bearer
+  (the grant check; charged to 10): 7.0, and 7.2 with the bot identity pair (S1 measured 7.18).
+- **What it changes, in the model of Q19** (12 shards, claim 0.8 s, five seeds; the model is the thread-and-event model fitted to S1).
+  Booking with guard 0.05 s and one budget: 179.0 posts a minute, 7.0 requests, 20.9 a second. With the bearer budget: 195.1 posts a
+  minute, 7.04 requests (6.04 bot, 1.0 bearer), 22.9 a second in all (19.6 the bot's, 3.3 the bearer's), 7.0 lock statements, 0
+  releases. The gain is the grant check no longer waiting for a bookable slot of the bot's window (booked waits 4.5 a post fall to
+  3.4), not more bot requests: the bot class stays under its own ceiling. On the S1 shape, with the model's ratio on the measured
+  126.5 posts a minute (195.1 / 143.6 = 1.36): 172 posts a minute, median line 14.5 minutes, p95 27.6, longest about 32, against
+  the plan's 12 / 25 / 40 (the floor at 6 bot requests and 23.8 a second is 10.5 minutes; with one budget it was 12.3). With the
+  56-second lane, 12 percent more loop time: about 13.0 / 24.7 / 29. [model; the capacity run measures it] A model run with a
+  bearer budget of 6 gave 219 posts a minute, an artifact of how twelve loops fall into step that I could not explain and do not rely
+  on; 8, 10, 15 and 25 give 195 to 197.
+- **For the monitors (names).** Health payload: `config.policy.bearerCapacity` and `bearerWindowSeconds` (null without a bearer
+  budget); `coordinator.guards.bearer` (present only with a bearer budget) with the fields of `guards.policy` (`present`, `hold`,
+  `blocked`, `circuit`, `embargoSeconds`, `remaining`, `limit`, `windowSeconds`, `remainingRatio`, `resetSeconds`,
+  `unchangedSeconds`, `policyDaysLeft`); `coordinator.traffic.admissions60s` is now the bot's class alone while a bearer budget
+  exists and `coordinator.traffic.bearerAdmissions60s` the bearer's, so `saturation_warn` divides the first by the application
+  capacity as before and a second alert divides the second by `bearerCapacity` (the SQL twin, `docs/ops/discord-ops-snapshot.sql`, says the same;
+  a real-PostgreSQL test compares them). `remaining` is the room of each horizon, 0 when its class would be refused.
+  `monitoring.sql` M3 and M6 give each class.
+- **What is not covered.** The webhook mode's own sends (kind `webhook`) stay in the application budget; whether they count toward
+  Discord's global limit is Q10. A bearer call that Discord rate limits (429 with scope `user`) embargoes that user's route as any
+  route; nothing is added for it. Interactive callers keep their behaviour in both classes (an immediate answer or a refusal with
+  the exact wait, one slot of each window kept free for them).

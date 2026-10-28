@@ -49,17 +49,22 @@ FROM jobs CROSS JOIN observed;
 -- and the average. The busiest second may reach twice the policy capacity where two fixed windows meet; above
 -- that is a defect. Counted by WIRE time (sent_at, else reserved_at): a booked admission (OPEN-QUESTIONS Q19) is
 -- stored with the instant it is to be sent, up to a second after the one it was made, and that instant is what the
--- ceiling counts.
+-- ceiling counts. Each class has a ceiling of its own since the bearer budget (OPEN-QUESTIONS Q21): the person's own bearer
+-- calls (credential_kind 'user'; 10 a second in the reviewed policy) and every other credential (25). One row each; with a
+-- policy that has no bearer pair, add the two rows together and compare the sum with 25.
 WITH seconds AS (
-    SELECT date_trunc('second', coalesce(sent_at, reserved_at)) AS second, count(*) AS requests
+    SELECT date_trunc('second', coalesce(sent_at, reserved_at)) AS second, credential_kind = 'user' AS bearer, count(*) AS requests
     FROM public.pr_discord_request_admissions
     WHERE coalesce(sent_at, reserved_at) > now() - interval '10 minutes'
-    GROUP BY 1
+    GROUP BY 1, 2
 )
-SELECT coalesce(max(requests), 0) AS busiest_second,
+SELECT bearer,
+       coalesce(max(requests), 0) AS busiest_second,
        round(coalesce(sum(requests), 0) / 600.0, 2) AS average_per_second,
-       count(*) FILTER (WHERE requests > 25) AS seconds_above_25
-FROM seconds;
+       count(*) FILTER (WHERE requests > CASE WHEN bearer THEN 10 ELSE 25 END) AS seconds_above_cap
+FROM seconds
+GROUP BY bearer
+ORDER BY bearer;
 
 -- M4. Posts waiting on the shared budget (released unsent with a rate wait): how many and how far out.
 WITH sample AS MATERIALIZED (
@@ -91,22 +96,23 @@ WHERE state IN ('sent', 'uncertain')
 GROUP BY is_publish
 ORDER BY is_publish;
 
--- M6. The four application-wide coordinator rows every loop reads before it claims (policy, bot global, bot
--- credential, invalid-request budget). A manual hold on the policy row is the runbook's stop; while any hold is set,
--- every loop ends with stoppedBy operator_hold or coordinator_hold. An active block or circuit is slept out.
--- policy_remaining_now: since booking (Q19) the room the booked horizon still has as of the last admission, not the
--- window's free slots; 0 exactly when a booking would be refused (see M8). A lane that fills the budget reads about half
--- of the 24 bookable, because its twelve loops hold at most twelve bookings at once.
-SELECT kind,
+-- M6. The application-wide coordinator rows every loop reads before it claims (policy, the bearer budget's, bot global, bot
+-- credential, invalid-request budget). A manual hold on the policy row is the runbook's stop (`WHERE kind = 'policy'` sets
+-- the bearer budget's row too); while any hold is set, every loop ends with stoppedBy operator_hold or coordinator_hold.
+-- An active block or circuit is slept out. The bearer budget's row (OPEN-QUESTIONS Q21) is a policy row told by its scope key.
+-- room_now: since booking (Q19) the room the booked horizon still has as of the last admission, not the window's free
+-- slots; 0 exactly when a booking would be refused (see M8). A lane that fills the budget reads about half of the 24
+-- bookable, because its twelve loops hold at most twelve bookings at once.
+SELECT CASE WHEN scope_key LIKE '01:%' THEN 'bearer' ELSE kind END AS row_kind,
        count(*) FILTER (WHERE manual_hold) AS holds,
        count(*) FILTER (WHERE blocked_until > now()) AS blocks_active,
        count(*) FILTER (WHERE circuit_until > now()) AS circuits_open,
-       min(remaining) FILTER (WHERE kind = 'policy') AS policy_remaining_now,
+       min(remaining) FILTER (WHERE kind = 'policy') AS room_now,
        max(greatest(blocked_until, circuit_until)) AS latest_embargo_until
 FROM public.pr_discord_rate_state
 WHERE kind IN ('policy', 'global', 'credential', 'invalid')
-GROUP BY kind
-ORDER BY kind;
+GROUP BY 1
+ORDER BY 1;
 
 -- M7. Discord posts held in the last hour because their approval expired before they could be sent (the event the
 -- worker writes at claim; counts only). Rising means the queue outlasts approvals: see OPEN-QUESTIONS.md Q1.

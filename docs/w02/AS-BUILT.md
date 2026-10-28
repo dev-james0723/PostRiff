@@ -549,7 +549,7 @@ minutes later. The hold of the shared bot credential after a 401 (`kind = 'crede
 The `discord.lane.completed` log lines (12 a minute; sum `posted`, `verified`, `held`, `uncertain`, `rateDelayed`,
 `leaseLost` per minute; any `stoppedBy` other than `idle`, `time_budget` or `rate_wait`), and `docs/w02/monitoring.sql`:
 M1 oldest due lag, M2 leases expired but still owned, M3 busiest second, M4 rate waits, M5 unanswered admissions (Q3),
-M6 holds on the four rows, M7 posts held for an expired approval. The launch monitors Q1 to Q13 still apply. The lane's
+M6 holds on the application-wide rows (the four, and the bearer budget's), M7 posts held for an expired approval. The launch monitors Q1 to Q13 still apply. The lane's
 `bookedWaits` and `bookedSeconds` and the health payload's `coordinator.booking` show the booking ("Booking", below).
 The lines' `held` (like the minute cron's `discordWorker.counters.held`) misses a post held by a rate-wait release,
 one whose wait outlasts its approval: `discord_worker.release_unsent` sets the state before the event that counts it
@@ -626,7 +626,8 @@ platform before any claim is made to customers.
 `rate_limits.py` (`SharedPostgresBudget`) changed on the limiter branch; the lane is unchanged. What a reader of this
 document should know:
 
-- **The 25 per second is exact and counts wire times.** The application row admits when the admissions occupying a slot
+- **The 25 per second is exact and counts wire times** (the bot's class: with the bearer budget, "The bearer budget", below, it
+  counts every credential but the person's own bearer). The application row admits when the admissions occupying a slot
   plus those held are fewer than the cap. An admission occupies a slot from its wire time (`sent_at`: a read when it is
   admitted, a create when its permit is consumed; else its reservation) for one span, the window plus
   `SLOT_GUARD_SECONDS` (0.05 s since the owner's D-16; it was 0.1 s). A permit not used yet, and a request sent but never
@@ -772,6 +773,54 @@ the gate against a 429, a hold and a circuit; a dying process; `consume` before 
 reservation still ends the invocation inside budget plus one step, `outlook`); `tests/test_discord_lane_booking_postgres.py`
 (12 and 16 loops at a full window: about one pass a post, nothing posted twice; an approval ending inside a pass; a loop killed
 inside a booked sleep; no sleep between the seal and the consume; a pause during booked waits).
+
+## The bearer budget
+
+*What and why.* The written budget was 25 requests a second across every credential. Of the 7 requests a post costs, 6 use the bot
+token and 1, the grant check `GET /oauth2/@me`, the person's own OAuth bearer, which does not touch the bot's global limit. The owner
+(reply 16, AUTHORIZATION-RECORD.md) redefined the budget: bot-token requests at most 25 a second, the person's bearer calls
+budgeted separately (D-2 option 1). Q21 has the call sites, the size, the model and the monitors' names.
+
+*The policy.* `SafetyPolicy` carries `bearer_capacity` and `bearer_window_seconds`, both or neither; the reviewed policy is 10 a
+second in a 1-second window (`scripts/discord_rate_policy.py` generates it, refuses more than 10 a second as a FAIL because a
+raise needs a review, warns when the two budgets together pass 80 percent of the bot limit or when the bearer budget is smaller
+than the lane needs). A policy without the pair parses and behaves exactly as before: the bearer calls stay in the application
+budget. That is also the way back: `generate --no-bearer`, applied with a new deployment like every policy.
+
+*Who is charged where.* `rate_limits.BEARER_KIND` (`user`: a request authorized with the person's own bearer) is charged to the
+bearer row, scope key `01:`; its kind is `policy`, which the table already allows, so there is no migration. Every other credential
+(`bot`, `oauth`: the client secret's token calls, `webhook`) is charged to the application row, `00:`. Each window counts only its
+own class's admissions (`_window_state(klass)`): one statement takes the newest admissions of both classes, so it stays bounded
+whatever the history, and picks the class's from them. The `held` count (permits not used yet, requests never answered) is per
+class too. Everything else is the code of the application window, unchanged and run with the row's own cap and window: the exact
+sliding rule, the guard, booking and its horizon, the slot kept for a caller that cannot wait, the quotes, the published
+`remaining` and `reset`, the policy renewal that can only tighten.
+
+*The hold, locks and the rest of the scope.* A bearer request locks the application row too (the keys sort `00:` before `01:`, the
+global lock order) but is only looked at there: its hold and embargo apply, it is neither refused by the row's count nor debited.
+So the runbook's stop, `UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy'`, sets both rows and stops both
+classes; a hold on the application row alone stops both; a hold on the bearer row alone (`... WHERE scope_key = '01:' || ...`) stops
+only the bearer calls. An observation locks the same rows. The invalid-request budget (`20:`), the route and resource rows and a
+credential's rows are shared as before: a 401, 403 or 429 counts against the egress address's invalid budget whichever class made
+the request.
+
+*What the application row now means.* `remaining`, `reset`, `lane.outlook` and `admissions60s` are the bot class's. The lane's
+outlook reads the bearer row too and waits while its horizon is full (every step opens with the grant check). The bearer row is
+seeded by the first bearer request under a policy that carries the budget; a bot request does not seed or touch it.
+
+*Health payload and SQL twin.* `config.policy.bearerCapacity` and `bearerWindowSeconds` (null without a bearer budget);
+`coordinator.guards.bearer` (only with one; the fields of `guards.policy`); `coordinator.traffic.admissions60s` counts the
+other credentials alone while a bearer budget exists and `bearerAdmissions60s` the bearer's. `docs/ops/discord-ops-snapshot.sql`
+says the same, the bearer row told by its scope key (a real-PostgreSQL test compares them). `monitoring.sql` M3 and M6 give each class.
+
+*Evidence.* `tests/test_discord_rate_bearer.py` (offline): a bearer request is charged to its row and only looks at the other; a full
+class leaves the other whole and each quotes its own window; both classes saturated at once give each exactly its cap (18 and 12 in
+six seconds at caps 3 and 2); the hold; booking and the reserve per class; a policy without the pair is what it was; every call
+site through the real helpers; and, in `test_discord_rate_booking.py`, randomized lives with two classes (the ceiling per class over
+its own wire times, each quote the brute force's on the class's window, each row what a booking of its class would find).
+`tests/test_discord_rate_bearer_postgres.py` (real PostgreSQL): thirty-six threads on both classes at once, polling and booking, with
+the busiest closed second per class on the database clock at its own cap and each class getting most of its own rate; the
+runbook's hold; the stored rows; the health payload and its SQL twin. The F429, B4 and N-1 tests are unchanged.
 
 ## Retention of the coordinator's admissions
 
