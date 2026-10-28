@@ -175,6 +175,17 @@ class ExactCeilingOnPostgres(unittest.TestCase):
             return dict(db.execute('SELECT state,count(*) FROM public.pr_discord_request_admissions WHERE application_key=%s '
                                    'GROUP BY state', (stack.key,)).fetchall())
 
+    def circuits(self, stack, *, open_only=False):
+        """(circuits set, longest failure streak) over the scope rows THIS application's admissions touched. The tests of a
+        class share one cluster, so a count over the whole table would see the circuit another test opened on purpose."""
+        condition = 'circuit_until>clock_timestamp()' if open_only else 'circuit_until IS NOT NULL'
+        with self.cluster.connect(autocommit=True) as db:
+            count, streak = db.execute(
+                f'SELECT count(*) FILTER (WHERE {condition}),coalesce(max(error_streak),0) FROM public.pr_discord_rate_state '
+                'WHERE scope_key IN (SELECT unnest(scope_keys) FROM public.pr_discord_request_admissions WHERE application_key=%s)',
+                (stack.key,)).fetchone()
+        return count, streak
+
     # --- the old failure, made deterministic ------------------------------------------------------------------------
 
     def test_a_late_burst_and_a_burst_just_after_it_cannot_double_the_ceiling(self):
@@ -489,8 +500,7 @@ class ExactCeilingOnPostgres(unittest.TestCase):
         other = stack.limiter.reserve_read('GET', '/channels/740000000000009101/messages/740000000000009103',
                                            identity=stack.identity)           # another message of the channel is read
         stack.limiter.observe(other, {'status': 404, 'headers': {}})
-        with self.cluster.connect(autocommit=True) as db:
-            open_circuits = db.execute('SELECT count(*) FROM public.pr_discord_rate_state WHERE circuit_until>clock_timestamp()').fetchone()[0]
+        open_circuits, _streak = self.circuits(stack, open_only=True)
         self.assertEqual(open_circuits, 1, 'only the nickname route of the server that refused is closed')
 
     # --- the leak that used to stall everything for good ------------------------------------------------------------
@@ -564,10 +574,7 @@ class ExactCeilingOnPostgres(unittest.TestCase):
                     stack.provider._bot('GET', '/guilds/%s/channels' % stack.tenants[0].guild)
         states = self.states(stack)
         self.assertEqual(states, {'observed': 5})
-        with self.cluster.connect(autocommit=True) as db:
-            circuits, streaks = db.execute('SELECT count(*) FILTER (WHERE circuit_until IS NOT NULL),max(error_streak) '
-                                           'FROM public.pr_discord_rate_state').fetchone()
-        self.assertEqual((circuits, streaks), (0, 0), 'a refusal for size is not an outage')
+        self.assertEqual(self.circuits(stack), (0, 0), 'a refusal for size is not an outage')
 
     def test_requests_whose_observation_failed_or_whose_process_died_stop_holding_slots(self):
         """Twenty-five reads admitted and never observed (observe() timed out on its lock, or the process died after the
