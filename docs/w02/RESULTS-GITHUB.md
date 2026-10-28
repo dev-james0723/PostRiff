@@ -408,24 +408,24 @@ The same 5,000 posts: the hot workspace holds N, the other 5,000 - N are spread 
 
 | | S2-100 | S2-300 | S2-1000 |
 |---|---|---|---|
-| Hot workspace sent | 100 of 100 | 292 of 300 (the rest held when the approvals lapsed) | not finished |
-| Hot workspace lateness median / p95 / max (min) | 41.27 / 43.39 / 43.57 | 47.76 / 58.86 / never | not finished |
-| Hot workspace first / last create (min after T) | 13.74 / 43.57 | 3.32 / 59.83 | not finished |
-| Hot create rate from T to its last create (per second; share of the physical 1 per second) | 0.038 (4%) | 0.078 (8%) | not finished |
-| Hot create rate while it was the only workspace with work | median 21 per minute (range 13 to 23) over 5 minutes | median 15 per minute (range 8 to 19) over 19 minutes | not finished |
-| Document as seeded | 586,649 bytes (212,689 stored); idle read-modify-write 0.044 / 0.041 / 0.042 s | 1,625,357 bytes (606,967 stored); idle read-modify-write 0.105 / 0.104 / 0.103 s | not finished |
-| Document at the end of the run | 880,285 bytes (371,917 stored); idle read-modify-write 0.068 / 0.068 / 0.076 s | 2,512,875 bytes (1,085,831 stored); idle read-modify-write 0.159 / 0.158 / 0.157 s | not finished |
-| The application's UPDATE of a workspace document | mean 4.6 ms, max 304 ms, 28,291 calls | mean 10.6 ms, max 1025 ms, 30,537 calls | not finished |
-| Small workspaces (at most 5 posts): all sent by (min); their lateness median / p95 / max (min) | 37.35; 17.18 / 33.27 / 37.35 | 38.61; 17.40 / 33.45 / 38.61 | not finished |
-| Standard lateness lines for all posts, median / p95 / max (min) | 17.45 / 33.83 / 43.57 | 18.46 / 41.30 / never | not finished |
-| Drain, T to the last verified (min) | 44.67 | 62.48 | not finished |
-| Requests above 25 in a trailing second (peak by send time) | 10 (25) | 41 (25) | not finished |
-| Duplicates, misroutes; permits died unused; open admissions | 0, 0; 0; none | 0, 0; 0; none | not finished |
+| Hot workspace sent | 100 of 100 | 292 of 300 (the rest held when the approvals lapsed) | 236 of 1000 (the rest held when the approvals lapsed) |
+| Hot workspace lateness median / p95 / max (min) | 41.27 / 43.39 / 43.57 | 47.76 / 58.86 / never | never / never / never |
+| Hot workspace first / last create (min after T) | 13.74 / 43.57 | 3.32 / 59.83 | 13.39 / 59.90 |
+| Hot create rate from T to its last create (per second; share of the physical 1 per second) | 0.038 (4%) | 0.078 (8%) | 0.049 (5%) |
+| Hot create rate while it was the only workspace with work | median 21 per minute (range 13 to 23) over 5 minutes | median 15 per minute (range 8 to 19) over 19 minutes | median 12 per minute (range 8 to 12) over 18 minutes |
+| Document as seeded | 586,649 bytes (212,689 stored); idle read-modify-write 0.044 / 0.041 / 0.042 s | 1,625,357 bytes (606,967 stored); idle read-modify-write 0.105 / 0.104 / 0.103 s | 5,260,348 bytes (1,986,815 stored); idle read-modify-write 0.259 / 0.249 / 0.248 s |
+| Document at the end of the run | 880,285 bytes (371,917 stored); idle read-modify-write 0.068 / 0.068 / 0.076 s | 2,512,875 bytes (1,085,831 stored); idle read-modify-write 0.159 / 0.158 / 0.157 s | 6,084,825 bytes (2,420,429 stored); idle read-modify-write 0.291 / 0.294 / 0.289 s |
+| The application's UPDATE of a workspace document | mean 4.6 ms, max 304 ms, 28,291 calls | mean 10.6 ms, max 1025 ms, 30,537 calls | mean 12.8 ms, max 1618 ms, 28,686 calls |
+| Small workspaces (at most 5 posts): all sent by (min); their lateness median / p95 / max (min) | 37.35; 17.18 / 33.27 / 37.35 | 38.61; 17.40 / 33.45 / 38.61 | 35.13; 15.66 / 30.15 / 35.13 |
+| Standard lateness lines for all posts, median / p95 / max (min) | 17.45 / 33.83 / 43.57 | 18.46 / 41.30 / never | 19.67 / never / never |
+| Drain, T to the last verified (min) | 44.67 | 62.48 | 80.52 |
+| Requests above 25 in a trailing second (peak by send time) | 10 (25) | 41 (25) | 97 (25) |
+| Duplicates, misroutes; permits died unused; open admissions | 0, 0; 0; none | 0, 0; 0; none | 0, 0; 4; none |
 
 **Reading (inference).**
 
-- The 1023b failure (the 3,000-post workspace sent nothing; the permit died before the seal) is gone at these sizes: no permit died and every create the hot workspace was given went out.
-- The document does not bind at 100 to 300 posts. One read-modify-write of it costs 0.04 to 0.16 s with nothing else running, and the application's own UPDATE of a workspace document averages 5 to 11 ms with a worst case of 0.3 to 1.0 s under load, against 2 to 3 ms and 40 ms for a one-post workspace.
-- What binds is the serial service of one workspace. A workspace is served one job per claim and one leased job at a time, and claims go round robin over the workspaces, so the hot workspace gets about one post per round while 2,000 workspaces have work (about one post every ten minutes) and only after the small workspaces are done (minute 38 to 39) does it get a loop to itself: a median of 21 (S2-100) and 15 (S2-300) posts per minute, 0.25 to 0.35 per second, one step of about 3 to 4 s per post while the other eleven loops idle. That is 25 to 35% of the physical one per second per channel, so the proposed target of 80% is not met at either size, and a workspace of 300 posts needs about 20 minutes after the others are done: 8 of its 300 lapsed at 60 minutes.
-- The small workspaces are not slowed by the hot one beyond the S1 effect (their lateness median 17.2 to 17.4 min against 19.8 in S1), but every workspace of at most five posts finished only at 37 to 39 minutes against the standard's 15.
+- The 1023b failure (the 3,000-post workspace sent nothing; the permit died before the seal) is gone at these sizes: the hot workspace sends, and no permit died at 100 and 300 posts (4 of 4,240 did at 1,000, after the seal, while a 6 MB document is rewritten).
+- The document does not bind at 100 to 300 posts but starts to at 1,000. One read-modify-write of it costs 0.04 to 0.16 s with nothing else running at 100 and 300 posts and 0.25 to 0.29 s at 1,000 (5.3 to 6.1 MB of JSON), and the application's own UPDATE of a workspace document averages 5, 11 and 13 ms with a worst case of 0.3, 1.0 and 1.6 s under load, against 2 to 3 ms and 40 ms for a one-post workspace. At 1,000 posts the hot workspace's rate alone is 12 per minute, one post every 5 s, below the 15 to 21 of the smaller ones, and 4 of its create permits died after the seal.
+- What binds is the serial service of one workspace. A workspace is served one job per claim and one leased job at a time, and claims go round robin over the workspaces, so the hot workspace gets about one post per round while 2,000 workspaces have work (about one post every ten minutes) and only after the small workspaces are done (minute 38 to 39) does it get a loop to itself: a median of 21 (S2-100), 15 (S2-300) and 12 (S2-1000) posts per minute, 0.2 to 0.35 per second, one step of about 3 to 5 s per post while the other eleven loops idle. That is 20 to 35% of the physical one per second per channel, so the proposed target of 80% is not met at any size, and a workspace of 300 posts needs about 20 minutes after the others are done: 8 of its 300 lapsed at 60 minutes, and of 1,000 posts only 236 were sent in the hour (764 held when their approvals lapsed), against the 16.7 minutes the one create per second of its channel would allow.
+- The small workspaces are not slowed by the hot one beyond the S1 effect (their lateness median 15.7 to 17.4 min against 19.8 in S1), but every workspace of at most five posts finished only at 35 to 39 minutes against the standard's 15.
 <!-- /s2-sizes -->
