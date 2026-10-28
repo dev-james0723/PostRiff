@@ -121,11 +121,11 @@ the real coordinator (1,500 reads, before any vacuum): 3.7 to 6.5 KB a request w
 and 1.7). At the sustained 22.7 requests a second that is 1.96 million rows and about 5 GB a day, 150 GB over the policy's 31 days;
 at the nominal 25, 2.16 million and 5.5 GB (the unvacuumed figures would say 8 to 14 GB). The coordinator needs a read's row only
 until it is answered and its slot has freed (the window and 0.1 s, or 30 s more if it was never answered); the ops snapshot reads
-the newest 20,000; a publication's row is the audit trail for a day.
+the newest 20,000; a publication's row is the audit trail for two days (the owner's approved window; first drafted as one).
 
 Built: `SharedPostgresBudget.purge_settled()` deletes, a bounded batch at a time, what the coordinator can no longer count and
 nothing else. Reads (`NOT is_publish`) that are `observed` or `blocked` and were reserved more than an hour ago, publications the
-same after a day, and nothing that settled in the last ten minutes (a late reconciliation of an old row finds it again). Never an
+same after two days, and nothing that settled in the last ten minutes (a late reconciliation of an old row finds it again). Never an
 unresolved row (`reserved`, `sealed`, `sent`, `uncertain`: the evidence a person reviews, an expired unused permit included),
 never a scope row (windows, embargoes, circuits, holds), never another application's. 2,000 rows a statement, oldest first, `FOR
 UPDATE SKIP LOCKED`, three rounds a call, one purger at a time (a transaction-level advisory lock; the others return `busy`),
@@ -142,10 +142,10 @@ last vacuum.
 Sizes with retention (measured; rows updated when they settle and deleted when they age out, with vacuums as autovacuum would):
 4.4 to 8.6 KB for each live read and 5.6 to 12.8 KB for each live publication, the dead versions that updates and deletes leave
 until vacuum included (the low end with frequent vacuums, the high end with one every three batches of a fifth of the table). The table then
-holds the last hour of reads and the last day of publications. At 100 posts a minute (6 reads and a publication a post) that is
-36,000 reads and 144,000 publications, 1.0 to 2.2 GB; at the ceiling of 22.7 a second (3.2 posts) 70,000 and 280,000, 1.9 to 4.2
-GB; four fifths of it is the publications, so `PURGE_PUBLICATION_SECONDS` is the knob (a further day costs 0.8 to 1.8 GB at 100
-posts a minute). One million synthetic rows (84 percent reads, 14 percent publications, half of each past its retention, 2 percent
+holds the last hour of reads and the last two days of publications. At 100 posts a minute (6 reads and a publication a post) that
+is 36,000 reads and 288,000 publications, 1.8 to 4.0 GB; at the ceiling of 22.7 a second (3.2 posts) 70,000 and 560,000, 3.4 to 7.8
+GB; nine tenths of it is the publications, so `PURGE_PUBLICATION_SECONDS` is the knob (each day costs 0.8 to 1.8 GB at 100 posts a
+minute; with one day the figures were 1.0 to 2.2 GB and 1.9 to 4.2 GB). One million synthetic rows (84 percent reads, 14 percent publications, half of each past its retention, 2 percent
 unresolved; 2,468 MB with indexes): a call, three rounds of 2,000 reads, takes 0.21 s (71 ms a round) against the 5 s statement
 timeout; the other 646,000 eligible rows go in 16.2 s (about 40,000 a second); a call with nothing to do 27 ms (a connection and two
 index probes); 200,000 rows, the test default, 0.28 to 0.32 s and 15 to 24 ms. The partial index of migration 142

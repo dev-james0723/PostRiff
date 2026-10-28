@@ -5,11 +5,11 @@
 -- with their indexes once vacuumed (3.7 to 6.5 KB before any vacuum), about 5 GB a day, 150 GB in the policy's 31 days, at the
 -- 22.7 requests a second the reviewed 25 sustains. SharedPostgresBudget.purge_settled() now deletes, a bounded batch at a time,
 -- the settled rows (observed, blocked) the coordinator can no longer count: those that are not publications after an hour, the
--- publications after a day. The table then holds 1.0 to 2.2 GB at 100 posts a minute and 1.9 to 4.2 GB at the ceiling (4.4 to
--- 8.6 KB for each live read, 5.6 to 12.8 KB for each live publication, the dead versions of updates and deletes included;
--- docs/w02/OPEN-QUESTIONS.md, Q16). This partial index is how it finds them, oldest first, without a scan: one entry (32 bytes)
--- is added when a row settles and removed with it, and it holds nothing else (the unresolved rows have their own index,
--- migration 124).
+-- publications after two days (the owner's approved window). The table then holds 1.8 to 4.0 GB at 100 posts a minute and 3.4 to
+-- 7.8 GB at the ceiling (4.4 to 8.6 KB for each live read, 5.6 to 12.8 KB for each live publication, the dead versions of
+-- updates and deletes included; docs/w02/OPEN-QUESTIONS.md, Q16). This partial index is how it finds them, oldest first, without
+-- a scan: one entry (32 bytes) is added when a row settles and removed with it, and it holds nothing else (the unresolved rows
+-- have their own index, migration 124).
 --
 -- Cost. A plain CREATE INDEX takes a SHARE lock on the table for the build (inserts and updates wait, reads do not): on the
 -- near-empty table of the first deployment that is milliseconds, with a million rows a few seconds (the statement timeout

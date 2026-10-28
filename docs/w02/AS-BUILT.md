@@ -774,10 +774,11 @@ branch, e6aa7db8; sizes, timings and the privilege question are in OPEN-QUESTION
 count and nothing else:
 
 - **What goes.** Reads (`NOT is_publish`) in state `observed` or `blocked` reserved more than `PURGE_READ_SECONDS` (3,600) ago;
-  publications the same after `PURGE_PUBLICATION_SECONDS` (86,400); a row that settled in the last `PURGE_SETTLE_GRACE_SECONDS`
-  (600) stays whatever its age. The coordinator counts a row for one span after its wire time (1.1 s) and an unanswered one for
-  the horizon (31 s); the health payload's windows are at most 15 minutes and a sender-name claim ends 15 minutes after its permit;
-  nothing reads a created post's row again after its approval's hour, and a day lets a person read yesterday's incident.
+  publications the same after `PURGE_PUBLICATION_SECONDS` (172,800, two days: the owner's approved window); a row that settled in
+  the last `PURGE_SETTLE_GRACE_SECONDS` (600) stays whatever its age. The coordinator counts a row for one span after its wire time
+  (1.1 s) and an unanswered one for the horizon (31 s); the health payload's windows are at most 15 minutes and a sender-name claim
+  ends 15 minutes after its permit; nothing reads a created post's row again after its approval's hour, and two days let a person
+  read the incident of the day before yesterday.
 - **What never goes.** An unresolved row (`reserved`, `sealed`, `sent`, `uncertain`), an expired unused permit included: it is the
   evidence a person reviews. Any scope row (windows, embargoes, circuits, holds). Another application's admissions.
 - **How.** 2,000 rows a statement, oldest first, `FOR UPDATE SKIP LOCKED`, `PURGE_ROUNDS` (3) a call, one short transaction a round
