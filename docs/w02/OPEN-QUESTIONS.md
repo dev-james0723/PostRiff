@@ -440,3 +440,71 @@ bearer calls budgeted separately. Nothing about what is checked changed; only wh
   Discord's global limit is Q10. A bearer call that Discord rate limits (429 with scope `user`) embargoes that user's route as any
   route; nothing is added for it. Interactive callers keep their behaviour in both classes (an immediate answer or a refusal with
   the exact wait, one slot of each window kept free for them).
+
+**Q22. Where the round trips under the application row's lock come from, and what cutting them would gain (the independent
+review's NEW-1 (c); analysis only, nothing built).** The review measured 21.5 admissions a second at 0 ms of statement latency,
+13.2 at 5 ms, about 8 at 10 and about 4 at 20 (`poc/pg_mix.py --rtt-ms`), inferred 12 to 15 serialized round trips per admission,
+and noted that the median of G5 rests on an assumed 2 ms. The numbers below were taken on this shared box (load 3 to 6 on 4
+cores), so the fixed part is larger than a quiet machine's; the slopes and the shape are what to read.
+
+- **The round trips** (learned route, an ordinary GET; counted with a statement logger on this head). A reservation is 7: three
+  before the lock (the timeouts' `set_config`, the route map, the seed of missing rows), the lock statement (`FOR UPDATE` on the
+  application, credential, global and route rows) and three under it: `tick` (the clock and the newest wires of the window), the
+  store (the changed state rows and the admission, already one statement, `_store_and_insert`) and COMMIT. An ordinary answer's
+  observation is 12: five before the lock, the lock statement (`FOR SHARE` on the guards, `FOR UPDATE` on the route rows) and six
+  under it: the admission row with the clock, the pending admissions of the alias, the store of the route rows, the mapping with
+  the admissions that join the alias, the admission's outcome and COMMIT (7 on a cold route, which adds the pending count). That
+  is 19 round trips an admission, 9 of them under a lock; the 10 before it cost the caller latency, not throughput.
+- **What the 9 cost** (one client behind a TCP stand-in for the pooler that splits the latency between the two directions; median
+  of 40 calls; from the return of the lock statement to the return of COMMIT, in ms):
+
+  | latency, ms | 0 | 2 | 5 | 10 | 20 |
+  |---|---|---|---|---|---|
+  | a reservation holds the lock | 8.3 | 23.2 | 41.4 | 59.2 | 101.0 |
+  | an observation holds it | 8.9 | 32.2 | 56.5 | 84.0 | 148.8 |
+
+  Between 10 and 20 ms each millisecond of latency adds 4.2 to a reservation's hold and 6.5 to an observation's: 3 and 6
+  statements, and a COMMIT that costs more than a statement (the log flush and the pooler's wait for the server; not separated).
+  An admission therefore holds the lock for 10.8 round trips plus a fixed 17 ms, and 1000 / (17 + 10.8 x latency) gives 26, 14,
+  8 and 4 admissions a second at 2, 5, 10 and 20 ms, against the review's 13.2, about 8 and about 4 with 12 to 24 loops. That is the
+  review's "12 to 15 round trips": 10.8 plus a fixed part that is large against 5 ms and small against 20. The lane needs 22.9
+  admissions a second (Q21), which leaves 43.7 ms for a reservation and its observation: the lock is the limit above about 2.4 ms.
+- **What could leave the lock or merge** (a what-if: the harness waives the latency of the statements that would be merged into
+  another; 12 booking loops in one process, cap 25, two 12-second rounds each; admissions a second):
+
+  | | round trips | 2 ms | 5 ms | 10 ms |
+  |---|---|---|---|---|
+  | as built | 10.8 | 20.3, 20.9 | 13.9, 13.4 | 7.8, 7.7 |
+  | (a) read the admission row and the alias's pending admissions in one statement | 9.8 | 21.4, 22.0 | 14.9, 14.5 | 8.6, 9.2 |
+  | (b) and write the route rows, the mapping and the outcome in one | 7.8 | 22.2, 22.1 | 17.2, 17.0 | 10.4, 10.9 |
+  | (c) and send COMMIT in the same flight as the last statement | 5.8 | 22.0, 22.2 | 21.2 (the other round hit a lock timeout) | 13.3, 14.1 |
+
+  The model predicts 14.1, 15.2, 17.9 and 21.7 at 5 ms and 8.0, 8.7, 10.5 and 13.3 at 10: within 5 percent. At 2 ms the window
+  itself (about 22 a second) is the limit once the lock is cut, and the lock as built costs 6 to 9 percent of it. Not movable: the
+  lock statement, `tick` (the window is read under the lock) and the stores; the seed and the route map are already before the
+  lock; a reservation's `tick` and store cannot merge, because Python decides the slot between them. (a) and (b) have a precedent
+  in `_store_and_insert`; the difficulty is that the observation's writes are checked one rowcount at a time and the mapping
+  statement and the outcome update can reach the same row (a permit that joins the alias in the observation that maps it), so a
+  merge needs a CASE per row and a RETURNING list: a rewrite of the statements the reviewers have just read. (c) is valid only if
+  the last statement is harmless when its guard fails, and it needs a pooler that pipelines (not tried against Supavisor).
+  The lever is the observation's SHARE lock, 6.5 of the 10.8 round trips: without it a section is a reservation's 4.2 and the
+  model gives 34 admissions a second at 5 ms and 20 at 10. What a hold, an embargo and the exclusive retry rely on it for is a
+  design review of its own.
+- **Where the lane stands.** The section may be 43.7 ms for 22.9 admissions a second. As built that allows a latency of 2.4 ms,
+  with (a) and (b) 3.4, with (a) to (c) 4.6, without the observation's lock about 8. The earlier PostRiff deployment records name
+  Vercel `iad1` (`docs/design/social-trend-intelligence/production-baseline.json`) and Supabase `us-east-1`
+  (`docs/postriff-phase-2/hosted-deployment-preparation.md`), the same metro, so 1 to 3 ms through the transaction pooler is
+  likely, but nobody has measured it and I could not check how production is placed. At 2 ms the lock and the window are about
+  equally tight; above 3 the lane is lock-bound: 14 admissions a second at 5 ms, 2 posts a second, about 119 posts a minute
+  against the model's 195.
+- **Recommendation: not built.** (a) and (b) gain 24 percent at 5 ms, 7 percent at 2, and rewrite the hottest statements after
+  the review has read them. First measure the per-statement latency from a lane function to the pooler (the capacity run's own, or
+  five `SELECT 1` and a COMMIT in the health snapshot, p50 and max: about 20 read-only lines in `ops.snapshot`, offered, not
+  built). At 2 ms or less leave everything as it is; between 2.4 and 4.6 build (a), then (b); above 5 the observation's lock has to
+  go. A slow lock is only a lower rate: the ceiling is a property of the stamps, not of the lock, and since NEW-1 a lock timeout
+  is a 1.5-second wait for the caller, not a release of the post for 300 seconds.
+- **NEW-1 under the load that exposed it** (24 loops, 20 ms, +100 ms to connect, 12 seconds; the review: 4 of 4 runs ended with
+  `rate_coordinator_degraded`, 3 to 358 fast-fail errors, 4.0 to 4.8 admissions a second). On this head: 0 of 2 degraded, 0 and 1
+  errors (one lock timeout in a direct `observe` of the harness, which the provider would have asked again), 4.5 and 4.7
+  admissions a second, 8 and 12 reservations told to wait 1.5 s. The rate is the same, because the lock sets it; what changed is
+  what a timeout means.
