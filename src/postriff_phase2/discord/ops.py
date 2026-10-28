@@ -349,6 +349,41 @@ def read_retention(cur, now, context):
             'lastVacuumAgeSeconds': _age(now, vacuumed)}
 
 
+_BOOKING = """WITH observed AS MATERIALIZED (SELECT clock_timestamp() AS at),
+sample AS MATERIALIZED (
+    SELECT is_publish, reserved_at, sent_at, coalesce(sent_at, reserved_at) AS wire
+    FROM public.pr_discord_request_admissions ORDER BY request_seq DESC LIMIT %(limit)s)
+SELECT count(*) FILTER (WHERE s.wire > o.at),
+       extract(epoch FROM max(s.wire) FILTER (WHERE s.wire > o.at))::double precision,
+       count(*) FILTER (WHERE NOT s.is_publish AND s.sent_at > s.reserved_at + interval '5 milliseconds'
+                          AND s.reserved_at > o.at - make_interval(secs => %(window)s)),
+       coalesce(sum(extract(epoch FROM s.sent_at - s.reserved_at)) FILTER (WHERE NOT s.is_publish
+                  AND s.sent_at > s.reserved_at + interval '5 milliseconds'
+                  AND s.reserved_at > o.at - make_interval(secs => %(window)s)), 0)::double precision,
+       coalesce(max(extract(epoch FROM s.sent_at - s.reserved_at)) FILTER (WHERE NOT s.is_publish
+                  AND s.sent_at > s.reserved_at + interval '5 milliseconds'
+                  AND s.reserved_at > o.at - make_interval(secs => %(window)s)), 0)::double precision,
+       extract(epoch FROM o.at)::double precision
+FROM sample s CROSS JOIN observed o GROUP BY o.at"""
+
+
+def read_booking(cur, now, context):
+    """Booking (rate_limits.SharedPostgresBudget.reserve): how many admissions still wait for their wire time, how far ahead the
+    latest lies, and what the reads booked in the last minute waited. `horizonSeconds` close to `bookAheadSeconds` means the booked
+    horizon is full and callers are being refused again (the saturation that `remaining` used to show). Reads only: a create's
+    booked wait is not recorded (its reserved_at is its slot); `aheadNow` counts creates as well."""
+    from .rate_limits import SharedPostgresBudget
+    cur.execute(_BOOKING, {'limit': SAMPLE_LIMIT, 'window': SATURATION_WINDOW})
+    row = cur.fetchone()
+    ahead, furthest, booked, total, longest, db_now = row if row else (0, None, 0, 0.0, 0.0, now)
+    horizon = max(0.0, furthest - db_now) if furthest is not None and db_now is not None else 0.0
+    return {'status': 'observed', 'bookAheadSeconds': float(SharedPostgresBudget.BOOK_AHEAD_SECONDS),
+            'aheadNow': int(ahead), 'horizonSeconds': round(horizon, 3),
+            'bookedReads60s': int(booked), 'bookedReadWaitSeconds60s': round(float(total), 3),
+            'meanBookedReadWaitSeconds60s': round(float(total) / int(booked), 3) if int(booked) else 0.0,
+            'maxBookedReadWaitSeconds60s': round(float(longest), 3)}
+
+
 def read_platform(cur, now, context):
     cur.execute("SELECT to_regclass('public.pr_operational_snapshots') IS NOT NULL")
     if not cur.fetchone()[0]:
@@ -428,7 +463,7 @@ def snapshot(worker, values=None, *, clock=time.time, monotonic=time.monotonic):
             db_now = float(cur.fetchone()[2])
             result['observedAt'] = round(db_now, 3)
             for name, read in (('queue', read_queue), ('ledger', read_ledger), ('coordinator', read_coordinator),
-                               ('retention', read_retention), ('servers', read_servers), ('platform', read_platform),
+                               ('retention', read_retention), ('booking', read_booking), ('servers', read_servers), ('platform', read_platform),
                                ('requests', read_requests)):
                 found[name] = _savepoint(cur, errors, name, read, db_now, context)
     except Exception as error:
@@ -446,6 +481,7 @@ def snapshot(worker, values=None, *, clock=time.time, monotonic=time.monotonic):
     coordinator = found.get('coordinator') or _unavailable('coordinator', errors)
     coordinator['traffic'] = ledger[1] if ledger else {'status': 'unavailable'}
     coordinator['retention'] = found.get('retention') or _unavailable('retention', errors)
+    coordinator['booking'] = found.get('booking') or _unavailable('booking', errors)
     result['coordinator'] = coordinator
     config['servers'] = found.get('servers') or _unavailable('servers', errors)
     result['platform'] = found.get('platform') or _unavailable('platform', errors)

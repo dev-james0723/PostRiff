@@ -81,6 +81,11 @@ class FakeDatabase:
                 raise RuntimeError('synthetic failure')
             self.result = [(NOW - 5 * 3600, NOW - 60 * 3600, 5400, 12, 880, NOW - 120)]
             return
+        if 'coalesce(sent_at, reserved_at) AS wire' in sql:   # the booking section: wires still to come, and what the reads booked waited
+            if 'booking' in self.fail:
+                raise RuntimeError('synthetic failure')
+            self.result = [(6, NOW + .4, 40, 18.0, .9, NOW)]
+            return
         for name, marker in (('queue', 'pr_discord_worker_projection'), ('ledger', 'pr_discord_request_admissions'),
                              ('coordinator', 'pr_discord_rate_state'), ('servers', 'pr_encrypted_credentials'),
                              ('platform', 'FROM public.pr_operational_snapshots'), ('requests', 'FROM public.pr_request_metrics')):
@@ -271,6 +276,9 @@ class Payload(unittest.TestCase):
             'status': 'observed', 'retentionSeconds': {'reads': 3600, 'publications': 86400},
             'oldestSettledReadAgeSeconds': 18000.0, 'oldestSettledPublicationAgeSeconds': 216000.0,
             'liveRowsEstimate': 5400, 'deadRowsEstimate': 12, 'rowsDeletedTotal': 880, 'lastVacuumAgeSeconds': 120.0})
+        self.assertEqual(payload['coordinator']['booking'], {
+            'status': 'observed', 'bookAheadSeconds': 1.0, 'aheadNow': 6, 'horizonSeconds': 0.4, 'bookedReads60s': 40,
+            'bookedReadWaitSeconds60s': 18.0, 'meanBookedReadWaitSeconds60s': 0.45, 'maxBookedReadWaitSeconds60s': 0.9})
         self.assertEqual(payload['security']['responses4xx'], {'status': 'observed', 'windowSeconds': 900,
                                                                'workspace': 7, 'connections': 5, 'discord': 3, 'other': 1})
         self.assertEqual(payload['platform']['queueDelayed'], 4)
@@ -296,6 +304,14 @@ class Payload(unittest.TestCase):
         self.assertEqual(payload['coordinator']['traffic']['admissions60s'], 80, 'the traffic section is unaffected')
         self.assertEqual(payload['deliveries']['status'], 'observed')
         self.assertEqual(payload['errors'], [{'section': 'retention', 'error': 'RuntimeError'}])
+
+    def test_a_failing_booking_section_answers_unavailable_alone(self):
+        adapter = provider()
+        payload, _ = self.snapshot(adapter, FakeDatabase(adapter, fail={'booking'}))
+        self.assertEqual(payload['coordinator']['booking'], {'status': 'unavailable', 'error': 'RuntimeError'})
+        self.assertEqual(payload['coordinator']['retention']['status'], 'observed')
+        self.assertEqual(payload['coordinator']['traffic']['admissions60s'], 80)
+        self.assertEqual(payload['errors'], [{'section': 'booking', 'error': 'RuntimeError'}])
 
     def test_an_unreachable_database_still_answers_the_process_view(self):
         adapter = provider()
