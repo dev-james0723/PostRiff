@@ -101,8 +101,10 @@ Decide whether to build it (AS-BUILT, "The worker flag and migration 128").
 unsent and demotes nothing (AS-BUILT, "A paused Discord is a wait"), and the lane claims nothing while paused. An existing
 rule is unchanged: a read-back (reconciliation) of an already created post that meets a disabled execution is completed
 `uncertain` ("The original Discord application is unavailable. Keep the receipt for manual review."), and five such checks
-push it to a one-day wait. The minute cron's frozen path can still claim read-backs while paused. Options: leave as is (the
-kill switch is an emergency brake); or make a paused Discord skip read-backs too, in the frozen path (a protocol decision).
+push it to a one-day wait. Neither the lane nor, since the K1 churn fix, the minute tick claims anything while Discord is
+paused (`tick()` passes `exclude_discord=True`), so only a scoped claim can still reach that rule and the read-back is
+made after the pause. Open: whether a scoped claim (a person's "post now") should wait too; today it reaches the
+preflight, which refuses with the pause, and the post is released unsent for a minute.
 
 **Q15. An exact split of creates and read-backs for monitoring.** The lag warning tells them apart in the report's sample
 and treats the projection's lag (one `next_at` per workspace, migration 126) as a create's unless the sample shows

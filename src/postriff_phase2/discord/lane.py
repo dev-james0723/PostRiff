@@ -189,20 +189,36 @@ class LaneWorker(PostgresWorker):
         self._examining = None  # the workspace the claim is reading, so a failure of its document can be pinned on it
         self._before = None  # that workspace's queue position as the claim found it (see _discord_rate_released)
 
+    @staticmethod
+    def _document(raw):
+        """A candidate row's workspace document as the claim itself reads it: a mapping, or the JSON text of one (a driver
+        without the jsonb adapter hands over text). None when it is neither: nothing can be read from it."""
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except ValueError:
+                return None
+        return raw if isinstance(raw, dict) else None
+
     def _discord_candidates(self, cur):
         """The inherited selection, except that a workspace set aside (see claim) is not offered again until its
         window ends, and the workspace being read is noted. Nothing else changes: same statements, same order."""
         for row in super()._discord_candidates(cur):
-            cursor = (row[2].get('phase2') or {}).get(discord_worker.CURSOR) if isinstance(row[2], dict) else None
+            document = self._document(row[2])
+            phase2 = document.get('phase2') if document is not None else None
+            phase2 = phase2 if isinstance(phase2, dict) else None
+            cursor = phase2.get(discord_worker.CURSOR) if phase2 is not None else None
             until = cursor.get('quarantinedUntil') if isinstance(cursor, dict) else None
             if discord_worker.finite(until) and until > self.clock():
                 continue
             self._examining = row[0]
-            phase2 = row[2].get('phase2') if isinstance(row[2], dict) else None
-            jobs = phase2.get('jobs') if isinstance(phase2, dict) else None
-            self._before = {'workspace': row[0], 'cursor': copy.deepcopy(cursor),
-                            'dispatched': {job['id']: job.get('lastDispatchedAt') for job in jobs
-                                           if isinstance(job, dict) and 'id' in job} if isinstance(jobs, list) else {}}
+            jobs = phase2.get('jobs') if phase2 is not None else None
+            # A document that cannot be read takes no snapshot, so nothing is restored from it: restoring from an empty
+            # one would pop the cursor and the dispatch stamp, a jump to the front of the rotation.
+            self._before = None if phase2 is None else {
+                'workspace': row[0], 'cursor': copy.deepcopy(cursor),
+                'dispatched': {job['id']: job.get('lastDispatchedAt') for job in jobs
+                               if isinstance(job, dict) and 'id' in job} if isinstance(jobs, list) else {}}
             yield row
             self._examining = None  # only reached when the claim went on to the next candidate
 
