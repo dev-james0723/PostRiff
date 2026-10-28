@@ -30,6 +30,9 @@ MAX_PERMIT_SECONDS = 10.0  # SafetyPolicy.parse refuses a longer permit_ttl_seco
 # its lock (statement_timeout is 5 s). Bounding the unresolved scan by expires_at, which the partial index holds, as
 # well as by the sent time keeps it to the unresolved rows of the last window plus margin, however many old ones leaked.
 SENT_SLACK = 6.0
+# What a READ refused by an operator or coordinator hold is told to wait. Nothing was sent and nothing is lost by waiting: the
+# read-back of a post that was already created defers by it (and gets its check back) instead of failing five times.
+HOLD_WAIT_SECONDS = 300.0
 NICKNAME_TEMPLATE = 'PATCH:/guilds/{id}/members/@me'   # the one Discord write the sender-name feature makes
 NICKNAME_ENV = 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED'
 _ID = re.compile(r'^[0-9]{5,25}$')
@@ -854,6 +857,9 @@ class SharedPostgresBudget:
             for key,row in rows.items():
                 self._roll(cur,key,row,now,fresh=key in fresh)
                 if row['hold']:
+                    if read_sent:
+                        # A read has no effect to be unsure of, so a hold is a wait for it; a create is refused outright.
+                        raise RateDelayed(HOLD_WAIT_SECONDS,cause='hold',scope='embargo')
                     raise RateCoordinatorUnavailable()
                 if row['kind'] == 'policy':
                     filled_reset = self._slide(cur,row,now,reading)  # sets left/reset; denied below like any capped row

@@ -337,23 +337,46 @@ class PolicyAndHold(Base):
         self.assertEqual(self.policy_row()['cap'], 3, 'a later, tighter policy still tightens a raised cap')
 
     def test_hold_refuses_everything_and_release_resumes_with_the_same_exact_state(self):
+        """A hold refuses every request. A create is unavailable (nothing was or will be sent). A read is a wait of five
+        minutes with the cause `hold`: that is what lets the read-back of a post that was already created defer, instead of
+        burning one of its five checks on every attempt and being parked for a day (B4, the ops review's H1)."""
         self.read()
         self.read()
         self.policy_row()['hold'] = True
-        for how in (self.read, self.create):
-            with self.assertRaises(RateCoordinatorUnavailable):
-                how()  # held while a slot is free
+        with self.assertRaises(RateCoordinatorUnavailable):
+            self.create()  # held while a slot is free
+        wait = self.denied()
+        self.assertEqual((wait.rate_cause, wait.rate_scope_kind, wait.retry_after_seconds), ('hold', 'embargo', 300.0))
         self.at(.1)
         self.policy_row()['hold'] = False
         self.read()  # the third and last slot of the window the hold interrupted
         self.denied()
         self.policy_row()['hold'] = True
+        wait = self.denied()  # held and full: the hold, not the window, is what a caller sees
+        self.assertEqual((wait.rate_cause, wait.retry_after_seconds), ('hold', 300.0))
         with self.assertRaises(RateCoordinatorUnavailable):
-            self.read()  # held and full: the hold, not a wait, is what a caller sees
+            self.create()
         self.policy_row()['hold'] = False
         self.assertEqual(len(self.db.admissions), 3, 'a hold neither admits nor refunds anything')
         self.at(1 + 2e-6)
         self.assertEqual(self.free_slots(), 2, 'the two admitted at +0 have freed; the one at +.1 has not')
+
+    def test_a_hold_on_the_credential_or_the_bot_scope_defers_reads_the_same_way(self):
+        """The coordinator holds the credential after a 401; a read behind that hold, or behind one on the bot's global scope, is
+        a wait too, and a create is unavailable."""
+        def hold(kind, value):
+            # a refused reservation rolls back and replaces the double's state objects: look the row up every time
+            (row,) = [state for state in self.db.states.values() if state['kind'] == kind]
+            row['hold'] = value
+        self.read()
+        for kind in ('credential', 'global'):
+            hold(kind, True)
+            wait = self.denied()
+            self.assertEqual((wait.rate_cause, wait.rate_scope_kind), ('hold', 'embargo'), kind)
+            with self.assertRaises(RateCoordinatorUnavailable):
+                self.create()
+            hold(kind, False)
+        self.read()
 
     def test_the_application_row_mirrors_the_window_for_readers(self):
         """lane.outlook reads remaining/reset without locks: a full window shows 0 and the exact next-slot time."""
@@ -367,6 +390,49 @@ class PolicyAndHold(Base):
         self.at(.4)
         self.denied()
         self.assertEqual(self.policy_row()['reset'], row['reset'], 'a denial writes nothing')
+
+
+class ReadsUnderAHold(Base):
+    """What a caller of the Discord provider sees under an operator hold (B4): a read is a deferral that sends nothing,
+    which is all the read-back of a created post needs to keep its checks; a create is still unavailable."""
+
+    def provider(self):
+        from postriff_phase2.social_connectors import DiscordProvider
+        self.calls = []
+
+        def transport(method, url, **kwargs):
+            self.calls.append((method, url))
+            return {'status': 200, 'headers': {}, 'body': {'id': '700000000000000009'}}
+        provider = DiscordProvider(APP, 'synthetic-secret', 'synthetic-bot', 'https://rafii.invalid', transport=transport)
+        provider.rate_v1_enabled = True
+        provider.rate_limiter = self.s
+        return provider
+
+    def test_a_direct_read_under_a_hold_is_a_deferral_that_sends_nothing_and_resumes_when_the_hold_is_lifted(self):
+        from postriff_phase2.discord.rate_limits import ReadAdmissionDelayed
+        provider = self.provider()
+        message = '/channels/700000000000000002/messages/700000000000000003'
+        provider._bot('GET', '/guilds/700000000000000001')          # the application row exists
+        self.policy_row()['hold'] = True
+        for _ in range(8):                                           # more attempts than a post has checks
+            with self.assertRaises(ReadAdmissionDelayed) as wait:
+                provider._bot('GET', message)
+            self.assertEqual((wait.exception.rate_cause, wait.exception.rate_scope_kind, wait.exception.retry_after_seconds),
+                             ('hold', 'embargo', 300.0))
+        self.assertEqual(len(self.calls), 1, 'nothing was sent under the hold')
+        self.assertEqual(len(self.db.admissions), 1, 'and nothing was admitted or charged')
+        self.policy_row()['hold'] = False
+        self.at(2)
+        provider._bot('GET', message)
+        self.assertEqual(len(self.calls), 2, 'the first read after the release goes out')
+
+    def test_a_create_under_a_hold_is_still_unavailable_not_a_wait(self):
+        provider = self.provider()
+        provider._bot('GET', '/guilds/700000000000000001')
+        self.policy_row()['hold'] = True
+        with self.assertRaises(RateCoordinatorUnavailable):
+            self.s.reserve('POST', '/channels/700000000000000002/messages', identity=self.identity)
+        self.assertEqual(len(self.calls), 1)
 
 
 class ReleasedReservations(Base):
@@ -544,6 +610,11 @@ class RandomizedAgainstModel(unittest.TestCase):
                 try:
                     permit = (limiter.reserve_read if read else limiter.reserve)(method, path, identity=identity)
                 except RateDelayed as error:
+                    if on_hold:   # a hold comes before any window: a read under it is a five-minute wait with the cause hold
+                        self.assertTrue(read, label(step, 'only a read waits under a hold; a create is unavailable'))
+                        self.assertEqual((error.rate_cause, error.rate_scope_kind, error.retry_after_seconds),
+                                         ('hold', 'embargo', 300.0), label(step, 'a read under a hold'))
+                        continue
                     self.assertEqual(expected[0], 'wait', label(step, 'denied but the model grants'))
                     detail = 'wait; scope %s, method %s, read %s, the model said %r' % (error.rate_scope_kind, method, read, expected)
                     if tightened:   # admissions made under the larger cap can outnumber what is scanned: the quote may be longer
@@ -553,6 +624,7 @@ class RandomizedAgainstModel(unittest.TestCase):
                     self.assertEqual(error.rate_scope_kind, 'application', label(step, 'scope'))
                 except RateCoordinatorUnavailable:
                     self.assertTrue(on_hold, label(step, 'unavailable without a hold'))
+                    self.assertFalse(read, label(step, 'a read under a hold waits; it is not unavailable'))
                 else:
                     self.assertFalse(on_hold, label(step, 'granted under a hold'))
                     self.assertEqual(expected[0], 'ok', label(step, 'granted but the model waits %r' % (expected,)))
