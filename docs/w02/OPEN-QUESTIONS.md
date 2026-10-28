@@ -104,7 +104,9 @@ rule is unchanged: a read-back (reconciliation) of an already created post that 
 push it to a one-day wait. Neither the lane nor, since the K1 churn fix, the minute tick claims anything while Discord is
 paused (`tick()` passes `exclude_discord=True`), so only a scoped claim can still reach that rule and the read-back is
 made after the pause. Open: whether a scoped claim (a person's "post now") should wait too; today it reaches the
-preflight, which refuses with the pause, and the post is released unsent for a minute.
+preflight, which refuses with the pause, and the post is released unsent for a minute. A missing or unusable coordinator is a
+different state from this pause and is not covered by it (Q20); its read-back is a wait, not an `uncertain` (AS-BUILT, "A
+read-back waits for the coordinator").
 
 **Q15. An exact split of creates and read-backs for monitoring.** The lag warning tells them apart in the report's sample
 and treats the projection's lag (one `next_at` per workspace, migration 126) as a create's unless the sample shows
@@ -285,3 +287,22 @@ What to know before relying on it.
   `discord.lane.completed` line; the health payload's `coordinator.booking`: `bookAheadSeconds`, `aheadNow`, `horizonSeconds`,
   `bookedReads60s`, `bookedReadWaitSeconds60s`, `meanBookedReadWaitSeconds60s`, `maxBookedReadWaitSeconds60s`.
 - **Off.** The lane flag (the minute worker never books), or `BOOK_AHEAD_SECONDS = 0` in a build.
+
+**Q20. A missing coordinator is not a pause (the lane side of the ops review's N-1; not built).** The read-back of a created post
+now waits when the coordinator cannot admit a request (AS-BUILT, "A read-back waits for the coordinator"): that was the harm, a
+created post made `uncertain` and parked for a day by the runbook's second lever. What remains is a question of the lane's own
+definition of a pause. `lane.paused()` asks the provider's flags (execution disabled, authorization off) and K1 keeps the lane and
+the minute tick from claiming anything while it is true. A build without a usable coordinator is not a pause by that definition:
+`OAuthService` (`oauth.py`) attaches the reviewed policy after `runtime_from_environment`, and when it does not parse leaves no
+limiter and marks it degraded, while authorization stays on; with no policy set it leaves an inert coordinator whose policy is
+None. Only `runtime_from_environment`'s own failure, or rate limits off, turns authorization off. The lane suite's
+`unable('no coordinator')` and the earlier table row of AS-BUILT assumed the second; the reviewer's probe found the first. In that
+state the lane stops (`coordinator_unavailable`) and the minute tick keeps the frozen path: it claims every Discord post, releases
+those not yet created for five minutes (one claim, one release and an attempt each, as the K1 re-review measured for a pause at
+one minute: about 280 attempts and 860 events a day per due post at five) and, since N-1, defers the read-back of each created one
+(one event per claim, 288 a day). Nothing is lost, nothing is posted, no check is spent. To stop the claims altogether the lane
+side would count a missing or policy-less coordinator as a pause: in `lane.paused()`, `provider.rate_v1_enabled and
+(limiter is None or limiter.policy is None)`, one expression, with the lane suite's case changed to the state `OAuthService`
+leaves (limiter None, degraded, authorization on) and `FlagOffIsTheFrozenBase` unchanged (it pins states that do not pause). An
+expired policy would stay a release for five minutes, as documented, unless the owner wants that quiet too. That is W-02's code
+(`lane.paused()` and its suite); the N-1 fix does not touch it.

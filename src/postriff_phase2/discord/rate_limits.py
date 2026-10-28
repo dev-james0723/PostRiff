@@ -37,6 +37,10 @@ SENT_SLACK = 6.0
 # What a READ refused by an operator or coordinator hold is told to wait. Nothing was sent and nothing is lost by waiting: the
 # read-back of a post that was already created defers by it (and gets its check back) instead of failing five times.
 HOLD_WAIT_SECONDS = 300.0
+# What the read-back of a post that was already created is told to wait when the coordinator cannot admit any request (none
+# attached, degraded, its policy ended, its database down). Nothing was sent and the receipt is kept: the lookup is asked again
+# later and its check is refunded (hosted_social.reconcile_discord). Creates are not affected: they stay fail-closed.
+COORDINATOR_WAIT_SECONDS = 300.0
 # The transaction-level advisory lock that serializes the retention purge (purge_settled): one deleter at a time, the others
 # return at once. Not a row or table lock; it conflicts with nothing the coordinator does.
 PURGE_LOCK = int.from_bytes(hashlib.sha256(b'postriff.discord.admissions.purge').digest()[:8], 'big') >> 1
