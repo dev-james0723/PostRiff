@@ -338,6 +338,17 @@ def blocker(social, now, values=None, *, process_state=True):
     return None
 
 
+def paused(social):
+    """Whether Discord is paused in this process: its execution is disabled (the kill switch POSTRIFF_OAUTH_DISCORD_DISABLED,
+    or a provider flag not set) or its authorization is off (the hosted runtime also turns it off without rate limits).
+    Every preflight would refuse with a pause, so the loops claim nothing: a claim would only touch the post, and a
+    read-back claimed now would be completed uncertain (K1). Pure: the provider's flags. No Discord provider at all is
+    blocker()'s business."""
+    provider = _discord(social)
+    return provider is not None and (not getattr(provider, 'execution_enabled', True)
+                                     or not getattr(provider, 'authorization_v2_enabled', False))
+
+
 def status(social, now, values=None):
     """This process's lane health at `now`: a stable, documented shape (version 1) for the minute cron's report, the
     shard answers and a protected health route. Pure and cheap: no database, network or secret; codes, numbers and
@@ -426,6 +437,8 @@ def outlook(lane):
     reason = blocker(lane.social, lane.clock(), values)
     if reason:
         return reason, 0.0
+    if paused(lane.social):
+        return 'discord_paused', 0.0
     provider = _discord(lane.social)
     marker = '0' * 64
     keys = sorted(key for key in provider.rate_limiter._keys(provider._rate_identity('bot'), marker, marker, marker)
@@ -476,6 +489,8 @@ def _projection_ready(lane):
     reason = blocker(lane.social, lane.clock(), values)
     if reason:
         return reason
+    if paused(lane.social):
+        return 'discord_paused'
     try:
         with lane.connection_factory() as db, db.cursor() as cur:
             cur.execute(_CLAIMABLE)

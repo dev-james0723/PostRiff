@@ -1247,6 +1247,14 @@ class PostgresWorker:
                         retry_after_seconds=getattr(error, 'retry_after_seconds', 300),
                         rate_cause=getattr(error,'rate_cause',None), rate_scope=getattr(error,'rate_scope_kind',None))
                     return True
+                if managed and getattr(error, 'code', None) == 'discord_paused':
+                    # Discord is paused (execution disabled, authorization or rate limits off): a wait, not a verdict
+                    # about this post or its destination. Released unsent, asked again later; never held, never
+                    # demoted. A revoked connection or a missing permission is another error and still holds.
+                    self.release_discord_unsent(claimed, reason='rate_delayed',
+                                                retry_after_seconds=discord_worker.PAUSED_RETRY_SECONDS,
+                                                rate_cause='discord_paused')
+                    return True
                 if managed and discord_worker.transient_preflight(error):
                     self.release_discord_unsent(claimed, reason='preflight_transient')
                     return True

@@ -780,31 +780,26 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual(failures, [])
         return frozen, F.jobs(self.cluster), {tenant.id for tenant in tenants[:3]}
 
-    def assert_frozen_holds(self, frozen, final):
-        """Without Discord authorization the frozen path holds each post it claims and asks for its destination to be
-        verified again; the repaired lane then has nothing due, and never sends a held post."""
-        for job in frozen.values():
-            self.assertEqual((job['state'], job['events'][-1]['message']),
-                             ('held', 'Discord destination, grant, media or rollout verification is unavailable. '
-                                      'Nothing was posted.'))
-        self.assertEqual(self.destinations(), ['verification_required'] * 6)
-        self.assertEqual({job['state'] for job in final.values()}, {'held'})
-        self.assertEqual(self.wire.requests(method='POST'), [])
+    def test_recovery_after_rate_limits_were_off_waits_and_then_drains_exactly_once(self):
+        """The hosted runtime turns Discord authorization off without rate limits: Discord is paused. The frozen minute
+        cron used to hold every post it claimed and ask for its destination to be verified again (K1); now each post
+        waits unsent, no destination is touched, and the repaired lane sends what is still inside its approval."""
+        self.assert_recovered_after_the_push_back(*self.recovery('rate limits off'),
+                                                  cooldown=discord_worker.PAUSED_RETRY_SECONDS)
+        self.assertEqual(self.destinations(), [], 'no destination was demoted')
 
-    def test_recovery_after_rate_limits_were_off_keeps_the_frozen_holds(self):
-        """Recorded: the hosted runtime turns Discord authorization off without rate limits."""
-        self.assert_frozen_holds(*self.recovery('rate limits off')[:2])
+    def test_recovery_after_the_coordinator_was_missing_waits_and_then_drains_exactly_once(self):
+        """Rate limits on but no coordinator (no policy, or one that does not parse) is reachable only with Discord
+        authorization off (runtime_from_environment): paused, as with rate limits off."""
+        self.assert_recovered_after_the_push_back(*self.recovery('no coordinator'),
+                                                  cooldown=discord_worker.PAUSED_RETRY_SECONDS)
+        self.assertEqual(self.destinations(), [], 'no destination was demoted')
 
-    def test_recovery_after_the_coordinator_was_missing_keeps_the_frozen_holds(self):
-        """Recorded: rate limits on but no coordinator (no policy, or one that does not parse) is reachable only with
-        Discord authorization off (runtime_from_environment), so the frozen path holds as with rate limits off."""
-        self.assert_frozen_holds(*self.recovery('no coordinator')[:2])
-
-    def assert_recovered_after_the_push_back(self, frozen, final, short):
+    def assert_recovered_after_the_push_back(self, frozen, final, short, cooldown=300):
         for (workspace, _), job in frozen.items():
             operation = job['discordWorker']
             self.assertEqual(operation['releaseReason'], 'rate_delayed')
-            self.assertAlmostEqual(operation['rateDelayedUntil'] - operation['releasedAt'], 300, delta=1)
+            self.assertAlmostEqual(operation['rateDelayedUntil'] - operation['releasedAt'], cooldown, delta=1)
             self.assertEqual((job['state'], job['nextAction']),
                              ('held', 'Discord rate wait outlasts approval; review the frozen destination and approve again')
                              if workspace in short else
@@ -1700,6 +1695,91 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         (job,) = F.jobs(self.cluster).values()
         self.assertEqual(sum(event['message'] == self.RENEWED for event in job['events']), 2)
         self.assertEqual(len(self.wire.creates[F.nonce(job)]), 1, 'created once; its read-back is not due yet')
+
+    # (p) a paused Discord is a wait, not a verdict about a post (K1) ---------------------------------------------
+
+    def pause(self, how):
+        provider = self.hosted.providers['discord']
+        if how == 'execution disabled':  # POSTRIFF_OAUTH_DISCORD_DISABLED, the abort ladder's kill switch
+            provider.execution_enabled = False
+        else:
+            provider.authorization_v2_enabled = False
+
+    def unpause(self):
+        provider = self.hosted.providers['discord']
+        provider.execution_enabled = provider.authorization_v2_enabled = True
+
+    def paused_queue(self, how):
+        tenants = [F.Tenant(n) for n in range(4)]
+        worker = self.start(tenants, 2)
+        self.pause(how)
+        return tenants, worker
+
+    def assert_waiting_untouched(self):
+        found = F.jobs(self.cluster)
+        self.assertEqual(sorted({job['state'] for job in found.values()}), ['scheduled'])
+        self.assertEqual(self.destinations(), [], 'no destination was demoted')
+        self.assertEqual(self.wire.calls, [], 'nothing reached Discord')
+
+    def assert_all_created_once_after_the_pause(self, worker, count):
+        self.unpause()
+        self.skip_push_back()
+        self.drain(worker, 2, seconds=60)
+        self.assert_each_created_once_and_verified(count)
+        self.assertEqual(self.destinations(), [])
+
+    def test_a_paused_discord_is_not_claimed_by_the_lane_and_nothing_is_lost(self):
+        """Before: with the kill switch on, the lane claimed every due post, the preflight refused with a pause, and
+        each post was held with its destination demoted: after the switch was off again nothing posted and every
+        customer had to authorize again (4 of 4 destinations, 8 of 8 posts in the review's run)."""
+        for how in ('execution disabled', 'authorization off'):
+            with self.subTest(how):
+                self.cluster.reset()
+                tenants, worker = self.paused_queue(how)
+                results, failures = F.run_lanes(worker, 2, seconds=30)
+                self.assertEqual(failures, [])
+                self.assertEqual({result['stoppedBy'] for result in results}, {'discord_paused'})
+                self.assertEqual(sum(result['counters']['claimed'] for result in results), 0, 'nothing was claimed')
+                self.assert_waiting_untouched()
+                self.assert_all_created_once_after_the_pause(worker, 8)
+
+    def test_a_paused_discord_is_a_wait_for_the_minute_cron_too_never_a_hold(self):
+        """The frozen minute cron (lane flag off, or the lane unable to run) also claims Discord. A pause there
+        released each post unsent for a minute at a time instead of holding it and demoting its destination."""
+        for how in ('execution disabled', 'authorization off'):
+            with self.subTest(how):
+                self.cluster.reset()
+                tenants, worker = self.paused_queue(how)
+                for _ in range(2):
+                    self.minute(worker, flag=False)
+                self.assert_waiting_untouched()
+                found = F.jobs(self.cluster)
+                released = [job for job in found.values() if job['discordWorker'].get('releaseReason') == 'rate_delayed']
+                self.assertGreaterEqual(len(released), 4, 'the cron touched posts and released them')
+                for job in released:
+                    operation = job['discordWorker']
+                    self.assertAlmostEqual(operation['rateDelayedUntil'] - operation['releasedAt'],
+                                           discord_worker.PAUSED_RETRY_SECONDS, delta=1)
+                    self.assertEqual(job['nextAction'], 'Await Discord shared rate budget; no POST occurred and this approval remains frozen')
+                    self.assertEqual(discord_worker.attempt_count(job), 0, 'a pause is not an attempt')
+                self.assert_all_created_once_after_the_pause(worker, 8)
+
+    def test_a_revoked_connection_still_holds_the_post_and_asks_for_the_destination_again(self):
+        """Only a pause became a wait: a real revocation or a missing permission is another error and holds as before."""
+        tenants = [F.Tenant(n) for n in range(2)]
+        worker = self.start(tenants, 1)
+        revoked, real = tenants[0].id, self.hosted.oauth.discord_grant_for_worker
+
+        def grant(workspace, connection, *, cur=None):
+            if workspace == revoked:
+                raise F.P.AlphaError('Discord authorization was revoked.', 409)
+            return real(workspace, connection, cur=cur)
+        with patch.object(self.hosted.oauth, 'discord_grant_for_worker', grant):
+            self.drain(worker, 1, seconds=30)
+        found = F.jobs(self.cluster)
+        self.assertEqual({workspace: job['state'] for (workspace, _), job in found.items()},
+                         {revoked: 'held', tenants[1].id: 'verified'})
+        self.assertEqual(self.destinations(), ['verification_required'])
 
 
 if __name__ == '__main__':

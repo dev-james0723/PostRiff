@@ -14,6 +14,9 @@ LEASE_SECONDS = 45
 MAX_UNSENT_ATTEMPTS = 3
 MAX_UNCONSUMED_PERMIT_RECOVERIES = 8
 MAX_CANDIDATES = 8
+# A paused Discord (execution disabled, authorization or rate limits off) is a wait, not a verdict about a post: it is
+# released unsent for this long and asked again (K1).
+PAUSED_RETRY_SECONDS = 60
 QUEUE_WORKSPACE_LIMIT = 256
 
 

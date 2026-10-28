@@ -871,7 +871,7 @@ class Outlook(unittest.TestCase):
         build = POLICY_TOOL.build
         self.provider = DiscordProvider(APP, 'synthetic-secret', 'synthetic-bot', 'https://rafii.example.invalid',
                                         transport=SyntheticWire(), production_reviewed=True)
-        self.provider.rate_v1_enabled = True
+        self.provider.rate_v1_enabled = self.provider.authorization_v2_enabled = True  # not paused
         self.now = 1_800_000_000.0
         self.statements = []
         self.rows = []
@@ -1241,6 +1241,81 @@ class NoSecondRenewal(unittest.TestCase):
                                          ('base worker, sealed with the guard', 'base', True, True)):
             with self.subTest(name), self.assertRaisesRegex(AssertionError, 'a renewal opened a connection'):
                 self.worker(cls).renew_discord_lease(self.claimed(sealed=sealed, guard=guard))
+
+
+class PausedDiscord(unittest.TestCase):
+    """K1: a paused Discord (execution disabled, authorization off) is a wait, not a verdict about a post. The
+    behaviour on real PostgreSQL, with the lane and the minute cron, is in test_discord_parallel_lane_postgres.py
+    (section p); here the rules."""
+    def setUp(self):
+        for item in (patch.dict(security_holds._INSTALLED, {'readable': True, 'checked': float('-inf')}),
+                     patch('postriff_phase2.billing.require_publishing', return_value=None),
+                     patch('socket.socket.connect', side_effect=AssertionError('Real network forbidden'))):
+            item.start()
+            self.addCleanup(item.stop)
+        self.db = MemoryDatabase(FlagOffIsTheFrozenBase.queue())
+        self.social = discord_social(self.db.connection)
+        self.provider = self.social.providers['discord']
+        self.base = PostgresWorker(self.db.connection, self.social, clock=lambda: NOW + 301, worker_id='minute-worker',
+                                   discord_workers=True)
+
+    def job(self):
+        return self.db.state['phase2']['jobs'][0]
+
+    def destination(self):
+        manifest = self.job()['manifest']
+        return next(d for d in self.db.state['phase2']['channels'][0]['discordDestinations'] if d['id'] == manifest['destinationId'])
+
+    def test_it_is_the_providers_flags_and_nothing_else(self):
+        self.assertFalse(lane.paused(self.social))
+        self.provider.execution_enabled = False
+        self.assertTrue(lane.paused(self.social))
+        self.provider.execution_enabled, self.provider.authorization_v2_enabled = True, False
+        self.assertTrue(lane.paused(self.social))
+        self.assertFalse(lane.paused(SimpleNamespace(providers={})), 'no Discord provider at all is blocker()s business')
+        self.assertFalse(lane.paused(None))
+
+    def test_a_paused_lane_stops_before_any_database_work(self):
+        self.provider.execution_enabled = False
+        lane_worker = lane.LaneWorker(self.base, 0)
+        lane_worker.connection_factory = Mock(side_effect=AssertionError('a paused lane opened a connection'))
+        self.assertEqual(lane._projection_ready(lane_worker), 'discord_paused')
+        self.assertEqual(lane.outlook(lane_worker), ('discord_paused', 0.0))
+        self.assertEqual(self.db.queries, [])
+
+    def test_a_readiness_failure_is_still_reported_before_a_pause(self):
+        self.provider.execution_enabled = False
+        self.provider.rate_limiter = None  # no coordinator
+        lane_worker = lane.LaneWorker(self.base, 0)
+        self.assertEqual(lane.outlook(lane_worker), ('coordinator_unavailable', 0.0))
+
+    def test_the_step_releases_a_post_whose_preflight_says_paused_and_never_holds_it_or_demotes_its_destination(self):
+        self.provider.authorization_v2_enabled = False
+        self.assertTrue(self.base.step(discord_only=True))
+        job = self.job()
+        self.assertEqual((job['state'], job['leaseOwner']), ('scheduled', None))
+        operation = job['discordWorker']
+        self.assertEqual((operation['releaseReason'], operation['rateDelayedUntil']),
+                         ('rate_delayed', self.db.now + hosted_worker.discord_worker.PAUSED_RETRY_SECONDS))
+        self.assertEqual(self.destination()['status'], 'authorized')
+        self.assertFalse(job.get('discordDispatchIntents'))
+        self.assertEqual(hosted_worker.discord_worker.attempt_count(job), 0, 'a pause is not an attempt')
+        self.assertEqual(self.wire_calls(), [])
+
+    def test_any_other_preflight_refusal_holds_and_demotes_as_before(self):
+        for error in (AlphaError('Discord was reconnected or changed. Review the post again.', 409),
+                      AlphaError('Discord access was removed. Reconnect or authorize this exact destination again.', 409,
+                                 code='discord_connection_required'),
+                      AlphaError('forbidden', 403)):
+            with self.subTest(code=getattr(error, 'code', None), status=error.status):
+                self.setUp()
+                with patch.object(self.social, 'prepare_discord_dispatch', side_effect=error):
+                    self.assertTrue(self.base.step(discord_only=True))
+                self.assertEqual(self.job()['state'], 'held')
+                self.assertEqual(self.destination()['status'], 'verification_required')
+
+    def wire_calls(self):
+        return self.provider.transport.calls
 
 
 if __name__ == '__main__':
