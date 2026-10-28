@@ -197,10 +197,17 @@ class Q05MutationDetection(unittest.TestCase):
         self.assertGreaterEqual(len(ws), 28, f"expected many ws-scope cases, saw {len(ws)}")
         passed = [c["case"] for c in ws if c["verdict"] == "PASS"]
         self.assertEqual(passed, [], f"ws-scope case(s) silently PASSED with the gate removed: {passed}")
-        failed = sum(1 for c in ws if c["verdict"] == "FAIL")
-        # not 6: the overwhelming majority must be hard FAIL, not merely inconclusive.
-        self.assertGreaterEqual(failed, len(ws) - 2,
-                                f"only {failed}/{len(ws)} ws-scope cases turned FAIL under M1b")
+        # not 6: the overwhelming majority must be hard FAIL, not merely inconclusive. Allowed INCONCLUSIVE:
+        # invite (a seat/validation limit), and on a sender-name build the bot-nickname writes, which a second,
+        # independent layer still refuses with the gate gone (only the installing member may write a nickname).
+        plain = [c for c in ws if ".sender." not in c["case"]]
+        failed = sum(1 for c in plain if c["verdict"] == "FAIL")
+        self.assertGreaterEqual(failed, len(plain) - 2,
+                                f"only {failed}/{len(plain)} ws-scope cases turned FAIL under M1b")
+        other = [c["case"] for c in ws if c["verdict"] != "FAIL"
+                 and not (c["verdict"] == "INCONCLUSIVE"
+                          and (".invite." in c["case"] or (c["case"].startswith("write.sender.") and ".bot." in c["case"])))]
+        self.assertEqual(other, [], "ws-scope cases neither FAIL nor an allowed INCONCLUSIVE under M1b")
 
     def test_m2_connection_workspace_binding(self):
         r = run_mutated("M2_connection_workspace_binding")
@@ -233,10 +240,15 @@ class Q05MutationDetection(unittest.TestCase):
         # probe also carries same-workspace role cases (viewer/editor), and those, and only those, must see it.
         r = run_mutated("M4_permission_requirement_noop")
         self.assertEqual(r["status"], "ran")
-        cross = [c["case"] for c in r["cases"]
-                 if c["verdict"] in ("FAIL", "INCONCLUSIVE") and c.get("scope") != "role"]
+        cross = [c["case"] for c in r["cases"] if c["verdict"] in ("FAIL", "INCONCLUSIVE")
+                 and ("->" in c["direction"] or c["case"].startswith(("snapshot.", "matrix.")))]
         self.assertEqual(cross, [], "disabling intra-workspace RBAC unexpectedly changed a cross-tenant outcome; "
                                     "re-examine the isolation model")
+        # Owner controls may only be throttled: with the permission check gone, same-workspace members spend the
+        # connection's sender-name throttle (6 POSTs per 10 minutes) before the owner's own save/restore runs.
+        controls = [(c["case"], c["observed"]) for c in r["cases"] if c["kind"] == "control"
+                    and c["verdict"] != "PASS" and c["observed"] not in ("429", "-")]
+        self.assertEqual(controls, [], "an owner control failed for a reason other than the throttle")
         if SENDER:
             flipped = [c["case"] for c in r["cases"] if c.get("scope") == "role" and c["verdict"] != "PASS"
                        and (".viewer." in c["case"] or ".editor." in c["case"])]

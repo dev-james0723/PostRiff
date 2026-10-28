@@ -49,7 +49,13 @@ class Q05LocalHarness(unittest.TestCase):
         self.assertEqual(summary["undiscovered"], 0)
         verdicts = {c["case"]: c["verdict"] for c in result["cases"]}
         self.assertNotIn("FAIL", verdicts.values())
-        self.assertNotIn("NOT_RUN", verdicts.values())
+        # NOT RUN only where the build does not serve the route at all (the sender-name cases before RC2)
+        not_run = [c for c in result["cases"] if c["verdict"] == "NOT_RUN"]
+        if result.get("senderNames"):
+            self.assertEqual(not_run, [])
+        else:
+            self.assertEqual([c["case"] for c in not_run if not c["note"].startswith("not-applicable:")
+                              or ".sender." not in c["case"]], [])
 
         # Coverage: both directions, reads and writes, a send-blast case, and controls.
         directions = {c["direction"] for c in result["cases"]}
@@ -93,13 +99,14 @@ class Q05LocalHarness(unittest.TestCase):
         self.assertEqual(result["messageSendsDuringRun"], 0)
         writes = [c for c in result["cases"] if c["kind"] == "write"]
         self.assertTrue(writes)
+        served = (lambda c: result.get("senderNames") or ".sender." not in c["case"])
         for c in writes:
             self.assertEqual(c["verdict"], "NOT_RUN", c)
-            self.assertTrue(c["note"].startswith("gated:"), c)
+            self.assertTrue(c["note"].startswith("gated:" if served(c) else "not-applicable:"), c)
         reads = [c for c in result["cases"] if c["kind"] == "read"]
         self.assertTrue(reads)
         for c in reads:
-            self.assertEqual(c["verdict"], "PASS", c)
+            self.assertEqual(c["verdict"], "PASS" if served(c) else "NOT_RUN", c)
 
 
 if __name__ == "__main__":

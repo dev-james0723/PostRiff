@@ -85,7 +85,7 @@ file edited), then the full probe runs against the mutated app. Observed:
 | **M2** | connection/credential → workspace binding (every credential read on the path) | 1 | `read.idor.destinations.A→B`, `…B→A` | destinations IDOR returns HTTP 200 leaking the victim's connection — probe flags 2xx + marker |
 | **M3** | OAuth transaction → workspace+member binding (`complete` SELECT + `row[1]!=actor` + `validate_context` + `save_identity`) | 1 | `snapshot.no_side_effect.A`, `…B` | cross-tenant completion advances far enough to commit a side effect (victim OAuth transaction consumed + an audit row); the no-side-effect proof (API + DB) catches it although the HTTP status is 409 |
 | **M5** | atomicity of a denied write — a committed workspace-blind credential revoke that then returns 404 | 1 | DB-side-effect flagged on both tenants (+ the victim-owner's own control breaks) | the HTTP status looks denied and the **state JSON is unchanged, so the API-level snapshot alone misses it**; the **DB-level** snapshot (`revoked`/`updated_at`) catches it — exactly the case the harness DB proof exists for |
-| **M4** | intra-workspace permission requirement (`permissions.require` → no-op) — **negative control** | 0 | none (correctly) | cross-tenant isolation does not depend on intra-workspace RBAC; the probe correctly does not flip. Intra-workspace RBAC is covered separately by `tests/phase2/postgres_isolation.py` §4 |
+| **M4** | intra-workspace permission requirement (`permissions.require` → no-op) — **negative control** | 0 (RC1) | none (correctly) | cross-tenant isolation does not depend on intra-workspace RBAC; the probe correctly does not flip. Intra-workspace RBAC is covered separately by `tests/phase2/postgres_isolation.py` §4. On an RC2 build with sender names the probe also carries same-workspace role cases, and exactly those (viewer/editor) see it; no cross-tenant case flips |
 
 Every substantive mutation (M1, M2, M3, M5) is detected on at least one read and/or write and via
 the no-side-effect proof where relevant; the probe is not a no-op that always passes. M4 is a
@@ -97,6 +97,55 @@ workspace-scoped checks + the fact that Discord objects live in per-workspace st
 single-line fault does not open cross-tenant access; M2 and the full M3 each had to remove the
 binding at **every** enforcement point to create a visible hole. This defence-in-depth is good,
 but it also means a reviewer must not assume one check is "the" gate.
+
+## Customer Discord sender names (RC2)
+
+Target: the final sender-name head `9f170585` (`claude/discord-rc2-sendername-20261023`), as a detached
+export (`git archive`, never a deployable tree), switches set explicitly (`POSTRIFF_DISCORD_SENDER_NAMES_ENABLED`
+and `POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED` = `true`), mock Discord only, synthetic data.
+
+```
+Q05_TARGET_ROOT=<export> python tests/q05_backend.py run --allow-writes --allow-send-risk --victim-is-synthetic
+```
+
+Full run: **probe exit 0, 146 cases, 146 PASS** (80 sender-name cases, 80 PASS), 0 FAIL / INCONCLUSIVE /
+NOT RUN.
+
+- **Attack phase** (bracketed by the probe's own markers): revision delta **0** in both tenants, **0**
+  provider requests, 0 provider writes, 0 message sends, bot nickname unchanged.
+- Cross-tenant read, write, **clear** and replay of the victim's webhook name and bot nickname are all
+  stopped at the membership gate (`403 Workspace unavailable.`) or the connection lookup (`404`), each
+  with the same status, code and whole body as a never-existing id; sender-name reads also compared on
+  timing (no victim-id answer set slower than its twin set; e.g. fastest victim 13.0 ms vs slowest twin
+  20.8 ms). The attacker's own audit after the attacks holds none of the victim's markers.
+- Same workspace: viewer/editor refused before anything is read (`permission_denied`), removed member at
+  the gate, a non-installing admin or connection manager reads the bot nickname read-only
+  (`not_authorizing_member`, no Discord read) and cannot write it; a webhook name is editable by any
+  connection manager (contract), and a never-current fingerprint is refused.
+
+Send-level and same-server scenarios (`tests/q05_sender_scenarios.py`, real app, two real workers
+released together against the mock Discord):
+
+| scenario | checks | what it shows |
+|---|---|---|
+| name pollution | 16/16 | each webhook gets exactly one execute carrying the name frozen at approval: never the other workspace's name, never the rename made after approval (both lanes sent) |
+| switch off | 9/9 | named post held, nothing sent; unnamed post sent without `username`; switched back on, the held post is not resent |
+| nickname authority | 27/27 | two live installations of one server: neither writes; a sole installation writes one PATCH with an opaque audit-log reason; the second installation is refused `409` with only `nickname_authority_other_workspace`, no PATCH, holder unchanged, no audit row; both directions; the competing installation committing after the read, during the Discord reads, and between preflight and the write guard is refused each time |
+| nickname hold | 6/6 | an unchanged nickname sends; after an admin-side rename in Discord the post approved under the old nickname is held (`discord_bot_nickname_changed`), nothing sent |
+
+Mutations (each deletes one guard in a copy of the target's `src/`):
+
+| mutation | guard deleted | detected by |
+|---|---|---|
+| **S1** | bot-nickname authorizer check (`authorizing()` returns true) | probe exit 1: the non-installing admin's bot-nickname read and write cases FAIL / INCONCLUSIVE (an edit offered, Discord read, refusal no longer the authorizer's) |
+| **S2** | webhook name made global (a review freezes the last name saved by ANY workspace) | name pollution: the frozen name and the execute `username` of a workspace are the other workspace's |
+| **S3** | single-installation nickname authority (read-time and write-guard checks) | nickname authority: the second installation's save sends a PATCH and overwrites the holder's nickname |
+| **S3b** | only the final write guard's authority check | nickname authority: the competing installation committing between preflight and write guard is no longer stopped (PATCH sent) |
+| **S4** | dispatch hold for a changed bot nickname | nickname hold: the post approved under the old nickname is sent after the admin-side rename |
+| **S5** | dispatch hold for a named webhook post with the switch off | switch off: the named post is sent (not held) |
+
+`python -m unittest tests.test_q05_tenant_probe_mutations` (with `Q05_TARGET_ROOT`): S1 to S5 detected
+(6 tests, 375 s). S2 to S5 run the scenarios only (`--skip-probe`); S1 runs the probe.
 
 ## Honest limits — what this local run does NOT prove
 
