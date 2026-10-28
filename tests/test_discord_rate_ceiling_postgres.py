@@ -233,7 +233,7 @@ class ExactCeilingOnPostgres(unittest.TestCase):
                 self.assertLessEqual(busiest_closed(stamps, 1.0 + GUARD), capacity)
                 self.assertEqual(stack.wire.route429, 0, 'no route limit was ever reached')
                 self.assertEqual(self.states(stack), {'observed': len(stamps)}, 'every admitted request was answered')
-                self.assertGreaterEqual(rate, .85 * capacity, 'sustained admissions per second (steady middle of the run)')
+                self.assertGreaterEqual(rate, .8 * capacity, 'sustained admissions per second (steady middle of the run)')
 
     def test_the_owners_cap_holds_with_many_threads_and_the_mock_sees_no_more(self):
         """cap 25 across 32 threads, each answered after 50 ms: the mock's own trailing second never sees more than 25."""

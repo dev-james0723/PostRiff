@@ -336,12 +336,19 @@ class SharedPostgresBudget:
     # whose answer was never observed keeps counting against a scope for that scope's window plus this margin, never
     # longer: after it nothing it did can fall inside any window the scope still holds.
     UNOBSERVED_MARGIN_SECONDS = 30.0
-    # Headroom for the delay between an admission and the request reaching Discord, which differs from request to
-    # request (the commit, a thread waking, the connection). Admissions are exact on the database clock; two requests
-    # admitted a window apart can still arrive less than a window apart when the earlier one is the slower. A slot
-    # therefore frees this long after the window, at most a tenth of it: no closed interval of window + guard holds more
-    # than the cap, a stronger bound than the window alone, and the sustained rate is cap x window / (window + guard).
-    SLOT_GUARD_SECONDS = 0.05
+    # Headroom for the delay between a request's wire time (the database clock when it was admitted, or when its permit
+    # was used) and the moment it reaches Discord, which differs from request to request (the commit, a thread waking,
+    # the connection, a busy machine). Wire times are exact on the database clock; two requests a window apart can still
+    # arrive less than a window apart when the earlier one is the slower by more than the slack between them. A slot
+    # frees this long after the window (at most a tenth of it): arrivals never exceed the cap in any window while the
+    # spread of that delay is at most this much, and the sustained rate is cap x window / (window + guard) (22.7 of 25 a
+    # second). Chosen over pacing at the wire (a send time on the permit and a wait in the transport) because it needs no
+    # field in the Permit (the sender claim rebuilds it), no sleep in the request path and no change to the transport, and
+    # costs nothing while demand is below the cap. Measured with the probe tests/discord_ceiling_probe.py (24 threads, a
+    # mock Discord, real PostgreSQL), arrivals above 25 in a trailing second at the mock: with 100 ms of added delay
+    # between admission and mock, none at 0.05 and at 0.1 s; with 300 ms, 3 to 6 at 0.05, 0.1 and 0.2 s (it takes 0.3 s,
+    # 19 a second). The capacity harness reports the real spread (wire jitter p99.9): set this to it.
+    SLOT_GUARD_SECONDS = 0.1
 
     def __init__(self, connection_factory, application_id, *, policy=None, **_compat):
         if not isinstance(application_id, str) or not _ID.fullmatch(application_id):
