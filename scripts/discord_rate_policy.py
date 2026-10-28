@@ -27,6 +27,14 @@ RENEW_LEAD_DAYS = 7
 # budget of 12 a second up and fewer below it (docs/w02/OPEN-QUESTIONS.md, Q19). Under 1.5 a shard is a warning.
 LANE_SHARDS = 12
 LANE_MIN_RATE = 1.5 * LANE_SHARDS
+# The person's own bearer calls have a budget of their own (the owner's D-2 option 1, OPEN-QUESTIONS Q21): the lane makes one of
+# them (the grant check) for every 6 bot requests of a post, so at the bot's full rate it needs a sixth of it, 4.2 a second at 25;
+# 10 a second is 2.4 times that, keeps one slot of the ten for a web caller and holds (10 - 1) / 1.05 = 8.6 a second of bookings. The
+# owner approved a separate bearer budget, not a size: 10 a second is the figure reviewed with it and a raise is a new review, so the
+# tool refuses one (change this constant only with that review). A policy without the pair keeps those calls in the application
+# budget, which is what a build without this feature reads: the tool says so.
+BEARER_CEILING = 10
+BOT_REQUESTS_PER_POST = 6
 MAX_VALIDITY_DAYS = 31
 CLOCK_SKEW_SECONDS = 60
 
@@ -36,10 +44,12 @@ DEFAULTS = {
     'app_capacity': 25, 'app_window_seconds': 1, 'unknown_window_seconds': 1,
     'invalid_capacity': 2000, 'invalid_window_seconds': 600,
     'failure_threshold': 3, 'circuit_seconds': 30, 'permit_ttl_seconds': 5, 'read_attempts': 3,
+    'bearer_capacity': BEARER_CEILING, 'bearer_window_seconds': 1,
 }
 
 
-KINDS = {'egress_scope': str, 'app_capacity': int, 'invalid_capacity': int, 'failure_threshold': int, 'read_attempts': int}
+KINDS = {'egress_scope': str, 'app_capacity': int, 'invalid_capacity': int, 'failure_threshold': int, 'read_attempts': int,
+         'bearer_capacity': int}
 
 
 def number(text):
@@ -69,7 +79,7 @@ def build(now, *, days=30, revision=None, **overrides):
     if unknown:
         raise ValueError('unknown setting: ' + ', '.join(sorted(unknown)))
     issued = int(now) - CLOCK_SKEW_SECONDS
-    values = {**DEFAULTS, **overrides}
+    values = {k: v for k, v in {**DEFAULTS, **overrides}.items() if v is not None}   # None leaves a setting out (no bearer budget)
     return {'version': 1, 'revision': revision or 'rafii-w1-' + datetime.fromtimestamp(now, timezone.utc).strftime('%Y%m%d'),
             'issued_at': issued, 'expires_at': issued + int(days * 86400), **values}
 
@@ -86,6 +96,7 @@ def judge(raw, at, require_days=14):
     app_rate = policy['app_capacity'] / policy['app_window_seconds']
     invalid_rate = policy['invalid_capacity'] / policy['invalid_window_seconds']
     app_ceiling = DISCORD_GLOBAL_PER_SECOND * APP_SHARE_CEILING
+    bearer_rate = policy['bearer_capacity'] / policy['bearer_window_seconds'] if 'bearer_capacity' in policy else None
     invalid_ceiling = DISCORD_INVALID_PER_10_MINUTES * INVALID_SHARE_CEILING
     if app_rate > app_ceiling or policy['app_capacity'] > app_ceiling:
         findings.append(('FAIL', 'app_ceiling', 'app budget %.1f/s exceeds %.0f%% of the %d/s bot limit'
@@ -97,6 +108,23 @@ def judge(raw, at, require_days=14):
                          'requests are booked a place in line, which holds about (budget - 1) / 1.05 loops; with fewer, loops are '
                          'refused at the booked horizon and the lane makes fewer posts than polling would (OPEN-QUESTIONS Q19)'
                          % (app_rate, LANE_MIN_RATE, LANE_SHARDS)))
+    if bearer_rate is None:
+        findings.append(('WARN', 'no_bearer_budget', 'no bearer budget: the person\'s own bearer calls (the grant check, one of the 7 '
+                         'requests of a post) are charged to the application budget, as before the owner\'s D-2 option 1. Only for a '
+                         'build that predates the bearer budget (a rollback); generate without --no-bearer otherwise'))
+    else:
+        if bearer_rate > BEARER_CEILING or policy['bearer_capacity'] > BEARER_CEILING:
+            findings.append(('FAIL', 'bearer_ceiling', 'bearer budget %.1f/s exceeds the %d/s reviewed with the owner\'s D-2 option 1; '
+                             'a raise needs a new review (OPEN-QUESTIONS Q21)' % (bearer_rate, BEARER_CEILING)))
+        elif app_rate + bearer_rate > app_ceiling:
+            findings.append(('WARN', 'bearer_sum', 'the two budgets together (%.1f + %.1f/s) are above %.0f%% of the %d/s bot limit'
+                             % (app_rate, bearer_rate, APP_SHARE_CEILING * 100, DISCORD_GLOBAL_PER_SECOND)))
+        needed = app_rate / BOT_REQUESTS_PER_POST * 1.5
+        bookable = (policy['bearer_capacity'] - 1) / (policy['bearer_window_seconds'] * 1.05)
+        if bookable < needed:
+            findings.append(('WARN', 'lane_bearer', 'bearer budget holds %.1f/s of bookings, under %.1f/s: the lane makes one grant '
+                             'check for every %d bot requests, so at the bot\'s full rate (%.0f/s) it needs %.1f/s, with half again as '
+                             'margin' % (bookable, needed, BOT_REQUESTS_PER_POST, app_rate, needed / 1.5)))
     if invalid_rate * 600 > invalid_ceiling or policy['invalid_capacity'] > invalid_ceiling:
         findings.append(('FAIL', 'invalid_ceiling', 'invalid budget exceeds %.0f%% of %d per 10 minutes'
                          % (INVALID_SHARE_CEILING * 100, DISCORD_INVALID_PER_10_MINUTES)))
@@ -112,6 +140,7 @@ def judge(raw, at, require_days=14):
         'issuedAt': iso(policy['issued_at']), 'expiresAt': iso(policy['expires_at']),
         'renewBy': iso(policy['expires_at'] - RENEW_LEAD_DAYS * 86400), 'daysRemaining': round(remaining, 1),
         'appRequestsPerSecond': round(app_rate, 2), 'invalidRequestsPer10Minutes': round(invalid_rate * 600),
+        'bearerRequestsPerSecond': round(bearer_rate, 2) if bearer_rate is not None else None,
     }
     return summary, findings
 
@@ -125,6 +154,7 @@ def main(argv=None):
     make.add_argument('--revision')
     for name, default in DEFAULTS.items():
         make.add_argument('--' + name.replace('_', '-'), type=KINDS.get(name, number), default=default)
+    make.add_argument('--no-bearer', action='store_true', help='leave the bearer budget out (a policy for a build that predates it)')
     check = commands.add_parser('check', help='judge a policy given as a file or - for standard input')
     check.add_argument('source')
     check.add_argument('--at', help='epoch seconds or ISO time the policy must be valid at (default: the current time)')
@@ -133,6 +163,8 @@ def main(argv=None):
     if args.command == 'generate':
         now = parse_time(args.now)
         overrides = {name: getattr(args, name) for name in DEFAULTS}
+        if args.no_bearer:
+            overrides.update(bearer_capacity=None, bearer_window_seconds=None)
         policy = build(now, days=args.days, revision=args.revision, **overrides)
         summary, findings = judge(policy, now, require_days=0)
         if not any(level == 'FAIL' for level, _, _ in findings):

@@ -144,7 +144,9 @@ class MemoryLedger:
             explicit = 'to_timestamp(%s::double precision) AS at' in sql
             at, (key, scan, _key, span, band, horizon, _span, _unused_span) = (params[0], params[1:]) if explicit else (None, params)
             moment = at if explicit else self.workspace.now if self.workspace else self.now
-            held, occupied, unused = self.window_inputs(moment, key, span, band, horizon, scan)
+            # which admissions this window counts: all, or (a separate bearer budget) those of the user-bearer kind or the others
+            klass = 'bearer' if "AND credential_kind='user'" in sql else 'bot' if "AND credential_kind<>'user'" in sql else None
+            held, occupied, unused = self.window_inputs(moment, key, span, band, horizon, scan, klass)
             self.result = [(moment, held, occupied, unused)]
         elif sql.startswith('WITH reservation_clock AS MATERIALIZED'):
             self.result=[];self.admit(sql,params)
@@ -223,15 +225,17 @@ class MemoryLedger:
         if row['publish'] and any(r['binding']==row['binding'] for r in self.admissions.values()):
             raise ValueError('Duplicate synthetic binding')
         self.admissions[row['id']]=row
-    def window_inputs(self,at,key,span,band,horizon,scan):
-        """(held, occupied wire times, the wire times of permits still to be used) for an application at `at`, as _window_state states them."""
-        held=sum(r['application']==key and self.wire_time(r)<=at-span and (
+    def window_inputs(self,at,key,span,band,horizon,scan,klass=None):
+        """(held, occupied wire times, the wire times of permits still to be used) for an application at `at`, as _window_state states them.
+        `klass` 'bearer' or 'bot' counts only the user-bearer admissions or only the others (the scan is of the newest `scan` of all)."""
+        def member(r):return klass is None or (r['kind']=='user')==(klass=='bearer')
+        held=sum(r['application']==key and member(r) and self.wire_time(r)<=at-span and (
             r['state'] in ('reserved','sealed') and r['expires']>at or
             r['state'] in ('sent','uncertain') and r['expires']>at-band and self.wire_time(r)>at-horizon)
             for r in self.admissions.values())
         newest=sorted((r for r in self.admissions.values() if r['application']==key),key=lambda r:-r['seq'])[:scan]
-        return (held,[self.wire_time(r) for r in newest if self.wire_time(r)>at-span],
-                [self.wire_time(r) for r in newest if self.wire_time(r)>at-span and r['state'] in ('reserved','sealed') and r['expires']>at])
+        return (held,[self.wire_time(r) for r in newest if self.wire_time(r)>at-span and member(r)],
+                [self.wire_time(r) for r in newest if self.wire_time(r)>at-span and member(r) and r['state'] in ('reserved','sealed') and r['expires']>at])
     @staticmethod
     def wire_time(row):return row['sent'] if row.get('sent') is not None else row['reserved']  # coalesce(sent_at,reserved_at)
     unobserved_at=wire_time

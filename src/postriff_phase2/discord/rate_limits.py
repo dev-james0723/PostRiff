@@ -46,6 +46,10 @@ COORDINATOR_WAIT_SECONDS = 300.0
 PURGE_LOCK = int.from_bytes(hashlib.sha256(b'postriff.discord.admissions.purge').digest()[:8], 'big') >> 1
 # The longest a caller may be made to wait for the slot it is booked (SharedPostgresBudget, BOOK_AHEAD_SECONDS below).
 BOOK_AHEAD_SECONDS = 1.0
+# The credential kind charged to the bearer budget when the reviewed policy carries one (SafetyPolicy.bearer_capacity): a request
+# authorized with the person's own OAuth bearer (the lane's grant check GET /oauth2/@me, the profile read after a token exchange or
+# refresh, the server list). The bot token, the client secret's token calls and a webhook's secret stay in the application budget.
+BEARER_KIND = 'user'
 _BOOK_AHEAD = contextvars.ContextVar('postriff_discord_book_ahead', default=(0.0, None))
 
 
@@ -265,6 +269,9 @@ def classify_response(response, credential_kind='bot'):
             'permanent': status in (400, 401, 403, 404), 'webhookInvalid': webhook_invalid}
 
 
+_BEARER_FIELDS = ('bearer_capacity', 'bearer_window_seconds')
+
+
 @dataclass(frozen=True)
 class SafetyPolicy:
     revision: str
@@ -280,19 +287,27 @@ class SafetyPolicy:
     circuit_seconds: float
     permit_ttl_seconds: float
     read_attempts: int
+    # The person's own bearer calls (kind `user`) on a budget of their own, an exact sliding window like the application's: this
+    # many requests per this many seconds (the owner's D-2 option 1; docs/w02/OPEN-QUESTIONS.md, Q21). Both or neither: a policy
+    # without the pair has no separate bearer budget (bearer_capacity 0) and those calls stay in the application budget, as before,
+    # so a policy issued before this field existed is still valid and a build can be rolled back by issuing one.
+    bearer_capacity: int = 0
+    bearer_window_seconds: float = 1.0
 
     @classmethod
     def parse(cls, raw):
         try:
             value = json.loads(raw) if isinstance(raw, str) and len(raw) <= 4096 else raw
             fields = set(cls.__dataclass_fields__)
-            if not isinstance(value, dict) or set(value) != fields | {'version'} or type(value['version']) is not int or value['version'] != 1:
+            required = fields - set(_BEARER_FIELDS)
+            if (not isinstance(value, dict) or set(value) not in (required | {'version'}, fields | {'version'})
+                    or type(value['version']) is not int or value['version'] != 1):
                 raise ValueError()
-            numbers = fields - {'revision', 'egress_scope'}
+            numbers = (fields & set(value)) - {'revision', 'egress_scope'}
             if any(not valid_number(value[k]) for k in numbers):
                 raise ValueError()
-            for k in ('app_capacity', 'invalid_capacity', 'failure_threshold', 'read_attempts'):
-                if type(value[k]) is not int:
+            for k in ('app_capacity', 'invalid_capacity', 'failure_threshold', 'read_attempts', 'bearer_capacity'):
+                if k in value and type(value[k]) is not int:
                     raise ValueError()
             if (not _LABEL.fullmatch(value['revision']) or not _LABEL.fullmatch(value['egress_scope'])
                     or not 0 <= value['issued_at'] < value['expires_at'] <= MAX_EPOCH
@@ -301,9 +316,11 @@ class SafetyPolicy:
                     or not 1 <= value['failure_threshold'] <= 100 or not 1 <= value['read_attempts'] <= 5
                     or any(not .05 <= value[k] <= 86400 for k in
                            ('app_window_seconds', 'unknown_window_seconds', 'invalid_window_seconds', 'circuit_seconds'))
-                    or not .05 <= value['permit_ttl_seconds'] <= 10):
+                    or not .05 <= value['permit_ttl_seconds'] <= 10
+                    or 'bearer_capacity' in value and (not 1 <= value['bearer_capacity'] <= 100000
+                                                       or not .05 <= value['bearer_window_seconds'] <= 86400)):
                 raise ValueError()
-            return cls(**{k: value[k] for k in fields})
+            return cls(**{k: value[k] for k in fields if k in value})
         except (ValueError, TypeError, KeyError, OverflowError):
             raise RateCoordinatorUnavailable() from None
 
@@ -376,6 +393,12 @@ class SharedPostgresBudget:
     or until they can no longer reach Discord: their scope's window plus
     UNOBSERVED_MARGIN_SECONDS. The application-wide row is an exact sliding
     window over the admissions themselves (_slide), not a fixed one.
+
+    Two budgets, when the reviewed policy carries the pair (SafetyPolicy.bearer_capacity): the person's own bearer calls (BEARER_KIND)
+    are charged to a second row of the same kind (scope key 01:, kind `policy` so that no schema changes), an exact sliding window of
+    its own cap and window; every other credential is charged to the application row (00:), whose window then counts those alone.
+    The classes share the admissions table and nothing else that is counted: a request of one class cannot take a slot of the other.
+    A bearer request also holds the application row, to see its hold and embargo (the runbook's stop covers it) without being charged.
     """
     # The longest an admitted request can still be on its way to Discord after it was marked sent: the transport's
     # 20-second socket timeout (providers.http_transport) plus allowance for DNS, TLS set-up and clock skew. A request
@@ -448,6 +471,21 @@ class SharedPostgresBudget:
         # attaches the reviewed policy before use; absence never enables a request.
         self.policy = SafetyPolicy.parse(policy) if policy is not None else None
 
+    def _bearer(self, identity):
+        """Whether a request with this identity is charged to the bearer budget: the policy carries one and the credential is the
+        person's own bearer. Everything else is charged to the application budget, as every request used to be."""
+        return self.policy is not None and self.policy.bearer_capacity > 0 and identity.kind == BEARER_KIND
+
+    @property
+    def bearer_key(self):
+        """The scope key of the bearer budget's row, None when the policy has none (for the lane's outlook and the health payload)."""
+        return '01:' + self.application_key if self.policy is not None and self.policy.bearer_capacity > 0 else None
+
+    def _class(self):
+        """The class the application row's window counts: None while there is one budget (every admission), else 'bot' (all but
+        the bearer kind), the other being 'bearer'."""
+        return 'bot' if self.policy is not None and self.policy.bearer_capacity > 0 else None
+
     @contextmanager
     def _transaction(self):
         try:
@@ -485,7 +523,7 @@ class SharedPostgresBudget:
         span = self._span(window)
         return min(100000, max(cap + 1, cap * (math.ceil((span + MAX_PERMIT_SECONDS) / span) + 1)))
 
-    def _window_state(self, cur, cap, window, at=None):
+    def _window_state(self, cur, cap, window, at=None, klass=None):
         """The database clock (or the instant `at`) and what the application window holds then, in ONE statement.
 
         It must be a statement of its own, started after the application row's lock was granted: in READ COMMITTED a
@@ -497,25 +535,38 @@ class SharedPostgresBudget:
         still reach Discord keep a slot too (`held`): a permit not yet used or expired, and a request sent but never
         answered, for _horizon at most. Returns (now, {cap, window, held, occupied, unused}); `unused` is the part of
         `occupied` that is permits still to be used (they may be used at any later time: a booking counts them in every window).
+
+        `klass` is None while there is one budget: every admission counts. With a bearer budget (SafetyPolicy.bearer_capacity) the
+        admissions are two classes, each counted only in its own window: 'bearer' (the person's own bearer, BEARER_KIND) or 'bot'
+        (every other credential). The newest rows are taken first, of both classes, and the class picked from them: a class filter
+        inside the scan would read a quiet class's whole history, and the newest rows cover both classes' caps (_scan_limit).
         """
         span, horizon = self._span(window) + SLOT_EPSILON, self._horizon(window)
         clock, lead = ('clock_timestamp()', ()) if at is None else ('to_timestamp(%s::double precision)', (at,))
+        held_class = array_class = ''
+        scan = self._scan_limit(cap, window)
+        if klass is not None:
+            p = self.policy
+            scan = self._scan_limit(p.app_capacity + p.bearer_capacity, min(p.app_window_seconds, p.bearer_window_seconds))
+            held_class, array_class = ((f" AND credential_kind='{BEARER_KIND}'", ' AND newest.bearer') if klass == 'bearer'
+                                       else (f" AND credential_kind<>'{BEARER_KIND}'", ' AND NOT newest.bearer'))
         cur.execute(f'''WITH tick AS MATERIALIZED (SELECT {clock} AS at),
             newest AS MATERIALIZED (SELECT coalesce(sent_at,reserved_at) AS wire,
-                    state IN ('reserved','sealed') AND expires_at>(SELECT at FROM tick) AS unused
+                    state IN ('reserved','sealed') AND expires_at>(SELECT at FROM tick) AS unused,
+                    credential_kind='{BEARER_KIND}' AS bearer
                 FROM {ADMISSIONS} WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s)
             SELECT extract(epoch from tick.at)::double precision,
-                (SELECT count(*) FROM {ADMISSIONS} WHERE application_key=%s
+                (SELECT count(*) FROM {ADMISSIONS} WHERE application_key=%s{held_class}
                     AND coalesce(sent_at,reserved_at)<=tick.at-make_interval(secs=>%s)
                     AND state IN ('reserved','sealed','sent','uncertain')
                     AND (state IN ('reserved','sealed') AND expires_at>tick.at
                          OR state IN ('sent','uncertain') AND expires_at>tick.at-make_interval(secs=>%s)
                             AND coalesce(sent_at,reserved_at)>tick.at-make_interval(secs=>%s))),
                 array(SELECT extract(epoch from newest.wire)::double precision FROM newest
-                    WHERE newest.wire>tick.at-make_interval(secs=>%s)),
+                    WHERE newest.wire>tick.at-make_interval(secs=>%s){array_class}),
                 array(SELECT extract(epoch from newest.wire)::double precision FROM newest
-                    WHERE newest.unused AND newest.wire>tick.at-make_interval(secs=>%s))
-            FROM tick''', (*lead,self.application_key,self._scan_limit(cap,window),
+                    WHERE newest.unused AND newest.wire>tick.at-make_interval(secs=>%s){array_class})
+            FROM tick''', (*lead,self.application_key,scan,
                            self.application_key,span,horizon+SENT_SLACK,horizon,span,span))
         value = cur.fetchone()
         if (not value or len(value) != 4 or not valid_number(value[0]) or type(value[1]) is not int or value[1] < 0
@@ -525,11 +576,11 @@ class SharedPostgresBudget:
         return value[0], {'cap': cap, 'window': window, 'held': value[1], 'occupied': sorted(value[2]),
                           'unused': sorted(value[3])}
 
-    def _reading(self, cur, row):
+    def _reading(self, cur, row, klass=None):
         """`now` after the locks, as _policy(cur) reads it, with the window's inputs for the stored cap and window.
 
         _slide asks again (_window_state at that `now`) only if a reviewed policy has just changed either."""
-        now, reading = self._window_state(cur, row['cap'], row['window'])
+        now, reading = self._window_state(cur, row['cap'], row['window'], None, klass)
         if self.policy is None:
             raise RateCoordinatorUnavailable()
         self.policy.require_current(now)
@@ -562,6 +613,11 @@ class SharedPostgresBudget:
             '20:' + _digest(p.egress_scope): ('invalid', p.invalid_capacity, p.invalid_window_seconds),
             '40:' + major: ('resource', None, None),
             '50:' + _digest(identity.auth_key + ':' + (bucket or route) + ':' + major): ('route', 1, p.unknown_window_seconds)}
+        if self._bearer(identity):
+            # The person's own bearer: charged to the bearer budget's row (01:), which sorts after the application row and is locked
+            # with it, so the runbook's hold on the application row (00:) stops these requests too. The application row is only
+            # looked at (hold, embargo), never charged: its window counts the bot's class alone (_reserve).
+            result['01:' + self.application_key] = ('policy', p.bearer_capacity, p.bearer_window_seconds)
         if bucket is None:
             # Cold aliases share one probe within the auth + major resource.
             # Discord separates top-level guild/channel resources; app/global,
@@ -607,7 +663,7 @@ class SharedPostgresBudget:
         shared = sorted(shared_keys)
         if shared:
             if (not set(shared) < set(ordered) or '00:'+self.application_key not in shared
-                    or any(key[:3] not in ('00:','10:','11:','20:','40:') for key in shared)):
+                    or any(key[:3] not in ('00:','01:','10:','11:','20:','40:') for key in shared)):
                 raise RateCoordinatorUnavailable()
             mutable = sorted(set(ordered)-set(shared))
             # Materialization + COUNT consumes every common SHARE lock before
@@ -634,7 +690,7 @@ class SharedPostgresBudget:
                 or [value[0] for value in values] != ordered):
             raise RateCoordinatorUnavailable()
         rows = {value[0]:dict(zip(self._FIELDS,value[1:])) for value in values}
-        expected = {'00:':'policy','10:':'global','11:':'credential','20:':'invalid','40:':'resource'}
+        expected = {'00:':'policy','01:':'policy','10:':'global','11:':'credential','20:':'invalid','40:':'resource'}
         if any(rows[key]['kind'] != expected[key[:3]] for key in shared):
             raise RateCoordinatorUnavailable()
         return rows
@@ -755,6 +811,8 @@ class SharedPostgresBudget:
             cap, window = {'policy':(self.policy.app_capacity,self.policy.app_window_seconds),
                            'invalid':(self.policy.invalid_capacity,self.policy.invalid_window_seconds),
                            'discovery':(1,self.policy.unknown_window_seconds)}[row['kind']]
+            if key[:3] == '01:':  # the bearer budget's row is a policy row of its own cap and window
+                cap, window = self.policy.bearer_capacity, self.policy.bearer_window_seconds
             used = max(0,row['cap']-row['left'])
             active_prior = row['policyExpires'] > now
             row['cap'] = min(row['cap'],cap) if active_prior else cap
@@ -870,7 +928,7 @@ class SharedPostgresBudget:
         if row['left'] == 0:
             row['reset'] = (rest[len(rest) - free] + span - horizon) if 0 < free <= len(rest) else now + window
 
-    def _slide(self, cur, row, now, reading, book=0.0, create=False):
+    def _slide(self, cur, row, now, reading, book=0.0, create=False, klass=None):
         """Set the application row's `left` and `reset` from the admissions themselves (an exact sliding window).
 
         What is counted. Every admission occupies one slot from its wire time `w` (sent_at when it has one, else
@@ -898,12 +956,15 @@ class SharedPostgresBudget:
 
         left, reset: see _published. Returns (the booked wire time, or None for an immediate admission). A refusal leaves
         `left` 0 and `reset` at the instant the refused caller may ask again.
+
+        `row` is the policy row the request is charged to: the application's, or the bearer budget's (`klass` says which window the
+        reading counts: _window_state). Everything above holds for either, with its own cap and window.
         """
         cap, window = row['cap'], row['window']
         span = self._span(window) + SLOT_EPSILON
         if (reading['cap'], reading['window']) != (cap, window):
             # a reviewed policy changed the cap or window just now: the reading answered for the old ones
-            _now, reading = self._window_state(cur, cap, window, now)
+            _now, reading = self._window_state(cur, cap, window, now, klass)
         slots = cap - reading['held']
         wires, unused = reading['occupied'], reading['unused']  # ascending wire times that are still inside their span
         row['left'], row['reset'] = 0, now + window  # resolution alone can free a slot: poll once per window
@@ -1051,10 +1112,17 @@ class SharedPostgresBudget:
             keys = self._keys(identity,route,major,bucket)
             # The application row is held from this statement to the commit: one statement reads the clock (wall time
             # after lock waits) and the application window, one writes the result, then the commit.
+            # With a bearer budget a request is charged to one of two policy rows: the bearer's own for the person's bearer, the
+            # application's for every other credential. A bearer request holds the application row as well but only looks at it
+            # (its hold and embargo, which stop every request): it is neither refused by its count nor debited.
+            bearer = self._bearer(identity)
+            charged = ('01:' if bearer else '00:') + self.application_key
+            looked_at = '00:' + self.application_key if bearer else None
+            klass = 'bearer' if bearer else self._class()
             fresh = set()
             rows = self._locked(cur,keys,fresh=fresh)
             previous = {key:dict(row) for key,row in rows.items()}
-            now, reading = self._reading(cur,rows['00:'+self.application_key])
+            now, reading = self._reading(cur,rows[charged],klass)
             read_at = self._monotonic()  # when `now` was read: a booked wait is counted from here, on this process's clock
             wait, wait_scope = 0.0, 'unknown'
             slot = None
@@ -1065,13 +1133,13 @@ class SharedPostgresBudget:
                         # A read has no effect to be unsure of, so a hold is a wait for it; a create is refused outright.
                         raise RateDelayed(HOLD_WAIT_SECONDS,cause='hold',scope='embargo')
                     raise RateCoordinatorUnavailable()
-                if row['kind'] == 'policy':
+                if key == charged:
                     # sets left/reset; denied below like any capped row unless this is a booking
-                    slot = self._slide(cur,row,now,reading,book,create=not read_sent)
+                    slot = self._slide(cur,row,now,reading,book,create=not read_sent,klass=klass)
                 embargo = max((row['blocked'] or 0)-now,(row['circuit'] or 0)-now)
                 if embargo > wait:
                     wait,wait_scope = embargo,'embargo'
-                if row['cap'] is not None and row['left'] <= 0:
+                if row['cap'] is not None and key != looked_at and row['left'] <= 0:
                     if row['reset']-now > wait:
                         kind = {'policy':'application','discovery':'discovery'}.get(row['kind'],'unknown')
                         if row['kind'] == 'route':
@@ -1102,7 +1170,7 @@ class SharedPostgresBudget:
             if expiry <= now:
                 raise RateDelayed(.05,cause='window_expiring',scope='permit')
             for key,row in rows.items():
-                if row['cap'] is not None and row['kind'] != 'invalid':
+                if row['cap'] is not None and row['kind'] != 'invalid' and key != looked_at:
                     row['left'] -= 1
             permit = Permit(str(uuid.uuid4()),self.application_key,method,_digest(path),identity,binding_hash(binding),expiry)
             self._store_and_insert(cur,rows,keys,previous,permit,route,major,bucket,binding,read_sent,slot)
@@ -1342,7 +1410,7 @@ class SharedPostgresBudget:
             if (share and bucket == new_bucket and bucket is not None
                     and not any(key.startswith('30:') for key in keys)
                     and {key for key in keys if key.startswith('50:')} == {header_key}):
-                shared_keys = tuple(key for key in keys if key[:3] in ('00:','10:','11:','20:','40:'))
+                shared_keys = tuple(key for key in keys if key[:3] in ('00:','01:','10:','11:','20:','40:'))
             rows = self._locked(cur,keys,shared_keys=shared_keys) if shared_keys else self._locked(cur,keys)
             previous = {key:dict(row) for key,row in rows.items()}
             immutable_guards = {key:dict(rows[key]) for key in shared_keys}

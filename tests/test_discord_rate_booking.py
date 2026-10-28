@@ -65,7 +65,7 @@ class Booked(unittest.TestCase):
         return '/guilds/%d' % (700000000000000000 + self.serial)
 
     def forget_routes(self):
-        self.db.states = {k: v for k, v in self.db.states.items() if k[:3] in ('00:', '10:', '11:', '20:')}
+        self.db.states = {k: v for k, v in self.db.states.items() if k[:3] in ('00:', '01:', '10:', '11:', '20:')}
         self.db.maps = {}
 
     def at(self, offset):
@@ -605,10 +605,11 @@ class Lives(unittest.TestCase):
                 return t
         return now
 
-    def check_row(self, db, probe, identity, now, where):
-        """The application row has just been written, at `now`: it must say what a booking of the whole horizon would find. The
-        decision is tried on the ledger as it stands, with a probe of the same policy, and rolled back."""
-        (row,) = [dict(r) for r in db.states.values() if r['kind'] == 'policy']   # a copy: the probe changes the ledger's own dicts
+    def check_row(self, db, probe, identity, now, where, prefix='00:'):
+        """The application row (of the budget the request was charged to) has just been written, at `now`: it must say what a
+        booking of the whole horizon would find. The decision is tried on the ledger as it stands, with a probe of the same
+        policy and the same kind of credential, and rolled back."""
+        (row,) = [dict(r) for k, r in db.states.items() if k[:3] == prefix and r['kind'] == 'policy']   # a copy: the probe changes the ledger's own dicts
 
         class Rollback(Exception):
             pass
@@ -627,34 +628,50 @@ class Lives(unittest.TestCase):
             self.assertGreaterEqual(row['reset'], now - 1e-6, where + ': and then reset is when it is')
         return possible
 
-    def run_seed(self, seed):
+    def run_seed(self, seed, bearer=False):
+        """One random life. With `bearer`, a second budget for the user-bearer kind (the owner's D-2) runs beside the bot's: each
+        step is one class or the other, and every check below is made per class on that class's own wire times."""
         rng = random.Random(seed)
         capacity, window = rng.choice((2, 3, 5, 8)), rng.choice((1, 1, .5, 2))
         guard = rng.choice((0.0, .05, .05, .1, .2))      # none, the production headroom (D-16), the one it replaced, and a wide one
         reserve = rng.choice((0, 1, 1))
+        extra = {}
+        if bearer:   # drawn after everything above, so the lives of the single budget are the ones they always were
+            extra = {'bearer_capacity': rng.choice((1, 2, 3, 5)), 'bearer_window_seconds': rng.choice((1, 1, .5, 2))}
         with patch.object(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', guard), patch.object(SharedPostgresBudget, 'IMMEDIATE_RESERVE', reserve):
             db = MemoryLedger(now=T0)
             mono = [0.0]
 
             def sleep(seconds):
                 mono[0] += seconds
-            limiter = SharedPostgresBudget(db.connection, APP, policy=policy(capacity, window), sleep=sleep, monotonic=lambda: mono[0])
-            identity = RequestIdentity.make(APP, 'bot', 'lives-bot')
-            probe = SharedPostgresBudget(db.connection, APP, policy=policy(capacity, window), sleep=lambda seconds: None, monotonic=lambda: 0.0)
+            limiter = SharedPostgresBudget(db.connection, APP, policy=policy(capacity, window, **extra), sleep=sleep, monotonic=lambda: mono[0])
+            probe = SharedPostgresBudget(db.connection, APP, policy=policy(capacity, window, **extra), sleep=lambda seconds: None, monotonic=lambda: 0.0)
+            # (kind of credential, identity, cap, window, span, the prefix of the row it is charged to)
+            classes = [('bot', RequestIdentity.make(APP, 'bot', 'lives-bot'), capacity, window, self.span(window, guard), '00:')]
+            if bearer:
+                classes.append(('user', RequestIdentity.make(APP, 'user', 'lives-bearer', '444444444444444444'), extra['bearer_capacity'],
+                                extra['bearer_window_seconds'], self.span(extra['bearer_window_seconds'], guard), '01:'))
+
+            def of(kind):
+                """The wire times of one class (the bearer's are the user kind; every other kind is the bot's)."""
+                return sorted(MemoryLedger.wire_time(r) for r in db.admissions.values() if (r['kind'] == 'user' and bearer) == (kind == 'user'))
             probed = [0, 0]
-            span = self.span(window, guard)
+            admissions_of = {kind: 0 for kind, *_ in classes}
             permits, serial, booked, refused = [], 0, 0, 0
+            longest_span = max(c[4] for c in classes)
             for step in range(self.STEPS):
                 where = 'seed %d step %d' % (seed, step)
-                db.now += rng.choice((0, 1e-6, .01, .05, .1, window / 3, window, span, 2 * window)) if rng.random() < .8 else rng.uniform(0, window)
-                db.states = {k: v for k, v in db.states.items() if k[:3] in ('00:', '10:', '11:', '20:')}
+                kind, identity, cap, win, span, prefix = rng.choice(classes) if bearer else classes[0]
+                db.now += rng.choice((0, 1e-6, .01, .05, .1, win / 3, win, span, 2 * win)) if rng.random() < .8 else rng.uniform(0, win)
+                db.states = {k: v for k, v in db.states.items() if k[:3] in ('00:', '01:', '10:', '11:', '20:')}
                 db.maps = {}
                 # answered requests older than anything a window or a held count can see only slow the double down (it copies itself)
                 db.admissions = {k: r for k, r in db.admissions.items()
-                                 if r['state'] not in ('observed', 'blocked') or MemoryLedger.wire_time(r) > db.now - 5 * span - 2}
+                                 if r['state'] not in ('observed', 'blocked') or MemoryLedger.wire_time(r) > db.now - 5 * longest_span - 2}
                 serial += 1
                 path = '/guilds/%d' % (710000000000000000 + serial)
                 before = sorted(MemoryLedger.wire_time(r) for r in db.admissions.values())
+                before_class = of(kind)
                 roll = rng.random()
                 now = db.now
                 admitted = False
@@ -666,12 +683,13 @@ class Lives(unittest.TestCase):
                         admitted = True
                     except RateDelayed as error:
                         refused += 1
-                        held = sum(1 for r in db.admissions.values() if MemoryLedger.wire_time(r) <= now - span and (
-                            r['state'] in ('reserved', 'sealed') and r['expires'] > now
-                            or r['state'] in ('sent', 'uncertain') and MemoryLedger.wire_time(r) > now - window - 30.0))
-                        slots = capacity - held
-                        if error.rate_scope_kind == 'application' and slots > 0 and not any(w > now + 1.05 for w in before):
-                            wires = [w for w in before if w > now - span]
+                        held = sum(1 for r in db.admissions.values() if (r['kind'] == 'user' and bearer) == (kind == 'user')
+                                   and MemoryLedger.wire_time(r) <= now - span and (
+                                       r['state'] in ('reserved', 'sealed') and r['expires'] > now
+                                       or r['state'] in ('sent', 'uncertain') and MemoryLedger.wire_time(r) > now - win - 30.0))
+                        slots = cap - held
+                        if error.rate_scope_kind == 'application' and slots > 0 and not any(w > now + 1.05 for w in before_class):
+                            wires = [w for w in before_class if w > now - span]
                             self.assertAlmostEqual(now + error.retry_after_seconds, max(self.brute_earliest(wires, now, span, slots), now + .001),
                                                    places=6, msg=where + ' quote')
                 elif roll < .7:  # a booked read
@@ -689,7 +707,8 @@ class Lives(unittest.TestCase):
                     except RateDelayed:
                         refused += 1
                 if admitted:   # the row was written just now, at `now`
-                    probed[self.check_row(db, probe, identity, now, where)] += 1
+                    admissions_of[kind] += 1
+                    probed[self.check_row(db, probe, identity, now, where, prefix)] += 1
                 after = sorted(MemoryLedger.wire_time(r) for r in db.admissions.values())
                 new = [w for w in after if w not in before]
                 for w in new:
@@ -705,17 +724,18 @@ class Lives(unittest.TestCase):
                             limiter.consume(permit, 'GET', ppath)
                         except RateDelayed:
                             pass
-                wires = sorted(w for w in (MemoryLedger.wire_time(r) for r in db.admissions.values()) if w > db.now - 4 * span - 3)
-                self.assertLessEqual(busiest_closed_window(wires, window), capacity, where + ': the ceiling over every wire')
-                self.assertLessEqual(max((sum(1 for w in wires if a <= w < a + span - EPS) for a in wires), default=0), capacity,
-                                     where + ': and the same in every span (window and headroom), which is what the guard rests on')
-        return booked, refused, probed
+                for kind_k, _identity, cap_k, win_k, span_k, _prefix in classes:
+                    wires = [w for w in of(kind_k) if w > db.now - 4 * span_k - 3]
+                    self.assertLessEqual(busiest_closed_window(wires, win_k), cap_k, where + ': the ceiling over every wire of the %s class' % kind_k)
+                    self.assertLessEqual(max((sum(1 for w in wires if a <= w < a + span_k - EPS) for a in wires), default=0), cap_k,
+                                         where + ': and the same in every span (window and headroom), which is what the guard rests on')
+        return booked, refused, probed, admissions_of
 
     def test_the_ceiling_and_the_quotes_hold_over_random_lives(self):
         total_booked = total_refused = 0
         full = open_ = 0
         for seed in self.SEEDS:
-            booked, refused, (closed, opened) = self.run_seed(seed)
+            booked, refused, (closed, opened), _ = self.run_seed(seed)
             total_booked += booked
             total_refused += refused
             full += closed
@@ -725,6 +745,23 @@ class Lives(unittest.TestCase):
         self.assertGreater(full, 50, 'and the stored row was checked against a booking that was refused as well as against one that was not')
         self.assertGreater(open_, 50)
 
+    def test_two_budgets_hold_over_random_lives_each_over_its_own_wires(self):
+        """The same lives with the user-bearer kind on a budget of its own (the owner's D-2 option 1): at every step the ceiling
+        holds per class over that class's wire times, a refusal's quote is the earliest instant a brute force finds on the class's
+        own window, a booking never lands before the moment it asked, and each row says what a booking of its class would find."""
+        total = {'bot': 0, 'user': 0}
+        refused = full = open_ = 0
+        for seed in self.SEEDS:
+            _booked, denied, (closed, opened), admissions = self.run_seed(seed, bearer=True)
+            refused += denied
+            full += closed
+            open_ += opened
+            for kind, count in admissions.items():
+                total[kind] += count
+        self.assertGreater(min(total.values()), 400, 'both classes were busy: %r' % total)
+        self.assertGreater(refused, 100)
+        self.assertGreater(full, 100)
+        self.assertGreater(open_, 100)
 
 if __name__ == '__main__':
     unittest.main()
