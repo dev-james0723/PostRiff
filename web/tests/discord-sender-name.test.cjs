@@ -30,9 +30,9 @@ const text = (markup) => markup.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').
 // ---------------------------------------------------------------------------------------------------------------
 
 test('the editor gives the same verdict, and the same first reason, as the server for every shared case', () => {
-  assert.equal(verdicts.schema, 'rafii.discord-sender-name-verdicts.v2');
+  assert.equal(verdicts.schema, 'rafii.discord-sender-name-verdicts.v3');
   assert.deepEqual(verdicts.limits, logic.SENDER_LIMIT);
-  assert.ok(verdicts.cases.length >= 90);
+  assert.ok(verdicts.cases.length >= 110);
   for (const shared of verdicts.cases) {
     const check = logic.checkSenderName(nameOf(shared), shared.kind);
     const label = `${shared.kind}: ${shared.note}`;
@@ -68,6 +68,31 @@ test('length is the binding of code points and UTF-16 units, as the server keeps
   assert.equal(logic.checkSenderName('x'.repeat(33), 'bot').over, 1);
   // The profile's own limit wins when the server sends one.
   assert.equal(logic.checkSenderName('x'.repeat(10), 'bot', { limit: 8 }).over, 2);
+});
+
+test('zero width joiners are accepted only where the server accepts them', () => {
+  const family = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}';
+  const accepted = [
+    family,
+    '\u2764\ufe0f\u200d\u{1F525}', // an emoji with its variation selector, then a joiner
+    '\u{1F469}\u{1F3FD}\u200d\u{1F4BB}', // a skin tone modifier before the joiner
+    '\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645', // Persian, a non-joiner between letters
+    '\u0915\u094d\u200c\u0937', // Devanagari, a non-joiner between a mark and a letter
+    '^\u200d^' // two modifier symbols: the server counts them as symbols
+  ];
+  for (const name of accepted) assert.deepEqual(logic.checkSenderName(name, 'webhook').issues, [], JSON.stringify(name));
+  const refused = [
+    'join\u200dder', 'a\u200cb', '\u200dabc', 'abc\u200d', '\u200c\u0628', '\u0628\u200c \u0628',
+    '\u{1F469}\u200dx', '\u{1F469}\u200d\ufe0f\u{1F468}', '\u{1F469}\u200d\u200d\u{1F468}', '\u0645\u200d\u0645'
+  ];
+  for (const name of refused) assert.deepEqual(logic.checkSenderName(name, 'webhook').issues, ['control_or_format'], JSON.stringify(name));
+  // Other control and format characters are refused even next to an emoji sequence.
+  assert.ok(logic.checkSenderName(`${family}\u200b`, 'webhook').issues.includes('control_or_format'));
+  // The count is UTF-16 units: a family is 5 code points and 8 units, so 10 fit in 80 and 11 do not.
+  const ten = logic.checkSenderName(family.repeat(10), 'webhook');
+  assert.deepEqual({ length: ten.length, codePoints: ten.codePoints, over: ten.over, issues: ten.issues }, { length: 80, codePoints: 50, over: 0, issues: [] });
+  assert.deepEqual(logic.checkSenderName(family.repeat(11), 'webhook').issues, ['too_long']);
+  assert.deepEqual(logic.checkSenderName(family.repeat(5), 'bot').issues, ['too_long']);
 });
 
 test('reserved words apply to both kinds and fold the way the server folds', () => {
@@ -133,6 +158,15 @@ test('a refused request maps to the state the contract names, never to a guessed
   assert.equal(first({ status: 409, code: 'discord_sender_name_required' }).key, 'stale');
   assert.equal(first({ status: 409, code: 'discord_connection_required' }).key, 'reconnect_required');
   assert.equal(first({ status: 409, code: 'discord_sender_write_unconfirmed' }).key, 'write_unconfirmed');
+  // Discord refused the write (nothing changed) and Discord accepted it without confirming (it may have changed) are different answers.
+  assert.equal(first({ status: 409, code: 'discord_sender_write_refused' }).key, 'write_refused');
+  // 409: reconnect the connection. 503: Discord connections are paused for the whole provider, which a reconnect cannot fix.
+  assert.equal(first({ status: 503, code: 'discord_connection_required' }).key, 'provider_unavailable');
+  // The provider is not ready: a 503 that still names its reason.
+  assert.deepEqual(states({ status: 503, code: 'discord_sender_name_unavailable', reasons: [{ code: 'provider_unavailable' }] }).map((state) => state.key), ['provider_unavailable']);
+  // Discord's shared request capacity is its own state, with the wait it named; Rafii's own throttle stays rate_limited.
+  assert.deepEqual(first({ status: 429, code: 'discord_rate_delayed', retryAfterSeconds: 7 }), { key: 'rate_delayed', retryAfterSeconds: 7, retryAtMs: NOW + 7_000, signInAgain: false });
+  assert.equal(first({ status: 429, code: 'discord_rate_delayed' }).retryAtMs, null);
   assert.equal(first({ status: 404, code: 'not_found' }).key, 'reconnect_required');
   assert.equal(first({ status: 403, code: 'permission_denied' }).key, 'workspace_permission');
   assert.deepEqual(first({ status: 429, code: 'rate_limited', retryAfterSeconds: 60 }), { key: 'rate_limited', retryAfterSeconds: 60, retryAtMs: NOW + 60_000, signInAgain: false });
@@ -152,14 +186,15 @@ test('a refused request maps to the state the contract names, never to a guessed
 
 test('only the states that can change offer a check, and a check is a read', () => {
   const offered = logic.SENDER_STATES.filter((key) => logic.canCheckAgain(key));
-  assert.deepEqual(offered.sort(), ['bot_missing_change_nickname', 'edit_pending', 'failed', 'nickname_authority_other_workspace', 'person_missing_manage_nicknames', 'person_role_below_bot', 'rate_limited', 'reconnect_required', 'stale', 'upstream_unavailable', 'write_unconfirmed'].sort());
+  assert.deepEqual(offered.sort(), ['bot_missing_change_nickname', 'edit_pending', 'failed', 'nickname_authority_other_workspace', 'person_missing_manage_nicknames', 'person_role_below_bot', 'provider_unavailable', 'rate_delayed', 'rate_limited', 'reconnect_required', 'stale', 'upstream_unavailable', 'write_refused', 'write_unconfirmed'].sort());
   // The contract: these three are answered without Discord and must not be retried.
   for (const key of ['sender_names_disabled', 'bot_nickname_disabled', 'not_authorizing_member']) assert.equal(logic.canCheckAgain(key), false, key);
   assert.equal(logic.canCheckAgain('ready'), false);
 });
 
-test('the seventeen states are the sixteen the copy explains plus ready', () => {
-  assert.equal(logic.SENDER_STATES.length, 17);
+test('the twenty states are the nineteen the copy explains plus ready', () => {
+  assert.equal(logic.SENDER_STATES.length, 20);
+  assert.deepEqual([...logic.UNAVAILABLE_CODES], ['sender_names_disabled', 'bot_nickname_disabled', 'provider_unavailable', 'not_authorizing_member', 'session_reverification_required', 'person_missing_manage_nicknames', 'person_role_below_bot', 'bot_missing_change_nickname', 'nickname_authority_other_workspace', 'edit_pending'], 'the server order of the reasons (REASON_ORDER)');
   assert.equal(logic.SENDER_STATES[0], 'ready');
   assert.deepEqual([...stateCopy.BLOCKED_STATES].sort(), logic.SENDER_STATES.filter((key) => key !== 'ready').sort());
   for (const code of logic.UNAVAILABLE_CODES) assert.ok(logic.SENDER_STATES.includes(code), code);
@@ -198,6 +233,26 @@ test('the two switches explain themselves without asking Discord anything', () =
   assert.equal(state({ senderNames: true, botNickname: false }, 'bot').key, 'bot_nickname_disabled');
   // The bot switch never switches webhook names off (the owner's rule: webhook names come first).
   assert.equal(state({ senderNames: true, botNickname: false }, 'webhook'), null);
+});
+
+test('the provider view\'s per-mode flags are read per kind and unknown is not off', () => {
+  const off = (modes, kind) => logic.senderProviderSaysOff(modes, kind);
+  assert.equal(off(undefined, 'bot'), false);
+  assert.equal(off({}, 'webhook'), false);
+  assert.equal(off({ bot: { nickname: { enabled: true } }, webhook: { senderName: { enabled: true } } }, 'bot'), false);
+  assert.equal(off({ bot: { nickname: { enabled: false } } }, 'bot'), true);
+  assert.equal(off({ bot: { nickname: { enabled: false } } }, 'webhook'), false, 'the bot flag never switches webhook names off');
+  assert.equal(off({ webhook: { senderName: { enabled: false } } }, 'webhook'), true);
+  assert.equal(off({ webhook: { senderName: { enabled: false } } }, 'bot'), false);
+});
+
+test('a bot nickname is drawn only when it is known, and a hold is claimed only when something is recorded', () => {
+  assert.deepEqual(logic.botNicknameView(undefined, 'channel'), { name: null, source: 'unknown', hold: undefined });
+  assert.deepEqual(logic.botNicknameView(undefined, 'manifest'), { name: null, source: 'unknown', hold: undefined });
+  assert.deepEqual(logic.botNicknameView('Concert helper', 'channel'), { name: 'Concert helper', source: 'observed', hold: 'pending' });
+  assert.deepEqual(logic.botNicknameView('Concert helper', 'manifest'), { name: 'Concert helper', source: 'approved', hold: 'approved' });
+  assert.deepEqual(logic.botNicknameView(null, 'channel'), { name: null, source: 'bot_username', hold: 'pending' });
+  assert.deepEqual(logic.botNicknameView('', 'manifest'), { name: null, source: 'bot_username', hold: 'approved' });
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -255,10 +310,19 @@ test('the messages never name another workspace and say what the person can do',
   const english = (state) => stateCopy.senderStateCopy(packs.en, state);
   assert.match(english('sender_names_disabled').next, /Nothing to do/);
   assert.doesNotMatch(english('sender_names_disabled').body, /held/, 'the held-post sentence is shown for webhooks only, in its own line');
-  assert.match(packs.en.senderStateHeldNote, /held, not sent under another name/);
+  assert.match(packs.en.senderStateHeldNote, /is held, and nothing is sent/);
+  assert.match(packs.en.senderStateHeldNote, /never sent under another name/);
+  assert.match(packs.en.senderStateHeldNote, /stays held after the feature is back on/);
   assert.match(english('bot_nickname_disabled').next, /incoming webhook/);
   assert.match(english('bot_nickname_disabled').body, /Webhook sender names are not affected/);
   assert.match(english('not_authorizing_member').next, /Ask that member/);
+  assert.match(english('not_authorizing_member').title, /bot/, 'only the bot nickname is restricted to the authorizing member');
+  assert.match(english('not_authorizing_member').body, /Webhook sender names are not affected/);
+  assert.match(english('provider_unavailable').body, /on Rafii’s side/);
+  assert.match(english('provider_unavailable').next, /Nothing to fix on your side/);
+  assert.match(english('rate_delayed').body, /Nothing was changed/);
+  assert.match(english('rate_delayed').next, /Rafii does not retry for you/);
+  assert.notEqual(english('rate_delayed').title, english('rate_limited').title, 'Discord asking Rafii to wait is not Rafii\'s own limit');
   assert.match(english('person_missing_manage_nicknames').body, /Manage Nicknames/);
   assert.match(english('person_role_below_bot').body, /highest role is above the bot’s highest role/);
   assert.match(english('bot_missing_change_nickname').body, /Change Nickname/);
@@ -268,8 +332,13 @@ test('the messages never name another workspace and say what the person can do',
   assert.match(english('stale').body, /another member|another Rafii workspace/);
   assert.match(english('session_reverification_required').next, /Sign out and sign in again/);
   assert.match(english('reconnect_required').next, /Channels page/);
-  assert.match(english('write_unconfirmed').body, /may be unchanged, and Rafii did not try again/);
+  assert.match(english('write_unconfirmed').body, /The nickname may have changed, and Rafii did not try again/);
   assert.match(english('write_unconfirmed').next, /Check again/);
+  assert.match(english('write_refused').body, /The nickname is unchanged, nothing is waiting, and Rafii did not try again/);
+  assert.match(english('write_refused').next, /Check again/);
+  assert.notEqual(english('write_refused').title, english('write_unconfirmed').title, 'a refusal and an unconfirmed write are different news');
+  assert.match(packs.en.senderCardOffBot, /shared by everyone who uses the bot/);
+  assert.doesNotMatch(packs.en.senderCardOff, /switched off|Edit sender name/, 'the card note claims no cause and does not point at a button that is not there');
   assert.match(english('rate_limited').body, /Nothing was changed/);
   assert.match(english('upstream_unavailable').body, /Nothing was changed/);
   assert.match(english('workspace_permission').next, /workspace owner or administrator/);
@@ -347,21 +416,27 @@ test('a bot post is shown with the shared server nickname and never as a per-pos
   assert.match(en, /server administrator can change it at any time/);
 });
 
-test('queued posts: a webhook post keeps its approved name, a bot post follows the current nickname, and neither is promised unless the server says so', () => {
+test('queued posts: a webhook post keeps its approved name, a bot post is held if its nickname changes, and neither is promised unless it is known', () => {
   const hook = html(base('en', { text: 'Hi' }));
   assert.ok(hook.includes(packs.en.previewWebhookQueuedNote));
   assert.ok(!hook.includes(packs.en.previewBotQueuedNote));
   assert.ok(!html(base('en', { text: 'Hi', queuedKeepsName: false })).includes(packs.en.previewWebhookQueuedNote));
-  const bot = html(base('en', { kind: 'bot', name: 'Concert helper', nameSource: 'observed', text: 'Hi' }));
-  assert.ok(bot.includes(packs.en.previewBotQueuedNote));
-  assert.ok(!bot.includes(packs.en.previewWebhookQueuedNote));
-  assert.ok(!html(base('en', { kind: 'bot', name: 'Concert helper', nameSource: 'observed', text: 'Hi', queuedFollowsNickname: false })).includes(packs.en.previewBotQueuedNote));
+  const bot = (extra) => html(base('en', { kind: 'bot', name: 'Concert helper', nameSource: 'observed', text: 'Hi', ...extra }));
+  assert.ok(bot({ botHold: 'pending' }).includes(packs.en.previewBotQueuedNote));
+  assert.ok(!bot({ botHold: 'pending' }).includes(packs.en.previewWebhookQueuedNote));
+  assert.ok(bot({ botHold: 'approved' }).includes(packs.en.previewBotApprovedNote));
+  assert.ok(!bot({ botHold: 'approved' }).includes(packs.en.previewBotQueuedNote));
+  // Without knowledge that the approval records the nickname, nothing about holding is claimed.
+  assert.ok(!bot({}).includes(packs.en.previewBotQueuedNote) && !bot({}).includes(packs.en.previewBotApprovedNote));
+  assert.ok(bot({}).includes(packs.en.previewBotNote));
   for (const locale of LOCALES) {
-    const botNote = html(base(locale, { kind: 'bot', name: 'x', nameSource: 'observed', text: 'Hi' }));
+    const botNote = html(base(locale, { kind: 'bot', name: 'x', nameSource: 'observed', text: 'Hi', botHold: 'pending' }));
     assert.ok(!botNote.includes(packs[locale].previewWebhookQueuedNote), `${locale}: a bot post is never said to keep a name`);
+    assert.ok(botNote.includes(packs[locale].previewBotQueuedNote), `${locale}: the hold note`);
   }
-  assert.match(packs.en.previewBotQueuedNote, /whatever nickname the bot has when they are sent/);
-  assert.doesNotMatch(packs.en.previewBotNote + packs.en.previewBotQueuedNote, /keeps? the name/i);
+  assert.match(packs.en.previewBotQueuedNote, /holds the post, sends nothing, and asks you to review it again/);
+  assert.match(packs.en.previewBotApprovedNote, /held and nothing is sent/);
+  assert.doesNotMatch(packs.en.previewBotNote + packs.en.previewBotQueuedNote + packs.en.previewBotApprovedNote, /keeps? the name|whatever nickname the bot has when they are sent/i);
 });
 
 test('the preview follows what is typed, and says it is not saved yet', () => {
@@ -441,7 +516,7 @@ test('each availability state renders its own message in every locale with a sta
   const seen = new Set();
   for (const locale of LOCALES) {
     for (const key of stateCopy.BLOCKED_STATES) {
-      const timed = key === 'edit_pending' || key === 'rate_limited';
+      const timed = key === 'edit_pending' || key === 'rate_limited' || key === 'rate_delayed';
       const markup = renderToStaticMarkup(React.createElement(SenderStatePanel, {
         state: { key, retryAfterSeconds: timed ? 90 : null, retryAtMs: timed ? 1792750000000 : null, signInAgain: false },
         copy: packs[locale], locale, timeZone: 'UTC', id: 'x', nowMs: 1792749000000, checkedAtMs: 1792749000000
@@ -468,6 +543,7 @@ test('a held change names its wait and its time; an alert is announced as one', 
   assert.match(panel(pending(null, null)), /in about two minutes/);
   assert.match(panel(pending(1792748000000, 90), { nowMs: 1792749000000 }), /check again now/);
   assert.match(panel({ key: 'rate_limited', retryAtMs: 1792749060000, retryAfterSeconds: 60, ...base }, { nowMs: 1792749000000 }), /Rafii can check again in about 60 seconds, at/);
+  assert.match(panel({ key: 'rate_delayed', retryAtMs: 1792749007000, retryAfterSeconds: 7, ...base }, { nowMs: 1792749000000 }), /Rafii can check again in about 7 seconds, at/);
   assert.match(panel(pending(null, null)), /id="p-recheck"/);
   // The two held states say different things.
   assert.notEqual(text(panel(pending(null, null))), text(panel({ key: 'rate_limited', retryAtMs: null, retryAfterSeconds: null, ...base })));

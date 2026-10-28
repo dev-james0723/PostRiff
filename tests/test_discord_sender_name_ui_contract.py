@@ -1,8 +1,8 @@
 """The sender-name editor in the web app checks a name before saving with a copy of
-`sender_names.name_problem` (contract v2, docs/sender-name/UI-API-CONTRACT.md). This test keeps the verdict
-fixture that both sides share honest: the real validator must give exactly the verdicts the editor's tests
-assume. If the backend rules change (limit, reserved words, normalization, character classes) this fails
-until the fixture and `web/src/lib/channels/discord-sender-name.ts` are updated together.
+`sender_names.name_problem` (contract v2, docs/sender-name/UI-API-CONTRACT.md, rules as of backend commit b03fc7ae).
+This test keeps the verdict fixture that both sides share honest: the real validator must give exactly the
+verdicts the editor's tests assume. If the backend rules change (limit, reserved words, normalization, character
+classes, joiners) this fails until the fixture and `web/src/lib/channels/discord-sender-name.ts` are updated together.
 
 The v2 validator lives on the sender-name backend branch. On a tree that does not have it yet
 (`name_problem` missing) the verdict checks are skipped with a message, never silently passed.
@@ -13,6 +13,14 @@ from pathlib import Path
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.discord import sender_names
+
+# The reasons the editor has a state for, in the order the server evaluates them (REASON_ORDER); a new reason on the
+# server has no message in the editor until `web/src/lib/channels/discord-sender-name.ts` and the copy are extended.
+EDITOR_REASONS = ('sender_names_disabled', 'bot_nickname_disabled', 'provider_unavailable', 'not_authorizing_member',
+                  'session_reverification_required', 'person_missing_manage_nicknames', 'person_role_below_bot',
+                  'bot_missing_change_nickname', 'nickname_authority_other_workspace', 'edit_pending')
+# The keys the editor sends in a POST body (`name` is absent from a reset).
+EDITOR_BODY_KEYS = frozenset({'name', 'fingerprint', 'confirmed', 'sharedServerConfirmed', 'reset'})
 
 FIXTURE = Path(__file__).resolve().parents[1] / 'web' / 'tests' / 'fixtures' / 'discord-sender-name-verdicts.json'
 HAS_V2 = hasattr(sender_names, 'name_problem')
@@ -28,9 +36,9 @@ class SenderNameUiContract(unittest.TestCase):
         cls.document = json.loads(FIXTURE.read_text(encoding='utf-8'))
 
     def test_fixture_shape(self):
-        self.assertEqual(self.document['schema'], 'rafii.discord-sender-name-verdicts.v2')
+        self.assertEqual(self.document['schema'], 'rafii.discord-sender-name-verdicts.v3')
         self.assertEqual(self.document['limits'], {'webhook': 80, 'bot': 32})
-        self.assertGreaterEqual(len(self.document['cases']), 90)
+        self.assertGreaterEqual(len(self.document['cases']), 110)
         reasons = {case['reason'] for case in self.document['cases']}
         self.assertEqual(reasons - {None}, {
             'empty', 'surrounding_space', 'not_normalized', 'too_long', 'control_or_format', 'spacing',
@@ -66,6 +74,11 @@ class SenderNameUiContract(unittest.TestCase):
         self.assertTrue(rules['singleSpacesOnly'])
         self.assertTrue(rules['reservedWords'])
         self.assertFalse(rules['surroundingSpace'])
+
+    @unittest.skipUnless(HAS_V2, 'sender_names.name_problem (contract v2) is not on this tree; run on the merged tree')
+    def test_reasons_and_body_keys_the_editor_knows_match_the_server(self):
+        self.assertEqual(tuple(sender_names.REASON_ORDER), EDITOR_REASONS)
+        self.assertEqual(frozenset(sender_names.ALLOWED_BODY), EDITOR_BODY_KEYS)
 
 
 if __name__ == '__main__':

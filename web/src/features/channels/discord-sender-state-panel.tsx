@@ -55,7 +55,7 @@ export function SenderStatePanel({ state, kind, copy, locale, timeZone, id, role
           {copy.senderStateHeldNote}
         </p>
       )}
-      {(state.key === 'edit_pending' || state.key === 'rate_limited') && (
+      {(state.key === 'edit_pending' || state.key === 'rate_limited' || state.key === 'rate_delayed') && (
         <p id={`${id}-recheck`} data-recheck data-retry-after-seconds={state.retryAfterSeconds ?? undefined} className='text-sm font-medium'>
           {recheckLine(copy, state, locale, timeZone, nowMs)}
         </p>

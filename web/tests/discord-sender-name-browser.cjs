@@ -30,12 +30,14 @@ for (const name of ['.env', '.env.local', '.env.development', '.env.development.
 // What a complete run must have done. The names are the receipt: a case that did not run is missing from it.
 const REQUIRED_CASES = [
   'webhook-edit-save', 'webhook-body-has-no-shared-flag', 'bot-shared-confirm-save', 'bot-body-has-shared-flag', 'focus-on-field-after-load', 'focus-returns-to-trigger',
+  'webhook-reset', 'webhook-reset-focus-and-no-double-post', 'bot-hold-note-and-warning', 'bot-hold-note-absent-when-switch-off', 'validation-joiner-accepted',
+  'schedule-preview-bot-nickname', 'review-preview-bot-recorded-nickname',
   'validation-too-long', 'validation-surrounding-space', 'validation-spacing', 'validation-forbidden-character', 'validation-url-like', 'validation-reserved-word',
   'validation-control-or-format', 'validation-not-normalized', 'validation-empty', 'validation-emoji-counts-two', 'validation-clears', 'counter-limits',
   'preview-webhook', 'preview-bot', 'preview-live-update', 'preview-theme-toggle', 'preview-contrast',
-  'state-sender_names_disabled', 'state-bot_nickname_disabled', 'state-not_authorizing_member', 'state-session_reverification_required', 'state-person_missing_manage_nicknames',
+  'state-write_refused', 'state-sender_names_disabled', 'state-bot_nickname_disabled', 'state-provider_unavailable', 'state-not_authorizing_member', 'state-session_reverification_required', 'state-person_missing_manage_nicknames',
   'state-person_role_below_bot', 'state-bot_missing_change_nickname', 'state-nickname_authority_other_workspace', 'state-edit_pending', 'state-reconnect_required',
-  'state-rate_limited', 'state-upstream_unavailable', 'state-workspace_permission', 'state-stale', 'state-failed', 'state-write_unconfirmed', 'state-several-reasons', 'state-check-again-is-a-read',
+  'state-rate_limited', 'state-rate_delayed', 'state-upstream_unavailable', 'state-workspace_permission', 'state-stale', 'state-failed', 'state-write_unconfirmed', 'state-several-reasons', 'state-check-again-is-a-read',
   'state-pending-countdown', 'state-blocked-controls-explain', 'default-off-is-read-only-view', 'card-hint-from-provider', 'card-hint-learned-from-read',
   'failure-stale-reload-no-retry', 'failure-fresh-session', 'failure-post-unavailable', 'failure-server-rule-keeps-form', 'failure-reload-uses-new-fingerprint',
   'protect-double-click', 'protect-enter-twice', 'protect-pending-close', 'protect-escape-while-saving',
@@ -90,6 +92,7 @@ const ISSUE_KEYS = {empty: 'senderIssueEmpty', surrounding_space: 'senderIssueSp
 const STATE_TEXT = {
   sender_names_disabled: ['senderStateSenderNamesDisabledTitle', 'senderStateSenderNamesDisabledBody', 'senderStateSenderNamesDisabledNext'],
   bot_nickname_disabled: ['senderStateBotNicknameDisabledTitle', 'senderStateBotNicknameDisabledBody', 'senderStateBotNicknameDisabledNext'],
+  provider_unavailable: ['senderStateProviderUnavailableTitle', 'senderStateProviderUnavailableBody', 'senderStateProviderUnavailableNext'],
   not_authorizing_member: ['senderStateNotAuthorizingMemberTitle', 'senderStateNotAuthorizingMemberBody', 'senderStateNotAuthorizingMemberNext'],
   session_reverification_required: ['senderStateSessionReverificationRequiredTitle', 'senderSessionError', 'senderStateSessionReverificationRequiredNext'],
   person_missing_manage_nicknames: ['senderStatePersonMissingManageNicknamesTitle', 'senderStatePersonMissingManageNicknamesBody', 'senderStatePersonMissingManageNicknamesNext'],
@@ -99,13 +102,15 @@ const STATE_TEXT = {
   edit_pending: ['senderStateEditPendingTitle', 'senderChangePending', 'senderStateEditPendingNext'],
   stale: ['senderStateStaleTitle', 'senderStateStaleBody', 'senderStateStaleNext'],
   write_unconfirmed: ['senderStateWriteUnconfirmedTitle', 'senderStateWriteUnconfirmedBody', 'senderStateWriteUnconfirmedNext'],
+  write_refused: ['senderStateWriteRefusedTitle', 'senderStateWriteRefusedBody', 'senderStateWriteRefusedNext'],
   reconnect_required: ['senderStateReconnectRequiredTitle', 'senderStateReconnectRequiredBody', 'senderStateReconnectRequiredNext'],
   rate_limited: ['senderStateRateLimitedTitle', 'senderStateRateLimitedBody', 'senderStateRateLimitedNext'],
+  rate_delayed: ['senderStateRateDelayedTitle', 'senderStateRateDelayedBody', 'senderStateRateDelayedNext'],
   upstream_unavailable: ['senderStateUpstreamUnavailableTitle', 'senderStateUpstreamUnavailableBody', 'senderStateUpstreamUnavailableNext'],
   workspace_permission: ['senderStateWorkspacePermissionTitle', 'senderStateWorkspacePermissionBody', 'senderStateWorkspacePermissionNext'],
   failed: ['senderStateFailedTitle', 'senderSaveFailed', 'senderStateFailedNext']
 };
-assert.equal(Object.keys(STATE_TEXT).length, 16);
+assert.equal(Object.keys(STATE_TEXT).length, 19);
 const fill = (text, values) => text.replace(/\{(\w+)\}/g, (whole, name) => String(values[name] ?? whole));
 const squash = value => value.replace(/\s+/g, ' ').trim();
 const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -118,7 +123,7 @@ function profile(kind, id, extra = {}) {
     observedName: 'Acme Weekly', observedAt: 1800000000.5, externalChange: false, fingerprint: hash(id + '-1'),
     feature: {senderNames: true, botNickname: true}, editable: true, unavailable: [],
     preview: {currentDisplayName: 'Acme Weekly', badge: 'APP', audience: webhook ? 'this_connection' : 'everyone_in_server',
-      queuedPostsKeepApprovedName: webhook, queuedPostsFollowCurrentNickname: !webhook}, ...extra};
+      queuedPostsKeepApprovedName: webhook, queuedBotPostsHoldIfNicknameChanges: !webhook}, ...extra};
 }
 const blockedProfile = (kind, id, codes, extra = {}) => profile(kind, id, {editable: false, unavailable: codes.map(code => typeof code === 'string' ? {code} : code), ...extra});
 /** The contract's early answers, made without reading Discord: no name, no observation time. */
@@ -128,15 +133,17 @@ const unread = {name: '', effectiveName: null, observedName: null, observedAt: n
 const STATE_SCENARIOS = [
   {state: 'sender_names_disabled', kind: 'webhook', get: () => ({body: blockedProfile('webhook', HOOK, ['sender_names_disabled'], {...unread, feature: {senderNames: false, botNickname: false}})})},
   {state: 'bot_nickname_disabled', kind: 'bot', get: () => ({body: blockedProfile('bot', BOT, ['bot_nickname_disabled'], {...unread, feature: {senderNames: true, botNickname: false}})})},
-  {state: 'not_authorizing_member', kind: 'webhook', get: () => ({body: blockedProfile('webhook', HOOK, ['not_authorizing_member'], unread)})},
+  {state: 'provider_unavailable', kind: 'bot', again: true, get: () => ({body: blockedProfile('bot', BOT, ['provider_unavailable'], unread)})},
+  {state: 'not_authorizing_member', kind: 'bot', get: () => ({body: blockedProfile('bot', BOT, ['not_authorizing_member'], unread)})},
   {state: 'session_reverification_required', kind: 'webhook', signIn: true, get: () => ({body: blockedProfile('webhook', HOOK, ['session_reverification_required'])})},
   {state: 'person_missing_manage_nicknames', kind: 'bot', again: true, get: () => ({body: blockedProfile('bot', BOT, ['person_missing_manage_nicknames'])})},
   {state: 'person_role_below_bot', kind: 'bot', again: true, get: () => ({body: blockedProfile('bot', BOT, ['person_role_below_bot'])})},
   {state: 'bot_missing_change_nickname', kind: 'bot', again: true, get: () => ({body: blockedProfile('bot', BOT, ['bot_missing_change_nickname'])})},
   {state: 'nickname_authority_other_workspace', kind: 'bot', again: true, get: () => ({body: blockedProfile('bot', BOT, ['nickname_authority_other_workspace'])})},
-  {state: 'edit_pending', kind: 'bot', again: true, timed: true, get: () => ({body: blockedProfile('bot', BOT, [{code: 'edit_pending', retryAfterSeconds: 90}])})},
+  {state: 'edit_pending', kind: 'bot', again: true, timed: true, wait: 90, get: () => ({body: blockedProfile('bot', BOT, [{code: 'edit_pending', retryAfterSeconds: 90}])})},
   {state: 'reconnect_required', kind: 'webhook', again: true, get: () => ({status: 409, body: {error: 'Reconnect this Discord connection before changing its sender name.', code: 'discord_connection_required'}})},
-  {state: 'rate_limited', kind: 'webhook', again: true, timed: true, get: () => ({status: 429, body: {error: 'Too many sender-name requests.', code: 'rate_limited', retryAfterSeconds: 60}})},
+  {state: 'rate_limited', kind: 'webhook', again: true, timed: true, wait: 60, get: () => ({status: 429, body: {error: 'Too many sender-name requests.', code: 'rate_limited', retryAfterSeconds: 60}})},
+  {state: 'rate_delayed', kind: 'webhook', again: true, timed: true, wait: 45, get: () => ({status: 429, body: {error: 'Discord is waiting for shared request capacity. Try again shortly; nothing was changed.', code: 'discord_rate_delayed', retryAfterSeconds: 45}})},
   {state: 'upstream_unavailable', kind: 'webhook', again: true, get: () => ({status: 502, body: {error: 'Discord did not return a valid current sender name.', code: 'upstream_error'}})},
   {state: 'workspace_permission', kind: 'webhook', get: () => ({status: 403, body: {error: 'Workspace unavailable.', code: 'permission_denied'}})}
 ];
@@ -210,14 +217,21 @@ const STATE_SCENARIOS = [
           }
           if (req.method() !== 'POST') { world.unexpected.push(`${req.method()} ${path}`); return send({error: 'Unexpected', code: 'invalid_request'}, 400); }
           const body = req.postDataJSON(); world.posts.push({id, body});
-          const names = Object.keys(body).sort().join(',');
-          const expected = current.senderKind === 'bot' ? 'confirmed,fingerprint,name,sharedServerConfirmed' : 'confirmed,fingerprint,name';
+          const names = Object.keys(body).sort().join(','), clearing = body.reset === true;
+          const expected = clearing ? 'confirmed,fingerprint,reset' : current.senderKind === 'bot' ? 'confirmed,fingerprint,name,sharedServerConfirmed' : 'confirmed,fingerprint,name';
           if (names !== expected || body.confirmed !== true) return send({error: 'Review and confirm the sender name before saving.', code: 'discord_sender_name_unconfirmed'}, 400);
           if (world.hold) await new Promise(resolve => { world.release = resolve; });
           const answer = world.postAnswer?.(id, body);
           if (answer) return send(answer.body, answer.status ?? 200);
           if (body.fingerprint !== current.fingerprint) return send({error: 'Discord sender settings changed. Reload and review the name again.', code: 'discord_sender_name_required'}, 409);
           const webhook = current.senderKind === 'webhook';
+          if (clearing) {
+            if (!webhook) return send({error: 'A bot nickname cannot be cleared from Rafii; choose the nickname you want.', code: 'discord_sender_reset_unsupported'}, 400);
+            world.profiles[id] = {...current, name: 'Acme Weekly', effectiveName: 'Acme Weekly', savedName: null, observedName: 'Acme Weekly', observedAt: 1800000100.5,
+              nameSource: 'webhook_default', fingerprint: hash(id + '-' + (++world.version)), saved: true, reset: true, preview: {...current.preview, currentDisplayName: 'Acme Weekly'}};
+            delete hook.discordSenderName;
+            return send(world.profiles[id]);
+          }
           world.profiles[id] = {...current, name: body.name, effectiveName: body.name, savedName: body.name, observedName: body.name, observedAt: 1800000100.5,
             nameSource: webhook ? 'saved_override' : 'observed_nickname', fingerprint: hash(id + '-' + (++world.version)), saved: true,
             preview: {...current.preview, currentDisplayName: body.name}};
@@ -244,16 +258,26 @@ const STATE_SCENARIOS = [
       const nameBox = dialog.getByRole('textbox', {name: copy.senderNameLabel, exact: true});
       const saveButton = dialog.getByRole('button', {name: copy.senderSave, exact: true});
       const closeButton = dialog.getByRole('button', {name: copy.senderClose, exact: true});
-      const hookButton = page.getByRole('button', {name: `${copy.senderEdit} · ${hook.account}`, exact: true});
-      const botButton = page.getByRole('button', {name: `${copy.senderEdit} · ${bot.account}`, exact: true});
+      // Found by attribute, not by name: the button says "Why can't I change this?" instead of "Edit sender name" once editing is known to be unavailable.
+      const hookButton = page.locator(`button[data-discord-sender-edit][aria-label$=" · ${hook.account}"]`);
+      const botButton = page.locator(`button[data-discord-sender-edit][aria-label$=" · ${bot.account}"]`);
       const trigger = kind => kind === 'bot' ? botButton : hookButton;
 
-      const shot = async (target, name, {tall = false, evidence = false} = {}) => {
+      // `.depot` gets the whole page; the evidence folder gets the dialog alone (or, with `clip`, the strip of the page around a control).
+      const shot = async (target, name, {tall = false, evidence = false, around = null} = {}) => {
         const original = target.viewportSize();
         if (tall) await target.setViewportSize({width, height: 2200});
         await sleep(150);
         await target.screenshot({path: join(outDir, `${combo}-${name}.png`)});
-        if (evidence && evidenceDir) await target.screenshot({path: join(evidenceDir, `${combo}-${name}.png`)});
+        if (evidence && evidenceDir) {
+          const evidencePath = join(evidenceDir, `${combo}-${name}.png`);
+          const box = target.getByRole('dialog');
+          if (around) {
+            const at = await around.boundingBox();
+            await target.screenshot({path: evidencePath, clip: {x: 0, y: Math.max(0, at.y - 200), width, height: 440}});
+          } else if (await box.count()) await box.screenshot({path: evidencePath});
+          else await target.screenshot({path: evidencePath});
+        }
         if (tall) await target.setViewportSize(original);
       };
       const focused = () => page.evaluate(() => {
@@ -340,13 +364,51 @@ const STATE_SCENARIOS = [
         assert.equal(await reasonOf(), squash(copy.senderSaveWhyConfirm));
         await dialog.getByRole('checkbox', {name: copy.senderSharedConfirm, exact: true}).check();
         assert.equal(await saveButton.isDisabled(), false);
-        await shot(page, 'bot-editor', {tall: true, evidence: locale === 'zh-Hant' && width === 390});
+        await shot(page, 'bot-editor', {tall: true, evidence: locale === 'zh-Hant' && width === 390 || locale === 'en' && width === 1280});
         await saveButton.click();
         await dialog.getByText(copy.senderSaved, {exact: true}).waitFor();
         assert.equal(world.posts.length, 2);
         assert.deepEqual(Object.keys(world.posts[1].body).sort(), ['confirmed', 'fingerprint', 'name', 'sharedServerConfirmed']);
         assert.equal(world.posts[1].body.sharedServerConfirmed, true); pass('bot-body-has-shared-flag');
         pass('bot-shared-confirm-save');
+        await resetPage();
+
+        // A webhook with a custom name can go back to the webhook's own name; nothing else can be "reset", and a repeat click sends nothing.
+        stage = combo + ':webhook-reset';
+        const custom = {name: 'D Festival 公告', effectiveName: 'D Festival 公告', savedName: 'D Festival 公告', nameSource: 'saved_override', observedName: 'Acme Weekly'};
+        world.profiles[HOOK] = profile('webhook', HOOK, custom);
+        hook.discordSenderName = 'D Festival 公告';
+        await openLoaded('webhook', 'D Festival 公告');
+        const resetButton = dialog.locator('[data-sender-reset-button]');
+        assert.equal(await resetButton.count(), 1);
+        assert.equal(squash(await resetButton.innerText()), squash(copy.senderResetLabel));
+        assert.equal(squash(await dialog.locator('[data-sender-reset] p').innerText()), squash(copy.senderResetHint));
+        assert.equal(await resetButton.getAttribute('aria-disabled'), 'false');
+        assert.ok((await resetButton.getAttribute('aria-describedby')).length > 0, 'the button points at what it does');
+        world.hold = true;
+        await resetButton.click();
+        await until(() => Boolean(world.release), 'held reset');
+        assert.equal(await resetButton.getAttribute('aria-disabled'), 'true');
+        await resetButton.dispatchEvent('click'); await sleep(300);
+        assert.equal(world.posts.length, 1, 'a second click while the first is pending sends nothing');
+        world.hold = false; world.release(); world.release = null;
+        const resetDone = dialog.locator('[data-sender-done="reset"]'); await resetDone.waitFor();
+        assert.equal(squash(await resetDone.innerText()), squash(copy.senderResetDone));
+        assert.deepEqual(Object.keys(world.posts[0].body).sort(), ['confirmed', 'fingerprint', 'reset']); assert.equal(world.posts[0].body.reset, true);
+        assert.equal(await nameBox.inputValue(), 'Acme Weekly');
+        assert.equal(await dialog.locator('[data-sender-reset]').count(), 0, 'nothing is left to reset');
+        assert.equal(await dialog.locator('[data-discord-message-preview]').getAttribute('data-name-source'), 'webhook_default');
+        assert.equal(squash(await dialog.locator('[data-preview-author]').innerText()), 'Acme Weekly');
+        await until(async () => (await focused())?.field === true, 'focus goes to the name field once the reset button is gone');
+        assert.equal(await saveButton.getAttribute('aria-disabled'), 'true', 'Save is off again until the name changes');
+        pass('webhook-reset-focus-and-no-double-post');
+        await resetPage();
+        await openLoaded('webhook');
+        assert.equal(await dialog.locator('[data-sender-reset]').count(), 0, 'a webhook without a custom name has nothing to reset');
+        await resetPage();
+        await openLoaded('bot');
+        assert.equal(await dialog.locator('[data-sender-reset]').count(), 0, 'a bot nickname cannot be cleared from here');
+        pass('webhook-reset');
         await resetPage();
       }
 
@@ -380,6 +442,14 @@ const STATE_SCENARIOS = [
         await until(async () => (await issues()).length === 0, 'sixteen emoji fit');
         assert.equal(squash(await dialog.locator('[data-sender-count]').innerText()), fill(copy.senderCount, {count: 32, limit: 32}));
         pass('validation-emoji-counts-two');
+        // A zero width joiner is fine inside an emoji sequence (4 families are 32 units) and refused between Latin letters, as the server does.
+        const family = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}';
+        await nameBox.fill(family.repeat(4));
+        await until(async () => (await issues()).length === 0, 'four family emoji fit');
+        assert.equal(squash(await dialog.locator('[data-sender-count]').innerText()), fill(copy.senderCount, {count: 32, limit: 32}));
+        await nameBox.fill('a\u200cb');
+        await until(async () => (await issues()).some(([found]) => found === 'control_or_format'), 'a joiner between Latin letters is refused');
+        pass('validation-joiner-accepted');
         await nameBox.fill('Concert helper');
         await until(async () => (await issues()).length === 0, 'rules clear');
         assert.equal(await nameBox.getAttribute('aria-invalid'), 'false');
@@ -418,6 +488,7 @@ const STATE_SCENARIOS = [
         const notes = squash(await preview.locator('[data-preview-notes]').innerText());
         assert.ok(notes.includes(squash(copy.previewWebhookNote)) && notes.includes(squash(copy.previewWebhookDefaultNote)));
         assert.ok(!notes.includes(squash(copy.previewBotNote)), 'a webhook preview never uses the shared-nickname sentence');
+        assert.ok(!notes.includes(squash(copy.previewBotQueuedNote)) && (await dialog.locator('[data-sender-bot-warning]').count()) === 0, 'the held-post sentence is about the bot');
         assert.match(squash(await preview.locator('[data-preview-time]').innerText()), new RegExp('^' + escapeRegExp(copy.previewToday).replace('\\{time\\}', '.+') + '$'));
         assert.equal(squash(await preview.locator('[data-preview-body]').innerText()), squash(copy.senderExample));
         assert.equal(await preview.locator('[data-preview-body]').evaluate(element => getComputedStyle(element).whiteSpace), 'pre-wrap');
@@ -465,7 +536,12 @@ const STATE_SCENARIOS = [
         const botNotes = squash(await botPreview.locator('[data-preview-notes]').innerText());
         assert.ok(botNotes.includes(squash(copy.previewBotNote)), 'the bot preview says everyone sees the shared nickname');
         assert.ok(botNotes.includes(squash(copy.previewBotNameAsOf)));
+        assert.ok(botNotes.includes(squash(copy.previewBotQueuedNote)), 'the editor says an approved bot post is held if the nickname changes');
+        assert.ok(!botNotes.includes(squash(copy.previewWebhookQueuedNote)));
         assert.ok(!botNotes.includes(squash(copy.previewWebhookNote)), 'a bot preview never claims a per-post name');
+        assert.equal(squash(await dialog.locator('[data-sender-bot-warning]').innerText()), squash(copy.senderBotSaveWarning));
+        assert.equal(await dialog.getByRole('checkbox').getAttribute('aria-describedby'), await dialog.locator('[data-sender-bot-warning]').getAttribute('id'), 'the checkbox points at the warning');
+        pass('bot-hold-note-and-warning');
         assert.equal(squash(await botPreview.locator('[data-preview-avatar-note]').innerText()), squash(copy.previewAvatarBot));
         assert.match(squash(await dialog.locator('[data-sender-observed-at]').innerText()), new RegExp('^' + escapeRegExp(copy.senderCheckedAt).replace('\\{time\\}', '.+') + '$'));
         // A bot nickname that someone else changed in Discord is shown as theirs, not Rafii's.
@@ -501,7 +577,7 @@ const STATE_SCENARIOS = [
           assert.deepEqual(await page.evaluate(() => { const element = document.querySelector('[data-sender-status]'); return {role: element?.getAttribute('role'), live: element?.getAttribute('aria-live')}; }), {role: 'status', live: 'polite'});
           // Keyboard and screen reader land on the explanation.
           await until(async () => (await focused())?.heading === `discord-sender-state-${scenario.state}`, `focus on the ${scenario.state} heading`);
-          if (['person_missing_manage_nicknames', 'person_role_below_bot', 'bot_missing_change_nickname', 'nickname_authority_other_workspace', 'edit_pending', 'session_reverification_required', 'bot_nickname_disabled', 'sender_names_disabled', 'not_authorizing_member'].includes(scenario.state)) {
+          if (['person_missing_manage_nicknames', 'person_role_below_bot', 'bot_missing_change_nickname', 'nickname_authority_other_workspace', 'edit_pending', 'session_reverification_required', 'bot_nickname_disabled', 'provider_unavailable', 'sender_names_disabled', 'not_authorizing_member'].includes(scenario.state)) {
             // A named profile is shown read-only; an unread one says it does not know the name.
             assert.notEqual(await nameBox.getAttribute('readonly'), null, 'the name is read-only');
             assert.equal(await nameBox.getAttribute('aria-readonly'), 'true');
@@ -518,9 +594,16 @@ const STATE_SCENARIOS = [
           if (scenario.state === 'sender_names_disabled') {
             assert.equal(squash(await dialog.locator('[data-held-note]').innerText()), squash(copy.senderStateHeldNote), 'a webhook is told about posts held while the switch is off');
           }
+          if (scenario.state === 'bot_nickname_disabled') {
+            // With the nickname switch off nothing is recorded or held, so the preview must not say it is.
+            const offNotes = squash(await dialog.locator('[data-preview-notes]').innerText());
+            assert.ok(offNotes.includes(squash(copy.previewBotNote)) && !offNotes.includes(squash(copy.previewBotQueuedNote)));
+            assert.equal(await dialog.locator('[data-sender-bot-warning]').count(), 0, 'no warning about held posts where the nickname cannot be changed');
+            pass('bot-hold-note-absent-when-switch-off');
+          }
           if (scenario.timed) {
             assert.match(squash(await dialog.locator('[data-recheck]').innerText()), new RegExp('^' + escapeRegExp(copy.senderRecheckIn).replace('\\{wait\\}', '.+').replace('\\{time\\}', '.+') + '$'));
-            assert.equal(await dialog.locator('[data-recheck]').getAttribute('data-retry-after-seconds'), scenario.state === 'edit_pending' ? '90' : '60', 'the wait the server named is shown');
+            assert.equal(await dialog.locator('[data-recheck]').getAttribute('data-retry-after-seconds'), String(scenario.wait), 'the wait the server named is shown');
             assert.equal(await again.getAttribute('aria-disabled'), 'true', 'a timed state cannot be re-read before its time');
             assert.ok(await again.getAttribute('aria-describedby'));
           }
@@ -580,9 +663,11 @@ const STATE_SCENARIOS = [
 
       // ---------------------------------------------------------------- the default: both switches off, and the cards
       if (run('cards')) {
-        const provider = flags => ({id: 'discord', platform: 'Discord', configured: true, connectReady: true, productionReviewed: true, discordConnectionsV2: true,
-          capabilities: {identity: true, publish: true}, setupIssues: [], discordModes: {webhook: {enabled: false, status: 'unavailable'}, userInstall: {enabled: false, status: 'unavailable'}},
-          ...(flags ? {discordSenderNames: flags} : {})});
+        // The webhook CONNECT route is closed at the opening (`webhook.enabled` false); `senderName.enabled` is a different flag: may a name be edited.
+        const provider = ({bot, webhook} = {}) => ({id: 'discord', platform: 'Discord', configured: true, connectReady: true, productionReviewed: true, discordConnectionsV2: true,
+          capabilities: {identity: true, publish: true}, setupIssues: [],
+          discordModes: {...(bot === undefined ? {} : {bot: {senderKind: 'bot', nickname: {enabled: bot}}}),
+            webhook: {enabled: false, status: 'unavailable', ...(webhook === undefined ? {} : {senderName: {enabled: webhook}})}, userInstall: {enabled: false, status: 'unavailable'}}});
         const hint = page.locator('[data-discord-sender-edit-hint]');
         const hintOf = async button => { const id = await button.getAttribute('aria-describedby'); return id ? squash(await page.evaluate(i => document.getElementById(i)?.innerText ?? '', id)) : null; };
 
@@ -608,7 +693,11 @@ const STATE_SCENARIOS = [
         // The first read taught the page the switches: every card now says so under its button, without being opened.
         await closeDialog();
         await until(async () => (await hint.count()) === 2, 'both cards learn that sender names are off');
-        for (const button of [hookButton, botButton]) assert.equal(await hintOf(button), squash(copy.senderCardOff));
+        assert.equal(await hintOf(hookButton), squash(copy.senderCardOff)); assert.equal(await hintOf(botButton), squash(copy.senderCardOffBot));
+        // Editing is known to be off: the card offers the explanation, not an editor.
+        for (const [button, account] of [[hookButton, hook.account], [botButton, bot.account]]) {
+          assert.equal(await button.getAttribute('aria-label'), `${copy.senderWhyButton} · ${account}`); assert.equal(squash(await button.innerText()), squash(copy.senderWhyButton));
+        }
         // A bot-only switch touches the bot card alone (webhook names do not depend on it).
         world.getAnswer = id => ({body: blockedProfile('bot', id, ['bot_nickname_disabled'], {...unread, feature: {senderNames: true, botNickname: false}})});
         await page.goto(base + '/app/channels', {waitUntil: 'domcontentloaded'});
@@ -618,23 +707,40 @@ const STATE_SCENARIOS = [
         await dialog.getByTestId('discord-sender-state-bot_nickname_disabled').waitFor();
         await closeDialog();
         await until(async () => (await hint.count()) === 1, 'only the bot card learns');
-        assert.equal(await hintOf(botButton), squash(copy.senderCardOff)); assert.equal(await hookButton.getAttribute('aria-describedby'), null);
+        assert.equal(await hintOf(botButton), squash(copy.senderCardOffBot)); assert.equal(await hookButton.getAttribute('aria-describedby'), null);
+        assert.equal(squash(await hookButton.innerText()), squash(copy.senderEdit), 'a card nothing is known about keeps its Edit button');
         pass('card-hint-learned-from-read');
         await resetPage();
 
         // The server can send the switches with the providers: then the first paint already says it, with no request.
         stage = combo + ':card-hint';
-        world.providers = [provider({senderNames: true, botNickname: false})];
+        world.providers = [provider({bot: false, webhook: true})];
         await page.goto(base + '/app/channels', {waitUntil: 'domcontentloaded'});
         await botButton.waitFor();
-        await until(async () => (await hint.count()) === 1, 'the provider switches reach the card');
-        assert.equal(await hintOf(botButton), squash(copy.senderCardOff)); assert.equal(await hookButton.getAttribute('aria-describedby'), null);
+        await until(async () => (await hint.count()) === 1, 'the provider flags reach the card');
+        assert.equal(await hintOf(botButton), squash(copy.senderCardOffBot)); assert.equal(await hookButton.getAttribute('aria-describedby'), null);
+        assert.equal(await botButton.getAttribute('data-availability'), 'unavailable'); assert.equal(await hookButton.getAttribute('data-availability'), 'unknown');
+        assert.equal(squash(await botButton.innerText()), squash(copy.senderWhyButton)); assert.equal(squash(await hookButton.innerText()), squash(copy.senderEdit));
+        await shot(page, 'card-why-button', {evidence: locale === 'en' && width === 390 || locale === 'zh-Hant' && width === 390, around: botButton});
         assert.equal(world.gets.length, 0, 'the connections page reads no sender name');
         // The button still opens the explanation, which asks the server (a cheap answer without Discord).
         world.getAnswer = id => ({body: blockedProfile('bot', id, ['bot_nickname_disabled'], {...unread, feature: {senderNames: true, botNickname: false}})});
         await open('bot'); await dialog.getByTestId('discord-sender-state-bot_nickname_disabled').waitFor();
         assert.equal(world.gets.length, 1);
+        assert.equal(squash(await dialog.getByRole('heading', {name: copy.senderViewTitle, exact: true}).innerText()), squash(copy.senderViewTitle), 'the dialog opened from the explanation button is not titled "Edit"');
+        await closeDialog();
+        await until(async () => (await focused())?.label === `${copy.senderWhyButton} · ${bot.account}`, 'focus returns to the same button after the explanation');
         pass('card-hint-from-provider');
+        await resetPage();
+        // Both flags true, or none sent: no claim at all. A webhook flag off touches the webhook card alone.
+        world.providers = [provider({bot: true, webhook: true})];
+        await page.goto(base + '/app/channels', {waitUntil: 'domcontentloaded'});
+        await botButton.waitFor(); await sleep(500);
+        assert.equal(await hint.count(), 0, 'nothing is claimed when the provider says editing is available');
+        world.providers = [provider({webhook: false})];
+        await page.goto(base + '/app/channels', {waitUntil: 'domcontentloaded'});
+        await until(async () => (await hint.count()) === 1, 'the webhook flag reaches the webhook card');
+        assert.equal(await hintOf(hookButton), squash(copy.senderCardOff)); assert.equal(await botButton.getAttribute('aria-describedby'), null);
         await resetPage();
         await page.goto(base + '/app/channels', {waitUntil: 'domcontentloaded'});
         await hookButton.waitFor();
@@ -694,6 +800,22 @@ const STATE_SCENARIOS = [
         await loaded('Acme Weekly');
         assert.equal(world.posts.length, 1, 'checking again never resends the change');
         pass('state-write_unconfirmed');
+        await resetPage();
+
+        // Discord answered the write with a refusal: nothing changed, nothing waits, and the way forward is a read (never a resend).
+        stage = combo + ':failure-write-refused';
+        await openLoaded('bot');
+        world.postAnswer = () => ({status: 409, body: {error: 'Discord refused the nickname change.', code: 'discord_sender_write_refused'}});
+        await edit('Another name', true); await saveButton.click();
+        const refused = dialog.getByTestId('discord-sender-state-write_refused'); await refused.waitFor();
+        assert.equal(await refused.getAttribute('role'), 'alert');
+        assert.ok(squash(await refused.innerText()).includes(squash(copy.senderStateWriteRefusedBody)));
+        assert.equal(world.posts.length, 1);
+        world.postAnswer = null;
+        await dialog.getByRole('button', {name: copy.senderCheckAgain, exact: true}).click();
+        await loaded('Acme Weekly');
+        assert.equal(world.posts.length, 1, 'checking again never resends the change');
+        pass('state-write_refused');
         await resetPage();
 
         // A fresh sign-in is needed: the buttons and words of the long-standing flow.
@@ -839,6 +961,22 @@ const STATE_SCENARIOS = [
         await assertFits('schedule dialog bot');
         pass('schedule-preview-bot');
         await page.keyboard.press('Escape'); await dialog.waitFor({state: 'detached'});
+        // When the channel view carries the nickname a review would record, the preview shows it and says what an approval does with it.
+        bot.discordBotNickname = 'Concert helper';
+        await page.goto(base + '/app/queue', {waitUntil: 'domcontentloaded'});
+        await page.getByRole('button', {name: 'Schedule a draft', exact: true}).click();
+        await dialog.waitFor();
+        await dialog.getByRole('combobox', {name: 'Draft', exact: true}).selectOption(input.variant.id);
+        await dialog.getByRole('combobox', {name: 'Account', exact: true}).selectOption(bot.id);
+        await until(async () => (await preview.getAttribute('data-kind')) === 'bot', 'bot preview with a nickname');
+        assert.equal(await preview.getAttribute('data-name-source'), 'observed');
+        assert.equal(squash(await preview.locator('[data-preview-author]').innerText()), 'Concert helper');
+        const knownNotes = squash(await preview.locator('[data-preview-notes]').innerText());
+        assert.ok(knownNotes.includes(squash(copy.previewBotQueuedNote)) && knownNotes.includes(squash(copy.previewBotNameAsOf)));
+        await assertFits('schedule dialog bot with a nickname');
+        pass('schedule-preview-bot-nickname');
+        await page.keyboard.press('Escape'); await dialog.waitFor({state: 'detached'});
+        delete bot.discordBotNickname;
         world.variants = []; delete hook.discordSenderName;
       }
 
@@ -846,7 +984,7 @@ const STATE_SCENARIOS = [
       if (run('review')) {
         stage = combo + ':review';
         const future = Math.floor(Date.now() / 1000) + 30 * 86400;
-        const reviewFor = (kind, name) => {
+        const reviewFor = (kind, name, nickname) => {
           const review = structuredClone(input.review);
           review.id = 'synthetic-review-' + kind;
           review.manifest.platform = 'Discord'; review.manifest.channelId = kind === 'webhook' ? hook.id : bot.id; review.manifest.senderKind = kind;
@@ -854,6 +992,7 @@ const STATE_SCENARIOS = [
           review.manifest.expiresAt = future + 7200;
           review.manifest.timing = {...review.manifest.timing, timestamp: future, utc: new Date(future * 1000).toISOString(), local: new Date(future * 1000).toISOString().slice(0, 16)};
           if (name) review.manifest.discordSenderName = name; else delete review.manifest.discordSenderName;
+          if (nickname !== undefined) review.manifest.discordBotNickname = nickname; else delete review.manifest.discordBotNickname;
           return review;
         };
         for (const kind of ['webhook', 'bot']) {
@@ -875,6 +1014,21 @@ const STATE_SCENARIOS = [
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `review ${kind} overflow`);
           pass(`review-preview-${kind}`);
         }
+        // An approval that recorded the bot's nickname shows it; one that recorded "no nickname" says the bot's own username shows; both say the hold.
+        for (const [nickname, source, author] of [['Concert helper', 'approved', 'Concert helper'], [null, 'bot_username', copy.previewBotNameUnknown]]) {
+          world.reviews = [reviewFor('bot', null, nickname)];
+          await page.goto(base + '/app/queue', {waitUntil: 'domcontentloaded'});
+          const recorded = page.locator('[data-discord-message-preview]').first();
+          await recorded.waitFor();
+          assert.equal(await recorded.getAttribute('data-name-source'), source);
+          assert.equal(squash(await recorded.locator('[data-preview-author]').innerText()), author);
+          const recordedNotes = squash(await recorded.locator('[data-preview-notes]').innerText());
+          assert.ok(recordedNotes.includes(squash(copy.previewBotApprovedNote)) && recordedNotes.includes(squash(copy.previewBotNote)));
+          assert.ok(!recordedNotes.includes(squash(copy.previewBotQueuedNote)), 'an approved post is told about the hold in the past tense, not as a future approval');
+          if (nickname === null) assert.ok(recordedNotes.includes(squash(copy.previewBotUsernameNote)));
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `review recorded nickname ${source} overflow`);
+        }
+        pass('review-preview-bot-recorded-nickname');
         world.reviews = [];
       }
 

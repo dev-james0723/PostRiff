@@ -393,7 +393,7 @@ export function createApi(getToken: TokenSource) {
       }),
     discordEngagement: (w: string, id: string) => get<DiscordEngagementStatus>(`${ws(w)}/channels/${encodeURIComponent(id)}/discord-engagement`),
     discordSenderProfile: (w: string, id: string) => get<DiscordSenderProfile>(`${ws(w)}/channels/${encodeURIComponent(id)}/discord-sender-name`),
-    setDiscordSenderName: (w: string, id: string, body: { name: string; fingerprint: string; confirmed: boolean; sharedServerConfirmed?: boolean }) =>
+    setDiscordSenderName: (w: string, id: string, body: { name?: string; fingerprint: string; confirmed: boolean; sharedServerConfirmed?: boolean; reset?: boolean }) =>
       send<DiscordSenderProfile>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/discord-sender-name`, body),
     discordEngagementConsent: (w: string, id: string, body: { destinationId: string; targetDigest: string; permissions: DiscordEngagementPermissions; confirmed: boolean; contentAccess?: 'mentions_only' | 'approved_content' }) =>
       send<DiscordEngagementStatus>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/discord-engagement/consent`, body),

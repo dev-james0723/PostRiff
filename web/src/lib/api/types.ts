@@ -165,8 +165,8 @@ export interface WorkerBinding { environment: 'preview'; origin: string }
 
 export interface DiscordModes {
   identity?: { senderKind: 'none'; canPublish: false };
-  bot?: { senderKind: 'bot' };
-  webhook: { senderKind?: 'webhook'; enabled: boolean; status?: string; payloadTypes?: string[] };
+  bot?: { senderKind: 'bot'; nickname?: { enabled: boolean } };
+  webhook: { senderKind?: 'webhook'; enabled: boolean; status?: string; payloadTypes?: string[]; senderName?: { enabled: boolean } };
   userInstall: { senderKind?: 'interaction'; enabled: boolean; status?: string; installUrl?: string; canPublish?: false; canSchedule?: false };
 }
 
@@ -193,6 +193,8 @@ export interface DiscordDestination {
 export interface Manifest {
   senderKind?: 'bot' | 'webhook';
   discordSenderName?: string;
+  /** Bot posts: the server nickname recorded when the post was approved (null: the bot had none). Absent: nothing was recorded. */
+  discordBotNickname?: string | null;
   destinationId?: string;
   discord?: { schema: 'rafii.discord.publish.v2'; target: DiscordDestination; wireDigest: string; deliveryDigest: string; operationDigest: string; publicationId: string };
   workerBinding?: WorkerBinding;
@@ -432,7 +434,7 @@ export interface ChannelFolder {
 export interface Phase2State {
   execution: string;
   trial: Trial;
-  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[]; discordConnectionKind?: 'installation' | 'webhook'; discordSenderName?: string }[];
+  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[]; discordConnectionKind?: 'installation' | 'webhook'; discordSenderName?: string; discordBotNickname?: string | null }[];
   assets: Asset[];
   reviews: Review[];
   jobs: Job[];
@@ -688,6 +690,7 @@ export interface RunSkill {
 export interface RunItemDecision {
   discord?: Manifest['discord'];
   discordSenderName?: string | null;
+  discordBotNickname?: string | null;
   timing?: Manifest['timing'];
   decision: 'approve' | 'reject' | 'revise' | string;
   by: string;
@@ -1478,6 +1481,12 @@ export interface Capability {
 
 export interface ChannelView {
   discordSenderName?: string | null;
+  /**
+   * Bot installations: the nickname a review would record now (what Discord last reported for the bot, `null` when it
+   * has none). Absent when nothing would be recorded (the nickname capability is off, or nothing has been observed).
+   * An approval of a bot post has to carry this value back (docs/sender-name/UI-NEEDS.md, R1).
+   */
+  discordBotNickname?: string | null;
   discordEngagement?: { implemented: boolean; enabled: boolean };
   defaultDestinationId?: string | null;
   discordDestinations?: DiscordDestination[];
@@ -1558,17 +1567,18 @@ export interface DiscordSenderProfile {
     badge: string;
     audience: 'this_connection' | 'everyone_in_server';
     queuedPostsKeepApprovedName: boolean;
-    queuedPostsFollowCurrentNickname: boolean;
+    /** Bot: an approved post is held at dispatch, and nothing is sent, when Discord shows another nickname than the recorded one. */
+    queuedBotPostsHoldIfNicknameChanges: boolean;
   };
   /** Present and true on the body of a successful POST. */
   saved?: boolean;
+  /** Present and true on the body of a successful reset (the custom webhook name was removed). */
+  reset?: boolean;
 }
 
 export interface ProviderView {
   discordConnectionsV2?: boolean;
   discordModes?: DiscordModes;
-  /** The two global sender-name switches, when the server sends them with the providers (docs/sender-name/UI-NEEDS.md 2.1). */
-  discordSenderNames?: { senderNames?: boolean; botNickname?: boolean };
   /** Whether THIS workspace may start a Discord connection (launch gate); existing connections are unaffected. */
   discordAccess?: { status: 'open' | 'closed'; reason?: string; capped?: boolean };
   /** Restricted server-side Pinterest pilot; never a public release gate. */

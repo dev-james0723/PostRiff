@@ -1,6 +1,6 @@
 {
- "schema": "rafii.discord-sender-name-verdicts.v2",
- "about": "The first rule sender_names.name_problem (contract v2) finds for each name, or null when the name is accepted. Shared by tests/test_discord_sender_name_ui_contract.py (backend) and web/tests/discord-sender-name.test.cjs (editor).",
+ "schema": "rafii.discord-sender-name-verdicts.v3",
+ "about": "The first rule sender_names.name_problem (commit b03fc7ae) finds for each name, or null when the name is accepted. Shared by tests/test_discord_sender_name_ui_contract.py (backend) and web/tests/discord-sender-name.test.cjs (editor).",
  "limits": {
   "webhook": 80,
   "bot": 32
@@ -589,6 +589,130 @@
    "reason": null,
    "note": "the capital sharp s is not a reserved word",
    "name": "Di\u1e9e"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "ZWJ inside a family emoji sequence",
+   "name": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67 Family News"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "ZWJ after an emoji and its variation selector",
+   "name": "\u2764\ufe0f\u200d\ud83d\udd25 Fire"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "ZWJ after a skin tone modifier",
+   "name": "\ud83d\udc69\ud83c\udffd\u200d\ud83d\udcbb Dev"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "rainbow flag sequence",
+   "name": "\ud83c\udff3\ufe0f\u200d\ud83c\udf08 Pride"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "Persian ZWNJ between letters",
+   "name": "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "Devanagari ZWNJ between a mark and a letter",
+   "name": "\u0915\u094d\u200c\u0937"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "ZWJ between two modifier symbols is accepted by the server",
+   "name": "^\u200d^"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "10 family emoji = 50 code points and exactly 80 UTF-16 units",
+   "unit": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67",
+   "repeat": 10
+  },
+  {
+   "kind": "webhook",
+   "reason": "too_long",
+   "note": "11 family emoji = 88 UTF-16 units",
+   "unit": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67",
+   "repeat": 11
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "4 family emoji = exactly 32 UTF-16 units",
+   "unit": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67",
+   "repeat": 4
+  },
+  {
+   "kind": "bot",
+   "reason": "too_long",
+   "note": "5 family emoji = 40 UTF-16 units",
+   "unit": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67",
+   "repeat": 5
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWNJ between Latin letters",
+   "name": "a\u200cb"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWJ at the start",
+   "name": "\u200dabc"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWJ at the end",
+   "name": "abc\u200d"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWJ between an emoji and a letter",
+   "name": "\ud83d\udc69\u200dx"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWJ followed by a variation selector",
+   "name": "\ud83d\udc69\u200d\ufe0f\ud83d\udc68"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "two joiners in a row",
+   "name": "\ud83d\udc69\u200d\u200d\ud83d\udc68"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWNJ before a space",
+   "name": "\u0628\u200c \u0628"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWNJ at the start",
+   "name": "\u200c\u0628"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWJ between Arabic letters (a ZWJ only joins symbols)",
+   "name": "\u0645\u200d\u0645"
   }
  ]
 }

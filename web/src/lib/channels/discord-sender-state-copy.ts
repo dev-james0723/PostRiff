@@ -11,6 +11,7 @@ type CopyKey = keyof DiscordCopy;
 export const SENDER_STATE_COPY: Record<BlockedSenderState, { title: CopyKey; body: CopyKey; next: CopyKey }> = {
   sender_names_disabled: { title: 'senderStateSenderNamesDisabledTitle', body: 'senderStateSenderNamesDisabledBody', next: 'senderStateSenderNamesDisabledNext' },
   bot_nickname_disabled: { title: 'senderStateBotNicknameDisabledTitle', body: 'senderStateBotNicknameDisabledBody', next: 'senderStateBotNicknameDisabledNext' },
+  provider_unavailable: { title: 'senderStateProviderUnavailableTitle', body: 'senderStateProviderUnavailableBody', next: 'senderStateProviderUnavailableNext' },
   not_authorizing_member: { title: 'senderStateNotAuthorizingMemberTitle', body: 'senderStateNotAuthorizingMemberBody', next: 'senderStateNotAuthorizingMemberNext' },
   session_reverification_required: { title: 'senderStateSessionReverificationRequiredTitle', body: 'senderSessionError', next: 'senderStateSessionReverificationRequiredNext' },
   person_missing_manage_nicknames: {
@@ -29,7 +30,9 @@ export const SENDER_STATE_COPY: Record<BlockedSenderState, { title: CopyKey; bod
   stale: { title: 'senderStateStaleTitle', body: 'senderStateStaleBody', next: 'senderStateStaleNext' },
   reconnect_required: { title: 'senderStateReconnectRequiredTitle', body: 'senderStateReconnectRequiredBody', next: 'senderStateReconnectRequiredNext' },
   write_unconfirmed: { title: 'senderStateWriteUnconfirmedTitle', body: 'senderStateWriteUnconfirmedBody', next: 'senderStateWriteUnconfirmedNext' },
+  write_refused: { title: 'senderStateWriteRefusedTitle', body: 'senderStateWriteRefusedBody', next: 'senderStateWriteRefusedNext' },
   rate_limited: { title: 'senderStateRateLimitedTitle', body: 'senderStateRateLimitedBody', next: 'senderStateRateLimitedNext' },
+  rate_delayed: { title: 'senderStateRateDelayedTitle', body: 'senderStateRateDelayedBody', next: 'senderStateRateDelayedNext' },
   upstream_unavailable: { title: 'senderStateUpstreamUnavailableTitle', body: 'senderStateUpstreamUnavailableBody', next: 'senderStateUpstreamUnavailableNext' },
   workspace_permission: { title: 'senderStateWorkspacePermissionTitle', body: 'senderStateWorkspacePermissionBody', next: 'senderStateWorkspacePermissionNext' },
   failed: { title: 'senderStateFailedTitle', body: 'senderSaveFailed', next: 'senderStateFailedNext' }

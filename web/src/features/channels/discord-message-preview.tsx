@@ -9,10 +9,11 @@ import type { SenderKind } from '../../lib/channels/discord-sender-name';
 /**
  * Where the shown name comes from. `draft`: what the person is typing, not saved. `saved`: a custom name Rafii stored
  * for a webhook connection. `webhook_default`: the name saved on the webhook itself in Discord (no custom name).
- * `observed`: a bot nickname as Rafii last read it. `bot_username`: the bot has no nickname there, so Discord shows
- * its own username. `unknown`: Rafii does not know the name, so the preview says so instead of making one up.
+ * `observed`: a bot nickname as Rafii last read it. `approved`: the bot nickname recorded in an approval.
+ * `bot_username`: the bot has no nickname there, so Discord shows its own username. `unknown`: Rafii does not know the
+ * name, so the preview says so instead of making one up.
  */
-export type PreviewNameSource = 'draft' | 'saved' | 'webhook_default' | 'observed' | 'bot_username' | 'unknown';
+export type PreviewNameSource = 'draft' | 'saved' | 'webhook_default' | 'observed' | 'approved' | 'bot_username' | 'unknown';
 
 export interface PreviewMediaItem {
   url: string;
@@ -33,9 +34,14 @@ export interface DiscordMessagePreviewProps {
   locale: string;
   /** The tag Discord puts next to app and webhook authors, as the server reports it (`preview.badge`). */
   badge?: string;
-  /** `preview.queuedPostsKeepApprovedName` (webhook) and `preview.queuedPostsFollowCurrentNickname` (bot); default by kind. */
+  /** `preview.queuedPostsKeepApprovedName` (webhook); default true. */
   queuedKeepsName?: boolean;
-  queuedFollowsNickname?: boolean;
+  /**
+   * Bot only, and only where it is known that an approval records the nickname and holds the post when Discord shows
+   * another one (`preview.queuedBotPostsHoldIfNicknameChanges` with the nickname switch on, or an approval that carries
+   * the recorded nickname). `pending`: before approval, `approved`: the approval already exists. Absent: no claim.
+   */
+  botHold?: 'pending' | 'approved';
   /** Heading text; the editor says "Sender preview", reviews say "How it will look in Discord". */
   heading: string;
   headingLevel?: 'h3' | 'h4';
@@ -107,7 +113,7 @@ export function DiscordMessagePreview({
   locale,
   badge,
   queuedKeepsName,
-  queuedFollowsNickname,
+  botHold,
   heading,
   headingLevel = 'h3',
   themeToggle = false,
@@ -132,7 +138,7 @@ export function DiscordMessagePreview({
 
   const nameNotes: string[] =
     kind === 'bot'
-      ? [copy.previewBotNote, ...((queuedFollowsNickname ?? true) ? [copy.previewBotQueuedNote] : [])]
+      ? [copy.previewBotNote, ...(botHold === 'pending' ? [copy.previewBotQueuedNote] : botHold === 'approved' ? [copy.previewBotApprovedNote] : [])]
       : [copy.previewWebhookNote, ...((queuedKeepsName ?? true) ? [copy.previewWebhookQueuedNote] : [])];
   if (nameSource === 'unknown') nameNotes.push(kind === 'bot' ? copy.previewBotNameUnknownNote : copy.previewWebhookDefaultNote);
   if (nameSource === 'webhook_default') nameNotes.push(copy.previewWebhookDefaultNote);

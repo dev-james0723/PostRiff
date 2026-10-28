@@ -2,6 +2,7 @@
 
 import { usePreferences } from '@/lib/preferences';
 import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
+import { botNicknameView } from '@/lib/channels/discord-sender-name';
 import { DiscordMessagePreview } from '@/features/channels/discord-message-preview';
 
 /**
@@ -89,6 +90,8 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
   const connection = state?.phase2?.channels.find((c) => c.id === item.channelId);
   const destinations = connection?.discordDestinations?.filter((d) => d.status === 'authorized' && d.authorizationGeneration === connection.discordAuthorizationGeneration) ?? [];
   const discordTarget = destinations.find((d) => d.id === destinationId);
+  const discordWebhook = discordTarget?.senderKind === 'webhook' || connection?.discordConnectionKind === 'webhook';
+  const botNickname = botNicknameView(connection?.discordBotNickname, 'channel');
   const text = TITLES[decision];
   const when = item.publishAt ? runLabel(item.publishAt * 1000, timeZone) : null;
   const edited = variant && typeof item.variantRevision === 'number' && variant.revision !== item.variantRevision;
@@ -121,7 +124,12 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
         excludedUnknowns: unknowns,
         acknowledgedWarnings: warnings,
         ...(item.platform === 'Discord' && item.publishAt ? { destinationId, destinationGeneration: discordTarget?.resourceGeneration, publishAt: item.publishAt,
-          ...(discordTarget?.senderKind === 'webhook' ? { discordSenderName: connection?.discordSenderName ?? null } : {}) } : {}),
+          // The approval states which sender it was shown: a webhook's custom name, or the bot nickname a review records.
+          ...(discordTarget?.senderKind === 'webhook'
+            ? { discordSenderName: connection?.discordSenderName ?? null }
+            : connection?.discordBotNickname !== undefined
+              ? { discordBotNickname: connection.discordBotNickname }
+              : {}) } : {}),
         sourceUse: rewriteSources.flatMap((s) => (digests?.[s.id] ? [{ sourceId: s.id, factsDigest: digests[s.id] }] : [])),
         ...(note.trim() ? { note: note.trim() } : {})
       });
@@ -176,9 +184,10 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
         )}
         {item.platform === 'Discord' && variant && decision === 'approve' && (
           <DiscordMessagePreview
-            kind={discordTarget?.senderKind === 'webhook' || connection?.discordConnectionKind === 'webhook' ? 'webhook' : 'bot'}
-            name={connection?.discordSenderName ?? null}
-            nameSource={connection?.discordSenderName ? (connection.discordConnectionKind === 'webhook' ? 'saved' : 'observed') : 'unknown'}
+            kind={discordWebhook ? 'webhook' : 'bot'}
+            name={discordWebhook ? connection?.discordSenderName ?? null : botNickname.name}
+            nameSource={discordWebhook ? (connection?.discordSenderName ? 'saved' : 'unknown') : botNickname.source}
+            botHold={discordWebhook ? undefined : botNickname.hold}
             text={variant.text}
             publishAt={item.publishAt ? new Date(item.publishAt * 1000) : null}
             timeZone={timeZone}
