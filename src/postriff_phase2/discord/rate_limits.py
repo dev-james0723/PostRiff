@@ -420,15 +420,15 @@ class SharedPostgresBudget:
     # window only for one span after its wire time (a second and a tenth), and unresolved it counts for _horizon at most, and
     # only while it is unresolved; a settled row counts for nothing. What is kept past that is the record. A read is kept an
     # hour (the health payload's windows are at most 15 minutes, a sender-name claim ends 15 minutes after its permit), a
-    # publication a day: nothing reads a created post's row again after its approval's hour (the unique intent and binding
-    # indexes only have to outlast a stale worker, whose lease and approval are long over), the read-back that follows is a new
-    # row, and a day lets a person read yesterday's incident; each further day costs 0.8 to 1.8 GB at 100 posts a
-    # minute (docs/w02/OPEN-QUESTIONS.md, Q16). An unresolved row (sent, uncertain, reserved, sealed) is never deleted: it is
-    # the evidence a person reviews.
+    # publication two days (the owner's approved window): nothing reads a created post's row again after its approval's hour
+    # (the unique intent and binding indexes only have to outlast a stale worker, whose lease and approval are long over), the
+    # read-back that follows is a new row, and two days let a person read the incident of the day before yesterday; each
+    # further day costs 0.8 to 1.8 GB at 100 posts a minute (docs/w02/OPEN-QUESTIONS.md, Q16). An unresolved row (sent,
+    # uncertain, reserved, sealed) is never deleted: it is the evidence a person reviews.
     PURGE_BATCH = 2000                    # rows one statement deletes at most
     PURGE_ROUNDS = 3                      # rounds one call runs while they come back full
     PURGE_READ_SECONDS = 3600.0           # a settled admission that is not a publication
-    PURGE_PUBLICATION_SECONDS = 86400.0   # a settled publication
+    PURGE_PUBLICATION_SECONDS = 172800.0  # a settled publication: two days
     PURGE_SETTLE_GRACE_SECONDS = 600.0    # a row settled more recently than this stays, however old its reservation
 
     def __init__(self, connection_factory, application_id, *, policy=None, sleep=time.sleep, monotonic=time.monotonic, **_compat):

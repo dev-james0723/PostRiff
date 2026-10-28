@@ -89,7 +89,7 @@ class PurgeShape(unittest.TestCase):
         self.assertNotIn('NOT is_publish', publications)
         key = limiter(recorder).application_key
         self.assertEqual(recorder.parameters[1], (key, 3600.0, 600.0, 2000))
-        self.assertEqual(recorder.parameters[2], (key, 86400.0, 600.0, 2000))
+        self.assertEqual(recorder.parameters[2], (key, 172800.0, 600.0, 2000))
         self.assertEqual(recorder.opened, 1, 'one short transaction')
 
     def test_it_runs_more_rounds_only_while_they_come_back_full(self):
@@ -122,9 +122,9 @@ class PurgeShape(unittest.TestCase):
 
     def test_the_retention_numbers_are_the_reviewed_ones(self):
         """Written out here so that changing one is a decision made in this file too: 2,000 rows a statement, an hour for a
-        read and a day for a publication, ten minutes of grace after a row settles."""
+        read and two days for a publication (the owner's approved windows), ten minutes of grace after a row settles."""
         self.assertEqual((SharedPostgresBudget.PURGE_BATCH, SharedPostgresBudget.PURGE_ROUNDS), (2000, 3))
-        self.assertEqual((SharedPostgresBudget.PURGE_READ_SECONDS, SharedPostgresBudget.PURGE_PUBLICATION_SECONDS), (3600.0, 86400.0))
+        self.assertEqual((SharedPostgresBudget.PURGE_READ_SECONDS, SharedPostgresBudget.PURGE_PUBLICATION_SECONDS), (3600.0, 172800.0))
         self.assertEqual(SharedPostgresBudget.PURGE_SETTLE_GRACE_SECONDS, 600.0)
         self.assertLess(SharedPostgresBudget.PURGE_READ_SECONDS, SharedPostgresBudget.PURGE_PUBLICATION_SECONDS)
         horizon = SharedPostgresBudget.UNOBSERVED_MARGIN_SECONDS + 600     # the longest window an unanswered request counts for

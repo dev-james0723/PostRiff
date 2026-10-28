@@ -273,7 +273,7 @@ class Payload(unittest.TestCase):
                                                                      'persistentCircuits': 2, 'openOver5Min': 0}})
         self.assertEqual(payload['coordinator']['traffic']['admissions60s'], 80)
         self.assertEqual(payload['coordinator']['retention'], {
-            'status': 'observed', 'retentionSeconds': {'reads': 3600, 'publications': 86400},
+            'status': 'observed', 'retentionSeconds': {'reads': 3600, 'publications': 172800},
             'oldestSettledReadAgeSeconds': 18000.0, 'oldestSettledPublicationAgeSeconds': 216000.0,
             'liveRowsEstimate': 5400, 'deadRowsEstimate': 12, 'rowsDeletedTotal': 880, 'lastVacuumAgeSeconds': 120.0})
         self.assertEqual(payload['coordinator']['booking'], {

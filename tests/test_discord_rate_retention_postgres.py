@@ -127,8 +127,8 @@ class Retention(unittest.TestCase):
         gone = {
             'a read answered two hours ago': self.one(),
             'a read blocked unsent two hours ago': self.one(state='blocked'),
-            'a settled publication past a day': self.one(publish=True, oldest=25 * HOUR),
-            'a blocked publication past a day': self.one(publish=True, state='blocked', oldest=25 * HOUR),
+            'a settled publication past two days': self.one(publish=True, oldest=49 * HOUR),
+            'a blocked publication past two days': self.one(publish=True, state='blocked', oldest=49 * HOUR),
         }
         kept = {
             'a read answered half an hour ago': self.one(oldest=HOUR // 2),
@@ -136,7 +136,8 @@ class Retention(unittest.TestCase):
             'a read sent and never answered, three days ago': self.one(state='sent', oldest=3 * DAY),
             'a write whose outcome is unknown': self.one(state='uncertain', oldest=3 * DAY),
             'a reserved permit, two hours old': self.one(state='reserved'),
-            'a settled publication inside a day': self.one(publish=True, oldest=3 * HOUR),
+            'a settled publication inside two days': self.one(publish=True, oldest=3 * HOUR),
+            'a settled publication a day and a half old (inside the window since it was widened)': self.one(publish=True, oldest=36 * HOUR),
             'a publication whose create is uncertain, 100 hours ago': self.one(publish=True, state='uncertain', oldest=100 * HOUR),
             'a sealed publication, 100 hours ago': self.one(publish=True, state='sealed', oldest=100 * HOUR),
             'another application\'s settled read': self.one(app=application_key('8123456789012345678')),
@@ -282,7 +283,7 @@ class Retention(unittest.TestCase):
         identity = RequestIdentity.make(self.app, 'bot', 'synthetic-bot-token')
         # History first: request_seq runs in time order, as it does in production, and the window reads the newest rows.
         self.add(4000, oldest=20 * HOUR, newest=2 * HOUR)
-        self.add(500, publish=True, oldest=100 * HOUR, newest=25 * HOUR)
+        self.add(500, publish=True, oldest=100 * HOUR, newest=49 * HOUR)
         old_unanswered = self.one(state='sent', oldest=3 * HOUR)
         old_uncertain_write = self.one(state='uncertain', oldest=3 * HOUR)
         publication = self.one(publish=True, state='uncertain', oldest=100 * HOUR)
@@ -392,7 +393,7 @@ class Retention(unittest.TestCase):
         began = time.monotonic()
         self.add(old_reads, oldest=6 * HOUR, newest=90 * 60)                 # all past the hour, and none crosses it during the run
         self.add(new_reads, oldest=40 * 60, newest=60)                       # all inside it
-        self.add(old_publications, publish=True, oldest=96 * HOUR, newest=30 * HOUR)
+        self.add(old_publications, publish=True, oldest=96 * HOUR, newest=50 * HOUR)
         self.add(new_publications, publish=True, oldest=20 * HOUR, newest=60)
         self.add(stuck, state='sent', oldest=5 * HOUR, newest=3 * HOUR)
         self.add(stuck, publish=True, state='uncertain', oldest=100 * HOUR, newest=60 * HOUR)
@@ -476,7 +477,7 @@ class Retention(unittest.TestCase):
                 return ops.read_retention(cur, self.cluster.now(), {})
         before = read()
         self.assertEqual(before['status'], 'observed')
-        self.assertEqual(before['retentionSeconds'], {'reads': 3600, 'publications': 86400})
+        self.assertEqual(before['retentionSeconds'], {'reads': 3600, 'publications': 172800})
         self.assertAlmostEqual(before['oldestSettledReadAgeSeconds'], 5 * HOUR, delta=30)
         self.assertAlmostEqual(before['oldestSettledPublicationAgeSeconds'], 60 * HOUR, delta=30)
         self.assertEqual(before['liveRowsEstimate'], 550)
