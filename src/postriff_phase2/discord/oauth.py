@@ -10,6 +10,8 @@ import hashlib
 import json
 import math
 import secrets
+import threading
+import time
 import uuid
 from contextlib import contextmanager
 from urllib.parse import urlencode
@@ -21,6 +23,29 @@ from .authorization import digest, snowflake
 
 def fail(message='Reconnect Discord and authorize the server and channel again.', status=409):
     raise AlphaError(message, status, code='discord_connection_required')
+
+
+# The API function is killed after 300 seconds, so a refresh claim older than this has no live claimant.
+REFRESH_CLAIM_TTL = 360
+# The refresh token is spent once Discord has answered; keep the new pair through a transient database error.
+SETTLE_ATTEMPTS = 3
+# G2E-A-05 / G2E-C-01. Reads that reach Discord (the server list, a server's channels, a re-check) share ONE application
+# window with every tenant. They are throttled per member and per workspace BEFORE any request to Discord. The UI makes a
+# handful of these a minute (open the picker, re-check, refresh), so these limits are far above normal use: a member may
+# make 30 in a minute, a workspace 120. One read per connection is in flight at a time, and a connection's channel list
+# and re-check answer are served from memory for READ_CACHE_SECONDS, so polling cannot multiply Discord traffic.
+# G2E-C-05 / G2E-A-11. Beyond the shared cap, one workspace (and one member) may not hold an unbounded number of servers
+# either: a person who manages many servers could otherwise spend the bot's whole capacity from a single account. A server
+# that was disconnected still holds its slot (the shared bot stays in it), so it still counts here.
+MAX_SERVERS_PER_WORKSPACE = 30
+MAX_SERVERS_PER_MEMBER = 15
+READ_LIMIT_MEMBER = (30, 60)
+READ_LIMIT_WORKSPACE = (120, 60)
+READ_CACHE_SECONDS = 45
+# A connection that is NOT healthy (no channel can be used, the re-check found a problem) is likely being fixed in
+# Discord right now, so its answer is only reused for a few seconds.
+READ_RETRY_SECONDS = 10
+READ_WAIT_SECONDS = 25
 
 
 def identity_capabilities():
@@ -58,6 +83,7 @@ def validate_context(context, workspace, actor, adapter, redirect, scopes, capab
 class DiscordConnections:
     def __init__(self, oauth):
         self.oauth = oauth
+        self._flights, self._flights_guard = {}, threading.Lock()
 
     @property
     def adapter(self):
@@ -90,6 +116,53 @@ class DiscordConnections:
                     fail('Workspace unavailable.', 404)
                 state = json.loads(row[0]) if isinstance(row[0], str) else copy.deepcopy(row[0])
                 yield cur, state, None
+
+    @staticmethod
+    def server_ceiling(state, actor, guild):
+        """Refuse a NEW server past the per-workspace or per-member ceiling, before any Discord request or cap slot. A
+        server this workspace already holds (a reconnect) is never counted twice."""
+        phase2 = state.get('phase2') or {}
+        cards = [c for c in phase2.get('channels', []) if isinstance(c, dict) and c.get('platform') == 'Discord'
+                 and c.get('discordConnectionKind') != 'webhook']
+        if any(c.get('providerAccountId') == guild for c in cards):
+            return
+        mine = {x.get('id') for x in phase2.get('discordIdentityLinks', []) if isinstance(x, dict) and x.get('authorizedBy') == actor}
+        if (len(cards) >= MAX_SERVERS_PER_WORKSPACE
+                or sum(1 for c in cards if c.get('discordIdentityConnectionId') in mine) >= MAX_SERVERS_PER_MEMBER):
+            raise AlphaError('This workspace already has the largest number of Discord servers Rafii connects '
+                             f'({MAX_SERVERS_PER_WORKSPACE} per workspace, {MAX_SERVERS_PER_MEMBER} per person). '
+                             'Contact support if you need more.', 409, code='discord_server_limit')
+
+    def admit_read(self, cur, workspace, member):
+        """Throttle a read that reaches Discord. Called inside the transaction that has just proved the caller's role,
+        so a stranger cannot spend a workspace's allowance, and always BEFORE the first provider request."""
+        from ..hosted import throttle
+        throttle(cur, f'discord-read:{workspace}:{member}', *READ_LIMIT_MEMBER)
+        throttle(cur, f'discord-read:{workspace}', *READ_LIMIT_WORKSPACE)
+
+    def read_through(self, key, fetch, ttl=0):
+        """At most one Discord read in flight per `key` (a connection) in this process. With `ttl`, a successful answer
+        is reused for that many seconds by every caller that has already passed its own authorization; without it the
+        callers are only serialised and each runs `fetch` itself (the result may depend on the caller). `ttl` may be a
+        function of the answer. Errors are never cached. Across processes the shared throttle and the request
+        coordinator remain the bound."""
+        with self._flights_guard:
+            if len(self._flights) >= 1024:
+                for old, entry in list(self._flights.items()):
+                    if not entry['lock'].locked() and entry['expires'] <= time.monotonic():
+                        del self._flights[old]
+            flight = self._flights.setdefault(key, {'lock': threading.Lock(), 'expires': 0.0, 'value': None})
+        if not flight['lock'].acquire(timeout=READ_WAIT_SECONDS):
+            raise AlphaError('Discord is busy with this connection. Try again in a moment.', 429)
+        try:
+            if ttl and flight['expires'] > time.monotonic():
+                return copy.deepcopy(flight['value'])
+            value = fetch()
+            if ttl:
+                flight['value'], flight['expires'] = copy.deepcopy(value), time.monotonic() + (ttl(value) if callable(ttl) else ttl)
+            return value
+        finally:
+            flight['lock'].release()
 
     def save_state(self, cur, workspace, state):
         self.oauth.commands.engine.invalidate(state)
@@ -134,8 +207,12 @@ class DiscordConnections:
         response = adapter._discord_http(method, path, headers=headers, credential_kind='user' if bearer else 'oauth',
                                          bearer=bearer, user_id=user_id, **kwargs)
         if response.get('status') not in (200, 201, 204):
-            error = AlphaError('Discord access is unavailable. Reconnect if permissions were removed.', 409 if response.get('status') in (400, 401, 403) else 503)
-            error.discord_permanent = response.get('status') in (400, 401, 403)
+            # Only Discord's own JSON refusal (or invalid_grant) is a verdict on the person's consent. An HTML/WAF page,
+            # an unknown body or a 5xx is not: it must never revoke, disconnect or zero anything.
+            permanent = adapter.is_discord_denial(response)
+            error = (AlphaError('Discord access is unavailable. Reconnect if permissions were removed.', 409) if permanent else
+                     AlphaError('Discord did not confirm this just now. Nothing was changed. Try again shortly.', 503))
+            error.discord_permanent = permanent
             error.discord_status = response.get('status')
             raise error
         return response.get('body')
@@ -196,11 +273,21 @@ class DiscordConnections:
         if purpose == 'installation':
             if not snowflake(inputs.get('guildId')):
                 fail('Select the exact Discord server to authorize.', 400)
-            identity = self._fresh_identity(workspace, token, inputs.get('identityConnectionId'))
-            if not any(g['id'] == inputs['guildId'] for g in self.user_guilds(identity)):
+            with self.local(workspace, token) as (cur, state, actor):
+                # BEFORE the Discord reads below (they used to run first, so a throttled caller still cost Discord requests).
+                throttle(cur, f'oauth-start:{workspace}', 20, 600)
+                self.admit_read(cur, workspace, actor)
+                self.server_ceiling(state, actor, inputs['guildId'])
+
+            def manageable():
+                fresh = self._fresh_identity(workspace, token, inputs.get('identityConnectionId'))
+                return fresh, self.user_guilds(fresh)
+            identity, servers = self.read_through(('identity', workspace, str(inputs.get('identityConnectionId'))[:128]), manageable)
+            if not any(g['id'] == inputs['guildId'] for g in servers):
                 fail('This identity cannot manage the selected Discord server.', 403)
         with self.local(workspace, token) as (cur, state, actor):
-            throttle(cur, f'oauth-start:{workspace}', 20, 600)
+            if purpose != 'installation':
+                throttle(cur, f'oauth-start:{workspace}', 20, 600)
             links = state.get('phase2', {}).get('discordIdentityLinks', [])
             context = {'v': 1, 'purpose': purpose, 'workspaceId': workspace, 'memberId': actor,
                        'applicationId': adapter.client_id, 'redirectUri': redirect, 'discoverGuilds': discover,
@@ -335,13 +422,59 @@ class DiscordConnections:
 
     def invalidate_dependents(self, cur, workspace, state, identity_id):
         for channel in state.get('phase2', {}).get('channels', []):
-            if channel.get('discordIdentityConnectionId') != identity_id:
-                continue
-            generation = str(uuid.uuid4())
-            channel.update(revoked=True, capabilityVerified=False, defaultDestinationId=None, discordAuthorizationGeneration=generation)
-            for target in channel.get('discordDestinations', []):
-                target['status'] = 'revoked'
-            cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,authorization_generation=%s::uuid,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='discord'", (generation, workspace, channel['id']))
+            if channel.get('discordIdentityConnectionId') == identity_id:
+                self._revoke_channel(cur, workspace, channel)
+
+    @staticmethod
+    def _revoke_channel(cur, workspace, channel):
+        generation = str(uuid.uuid4())
+        channel.update(revoked=True, capabilityVerified=False, defaultDestinationId=None, discordAuthorizationGeneration=generation)
+        for target in channel.get('discordDestinations', []):
+            target['status'] = 'revoked'
+        cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,authorization_generation=%s::uuid,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='discord'", (generation, workspace, channel['id']))
+
+    def _disconnect_record(self, cur, workspace, state, record):
+        """One identity: marked disconnected, every installation bound to it revoked, its own credential row zeroed."""
+        generation = str(uuid.uuid4())
+        record.update(status='disconnected', authorizationGeneration=generation)
+        for key in ('refreshClaim', 'refreshStartedAt', 'dependentsSuspended'):
+            record.pop(key, None)
+        self.invalidate_dependents(cur, workspace, state, record['id'])
+        cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,authorization_generation=%s::uuid,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='discord'", (generation, workspace, record['id']))
+
+    def disconnect_member(self, cur, workspace, state, member):
+        """G2E-A-03. Runs in the transaction that ends a member's access (removed, left, or no longer allowed to manage
+        connections): every personal Discord identity this member authorized is disconnected, what hangs on it is revoked
+        and the credential rows are zeroed. A system action: no Discord request, nothing for the person to confirm.
+        True when state changed (the caller then saves it)."""
+        phase2, changed = state.get('phase2') or {}, False
+        for record in phase2.get('discordIdentityLinks', []):
+            if isinstance(record, dict) and record.get('authorizedBy') == member and record.get('status') != 'disconnected':
+                self._disconnect_record(cur, workspace, state, record)
+                changed = True
+        for channel in phase2.get('channels', []):
+            # A webhook the member authorized on its own (not through an identity) is that member's custody too.
+            if (isinstance(channel, dict) and channel.get('platform') == 'Discord' and channel.get('discordConnectionKind') == 'webhook'
+                    and channel.get('discordAuthorizedBy') == member and not channel.get('revoked')):
+                self._revoke_channel(cur, workspace, channel)
+                changed = True
+        return changed
+
+    @staticmethod
+    def suspend_dependents(state, identity_id):
+        """Fail closed without destroying. The identity cannot be used until the person links it again, so nothing bound
+        to it may send or be re-verified (bind_identity refuses), and each card shows "Finish setup" with its approved
+        jobs held. The installation, its destinations and its credential row are left exactly as they are: they come
+        back when the same Discord user links the same identity again (save_identity)."""
+        for channel in state.get('phase2', {}).get('channels', []):
+            if channel.get('discordIdentityConnectionId') == identity_id and not channel.get('revoked'):
+                channel.update(capabilityVerified=False, discordSuspended=True)
+
+    def _suspend_identity(self, cur, workspace, state, record):
+        record.update(status='reconnect_required', dependentsSuspended=True)
+        record.pop('refreshClaim', None); record.pop('refreshStartedAt', None)
+        self.suspend_dependents(state, record['id'])
+        self.save_state(cur, workspace, state)
 
     def save_identity(self, workspace, token, context, body, user, scopes):
         with self.local(workspace, token) as (cur, state, actor):
@@ -352,10 +485,21 @@ class DiscordConnections:
             prior = next((x for x in links if x['id'] == connection), None)
             if prior and prior.get('authorizationGeneration') != context['identityGenerations'].get(connection):
                 fail('Discord changed during connection. Reload and start again.')
-            if prior:
+            # An identity that was only suspended (an unconfirmed refresh) keeps its servers when the same person links
+            # the same Discord account again; any other relink fences every dependent installation, as before.
+            resumed = bool(prior and prior.get('status') == 'reconnect_required' and prior.get('dependentsSuspended') is True
+                           and prior.get('userId') == user['id'])
+            if prior and not resumed:
                 self.invalidate_dependents(cur, workspace, state, connection)
             expires = self.oauth.clock() + body['expires_in']
             generation = self.upsert(cur, workspace, connection, user['id'], {'v': 1, 'kind': 'identity', 'applicationId': self.adapter.client_id, 'memberId': actor, 'user': user['id'], 'at': body['access_token']}, scopes, expires, body.get('refresh_token'))
+            if resumed:
+                # The installations' envelopes name this consent generation; the same subject coming back restores it.
+                generation = prior['authorizationGeneration']
+                cur.execute("UPDATE public.pr_encrypted_credentials SET authorization_generation=%s::uuid WHERE workspace_id=%s AND connection_id=%s AND provider='discord'", (generation, workspace, connection))
+                for channel in state.get('phase2', {}).get('channels', []):
+                    if channel.get('discordIdentityConnectionId') == connection:
+                        channel.pop('discordSuspended', None)
             record = {'id': connection, 'workspaceId': workspace, 'applicationId': self.adapter.client_id, 'userId': user['id'],
                       'account': str(user.get('global_name') or user.get('username') or user['id'])[:128],
                       'authorizedBy': actor, 'authorizedAt': self.oauth.clock(), 'authorizationGeneration': generation,
@@ -393,13 +537,20 @@ class DiscordConnections:
         return {'connected': True, 'connectionId': connection, 'account': channel['account'], 'discordPurpose': 'installation', 'missingScopes': []}
 
     def _fresh_identity(self, workspace, token, connection):
-        claim, fast = None, None
+        claim, fast, stale = None, None, False
         with self.local(workspace, token) as (cur, state, actor):
             record = identity_record(state, connection, actor)
             row, envelope = self.bind_identity(cur, workspace, record)
             if record.get('refreshClaim'):
-                fail('Discord identity refresh is pending or requires reconnecting.')
-            if row[3] and float(row[3]) > self.oauth.clock() + 60:
+                started = record.get('refreshStartedAt')
+                if (isinstance(started, (int, float)) and not isinstance(started, bool)
+                        and self.oauth.clock() - started <= REFRESH_CLAIM_TTL):
+                    fail('Discord identity refresh is pending or requires reconnecting.')
+                # No live claimant any more (a killed or crashed refresh). Whether its rotating token was spent cannot be
+                # known, so the identity stays closed, visibly, but what hangs on it is suspended, not destroyed.
+                self._suspend_identity(cur, workspace, state, record)
+                stale = True
+            elif row[3] and float(row[3]) > self.oauth.clock() + 60:
                 fast = {'connectionId': connection, 'authorizationGeneration': row[4], 'userId': envelope['user'], 'bearer': envelope['at'], 'scopes': list(row[5])}
             else:
                 if not row[2]:
@@ -408,6 +559,8 @@ class DiscordConnections:
                 record.update(refreshClaim=claim, refreshStartedAt=self.oauth.clock())
                 self.save_state(cur, workspace, state)
                 refresh = self.oauth.vault.decrypt(row[2], row[1])
+        if stale:
+            fail('Discord refresh could not be confirmed. Reconnect before publishing.')
         if fast is not None:
             # Local expiry is not proof that Discord still authorizes this user.
             try:
@@ -415,6 +568,8 @@ class DiscordConnections:
                 if user['id'] != fast['userId']:
                     fail('The Discord identity changed. Reconnect.')
             except AlphaError as error:
+                # discord_permanent is set only for Discord's own JSON refusal; an HTML/WAF page, a 5xx or a lost
+                # connection reach here as an ordinary unavailable error and change nothing.
                 if getattr(error, 'discord_permanent', False) or error.code == 'discord_connection_required':
                     with self.local(workspace, token) as (cur, state, actor):
                         record = identity_record(state, connection, actor)
@@ -433,13 +588,18 @@ class DiscordConnections:
             return fast
         from .rate_limits import RateCoordinatorUnavailable, RateDelayed
 
-        def reconnect_required():
+        def reconnect_required(destroy=False):
+            """Fail closed. `destroy` only when Discord itself refused the grant; otherwise the servers are suspended."""
             with self.local(workspace, token) as (cur, state, actor):
                 record = identity_record(state, connection, actor)
                 if record.get('refreshClaim') == claim and record.get('authorizationGeneration') == row[4]:
-                    record['status'] = 'reconnect_required'
-                    self.invalidate_dependents(cur, workspace, state, connection)
-                    self.save_state(cur, workspace, state)
+                    if destroy:
+                        record['status'] = 'reconnect_required'
+                        record.pop('refreshClaim', None); record.pop('refreshStartedAt', None)
+                        self.invalidate_dependents(cur, workspace, state, connection)
+                        self.save_state(cur, workspace, state)
+                    else:
+                        self._suspend_identity(cur, workspace, state, record)
             fail('Discord refresh could not be confirmed. Reconnect before publishing.')
 
         def release_claim():
@@ -460,37 +620,58 @@ class DiscordConnections:
             release_claim()
             raise
         except AlphaError as refused:
-            if getattr(refused, 'discord_status', None) != 429:
-                reconnect_required()
-            # Discord itself answered 429: the request was rate limited and not processed, so the refresh token is
-            # unspent either. Same outcome as a coordinator refusal; any other answer stays ambiguous.
-            release_claim()
-            raise RateDelayed(cause='provider_429') from refused
+            status = getattr(refused, 'discord_status', None)
+            if getattr(refused, 'discord_permanent', False):
+                reconnect_required(destroy=True)  # Discord itself refused this grant (invalid_grant or its JSON 401/403)
+            if status == 429:
+                # Discord itself answered 429: the request was rate limited and not processed, so the refresh token is
+                # unspent either. Same outcome as a coordinator refusal.
+                release_claim()
+                raise RateDelayed(cause='provider_429') from refused
+            if isinstance(status, int) and 400 <= status < 500:
+                # Answered, but not by Discord's token endpoint (an HTML/WAF page, a proxy) or as a refusal of the request
+                # itself: the grant was not exercised, so the token is unspent and nothing is ambiguous.
+                release_claim()
+                raise
+            reconnect_required()  # a 5xx or a lost connection: Discord may have rotated the token before failing
         except Exception:
             reconnect_required()
         # From here the old refresh token is spent, so a failure to verify the new one cannot be retried.
+        different = False
         try:
             body = self.token_body(response)
             user, scopes = self.verified_user(body['access_token'], row[5], envelope['user'])
-            if user['id'] != envelope['user']:
-                fail('Discord refreshed a different identity. Reconnect.')
-        except Exception:
-            reconnect_required()
-        with self.local(workspace, token) as (cur, state, actor):
-            record = identity_record(state, connection, actor)
-            current, _ = self.bind_identity(cur, workspace, record)
-            if record.get('refreshClaim') != claim or current[4] != row[4] or current[0] != row[0]:
-                fail('Discord changed while refreshing. Reload the connection.')
-            envelope['at'] = body['access_token']
-            ciphertext, key = self.oauth.vault.encrypt(json.dumps(envelope))
-            refresh_ct = self.oauth.vault.encrypt(body.get('refresh_token') or refresh)[0]
-            expires = self.oauth.clock() + body['expires_in']
-            cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,scopes=%s,access_expires_at=to_timestamp(%s),rotated_at=now(),updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND authorization_generation=%s::uuid AND access_ciphertext=%s AND revoked_at IS NULL", (ciphertext, refresh_ct, key, scopes, expires, workspace, connection, row[4], row[0]))
-            if cur.rowcount != 1:
-                fail()
-            record.pop('refreshClaim', None); record.pop('refreshStartedAt', None)
-            record.update(expiresAt=expires, discoverGuilds='guilds' in scopes)
-            self.save_state(cur, workspace, state)
+            different = user['id'] != envelope['user']
+        except Exception as error:
+            reconnect_required(destroy=bool(getattr(error, 'discord_permanent', False)))
+        if different:
+            reconnect_required()  # Discord refreshed a different identity
+        for attempt in range(SETTLE_ATTEMPTS):
+            try:
+                with self.local(workspace, token) as (cur, state, actor):
+                    record = identity_record(state, connection, actor)
+                    current, _ = self.bind_identity(cur, workspace, record)
+                    if record.get('refreshClaim') != claim or current[4] != row[4] or current[0] != row[0]:
+                        fail('Discord changed while refreshing. Reload the connection.')
+                    envelope['at'] = body['access_token']
+                    ciphertext, key = self.oauth.vault.encrypt(json.dumps(envelope))
+                    refresh_ct = self.oauth.vault.encrypt(body.get('refresh_token') or refresh)[0]
+                    expires = self.oauth.clock() + body['expires_in']
+                    cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,scopes=%s,access_expires_at=to_timestamp(%s),rotated_at=now(),updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND authorization_generation=%s::uuid AND access_ciphertext=%s AND revoked_at IS NULL", (ciphertext, refresh_ct, key, scopes, expires, workspace, connection, row[4], row[0]))
+                    if cur.rowcount != 1:
+                        fail()
+                    record.pop('refreshClaim', None); record.pop('refreshStartedAt', None)
+                    record.update(expiresAt=expires, discoverGuilds='guilds' in scopes)
+                    self.save_state(cur, workspace, state)
+                break
+            except AlphaError:
+                raise  # a conflict (the claim or the credential changed) is not a database fault
+            except Exception:
+                # A transient database error must not strand the identity with a spent token and a claim nobody settles.
+                if attempt + 1 < SETTLE_ATTEMPTS:
+                    time.sleep(.05 * 2 ** attempt)
+        else:
+            reconnect_required()  # still failing: make it visible instead of leaving a silent dead end
         return {'connectionId': connection, 'authorizationGeneration': row[4], 'userId': user['id'], 'bearer': body['access_token'], 'scopes': scopes}
 
     def user_guilds(self, identity):
@@ -521,7 +702,12 @@ class DiscordConnections:
     def guilds(self, workspace, token, connection):
         if token is None:
             fail('Sign in to manage Discord connections.', 401)
-        return {'identityConnectionId': connection, 'guilds': self.user_guilds(self._fresh_identity(workspace, token, connection))}
+        with self.local(workspace, token) as (cur, state, actor):
+            identity_record(state, connection, actor)  # someone else's identity spends none of this member's allowance
+            self.admit_read(cur, workspace, actor)
+        return {'identityConnectionId': connection,
+                'guilds': self.read_through(('identity', workspace, connection),
+                                            lambda: self.user_guilds(self._fresh_identity(workspace, token, connection)))}
 
     def public_identities(self, workspace, token):
         if token is None:
@@ -569,7 +755,10 @@ class DiscordConnections:
                         'configured', 'identityVerified', 'capabilityVerified', 'verifiedAt',
                         'capabilityVersion', 'discordVerificationGeneration')
 
+        authorizer_gone = False
+
         def installation(cur, state, *, fresh=False):
+            nonlocal authorizer_gone
             if state.get('accountDeletion') or state.get('accountBlock'):
                 fail('This workspace cannot verify connections right now.')
             channel = next((c for c in state.get('phase2', {}).get('channels', [])
@@ -603,6 +792,13 @@ class DiscordConnections:
                 # Capture structural custody before I/O. Expiry is handled by
                 # the existing rotating-token path, then rechecked at commit.
                 record = identity_record(state, envelope['identityConnectionId'])
+                try:
+                    # Before ANY Discord request: a removed, downgraded or deleted authorizer's credential is neither
+                    # used nor rotated here (G2E-A-02); the same guard the worker grant already applies.
+                    self.require_active_installation_authorizer(cur, workspace, record)
+                except AlphaError:
+                    authorizer_gone = True
+                    return channel, row, envelope
                 credential, identity = self.bind_identity(cur, workspace, record)
                 if (credential[4] != envelope.get('identityGeneration')
                         or identity['user'] != envelope.get('user') or record.get('refreshClaim')):
@@ -615,6 +811,8 @@ class DiscordConnections:
             scopes = list(starting[5])
             if token is not None:
                 actor = member
+        if authorizer_gone:
+            return self._authorizer_gone(workspace, connection, token=token, actor=actor, event=event, scopes=scopes)
         outcome, identity_verified = 'read_verified', False
         try:
             identity = self._fresh_identity(workspace, None, envelope['identityConnectionId'])
@@ -701,21 +899,52 @@ class DiscordConnections:
             return {'connectionId': connection, 'state': outcome, 'identityVerified': identity_verified,
                     'scopes': scopes, 'ready': ready}
 
+    def _authorizer_gone(self, workspace, connection, *, token, actor, event, scopes):
+        """The member who authorized this installation no longer manages the workspace's connections. Nobody may use,
+        refresh or rotate their Discord credential, so no Discord request is made at all. The card is flipped ONCE
+        (verification and approval stop, queued posts are held); later passes find nothing left to change."""
+        from ..hosted import audit
+        done = {'connectionId': connection, 'state': 'reauthorization_required', 'identityVerified': False,
+                'scopes': list(scopes), 'ready': False}
+        with self.local(workspace, token) as (cur, state, member):
+            channel = next((c for c in state.get('phase2', {}).get('channels', [])
+                            if c.get('id') == connection and c.get('platform') == 'Discord'), None)
+            if channel is None or channel.get('revoked'):
+                fail('This Discord installation is unavailable.', 404)
+            try:
+                self.require_active_installation_authorizer(
+                    cur, workspace, identity_record(state, channel.get('discordIdentityConnectionId')))
+            except AlphaError:
+                pass  # still gone
+            else:
+                return {**done, 'state': 'verification_unavailable'}  # reinstated meanwhile: nothing to flip, look again later
+            if channel.get('discordAuthorizerGone') is not True or channel.get('capabilityVerified') or channel.get('identityVerified'):
+                channel.update(capabilityVerified=False, identityVerified=False, discordAuthorizerGone=True,
+                               discordVerificationGeneration=str(uuid.uuid4()))
+                cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='The member who connected this server no longer manages connections; reconnect it.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND capability<>'identity'", (workspace, connection))
+                self.save_state(cur, workspace, state)
+                audit(cur, workspace, member or actor, event, connection, {'state': 'reauthorization_required', 'reason': 'authorizer_gone'})
+        return done
+
     @staticmethod
     def require_active_installation_authorizer(cur, workspace, record):
         # This check is independent of token expiry; a legitimately expiring
         # Discord bearer must still be able to use the existing safe refresh.
-        from ..permissions import Membership
-        if record.get('status') != 'linked' or not record.get('authorizedBy'):
+        if (record.get('status') != 'linked' or not record.get('authorizedBy')
+                or not DiscordConnections._active_manager(cur, workspace, record['authorizedBy'])):
             fail('The Discord server authorizer no longer manages this workspace connection.')
+
+    @staticmethod
+    def _active_manager(cur, workspace, member):
+        """True while `member` is an active member of the workspace (undeleted profile) who may manage connections."""
+        from ..permissions import Membership
         cur.execute("SELECT m.role,m.can_manage_connections FROM public.pr_memberships m "
             "JOIN public.pr_profiles p ON p.user_id=m.user_id "
             "WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' "
             "AND p.deleted_at IS NULL FOR SHARE OF m,p",
-            (workspace, record['authorizedBy']))
-        member = cur.fetchone()
-        if not member or not Membership.from_row(member[0], can_manage_connections=member[1]).allows('manage_connections'):
-            fail('The Discord server authorizer no longer manages this workspace connection.')
+            (workspace, member))
+        row = cur.fetchone()
+        return bool(row) and Membership.from_row(row[0], can_manage_connections=row[1]).allows('manage_connections')
 
     def validate_installation(self, cur, workspace, envelope):
         if envelope.get('kind') != 'installation' or not envelope.get('identityConnectionId'):
@@ -737,14 +966,20 @@ class DiscordConnections:
             fail('Sign in to manage Discord connections.', 401)
         from ..hosted import audit
         with self.local(workspace, token) as (cur, state, actor):
-            record = identity_record(state, connection, actor)
+            orphan = False
+            try:
+                record = identity_record(state, connection, actor)
+            except AlphaError:
+                # Not this member's own. An identity whose authorizer is no longer an active manager of this workspace
+                # belongs to nobody and would otherwise stay undeletable: a manager (this caller) may remove it.
+                record = identity_record(state, connection)
+                if self._active_manager(cur, workspace, record.get('authorizedBy')):
+                    fail('This Discord identity is unavailable to this workspace member.', 404)
+                orphan = True
             self.oauth.repository.assert_fresh(token, actor)
-            generation = str(uuid.uuid4())
-            record.update(status='disconnected', authorizationGeneration=generation)
-            self.invalidate_dependents(cur, workspace, state, connection)
-            cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,authorization_generation=%s::uuid,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='discord'", (generation, workspace, connection))
+            self._disconnect_record(cur, workspace, state, record)
             self.save_state(cur, workspace, state)
-            audit(cur, workspace, actor, 'discord.identity_disconnected', connection)
+            audit(cur, workspace, actor, 'discord.identity_disconnected', connection, {'reason': 'authorizer_gone'} if orphan else None)
         return {'disconnected': True, 'remoteRevocation': 'not_requested', 'note': 'Disconnected from this workspace. The shared bot stays installed. Remove Rafii in Discord Authorized Apps to revoke the Discord authorization across connected workspaces.'}
 
     def validate_webhook(self, cur, workspace, envelope):

@@ -62,7 +62,7 @@ class LifecycleWire(SyntheticWire):
             return {'status': 200, 'body': body}
         if path == '/oauth2/@me':
             if self.identity_revoked:
-                return {'status': 401, 'body': {'message': 'Synthetic revoked identity'}}
+                return {'status': 401, 'body': {'message': '401: Unauthorized', 'code': 0}}  # Discord's own error shape (G2E-A-01)
             return {'status': 200, 'body': {'application': {'id': self.application}, 'user': {'id': self.user}, 'scopes': self.tokens[bearer]}}
         if path == '/users/@me' and kwargs.get('headers', {}).get('Authorization', '').startswith('Bearer '):
             return {'status': 200, 'body': {'id': self.profile_user or self.user, 'username': 'Synthetic identity'}}

@@ -502,6 +502,8 @@ class DiscordEngagementService:
             job = next((j for j in jobs if j['id'] == manifest['discord']['publicationId']), None)
             auth.assert_no_unresolved_repeat(state, manifest, excluding=job['id'] if job else None)
             if not job:
+                # The same owner ceiling as every other Discord approval, counted under this command's workspace row lock.
+                auth.assert_workspace_hourly_ceiling(state, manifest['timing']['timestamp'])
                 # Live plan/security checks run under the same transaction below.
                 job = {'id': manifest['discord']['publicationId'], 'manifest': copy.deepcopy(manifest),
                        'approvalDigest': current['digest'], 'approvedAt': self.clock(), 'approvedBy': principal,

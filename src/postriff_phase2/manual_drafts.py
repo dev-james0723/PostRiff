@@ -4,6 +4,7 @@ This is a trusted state command, invoked by the normal authenticated repository
 transaction. It never refreshes an existing draft or changes the shared brief.
 """
 import copy
+import json
 import re
 
 from postriff_alpha import learning
@@ -14,6 +15,13 @@ from .contracts import digest
 ACTION = "manual_draft_create"
 MAX_TEXT = 10000
 MAX_DESTINATIONS = 20
+# G2E-C-03. This action appends to the one JSON document that every request of the workspace reads and rewrites, so
+# unbounded saves slow the whole workspace (60 saves of 10,000 characters to 20 destinations took a request from 0.07 s to
+# 5.9 s). Normal use is a few hundred characters to a few destinations; these ceilings are well above it:
+MAX_REQUEST_CHARS = 60000          # text length x destinations in one save (10,000 characters to 6 destinations, 3,000 to 20)
+MAX_MANUAL_VARIANTS = 2000         # saved manual variants per workspace (about 650 posts at three destinations each)
+MAX_STATE_BYTES = 12 * 1024 * 1024  # serialized workspace state; checked only once a workspace holds many drafts
+LIMIT_MESSAGE = "This workspace has reached its saved-draft limit. Delete or publish older work, or contact support."
 _REQUEST_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _FIELDS = {"text", "destinations", "requestId", "capabilityRevision"}
 _DESTINATION_FIELDS = {"platform", "language", "channelId", "format"}
@@ -42,6 +50,9 @@ def create(state, actor, payload, at):
     raw = payload.get("destinations")
     if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_DESTINATIONS:
         raise AlphaError("Choose 1–20 destinations for this text.")
+    if len(text) * len(raw) > MAX_REQUEST_CHARS:
+        raise AlphaError("This text is too long for that many destinations. Save it to fewer destinations or shorten it.", 413,
+                         code="manual_draft_too_large")
     destinations = []
     for item in raw:
         if not isinstance(item, dict) or set(item) - _DESTINATION_FIELDS:
@@ -72,6 +83,13 @@ def create(state, actor, payload, at):
             raise AlphaError("This save request already belongs to different content. Start a new save.", 409,
                              code="manual_draft_request_conflict")
         return state
+
+    # After the retry check: an idempotent retry of a save that already fit must never be refused for room.
+    variants = state.get("variants", [])
+    if sum(1 for v in variants if v.get("manualRequestId")) + len(destinations) > MAX_MANUAL_VARIANTS:
+        raise AlphaError(LIMIT_MESSAGE, 409, code="manual_draft_limit")
+    if len(variants) >= 200 and len(json.dumps(state, default=str)) + 2 * len(text) * len(destinations) > MAX_STATE_BYTES:
+        raise AlphaError(LIMIT_MESSAGE, 409, code="manual_draft_limit")
 
     created = []
     style_revision = learning.revision(copy.deepcopy(state))

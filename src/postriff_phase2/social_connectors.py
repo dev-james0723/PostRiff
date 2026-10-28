@@ -506,11 +506,32 @@ class DiscordProvider(OAuthProvider):
                     raise RateCoordinatorUnavailable()
                 raise RateDelayed(observation['retryAfterSeconds'], cause='provider_429')
             if response.get('status') in (401,403,404) and method == 'GET':
+                if not self.is_discord_denial(response):
+                    # An HTML/WAF page, an empty or unknown body: not Discord's verdict on anyone's consent.
+                    error = AlphaError('Discord did not answer as expected. Nothing was changed. Try again shortly.', 503)
+                    error.discord_permanent = False
+                    error.discord_status = response.get('status')
+                    raise error
                 error = AlphaError('Discord access was removed. Reconnect or authorize this exact destination again.',409,
                                    code='discord_connection_required')
                 error.discord_permanent = True
                 raise error
         return response
+
+    @staticmethod
+    def is_discord_denial(response):
+        """True only when Discord ITSELF refused a credential: a JSON error in Discord's own shape ({message, code}
+        on 401/403/404) or the token endpoint's `invalid_grant`. An HTML page (the Cloudflare/WAF edge in front of
+        Discord), an empty or unrecognised body, a 5xx or a lost connection say nothing about anyone's consent, so no
+        caller may revoke, disconnect or zero anything because of them."""
+        status, body = response.get('status'), response.get('body')
+        headers = {str(k).lower(): str(v).lower() for k, v in (response.get('headers') or {}).items()}
+        if (type(status) is not int or not isinstance(body, dict) or 'raw' in body
+                or 'html' in headers.get('content-type', '')):
+            return False
+        if body.get('error') == 'invalid_grant':
+            return status == 400
+        return status in (401, 403, 404) and type(body.get('code')) is int and isinstance(body.get('message'), str)
 
     def authorize_url(self, redirect, state, challenge, scopes):
         # Legacy transaction shape retained for existing bot callbacks. New

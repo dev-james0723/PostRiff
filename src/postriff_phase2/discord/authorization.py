@@ -3,8 +3,10 @@
 Workspace commands and the worker call these under the existing workspace row
 lock. Provider checks and media reads happen before the final SQL handoff.
 """
+import bisect
 import copy
 import hashlib
+import itertools
 import json
 import math
 import re
@@ -182,6 +184,73 @@ def assert_no_unresolved_repeat(state, manifest, *, excluding=None):
                      or (not original.get('discord') and original.get('channelId') == manifest['channelId']
                          and original.get('payload') == manifest.get('payload')))):
             reject('An earlier Discord delivery is unresolved. Reconcile it before approving another copy.')
+
+
+# Owner decision (reply 16, 2026-10-28). A hot workspace is served one post at a time: measured on the hosted runner it sent
+# 292 of 300 posts, and only 236 of 1,000 queued posts inside the one-hour approval window, so the tail of a larger hour is
+# held at expiry and the customer sees "approve again". Past this ceiling an approval is refused instead of queued.
+WORKSPACE_HOURLY_CEILING = 300
+WORKSPACE_HOURLY_WINDOW_SECONDS = 3600
+WORKSPACE_HOURLY_CODE = 'discord_workspace_hourly_ceiling'
+# The states that still need the lane. A held post (nothing publishes from it until it is approved again) must not block
+# that new approval, and an uncertain or sent post no longer waits for the lane.
+PENDING_STATES = ('approved', 'scheduled', 'claimed', 'submitting')
+
+
+class HourlyCeilingError(AlphaError):
+    """409 whose `public_fields` (the limit and the window, never a count of the workspace's posts) join the JSON error
+    body, like security_gate.SecurityError. There is no retry hint: waiting does not help, choosing another hour does."""
+
+    def __init__(self, message, public_fields):
+        super().__init__(message, 409, code=WORKSPACE_HOURLY_CODE)
+        self.public_fields = public_fields
+
+
+def pending_times(state):
+    """Scheduled times of this workspace's approved Discord posts that still need the lane (PENDING_STATES)."""
+    for job in (state.get('phase2') or {}).get('jobs') or []:
+        manifest = job.get('manifest') if isinstance(job, dict) else None
+        if not isinstance(manifest, dict) or manifest.get('platform') != 'Discord':
+            continue
+        # A preview deployment holds an approved post until someone dispatches it: it still waits for the lane.
+        if job.get('state') in PENDING_STATES or (job.get('state') == 'held' and job.get('previewDispatchPending') is True):
+            timing = manifest.get('timing')
+            at = timing.get('timestamp') if isinstance(timing, dict) else None
+            if type(at) in (int, float) and math.isfinite(at):
+                yield at
+
+
+def reserved_campaign_times(root, excluding=None):
+    """Publish times of Discord automation posts a person approved whose job does not exist yet (queue commit creates it
+    shortly before the publish time). They hold their place in the hour, so a later approval is not promised the same room."""
+    for occurrence in (root or {}).get('occurrences') or []:
+        for item in occurrence.get('items') or []:
+            if (item is not excluding and item.get('platform') == 'Discord' and item.get('state') == 'approved'
+                    and not item.get('jobId')):
+                timing = (item.get('decision') or {}).get('timing')
+                yield timing.get('timestamp') if isinstance(timing, dict) else None
+
+
+def assert_workspace_hourly_ceiling(state, timestamp, *, also=()):
+    """Refuse a Discord post at `timestamp` (epoch seconds) that would put more than WORKSPACE_HOURLY_CEILING approved,
+    non-terminal Discord posts of this workspace inside any one sliding hour of scheduled time.
+
+    The hour is the half-open window [x, x + 3600): posts exactly 60 minutes apart do not share one. Only windows that
+    contain the new post can have changed (a workspace that is already over the ceiling elsewhere can still use another
+    hour), and a window holds the most when it starts at a post, so it is enough to count the windows that start at a post
+    time in (timestamp - 3600, timestamp]. `also` adds times that hold a place without a job yet. Callers run under the
+    workspace row lock (the approval command), so counting and adding are one step."""
+    ceiling, span = WORKSPACE_HOURLY_CEILING, WORKSPACE_HOURLY_WINDOW_SECONDS
+    if type(timestamp) not in (int, float) or not math.isfinite(timestamp):
+        reject('Review the exact Discord publication time again.')
+    near = sorted([timestamp] + [t for t in itertools.chain(pending_times(state), also)
+                                 if type(t) in (int, float) and math.isfinite(t) and abs(t - timestamp) < span])
+    for left in {t for t in near if t <= timestamp}:  # `near` holds only times within (timestamp - 3600, timestamp + 3600)
+        if bisect.bisect_left(near, left + span) - bisect.bisect_left(near, left) > ceiling:
+            raise HourlyCeilingError(
+                f'This hour is full: a workspace can have at most {ceiling} approved Discord posts scheduled within any one hour. '
+                'Approve fewer posts in that hour, or spread them over more hours.',
+                {'limit': ceiling, 'windowSeconds': span})
 
 
 def freeze_manifest(state, channel, manifest, selected_id):

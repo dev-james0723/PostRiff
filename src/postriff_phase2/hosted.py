@@ -230,6 +230,9 @@ class PostgresWorkspaceRepository:
         if action.startswith(('voice_sample', 'brand_brain_')) or action == 'voice_profile_analyze':
             audit_event = lambda state: ('voice.' + action, payload.get('sourceId', ''), {'requestId': payload.get('requestId'), 'activeRevision': state.get('speaker', {}).get('activeRevision')})
         after, before = None, None
+        if action == manual_drafts.ACTION:
+            # A person saves a handful of drafts a minute; the same transaction that saves them counts them (G2E-C-03).
+            before = lambda cur, state, principal: throttle(cur, f'manual-draft:{workspace_id}', 30, 60)
         if action == 'p2_review':
             from .mastodon_media import prepare_library
             payload = copy.deepcopy(payload)
@@ -941,6 +944,18 @@ class HostedWorkspaceService:
                 rows = cur.fetchall()
         return {"workspaces": [{"workspaceId": row[0], "membership": Membership.from_row(*row[1:6]).summary(), "createdAt": float(row[6]), **workspace_summary(*row[7:13])} for row in rows]}
 
+    def _drop_member_discord(self, cur, row, workspace_id, member):
+        """G2E-A-03. A member who is gone, or can no longer manage connections, must not leave a live personal Discord
+        credential behind that nobody can delete. Same transaction as the membership change (the workspace row is
+        already locked); no Discord request. A workspace with no Discord state does nothing."""
+        phase2 = (row[1] if isinstance(row[1], dict) else json.loads(row[1])).get("phase2") or {}
+        if not phase2.get("discordIdentityLinks") and not any(c.get("discordAuthorizedBy") for c in phase2.get("channels") or [] if isinstance(c, dict)):
+            return
+        state = json.loads(row[1]) if isinstance(row[1], str) else copy.deepcopy(row[1])
+        discord = self.oauth.discord_connections
+        if discord.disconnect_member(cur, workspace_id, state, member):
+            discord.save_state(cur, workspace_id, state)
+
     def leave_workspace(self, workspace_id, token):
         """A member removes their own access. The owner cannot leave: ownership moves first."""
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
@@ -951,6 +966,7 @@ class HostedWorkspaceService:
                 raise AlphaError("Workspace unavailable.", 403)
             from .agent_runtime_v2 import agent_permissions, authz
             agent_permissions.on_membership_ended(cur, workspace_id, principal, actor=principal, now=self.clock(), mode=authz.mode_for(authz.runtime_config_for(self), workspace_id))
+            self._drop_member_discord(cur, row, workspace_id, principal)
             audit(cur, workspace_id, principal, "member.left")
         return {"workspaceId": workspace_id, "status": "left"}
 
@@ -1166,6 +1182,8 @@ class HostedWorkspaceService:
             if current[0] == "owner":
                 raise AlphaError("Ownership transfer is a separate step-up action.", 409)
             cur.execute("UPDATE public.pr_memberships SET role=%s,can_publish=%s,can_reply=%s,can_moderate=%s,can_manage_connections=%s,updated_at=now() WHERE workspace_id=%s AND user_id=%s", (role, granted["can_publish"], granted["can_reply"], granted["can_moderate"], granted["can_manage_connections"], workspace_id, user_id))
+            if not Membership(role, granted).allows("manage_connections"):
+                self._drop_member_discord(cur, row, workspace_id, user_id)
             audit(cur, workspace_id, principal, "member.updated", user_id, {"role": role, **granted})
             return {"userId": user_id, "role": role, **granted}
 
@@ -1204,6 +1222,7 @@ class HostedWorkspaceService:
             cur.execute("UPDATE public.pr_memberships SET status='revoked',updated_at=now() WHERE workspace_id=%s AND user_id=%s", (workspace_id, user_id))
             from .agent_runtime_v2 import agent_permissions, authz
             agent_permissions.on_membership_ended(cur, workspace_id, user_id, actor=principal, now=self.clock(), mode=authz.mode_for(authz.runtime_config_for(self), workspace_id))
+            self._drop_member_discord(cur, row, workspace_id, user_id)
             audit(cur, workspace_id, principal, "member.removed", user_id)
             return {"userId": user_id, "status": "revoked", "note": "Jobs this member approved are held at the next worker claim until re-approved."}
 

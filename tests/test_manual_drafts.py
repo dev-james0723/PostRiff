@@ -194,6 +194,7 @@ class ManualDrafts(unittest.TestCase):
         self.assertEqual(classify(manual_drafts.ACTION), "edit")
         for role in ("owner", "admin", "editor", "approver", "viewer"):
             cursor = Mock()
+            cursor.fetchone.return_value = (1,)  # the per-workspace save throttle counts this save (G2E-C-03)
             repository = PostgresWorkspaceRepository(None, lambda _: ACTOR, self.commands)
 
             @contextmanager

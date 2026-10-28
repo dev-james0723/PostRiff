@@ -77,6 +77,9 @@ class Phase2Store(Store):
         p = result["state"].get("phase2")
         if p:
             p.pop('discordEngagement', None)
+            # Every member (a viewer too) receives this snapshot. The identity links are one person's own: their Discord
+            # user id, display name and Rafii member id belong to GET channels (own links only), never to a shared payload.
+            p.pop('discordIdentityLinks', None)
             # Some hosted workspaces never had the legacy embedded trial grant.
             # Present their saved content without inventing a trial or allowance;
             # hosted publishing entitlements are checked separately against SQL.
@@ -377,6 +380,11 @@ class Phase2Store(Store):
             recent = [j for j in data["jobs"] if j["manifest"]["channelId"] == manifest["channelId"] and j.get("approvedAt", 0) > now - 86400 and j["state"] not in ("canceled", "failed")]
             if limit and len(recent) >= limit:
                 raise AlphaError(f"{channel['platform']} allows {limit} posts per 24 hours for this account; this approval would exceed it.", 409)
+            if manifest['platform'] == 'Discord':
+                # Owner ceiling: at most 300 approved Discord posts in any one sliding hour of a workspace. Counted under the
+                # workspace row lock this command already holds, and before anything below changes.
+                from .discord.authorization import assert_workspace_hourly_ceiling
+                assert_workspace_hourly_ceiling(s, manifest['timing']['timestamp'])
             review["status"] = "approved"
             youtube_early = manifest['platform'] == 'YouTube' and (manifest.get('publishOptions', {}).get('publishAt') or manifest.get('publishOptions', {}).get('publicationMode') == 'now')
             job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": now if youtube_early or manifest.get("nativeScheduleAt") else manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}

@@ -456,12 +456,26 @@ class OAuthService:
             pinned = None
         return f"{pinned or base}/api/oauth/{provider_id}/callback"
 
+    def _discord_flags_consistent(self):
+        """G2E-A-08. In hosted production, approvals (AUTHORIZATION_V2) without the linked-identity connection flow
+        (CONNECTIONS_V2) is a mistyped flag, not a mode: the original flow it would leave reachable stores envelopes that
+        carry no authorizer, so the worker could not check that the member who connected is still allowed to. Fail closed,
+        as 503. Outside production that combination stays available: it is the staged P0 rollout the disposable-database
+        gates (postgres_discord_authorization.py) exercise, and nothing customer-facing runs there."""
+        discord = self.providers.get('discord') if hasattr(self.providers, 'get') else None
+        if (discord is not None and getattr(discord, 'authorization_v2_enabled', False)
+                and not getattr(discord, 'connections_v2_enabled', False)):
+            from .discord import launch_gate
+            if launch_gate.hosted_production():
+                raise AlphaError('Discord connection authorization is not enabled.', 503)
+
     # --- start ----------------------------------------------------------------------
     def start(self, workspace_id, token, provider_id, capability, inputs=None):
         inputs = inputs or {}
         if not isinstance(inputs, dict):
             raise AlphaError('Expected structured connection inputs.', 400)
         if provider_id == 'discord':
+            self._discord_flags_consistent()
             # Who may START a Discord connection is decided before any provider request (launch_gate).
             from .discord import launch_gate
             launch_gate.require_connect_access(self.discord_connections, workspace_id, token)
@@ -588,6 +602,8 @@ class OAuthService:
 
     # --- complete (authenticated exchange) ----------------------------------------
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
+        if provider_id == 'discord':
+            self._discord_flags_consistent()
         if provider_id == 'discord' and getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
             return self.discord_connections.complete(workspace_id, token, state, code, error, iss=iss)
         if provider_id == 'pinterest':
@@ -934,9 +950,10 @@ class OAuthService:
         return cur.fetchone() is not None
 
     # --- destinations (a Discord channel) ------------------------------------------------
-    def _member_grant(self, workspace_id, token, connection_id, requirement):
-        """(adapter, fresh grant) for a member with `requirement`. The grant comes from token_for_worker, so a
-        short-lived token (Pinterest, TikTok, YouTube) is renewed before Rafii asks the provider anything."""
+    def _member_provider(self, workspace_id, token, connection_id, requirement):
+        """(provider id, Discord consent generation or None) for a member with `requirement`. For Discord the read is
+        throttled here, in the same transaction and before anything is asked of Discord (G2E-A-05)."""
+        generation = None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership
             require(_membership(row), requirement)
@@ -944,17 +961,45 @@ class OAuthService:
             stored = cur.fetchone()
             if stored:
                 self._assert_pinterest_context(stored[0], workspace_id, principal)
+            if stored and stored[0] == 'discord':
+                self.discord_connections.admit_read(cur, workspace_id, principal)
+                cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='discord' AND revoked_at IS NULL", (workspace_id, connection_id))
+                current = cur.fetchone()
+                generation = current[0] if current else None
         if not stored:
             raise AlphaError("Connection unavailable.", 404)
-        grant = (self.discord_grant_for_worker(workspace_id, connection_id) if stored[0] == 'discord'
+        return stored[0], generation
+
+    def _grant_for(self, provider_id, workspace_id, connection_id):
+        grant = (self.discord_grant_for_worker(workspace_id, connection_id) if provider_id == 'discord'
                  else self.token_for_worker(workspace_id, connection_id))
         return self.provider_for_grant(grant), grant
+
+    def _member_grant(self, workspace_id, token, connection_id, requirement):
+        """(adapter, fresh grant) for a member with `requirement`. The grant comes from token_for_worker, so a
+        short-lived token (Pinterest, TikTok, YouTube) is renewed before Rafii asks the provider anything."""
+        provider_id, _ = self._member_provider(workspace_id, token, connection_id, requirement)
+        return self._grant_for(provider_id, workspace_id, connection_id)
 
     def destinations(self, workspace_id, token, connection_id, board_id=None):
         """Where this account can post: a Discord channel or Facebook Page (chosen once), or a Pinterest board (per Pin)."""
         if board_id is not None and (not isinstance(board_id, str) or not re.fullmatch(r'\d{1,30}', board_id)):
             raise AlphaError('Choose a valid Pinterest board.', 400)
-        adapter, grant = self._member_grant(workspace_id, token, connection_id, "approve")
+        provider_id, generation = self._member_provider(workspace_id, token, connection_id, "approve")
+        if provider_id == 'discord' and board_id is None:
+            # One Discord read per connection at a time, and a channel list is reused for a short while (G2E-A-05).
+            # The grant (which may refresh the authorizer's token) is part of the read, so a repeat costs no request.
+            def read():
+                adapter, grant = self._grant_for('discord', workspace_id, connection_id)
+                return adapter.destinations(grant['accessToken']), grant['authorizationGeneration']
+            from .discord.oauth import READ_CACHE_SECONDS, READ_RETRY_SECONDS
+            choices, grant_generation = self.discord_connections.read_through(
+                ('destinations', workspace_id, connection_id, generation), read,
+                ttl=lambda value: READ_CACHE_SECONDS if value[0] else READ_RETRY_SECONDS)
+            adapter, grant = self._provider('discord'), {'authorizationGeneration': grant_generation}
+        else:
+            adapter, grant = self._grant_for(provider_id, workspace_id, connection_id)
+            choices = None
         if board_id is not None:
             if adapter.id != 'pinterest':
                 raise AlphaError('Board sections are available only for Pinterest.', 400)
@@ -962,7 +1007,8 @@ class OAuthService:
                     'destinations': adapter.sections(grant['accessToken'], board_id)}
         if not getattr(adapter, "has_destinations", False):
             raise AlphaError("This account has nothing to choose.", 409)
-        choices = adapter.destinations(grant['accessToken'])
+        if choices is None:
+            choices = adapter.destinations(grant['accessToken'])
         if adapter.id == 'discord':
             from .discord.authorization import destination_id
             snapshot = self.repository.get(workspace_id, token)
@@ -1113,11 +1159,14 @@ class OAuthService:
         return {'connectionId': connection_id, 'destinationId': destination_id, 'status': 'revoked'}
 
     def discord_grant_for_worker(self, workspace_id, connection_id, *, cur=None):
-        """Read one credential generation without provider IO or token refresh.
-
-        When a cursor is supplied, the caller already owns the workspace lock.
-        Lock order is workspace -> credential; no network occurs under either.
+        """Read one credential generation for a worker or member. WITHOUT a cursor this DOES reach Discord: with
+        connections v2 it first calls installation_identity, which verifies the authorizing member's live OAuth grant
+        (one GET) and, when that token is expiring, refreshes it (a rotating-token POST plus two GETs). Those requests
+        run outside any lock and spend the shared application window like any read. WITH a cursor the caller already
+        owns the workspace lock and no request is made, only the database checks (active authorizer, generations).
+        Lock order is workspace -> credential; no network occurs under either lock.
         """
+        self._discord_flags_consistent()
         if cur is None:
             if getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
                 self.discord_connections.installation_identity(workspace_id, connection_id)
@@ -1716,6 +1765,12 @@ class OAuthService:
             if not stored:
                 raise AlphaError("Connection unavailable.", 404)
             self._assert_pinterest_context(stored[0], workspace_id, principal, scopes=stored[2])
+            discord_generation = None
+            if stored[0] == 'discord':
+                self.discord_connections.admit_read(cur, workspace_id, principal)  # before any request to Discord (G2E-A-05)
+                cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='discord' AND revoked_at IS NULL", (workspace_id, connection_id))
+                current = cur.fetchone()
+                discord_generation = current[0] if current else None
             if stored[0] == 'youtube':
                 cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL", (workspace_id, connection_id))
                 generation_row = cur.fetchone()
@@ -1726,7 +1781,13 @@ class OAuthService:
                 self.youtube_policy.require_user(cur, workspace_id, principal, token, adapter, scopes=stored[2], force=policy_force)
         provider_id, account_id, scopes, starting_ciphertext = stored[:4]
         if provider_id == 'discord' and getattr(self.providers.get('discord'), 'connections_v2_enabled', False):
-            return (self.discord_connections.reverify_webhook if connection_id.startswith('discord-webhook-') else self.discord_connections.reverify_installation)(workspace_id, connection_id, token=token)
+            from .discord.oauth import READ_CACHE_SECONDS, READ_RETRY_SECONDS
+            reverify = self.discord_connections.reverify_webhook if connection_id.startswith('discord-webhook-') else self.discord_connections.reverify_installation
+            # One re-check per connection at a time; a result is reused for a short while, so repeated clicks or a
+            # polling client cannot multiply Discord traffic (G2E-A-05).
+            return self.discord_connections.read_through(('verify', workspace_id, connection_id, discord_generation),
+                                                         lambda: reverify(workspace_id, connection_id, token=token),
+                                                         ttl=lambda value: READ_CACHE_SECONDS if value.get('state') == 'read_verified' else READ_RETRY_SECONDS)
         grant = None
         reported = []
         identity = None

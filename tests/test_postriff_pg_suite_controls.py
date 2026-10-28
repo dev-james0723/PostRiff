@@ -15,7 +15,7 @@ class PostgreSQLCatalogControls(unittest.TestCase):
             'postgres_discord_connections.py','postgres_discord_worker.py',
             'postgres_discord_rate_limits.py','postgres_discord_capacity.py',
             'postgres_discord_admission_index_probe.py','postgres_discord_engagement.py',
-            'postgres_discord_multimode.py'})
+            'postgres_discord_multimode.py','postgres_discord_custody.py'})
         ordinary=[Path('postgres_alpha.py'),Path('postgres_beta.py')]
         guarded=[Path(name) for name in suite.OWNED_CLOUD_ONLY]
         self.assertEqual(suite.select_scripts(ordinary+guarded,[]),ordinary)
@@ -26,6 +26,7 @@ class PostgreSQLCatalogControls(unittest.TestCase):
         workflow=(ROOT/'.github/workflows/consumer-ready.yml').read_text()
         guarded=(ROOT/'scripts/discord-validation-cloud.sh').read_text()
         self.assertIn('discord_validation_gate engagement-sql python scripts/postriff_disposable_postgres.py tests/phase2/postgres_discord_engagement.py',guarded)
+        self.assertIn('discord_validation_gate custody-sql python scripts/postriff_disposable_postgres.py tests/phase2/postgres_discord_custody.py',guarded)
         self.assertIn('ci-postgres python scripts/postriff_pg_suite.py',workflow)
         self.assertIn('ci-discord-p0-p4 timeout --signal=TERM --kill-after=60s 15m bash scripts/discord-p4-validation-cloud.sh',workflow)
 
