@@ -309,6 +309,26 @@ class ExistingTick(unittest.TestCase):
         self.assertTrue(result['discordParallelLane'])
         self.assertEqual(seen, [{'exclude_youtube': False, 'exclude_discord': True}] * 10)
 
+    def test_with_discord_paused_the_minute_tick_claims_no_discord_post_whatever_the_lane_flag(self):
+        """K1 churn: a pause made the frozen minute tick claim every due Discord post again each minute, only to release
+        it (events, an attempt, two document writes each time). While the provider is paused it leaves Discord alone,
+        as the lane's loops do. Unpaused, the lane off still alternates its two lanes (the test above)."""
+        off = {lane.ENV_ENABLED: 'false', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}
+        paths = (('lane off', off, {}), ('lane on, unable to run', ON, NOT_READY[0][1]), ('lane on and able', ON, {}))
+        for name, environment, setup in paths:
+            for how in ('execution disabled', 'authorization off'):
+                seen = []
+                social = discord_social(**setup)
+                if how == 'execution disabled':
+                    social.providers['discord'].execution_enabled = False
+                else:
+                    social.providers['discord'].authorization_v2_enabled = False
+                with self.subTest(path=name, pause=how), patch.dict('os.environ', environment):
+                    result = recording_worker(lambda **kw: seen.append(kw) or True, social=social).tick()
+                    self.assertEqual(result['processed'], 10)
+                    self.assertEqual(seen, [{'exclude_youtube': False, 'exclude_discord': True}] * 10,
+                                     'no step may claim a Discord post while it is paused')
+
 
 class LaneReadiness(unittest.TestCase):
     """One readiness test decides both who sends Discord in the minute tick and whether a shard loop runs."""
@@ -1386,7 +1406,42 @@ class PausedDiscord(unittest.TestCase):
         self.assertEqual(self.destination()['status'], 'authorized')
         self.assertFalse(job.get('discordDispatchIntents'))
         self.assertEqual(hosted_worker.discord_worker.attempt_count(job), 0, 'a pause is not an attempt')
+        self.assertEqual(self.base.discord_stats['rateDelays'], 0, 'a pause is not a rate delay')
         self.assertEqual(self.wire_calls(), [])
+
+    def pause(self, how):
+        if how == 'execution disabled':
+            self.provider.execution_enabled = False
+        else:
+            self.provider.authorization_v2_enabled = False
+
+    def test_the_minute_tick_leaves_every_due_post_untouched_for_as_long_as_discord_is_paused(self):
+        """K1 churn: the frozen minute tick (lane flag off, or the lane unable to run) claimed every due post again each
+        minute of a pause: a claim event, a submitting event and an attempt, a release event and two rewrites of the
+        workspace document, every time (about 4,300 events and 1,400 attempts per post for a day's kill switch, in a
+        document every later claim rewrites). It skips Discord while the provider is paused."""
+        off = {lane.ENV_ENABLED: 'false', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}
+        for how in ('execution disabled', 'authorization off'):
+            for name, environment in (('lane off', off), ('lane on, unable to run', ON)):
+                with self.subTest(pause=how, path=name):
+                    self.setUp()
+                    self.base.clock = lambda: self.db.now
+                    self.pause(how)
+                    if environment is ON:
+                        coordinator(self.provider, self.db.connection, rate_limits=False, policy=None)  # the lane cannot run
+                    before = copy.deepcopy(self.db.state)
+                    with patch.dict('os.environ', environment), self.assertLogs('postriff.request', 'DEBUG'):
+                        logging.getLogger('postriff.request').debug('marker')  # the lag warning may log
+                        for _ in range(5):  # five minutes of the pause
+                            self.db.now += 60
+                            self.base.tick()
+                    job, was = self.job(), before['phase2']['jobs'][0]
+                    self.assertEqual((job['state'], len(job['events']), len(job.get('attempts', []))),
+                                     ('scheduled', len(was['events']), len(was.get('attempts', []))),
+                                     'no event and no attempt was added')
+                    self.assertEqual(self.db.state, before, 'the document was not rewritten')
+                    self.assertEqual(self.destination()['status'], 'authorized')
+                    self.assertEqual(self.wire_calls(), [])
 
     def test_any_other_preflight_refusal_holds_and_demotes_as_before(self):
         for error in (AlphaError('Discord was reconnected or changed. Review the post again.', 409),

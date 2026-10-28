@@ -311,7 +311,8 @@ class PostgresWorker:
             counter = ('rateDelays' if reason == 'rate_delayed' else
                        'shutdownReleased' if reason == 'shutdown' else
                        'deadLetters' if status == 'failed' else 'retries')
-            self.discord_stats[counter] += 1
+            if rate_cause != 'discord_paused':  # a pause is a wait for the operator, not a rate delay (K1)
+                self.discord_stats[counter] += 1
             return True
 
     def _binding_matches(self, job):
@@ -1250,7 +1251,9 @@ class PostgresWorker:
                 if managed and getattr(error, 'code', None) == 'discord_paused':
                     # Discord is paused (execution disabled, authorization or rate limits off): a wait, not a verdict
                     # about this post or its destination. Released unsent, asked again later; never held, never
-                    # demoted. A revoked connection or a missing permission is another error and still holds.
+                    # demoted. A revoked connection or a missing permission is another error and still holds. The
+                    # ticks no longer claim Discord while it is paused (tick()); this is a person's scoped claim or
+                    # a pause that began after the claim.
                     self.release_discord_unsent(claimed, reason='rate_delayed',
                                                 retry_after_seconds=discord_worker.PAUSED_RETRY_SECONDS,
                                                 rate_cause='discord_paused')
@@ -1349,6 +1352,11 @@ class PostgresWorker:
         from .youtube.fleet import enabled
         fleet_owns_youtube = enabled()
         from .discord import lane
+        # K1: while the provider is paused every preflight refuses, so a claim would only touch each due Discord post (a
+        # claim and a submitting event, an attempt, a release event, two rewrites of the workspace document) and release
+        # it again a minute later, for as long as the pause lasts. Leave Discord alone, as the lane's loops do: the
+        # posts wait untouched and are claimed at once when the pause ends. Not a growing back-off, which would delay them.
+        paused = lane.paused(self.social)
         if lane.enabled():
             # Only the causes that stop the lane in every process: a coordinator degraded in this process alone
             # cannot send here either, so this tick still leaves Discord to the lane loops of healthy processes.
@@ -1360,7 +1368,7 @@ class PostgresWorker:
             else:
                 # The lane cannot run anywhere (rate limits off, no current policy, a bad lane budget): keep the
                 # frozen Discord path. The lease protocol makes the two schedulers safe together.
-                result = self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
+                result = self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube, exclude_discord=paused)
             # Health indication (this process's full rule), and the lag warning: this tick's own report (a sample of
             # 256 workspaces) and, when the lane owns Discord, the projection's oldest due work (every workspace, one
             # indexed statement). A tick that kept Discord runs the frozen path's statements only.
@@ -1370,7 +1378,7 @@ class PostgresWorker:
             else:
                 lane.warn_if_lagging(result, reason)
             return result
-        return self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
+        return self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube, exclude_discord=paused)
 
     def tick_youtube(self, max_jobs, max_seconds):
         """Dedicated lane: no other platform or maintenance dispatch can run."""

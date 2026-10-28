@@ -750,18 +750,21 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         return [destination.get('status') for (state,) in rows for channel in state['phase2']['channels']
                 for destination in channel.get('discordDestinations', []) if destination.get('status') != 'authorized']
 
-    def recovery(self, cause):
-        """Six due posts, three of whose approvals end in 20 s. The lane cannot run (`cause`): the shards claim
-        nothing and the minute cron keeps the frozen path. Then the configuration is repaired and the lane drains.
-        Returns the jobs after the frozen minute, the jobs at the end, and the short-approval workspaces."""
+    def recovery(self, cause, approval=20):
+        """Six due posts, three of whose approvals end in `approval` seconds. The lane cannot run (`cause`): the shards
+        claim nothing and the minute cron keeps the frozen path. Then the configuration is repaired and the lane
+        drains; when the cause paused Discord the cron touched nothing, so the repair waits until those approvals
+        have ended. Returns the jobs after the frozen minute, the jobs at the end, and the short-approval workspaces."""
         tenants = [F.Tenant(n) for n in range(6)]
-        at = self.cluster.now() + 20 - 3600  # an approval lives one hour after its scheduled time
+        ends = self.cluster.now() + approval
+        at = ends - 3600  # an approval lives one hour after its scheduled time
         F.seed(self.cluster, tenants[:3], 1, now=at - 300, at=at)
         F.seed(self.cluster, tenants[3:], 1)
         self.wire = F.MockDiscord(tenants)
         self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
         worker = F.base_worker(self.cluster, self.hosted)
         self.unable(cause)
+        self.seeded = F.jobs(self.cluster)  # for the causes that pause Discord: the cron must leave these as they are
         results, failures = F.run_lanes(worker, 3, seconds=10)
         self.assertEqual(failures, [])
         self.assertEqual([r['stoppedBy'] for r in results], ['coordinator_unavailable'] * 3)
@@ -772,6 +775,8 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                          (False, 'coordinator_unavailable'))
         frozen = F.jobs(self.cluster)
         self.assertEqual(self.wire.calls, [], 'nothing reached Discord while the lane could not run')
+        if F.discord_lane.paused(self.hosted):  # the cron left the posts alone: let the short approvals really end
+            time.sleep(max(0.0, ends + 1 - self.cluster.now()))
         self.repair()
         self.skip_push_back()
         tick = self.minute(worker)
@@ -782,20 +787,24 @@ class ParallelLaneOnPostgres(unittest.TestCase):
 
     def test_recovery_after_rate_limits_were_off_waits_and_then_drains_exactly_once(self):
         """The hosted runtime turns Discord authorization off without rate limits: Discord is paused. The frozen minute
-        cron used to hold every post it claimed and ask for its destination to be verified again (K1); now each post
-        waits unsent, no destination is touched, and the repaired lane sends what is still inside its approval."""
-        self.assert_recovered_after_the_push_back(*self.recovery('rate limits off'),
-                                                  cooldown=discord_worker.PAUSED_RETRY_SECONDS)
+        cron used to hold every post it claimed and ask for its destination to be verified again (K1), then to claim
+        it again every minute; now it leaves the posts exactly as they were, no destination is touched, and the
+        repaired lane sends what is still inside its approval."""
+        recovered = self.recovery('rate limits off', approval=5)
+        self.assert_recovered_after_the_push_back(*recovered, untouched=self.seeded)
         self.assertEqual(self.destinations(), [], 'no destination was demoted')
 
     def test_recovery_after_the_coordinator_was_missing_waits_and_then_drains_exactly_once(self):
         """Rate limits on but no coordinator (no policy, or one that does not parse) is reachable only with Discord
         authorization off (runtime_from_environment): paused, as with rate limits off."""
-        self.assert_recovered_after_the_push_back(*self.recovery('no coordinator'),
-                                                  cooldown=discord_worker.PAUSED_RETRY_SECONDS)
+        recovered = self.recovery('no coordinator', approval=5)
+        self.assert_recovered_after_the_push_back(*recovered, untouched=self.seeded)
         self.assertEqual(self.destinations(), [], 'no destination was demoted')
 
-    def assert_recovered_after_the_push_back(self, frozen, final, short, cooldown=300):
+    def assert_recovered_after_the_push_back(self, frozen, final, short, cooldown=300, untouched=None):
+        if untouched is not None:  # Discord was paused: the frozen minute claimed nothing, so nothing was pushed back
+            self.assertEqual(frozen, untouched, 'the minute cron left every post as it was')
+            frozen = {}
         for (workspace, _), job in frozen.items():
             operation = job['discordWorker']
             self.assertEqual(operation['releaseReason'], 'rate_delayed')
@@ -1785,26 +1794,46 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 self.assert_waiting_untouched()
                 self.assert_all_created_once_after_the_pause(worker, 8)
 
-    def test_a_paused_discord_is_a_wait_for_the_minute_cron_too_never_a_hold(self):
-        """The frozen minute cron (lane flag off, or the lane unable to run) also claims Discord. A pause there
-        released each post unsent for a minute at a time instead of holding it and demoting its destination."""
+    def revisions(self):
+        with self.cluster.connect(autocommit=True) as db:
+            return dict(db.execute("SELECT id::text,revision FROM public.pr_workspaces WHERE state ? 'phase2'").fetchall())
+
+    def test_a_paused_discord_leaves_the_minute_crons_posts_untouched_however_long_the_pause(self):
+        """K1 churn. The frozen minute cron (lane flag off, which is today's production, or the lane unable to run)
+        claimed every due post again each minute of a pause: a claim and a submitting event, an attempt, a release
+        event and two rewrites of the workspace document, every time. A day's kill switch would have added some 4,300
+        events and 1,400 attempts to every post, in a document every later claim rewrites. It now leaves Discord alone
+        while the provider is paused, as the lane's loops do: the posts wait untouched, never held, no destination
+        demoted, and once the pause is over they are claimed at once and created once."""
         for how in ('execution disabled', 'authorization off'):
-            with self.subTest(how):
-                self.cluster.reset()
-                tenants, worker = self.paused_queue(how)
-                for _ in range(2):
-                    self.minute(worker, flag=False)
-                self.assert_waiting_untouched()
-                found = F.jobs(self.cluster)
-                released = [job for job in found.values() if job['discordWorker'].get('releaseReason') == 'rate_delayed']
-                self.assertGreaterEqual(len(released), 4, 'the cron touched posts and released them')
-                for job in released:
-                    operation = job['discordWorker']
-                    self.assertAlmostEqual(operation['rateDelayedUntil'] - operation['releasedAt'],
-                                           discord_worker.PAUSED_RETRY_SECONDS, delta=1)
-                    self.assertEqual(job['nextAction'], 'Await Discord shared rate budget; no POST occurred and this approval remains frozen')
-                    self.assertEqual(discord_worker.attempt_count(job), 0, 'a pause is not an attempt')
-                self.assert_all_created_once_after_the_pause(worker, 8)
+            for path, flag, unable in (('lane flag off', False, None), ('lane on but unable to run', True, 'policy expired')):
+                with self.subTest(pause=how, path=path):
+                    self.cluster.reset()
+                    tenants, worker = self.paused_queue(how)
+                    if unable:
+                        self.unable(unable)
+                    before = F.jobs(self.cluster)
+                    for _ in range(5):  # five minutes of the pause
+                        self.skip_push_back()  # whatever a cron had released a minute ago is due again now
+                        revisions = self.revisions()
+                        tick = self.minute(worker, flag=flag)
+                        self.assertEqual(tick['processed'], 0, 'the cron claimed nothing')
+                        self.assertEqual(self.revisions(), revisions, 'the cron rewrote no workspace document')
+                    for key, job in F.jobs(self.cluster).items():
+                        was = before[key]
+                        self.assertEqual((len(job['events']), len(job.get('attempts', [])), job.get('lastDispatchedAt')),
+                                         (len(was['events']), len(was.get('attempts', [])), was.get('lastDispatchedAt')),
+                                         'no event, no attempt, no claim stamp was added')
+                    self.assert_waiting_untouched()
+                    if unable:
+                        self.repair()
+                    self.unpause()
+                    if not flag:  # the next minute, with no help from the test: every post is claimed at once
+                        tick = self.minute(worker, flag=False)
+                        self.assertGreaterEqual(tick['processed'], 8, 'all eight posts were due: none waited a back-off')
+                    self.drain(worker, 2, seconds=60)
+                    self.assert_each_created_once_and_verified(8)
+                    self.assertEqual(self.destinations(), [])
 
     def test_a_revoked_connection_still_holds_the_post_and_asks_for_the_destination_again(self):
         """Only a pause became a wait: a real revocation or a missing permission is another error and holds as before."""
