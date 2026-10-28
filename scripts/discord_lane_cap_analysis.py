@@ -321,6 +321,38 @@ def pair_admissions(window, admissions, max_gap=30.0):
     return pairs, unpaired, every
 
 
+def guard_sizing(pairs, ceiling=25, at_the_ceiling=0.25):
+    """What guard between the (ceiling+1)-th send and the first would keep the mock at `ceiling` in a closed second.
+
+    Take every request i in send order and the request `ceiling` places after it. The coordinator keeps them at least
+    1 + G apart by send time (G is its guard), and the two arrive (s_j - s_i) + (d_j - d_i) apart, where d is a request's
+    delay from send to arrival. The mock counts more than `ceiling` in a trailing second exactly when that is under
+    one second, that is when d_i - d_j exceeds the slack s_j - s_i - 1. Only windows at the ceiling (slack up to
+    `at_the_ceiling` seconds) are used; a quiet stretch puts no pressure on it. Returns the number of such windows, the
+    smallest slack, how many had the 26th arrival less than a second after the first, and the percentiles of
+    d_i - d_j: a guard of that size would have held that share of the windows (inference, from this run's delays)."""
+    ordered = sorted(pairs, key=lambda item: item[0])
+    sends = [item[0] for item in ordered]
+    arrivals = [item[1]['arrived'] for item in ordered]
+    differences, slacks, violations = [], [], 0
+    for i in range(len(ordered) - ceiling):
+        j = i + ceiling
+        slack = sends[j] - sends[i] - 1.0
+        if slack > at_the_ceiling:
+            continue
+        slacks.append(slack)
+        differences.append((arrivals[i] - sends[i]) - (arrivals[j] - sends[j]))
+        violations += (arrivals[j] - arrivals[i]) < 1.0
+    if not differences:
+        return None
+    ordered_differences = sorted(differences)
+    pick = lambda q: ordered_differences[min(len(ordered_differences) - 1, int(q * len(ordered_differences)))]
+    return {'ceiling': ceiling, 'windows': len(differences), 'minSlack': min(slacks), 'violations': violations,
+            'violationShare': violations / len(differences),
+            'delayDifference': {'p50': pick(.5), 'p90': pick(.9), 'p99': pick(.99), 'p999': pick(.999),
+                                'p9999': pick(.9999), 'max': ordered_differences[-1]}}
+
+
 def wire_jitter(window, admissions, ceiling=25):
     """Admission-to-wire spread, per request, and what it does to the ceiling.
 
@@ -359,7 +391,8 @@ def wire_jitter(window, admissions, ceiling=25):
                              - bisect.bisect_right(arrivals, record['arrived'] - 1.0))
         causes['coordinator' if sent_in_second > ceiling else 'wire' if arrived_in_second > ceiling else 'mock'] += 1
     all_total = _spread(total)
-    return {'paired': len(pairs), 'admissionsSent': len(every), 'admissionsWithoutArrival': unpaired,
+    guard = guard_sizing(pairs, ceiling)
+    return {'paired': len(pairs), 'admissionsSent': len(every), 'admissionsWithoutArrival': unpaired, 'guard': guard,
             'arrivalsWithoutAdmission': keyed - len(pairs),
             'admissionToArrival': all_total, 'admissionToCall': _spread(app_side), 'callToArrival': _spread(wire_side),
             'creates': _spread(creates), 'reads': _spread(reads),
@@ -1165,6 +1198,17 @@ def evidence_lines(result):
                 '(loopback, and the mock\'s accept and thread start on the same loaded machine) %s. In production the second '
                 'part is real network time, which this run does not model.' % (_ms_list(j['admissionToCall']),
                                                                               _ms_list(j['callToArrival'])))
+        g = j.get('guard')
+        if g:
+            dd = g['delayDifference']
+            lines.append(
+                '- **Guard sizing** (windows at the ceiling: a request and the %dth after it sent within %.2f s of one second '
+                'apart; %s such windows, smallest slack %s): the later one arrived less than 1 s after the first in %s windows '
+                '(%.3f%%). Delay of the first minus delay of the later one, p50 / p90 / p99 / p99.9 / p99.99 / max: %s. A guard '
+                'of the p99 / p99.9 / p99.99 value would hold the ceiling in all but 1%% / 0.1%% / 0.01%% of such windows '
+                '(inference from this run\'s delays; the guard in force is the smallest slack).' % (
+                    g['ceiling'] + 1, 0.25, _count(g['windows']), _ms(g['minSlack']), _count(g['violations']),
+                    100 * g['violationShare'], ' / '.join(_ms(dd[k]) for k in ('p50', 'p90', 'p99', 'p999', 'p9999', 'max'))))
         by = j['aboveCeilingBy']
         lines.append(
             '- **Requests the mock counted above %d in their trailing second: %s**, by cause: the coordinator had already sent '

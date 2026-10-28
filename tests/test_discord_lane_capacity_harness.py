@@ -280,6 +280,25 @@ class WireTimingAndPermits(unittest.TestCase):
         self.assertGreater(result['spreadAboveMedianP999'], 1.4, 'p99.9 is the 1.5 s bunching, the median is 10 ms')
         self.assertEqual(result['creates'], None)
 
+    def test_guard_sizing_counts_the_windows_where_the_26th_arrival_is_under_a_second_after_the_first(self):
+        import random
+        rng = random.Random(5)
+        pairs, at = [], 0.0
+        for number in range(400):
+            at += 1.1 / 25  # 25 sends per 1.1 s: the guard is 0.1 s
+            delay = 0.05 + (0.3 if rng.random() < 0.02 else 0.0) + rng.random() * 0.01
+            pairs.append((at, {'arrived': at + delay}, False))
+        result = analysis.guard_sizing(pairs, 25)
+        ordered = sorted(pairs, key=lambda p: p[0])
+        expected = sum(1 for i in range(len(ordered) - 25) if ordered[i + 25][1]['arrived'] - ordered[i][1]['arrived'] < 1.0)
+        self.assertEqual(result['windows'], 375)
+        self.assertEqual(result['violations'], expected)
+        self.assertGreater(expected, 0, 'the 2% of 0.3 s delays do push the 26th arrival inside the second')
+        self.assertAlmostEqual(result['minSlack'], 0.1, places=6)
+        self.assertGreater(result['delayDifference']['max'], 0.25)
+        self.assertLess(result['delayDifference']['p50'], 0.02)
+        self.assertIsNone(analysis.guard_sizing([(1.0, {'arrived': 1.1}, False)] * 10, 25))
+
     def test_wire_jitter_is_none_without_an_admissions_export_or_digests(self):
         self.assertIsNone(analysis.wire_jitter([{'arrived': 1.0}], []))
         self.assertIsNone(analysis.wire_jitter([{'arrived': 1.0}], [self.admission('0' * 16, 1.0)]))
