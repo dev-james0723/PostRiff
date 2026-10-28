@@ -367,7 +367,19 @@ def guard_sizing(pairs, ceiling=25, at_the_ceiling=0.25):
                                 'p9999': pick(.9999), 'max': ordered_differences[-1]}}
 
 
-def wire_jitter(window, admissions, ceiling=25):
+def trailing_counts(window, key):
+    """Each mock record's count of requests in its trailing second, as the mock counted it: the figure the mock logged under `key`
+    ('trailingAll', or 'trailingApp' / 'trailingUser' for a budget class) when the log has it, else recomputed from the records'
+    own processing times (the mock's `_trail`: requests in (t - 1 s, t], the record itself included). {id(record): count}."""
+    if any(key in r for r in window[:200]):
+        return {id(r): r.get(key) or 0 for r in window}
+    import bisect
+    ordered = sorted(window, key=lambda r: r['processed'])
+    times = [r['processed'] for r in ordered]
+    return {id(r): i + 1 - bisect.bisect_right(times, r['processed'] - 1.0) for i, r in enumerate(ordered)}
+
+
+def wire_jitter(window, admissions, ceiling=25, trailing='trailingAll'):
     """Admission-to-wire spread, per request, and what it does to the ceiling.
 
     Each admission's send time (the coordinator's `sent_at`, database clock) is joined to the mock's arrival of that
@@ -393,8 +405,9 @@ def wire_jitter(window, admissions, ceiling=25):
     arrivals = sorted(r['arrived'] for r in window)
     send_of = {id(r): at for at, r, _ in pairs}
     causes = Counter()
+    trail = trailing_counts(window, trailing)
     for record in window:
-        if (record.get('trailingAll') or 0) <= ceiling:
+        if trail.get(id(record), 0) <= ceiling:
             continue
         at = send_of.get(id(record))
         if at is None:
@@ -414,6 +427,77 @@ def wire_jitter(window, admissions, ceiling=25):
             'sendPeakTrailingSecond': peak_trailing(every, 1.0), 'sendPeakCalendarSecond': peak_calendar_second(every),
             'arrivalPeakTrailingSecond': peak_trailing(arrivals, 1.0), 'arrivalPeakCalendarSecond': peak_calendar_second(arrivals),
             'aboveCeilingAtMock': sum(causes.values()), 'aboveCeilingBy': dict(causes), 'ceiling': ceiling}
+
+
+def budget_classes(window, admissions, policy, created_posts=None):
+    """The two budgets of a policy that carries the bearer pair (the limiter's 0cb19962: the person's own bearer calls, credential
+    kind `user`, have a budget of their own and the application's counts every other credential). Each class is counted on its own:
+    its admissions in the coordinator (reserved and stamped, `sent_at`), its requests at the mock (peak in a trailing second, requests
+    above its ceiling and why), and per created post. The all-credential figures stay where they were (the standard's own line
+    counts all credentials); with two budgets they may pass 25 by the bearer's share. None for a policy without the pair."""
+    bearer_cap = (policy or {}).get('bearer_capacity')
+    if not bearer_cap:
+        return None
+    app_cap = policy.get('app_capacity') or 25
+    out = {'bearerCapacity': bearer_cap, 'bearerWindowSeconds': policy.get('bearer_window_seconds'), 'appCapacity': app_cap,
+           'appWindowSeconds': policy.get('app_window_seconds')}
+    for name, ceiling, user, trailing in (('app', app_cap, False, 'trailingApp'), ('bearer', bearer_cap, True, 'trailingUser')):
+        records = [r for r in window if (r.get('credential') == 'user') == user]
+        rows = [a for a in admissions or [] if len(a) > 10 and (a[10] == 'user') == user]
+        sent = [a[2] for a in rows if a[2] is not None]
+        reserved = [a[0] for a in rows if a[0] is not None]
+        arrivals = [r['arrived'] for r in records]
+        jitter = wire_jitter(records, rows, ceiling, trailing) if rows and records else None
+        trail = trailing_counts(records, trailing) if records else {}
+        out[name] = {'ceiling': ceiling, 'requestsAtMock': len(records), 'admissions': len(rows), 'sentAdmissions': len(sent),
+                     'admissionsPerCreatedPost': (len(rows) / created_posts) if created_posts else None,
+                     'requestsPerCreatedPost': (len(records) / created_posts) if created_posts else None,
+                     'stampedPeakTrailingSecond': peak_trailing(sent, 1.0), 'stampedPeakCalendarSecond': peak_calendar_second(sent),
+                     'reservedPeakTrailingSecond': peak_trailing(reserved, 1.0),
+                     'arrivalPeakTrailingSecond': peak_trailing(arrivals, 1.0),
+                     'arrivalPeakCalendarSecond': peak_calendar_second(arrivals),
+                     'aboveCeilingAtMock': sum(1 for r in records if trail.get(id(r), 0) > ceiling),
+                     'aboveCeilingBy': (jitter or {}).get('aboveCeilingBy'), 'guard': (jitter or {}).get('guard'),
+                     'admissionToArrival': (jitter or {}).get('admissionToArrival')}
+    return out
+
+
+def class_lines(result):
+    """Markdown lines for the receipt: the two budgets of a policy with a bearer budget, side by side (empty without one)."""
+    b = result.get('budgetClasses')
+    if not b:
+        return []
+    lines = ['## The two budgets (application and bearer)', '',
+             'The reviewed policy carries a bearer budget (%s a second, window %s s) beside the application\'s (%s a second, window %s s): '
+             'the person\'s own bearer calls (the grant check, credential kind `user`) are charged to the first, every other request to '
+             'the second. Each class is counted on its own below; the all-credential figures of the standard\'s own line (`policy_ceiling`) '
+             'may pass %s by the bearer\'s share, which is the design and not a breach: the rows that decide are these. Coordinator-stamped '
+             'is `sent_at`, the instant the coordinator let a request leave; arrival is what the mock counted '
+             '(owner reply 16, D-16: stamped must stay at or under the ceiling, arrival is REPORTED).' % (
+                 b['bearerCapacity'], _fmt(b.get('bearerWindowSeconds')), b['appCapacity'], _fmt(b.get('appWindowSeconds')), b['appCapacity']), '',
+             '| | Application class | Bearer class |', '|---|---|---|']
+    a, u = b['app'], b['bearer']
+
+    def row(label, key, fmt=_count):
+        lines.append('| %s | %s | %s |' % (label, fmt(a.get(key)), fmt(u.get(key))))
+    row('Ceiling per trailing second', 'ceiling')
+    row('Admissions in the coordinator (reserved during the run)', 'admissions')
+    row('Admissions per created post', 'admissionsPerCreatedPost', _fmt)
+    row('Requests at the mock', 'requestsAtMock')
+    row('Requests at the mock per created post', 'requestsPerCreatedPost', _fmt)
+    row('**Coordinator-stamped, most in a trailing second**', 'stampedPeakTrailingSecond')
+    row('Coordinator-stamped, most in a calendar second', 'stampedPeakCalendarSecond')
+    row('Reserved (admission time), most in a trailing second', 'reservedPeakTrailingSecond')
+    row('Arrivals at the mock, most in a trailing second', 'arrivalPeakTrailingSecond')
+    row('Arrivals at the mock, most in a calendar second', 'arrivalPeakCalendarSecond')
+    row('**Requests above the ceiling in a trailing second at the mock (REPORTED)**', 'aboveCeilingAtMock')
+    lines.append('| Of those: the coordinator had sent more / wire jitter / the mock\'s processing order | %s | %s |' % tuple(
+        ('%s / %s / %s' % (x['aboveCeilingBy'].get('coordinator', 0), x['aboveCeilingBy'].get('wire', 0), x['aboveCeilingBy'].get('mock', 0)))
+        if x.get('aboveCeilingBy') else 'n/a' for x in (a, u)))
+    lines.append('| Admission to arrival at the mock, p50 / p99 / max (ms) | %s | %s |' % tuple(
+        _ms_list(x.get('admissionToArrival'), ('p50', 'p99', 'max')) for x in (a, u)))
+    lines.append('')
+    return lines
 
 
 _WITNESS = {'GET /oauth2/@me': 'grant', 'GET /guilds/{id}': 'guild', 'GET /guilds/{id}/members/{id}': 'member',
@@ -607,7 +691,16 @@ def attempt_statistics(attempts, created_posts=None, restart_gap=3.0):
             steps[kind]['%d attempt(s), %s' % (len(run), 'admitted' if run[-1][7] == 'A' else 'gave up')] += 1
     totals = Counter(r[7] for r in attempts)
     booked_rows = [r for r in attempts if r[7] == 'A' and _booking_columns(r)[0] > 0]
+    by_credential = {}
+    for credential in sorted({r[5] or '?' for r in attempts}):
+        mine = [r for r in attempts if (r[5] or '?') == credential]
+        admitted_mine = sum(1 for r in mine if r[7] == 'A')
+        by_credential[credential] = {'attempts': len(mine), 'admitted': admitted_mine, 'refused': sum(1 for r in mine if r[7] == 'R'),
+                                     'errors': sum(1 for r in mine if r[7] == 'E'),
+                                     'admittedPerCreatedPost': (admitted_mine / created_posts) if created_posts else None,
+                                     'attemptsPerCreatedPost': (len(mine) / created_posts) if created_posts else None}
     return {'attempts': len(attempts), 'admitted': totals['A'], 'refused': totals['R'], 'errors': totals['E'],
+            'byCredential': by_credential,
             'withBookingColumns': sum(1 for r in attempts if len(r) >= 16),
             'errorsByCause': dict(Counter('%s %s' % (r[2], r[10]) for r in attempts if r[7] == 'E').most_common()),
             'booked': len(booked_rows), 'bookedByOperation': dict(Counter(r[2] for r in booked_rows)),
@@ -669,6 +762,7 @@ def attempt_lines(stats):
 
 
 LOCK_TIMEOUT, STATEMENT_TIMEOUT, DEADLOCK = '55P03', '57014', '40P01'
+BUSY = 'coordinator_busy'
 RESERVE_OPS = ('read', 'reserve')
 
 
@@ -688,16 +782,24 @@ def coordinator_failures(rows, stopped=None, due=None, creates_per_minute=None):
     for op in ('read', 'reserve', 'consume', 'observe', 'note_failure', 'abandon'):
         mine = [r for r in calls if r[2] == op]
         errors = [r for r in mine if r[7] == 'E']
-        by_op[op] = {'calls': len(mine), 'errors': len(errors),
+        # From 0cb19962 a reservation that met a lock or statement timeout is answered 'coordinator_busy' (a refusal with a wait of
+        # 1.5 s, cause 'coordinator_busy:<SQLSTATE>' in this log): the timeout is counted all the same, beside the errors that carry one.
+        busy = [r for r in mine if r[7] == 'R' and str(r[10]).startswith(BUSY)]
+        timeouts = errors + busy
+        by_op[op] = {'calls': len(mine), 'errors': len(errors), 'busyDelays': len(busy),
                      'unavailable': sum(1 for r in errors if r[9] == 'RateCoordinatorUnavailable'),
-                     'lockTimeouts': sum(1 for r in errors if LOCK_TIMEOUT in str(r[10])),
-                     'statementTimeouts': sum(1 for r in errors if STATEMENT_TIMEOUT in str(r[10])),
+                     'lockTimeouts': sum(1 for r in timeouts if LOCK_TIMEOUT in str(r[10])),
+                     'statementTimeouts': sum(1 for r in timeouts if STATEMENT_TIMEOUT in str(r[10])),
                      'deadlocks': sum(1 for r in errors if DEADLOCK in str(r[10])),
                      'otherErrors': sum(1 for r in errors if not any(code in str(r[10]) for code in (LOCK_TIMEOUT, STATEMENT_TIMEOUT, DEADLOCK))),
                      'seconds': _spread([r[1] for r in mine])}
     errors = [r for r in calls if r[7] == 'E']
+    busy_all = [r for r in calls if r[7] == 'R' and str(r[10]).startswith(BUSY)]
     reserve = [by_op[op] for op in RESERVE_OPS]
     totals = {'errors': len(errors), 'unavailable': sum(1 for r in errors if r[9] == 'RateCoordinatorUnavailable'),
+              'busyDelays': len(busy_all),
+              'busyByState': dict(Counter(str(r[10]).partition(':')[2] or '?' for r in busy_all).most_common()),
+              'busyQuotedSeconds': _spread([r[8] for r in busy_all if isinstance(r[8], (int, float))]),
               'lockTimeoutsInReserve': sum(b['lockTimeouts'] for b in reserve),
               'lockTimeoutsInConsume': by_op['consume']['lockTimeouts'],
               'lockTimeoutsInObserve': by_op['observe']['lockTimeouts'] + by_op['note_failure']['lockTimeouts'] + by_op['abandon']['lockTimeouts'],
@@ -709,9 +811,12 @@ def coordinator_failures(rows, stopped=None, due=None, creates_per_minute=None):
     summary = {'byOperation': by_op, 'totals': totals,
                'releases': {'total': len(releases), 'about300Seconds': len(unavailable_wait), 'quotedWait': len(quoted),
                             'noWaitGiven': len(releases) - len(unavailable_wait) - len(quoted),
+                            'busyCause': sum(1 for r in releases if str(r[10]).startswith(BUSY)),
                             'byReasonAndCause': dict(Counter('%s / %s / %s' % (r[4], r[9], r[10]) for r in releases).most_common()),
                             'quotedWaitSeconds': _spread([r[8] for r in quoted])},
                'degraded': {'processes': len({r[12] for r in degraded}), 'events': len(degraded),
+                            'timed': sum(1 for r in degraded if str(r[4]).startswith('timed')),
+                            'permanent': sum(1 for r in degraded if str(r[4]).startswith('permanent')),
                             'firstAfterDue': (min(r[0] for r in degraded) - due) if degraded and due else None,
                             'lastAfterDue': (max(r[0] for r in degraded) - due) if degraded and due else None,
                             'where': dict(Counter(re.sub(r':[0-9]+', '', r[4]) for r in degraded).most_common(6)),
@@ -743,23 +848,30 @@ def coordinator_failure_lines(summary):
     lines = ['## Coordinator failures (the database-latency cliff)', '']
     lines.append('Counted from the attempt log (every coordinator call of every process, including the observation after each answer and the '
                  'releases of posts; zeros are the answer of a clean run). A lock timeout is SQLSTATE 55P03 (the coordinator sets a 2 s '
-                 '`lock_timeout`), a statement timeout 57014, a deadlock 40P01.')
+                 '`lock_timeout`), a statement timeout 57014, a deadlock 40P01. From the limiter\'s 0cb19962 a reservation that meets a '
+                 'lock or statement timeout is answered `coordinator_busy` (a refusal with a wait of 1.5 s, nothing admitted) instead of '
+                 '`RateCoordinatorUnavailable`: those are counted in the timeout columns and in their own column, and an observation that '
+                 'meets one is asked once more by the provider (two rows in the log) before it degrades the process.')
     lines.append('')
-    lines.append('| Operation | Calls | Errors | RateCoordinatorUnavailable | Lock timeouts | Statement timeouts | Deadlocks | Other | Call took p50 / p99 / max (ms) |')
-    lines.append('|---|---|---|---|---|---|---|---|---|')
+    lines.append('| Operation | Calls | Errors | RateCoordinatorUnavailable | Answered coordinator_busy | Lock timeouts (errors and busy) | Statement timeouts (errors and busy) | Deadlocks | Other errors | Call took p50 / p99 / max (ms) |')
+    lines.append('|---|---|---|---|---|---|---|---|---|---|')
     names = {'read': 'reserve_read (a read)', 'reserve': 'reserve (a create permit)', 'consume': 'consume', 'observe': 'observe (the answer)',
              'note_failure': 'note_transport_failure', 'abandon': 'abandon_unsent'}
     for op in ('read', 'reserve', 'consume', 'observe', 'note_failure', 'abandon'):
         b = o[op]
         s = b.get('seconds') or {}
-        lines.append('| %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (
-            names[op], _count(b['calls']), _count(b['errors']), _count(b['unavailable']), _count(b['lockTimeouts']),
-            _count(b['statementTimeouts']), _count(b['deadlocks']), _count(b['otherErrors']), _ms_list(s, ('p50', 'p99', 'max'))))
+        lines.append('| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (
+            names[op], _count(b['calls']), _count(b['errors']), _count(b['unavailable']), _count(b.get('busyDelays', 0)),
+            _count(b['lockTimeouts']), _count(b['statementTimeouts']), _count(b['deadlocks']), _count(b['otherErrors']),
+            _ms_list(s, ('p50', 'p99', 'max'))))
     lines.append('')
     lines.append('- **Lock timeouts: %s in reserve (reads and create permits), %s in consume (the create leaving), %s in observe (the answer recorded, '
-                 'and the notes of a request that failed or was dropped).** RateCoordinatorUnavailable errors in all: %s of %s errors.' % (
+                 'and the notes of a request that failed or was dropped).** RateCoordinatorUnavailable errors in all: %s of %s errors. '
+                 '**`coordinator_busy` delays: %s** (by SQLSTATE %s; quoted wait p50 / max %s s).' % (
                      _count(t['lockTimeoutsInReserve']), _count(t['lockTimeoutsInConsume']), _count(t['lockTimeoutsInObserve']),
-                     _count(t['unavailable']), _count(t['errors'])))
+                     _count(t['unavailable']), _count(t['errors']), _count(t.get('busyDelays', 0)),
+                     json.dumps(t.get('busyByState') or {}, sort_keys=True),
+                     ' / '.join(_fmt((t.get('busyQuotedSeconds') or {}).get(k)) for k in ('p50', 'max'))))
     by_cause = r['byReasonAndCause']
     lines.append('- **Releases of a post** (the worker gives it back unsent): %s; about 300 s (what a coordinator that is unavailable releases for; a '
                  'quote of exactly 300 s would count too): **%s**; with a quoted wait: %s%s; without a wait given: %s. By reason / rate scope / rate cause: %s.' % (
@@ -767,10 +879,12 @@ def coordinator_failure_lines(summary):
                      (' (p50 / p90 / max %s s)' % ' / '.join(_fmt((r.get('quotedWaitSeconds') or {}).get(k)) for k in ('p50', 'p90', 'max'))) if r['quotedWait'] else '',
                      _count(r['noWaitGiven']), json.dumps(by_cause) if by_cause else 'none'))
     if d['events']:
-        lines.append('- **`rate_coordinator_degraded` was set in %d process(es) (%d events)**, first %s after T, last %s after T; set from %s, right after the failed call %s. '
-                     'In a process where it is set every later request is refused before transport; the lane there stops as `coordinator_degraded`.' % (
-                         d['processes'], d['events'], _minutes(d['firstAfterDue']), _minutes(d['lastAfterDue']),
-                         json.dumps(d['where']), json.dumps(d['afterFailedCall'])))
+        lines.append('- **`rate_coordinator_degraded` was set %d time(s): %d timed (45 s, after an outcome could not be recorded), %d for good (a policy that does '
+                     'not parse)**; in %d cron source(s); first %s after T, last %s after T; set from %s, right after the failed call %s. '
+                     'In a process where it is set every later request is refused before transport; the lane there stops as `coordinator_degraded` '
+                     '(a tree before 0cb19962 never lifts it).' % (
+                         d['events'], d.get('timed', 0), d.get('permanent', 0), d['processes'], _minutes(d['firstAfterDue']),
+                         _minutes(d['lastAfterDue']), json.dumps(d['where']), json.dumps(d['afterFailedCall'])))
     else:
         lines.append('- **`rate_coordinator_degraded` was never set** in any process of the run.')
     stopped = summary['laneStopped']
@@ -821,6 +935,7 @@ def health_summary(samples):
             and traffic(s)['admissions60s'] >= 0.5 * peak] or usable
     booking = lambda s: ((s.get('coordinator') or {}).get('booking') or {})
     policy = lambda s: (((s.get('coordinator') or {}).get('guards') or {}).get('policy') or {})
+    bearer = lambda s: (((s.get('coordinator') or {}).get('guards') or {}).get('bearer') or {})
     observed = [s for s in busy if booking(s).get('status') == 'observed']
     ahead = next((booking(s).get('bookAheadSeconds') for s in observed), None)
     out.update(
@@ -846,6 +961,18 @@ def health_summary(samples):
                                               and booking(s)['horizonSeconds'] < 0.5 * ahead),
         policyHoldOrEmbargo=sum(1 for s in usable if policy(s).get('hold') or policy(s).get('blocked') or policy(s).get('circuit')),
         responses429=_samples_of([traffic(s).get('responses429') for s in busy]),
+        # The bearer budget's own row (coordinator.guards.bearer, present only when the policy carries the pair) and the bearer class's
+        # admissions of the last minute (coordinator.traffic.bearerAdmissions60s); with the pair admissions60s counts the other class alone.
+        bearerReadings=sum(1 for s in busy if bearer(s).get('present')),
+        bearerLimit=next((bearer(s).get('limit') for s in busy if bearer(s).get('limit') is not None), None),
+        bearerAdmissions60s=_samples_of([traffic(s).get('bearerAdmissions60s') for s in busy]),
+        bearerPeakAdmissions60s=max((traffic(s).get('bearerAdmissions60s') for s in busy
+                                     if isinstance(traffic(s).get('bearerAdmissions60s'), (int, float))), default=None),
+        bearerRemaining=_samples_of([bearer(s).get('remaining') for s in busy if bearer(s).get('present')]),
+        bearerRemainingRatio=_samples_of([bearer(s).get('remainingRatio') for s in busy if bearer(s).get('present')]),
+        bearerResetSeconds=_samples_of([bearer(s).get('resetSeconds') for s in busy if bearer(s).get('present')]),
+        bearerRemainingZeroReadings=sum(1 for s in busy if bearer(s).get('present') and bearer(s).get('remaining') == 0),
+        bearerHoldOrEmbargo=sum(1 for s in usable if bearer(s).get('hold') or bearer(s).get('blocked') or bearer(s).get('circuit')),
         lastReading={k: v for k, v in (usable[-1].get('coordinator') or {}).items() if k in ('booking', 'traffic')})
     return out
 
@@ -868,7 +995,7 @@ def reads_ahead(admissions):
     return _spread(ahead)
 
 
-def booking_summary(lane_counters, created_posts, admissions, attempts, health):
+def booking_summary(lane_counters, created_posts, admissions, attempts, health, coordinator_counters=None):
     """Booking (rate_limits.booking: a lane caller that finds the application window full books the next free slot and sleeps
     in the call until it comes) from four independent sources, so each can be checked against the others:
     the lane's own counters (bookedWaits, bookedSeconds), the coordinator's admissions (a read stored `sent` at a wire time later
@@ -893,7 +1020,7 @@ def booking_summary(lane_counters, created_posts, admissions, attempts, health):
            'attempts': {k: (attempts or {}).get(k) for k in ('withBookingColumns', 'booked', 'bookedByOperation',
                                                               'bookedPlannedSeconds', 'bookedSleptSeconds', 'bookedPlanned',
                                                               'bookedSlept', 'refusedWithRoomToBook')} if attempts else None,
-           'health': health}
+           'health': health, 'coordinatorCounters': dict(coordinator_counters) if coordinator_counters else None}
     return out
 
 
@@ -919,8 +1046,8 @@ def booking_lines(result):
     ra = b.get('readsAhead')
     if ra:
         lines.append('- **Booked horizon as the reads saw it:** the number of reads lying ahead of the clock (a wire time not yet reached) '
-                     'when a read was reserved, p50 / p90 / p99 / max %s (n = %s reads; with the reviewed 25 a second and a 0.1 s guard a '
-                     'full horizon holds about 21).' % (
+                     'when a read was reserved, p50 / p90 / p99 / max %s (n = %s reads; the figure for a full horizon depends on the head: about 21 at '
+                     'the 0.1 s guard of 02fd679b, a little more at 0.05 s).' % (
                          ' / '.join(_fmt(ra.get(k)) for k in ('p50', 'p90', 'p99', 'max')), _count(ra.get('n'))))
     a = b.get('attempts')
     if a and a.get('withBookingColumns'):
@@ -959,8 +1086,8 @@ def booking_lines(result):
             'meaning changed with booking (and was changed again by the limiter), so it is printed next to the horizon to be checked '
             'against it: `remaining` was 0 in %s of the %s busy readings, and in %s of those the booked horizon was under half of '
             '`bookAheadSeconds` (a 0 with a shallow horizon is not a refusal in sight; the meaning per head is in docs/w02/CAPACITY-RUN.md). '
-            '`coordinator.traffic.admissions60s` %s (a minute at the 22.7 a second the guard allows is 1,362; the most a saturated lane '
-            'sends is 21.8 a second = 1,308); holds, embargoes or open circuits on the policy row in %s readings; 429 responses in the '
+            '`coordinator.traffic.admissions60s` %s (a minute at the sustained rate the guard allows: 22.7 a second = 1,362 at a 0.1 s guard '
+            '(up to 02fd679b), 23.8 a second = 1,428 at 0.05 s (from ac348e33)); holds, embargoes or open circuits on the policy row in %s readings; 429 responses in the '
             'last minute %s. Reading took %s ms (server), %s s (process, cold).' % (
                 _fmt(h.get('policyLimit')), sp('policyRemaining', digits=0), sp('policyRemainingRatio', digits=2),
                 sp('policyResetSeconds', digits=1), h['policyRemainingZeroReadings'], h['busyReadings'],
@@ -968,6 +1095,22 @@ def booking_lines(result):
                 sp('admissions60s', digits=0), h['policyHoldOrEmbargo'], sp('responses429', digits=0),
                 ' / '.join(_fmt((h.get('elapsedMs') or {}).get(k)) for k in ('p50', 'max')),
                 ' / '.join(_fmt((h.get('wallSeconds') or {}).get(k)) for k in ('p50', 'max'))))
+        if h.get('bearerReadings'):
+            lines.append(
+                '- **Bearer budget, `coordinator.guards.bearer`** (limit %s a second; present in %s of the %s busy readings): `remaining` %s, '
+                '`remainingRatio` %s, `resetSeconds` %s; `remaining` was 0 in %s readings. `coordinator.traffic.bearerAdmissions60s` %s (a minute '
+                'at the budget\'s 8.6 a second of bookings is about 520; the most in a reading: %s); holds, embargoes or open circuits on its row in '
+                '%s readings. With the pair, `admissions60s` above counts the application class alone.' % (
+                    _fmt(h.get('bearerLimit')), h['bearerReadings'], h['busyReadings'], sp('bearerRemaining', digits=0),
+                    sp('bearerRemainingRatio', digits=2), sp('bearerResetSeconds', digits=1), h['bearerRemainingZeroReadings'],
+                    sp('bearerAdmissions60s', digits=0), _fmt(h.get('bearerPeakAdmissions60s')), h['bearerHoldOrEmbargo']))
+    c = b.get('coordinatorCounters')
+    if c:
+        lines.append(
+            '- **The coordinator\'s own booking counters** (`booking_stats()` of every process, summed over the invocations that ended '
+            'normally): bookings %s, seconds booked %s, **horizonRefusals %s** (a booking refused because the horizon had no slot or the '
+            'deadline was too near), gateStops %s (a booked read stopped at the gate by a hold or an embargo that began while it slept).' % (
+                _count(c.get('bookings')), _fmt(c.get('bookedWaitSeconds')), _count(c.get('horizonRefusals')), _count(c.get('gateStops'))))
     lines.append('')
     return lines
 
@@ -1195,6 +1338,7 @@ def analyse(run_dir):
     permits = permit_stats(admissions)
     passes_summary = preflight_passes(window, admissions)
     created_count = sum(1 for p in posts.values() if p['createdAt'] is not None)
+    classes = budget_classes(window, admissions, config.get('ratePolicy') or {}, created_count)
     attempt_rows = load_jsonl(os.path.join(run_dir, 'attempts.jsonl'))
     attempts_summary = attempt_statistics(attempt_rows, created_count)
     health = health_summary(load_jsonl(os.path.join(run_dir, 'health-samples.jsonl')))
@@ -1266,6 +1410,11 @@ def analyse(run_dir):
         for key, value in report.items():
             if isinstance(value, (int, float)):
                 minute_discord[key] += value
+    coordinator_counters = Counter()
+    for item in invocations:  # booking_stats() of the processes that ended normally (the invocation wrapper writes it at the end)
+        for key, value in (item.get('bookingStats') or {}).items():
+            if isinstance(value, (int, float)):
+                coordinator_counters[key] += value
     cpu = [i.get('cpuUser', 0) + i.get('cpuSystem', 0) for i in invocations]
     rss = [i.get('maxRssKb', 0) for i in invocations]
     failures = [i for i in invocations if i.get('status') != 200 or i.get('exception')]
@@ -1316,8 +1465,8 @@ def analyse(run_dir):
     errors = Counter()
     if pooler:
         database['pooler'] = {k: pooler.get(k) for k in (
-            'mode', 'poolSize', 'maxClients', 'latencyMs', 'connectRtts', 'waitTimeoutSeconds', 'clientPeak',
-            'assignedPeak', 'waitingPeak', 'demandPeak', 'transactions', 'waitTimeouts', 'clientsRefused',
+            'mode', 'poolSize', 'maxClients', 'latencyMs', 'connectRtts', 'relayConnectRtts', 'waitTimeoutSeconds', 'clientPeak',
+            'clientsTotal', 'assignedPeak', 'waitingPeak', 'demandPeak', 'transactions', 'waitTimeouts', 'clientsRefused',
             'dirtyReleases', 'ignoredStartupOptions', 'errorsBySqlstate', 'waitSeconds', 'transactionHoldSeconds',
             'exchangeSeconds', 'cpuSeconds')}
         if pooler.get('mode') == 'pool' and pooler.get('poolSize'):
@@ -1374,14 +1523,17 @@ def analyse(run_dir):
                     'aboveFiftyBot': counters.get('aboveGlobalBot'), 'aboveFiftyAll': counters.get('aboveGlobalAll'),
                     'peakTrailingSecondAll': mock_summary.get('peakTrailingSecondAll'),
                     'peakTrailingSecondBot': mock_summary.get('peakTrailingSecondBot'),
+                    'aboveCeilingApp': counters.get('abovePolicyApp'), 'aboveCeilingBearer': counters.get('aboveBearer'),
+                    'peakTrailingSecondApp': mock_summary.get('peakTrailingSecondApp'),
+                    'peakTrailingSecondUser': mock_summary.get('peakTrailingSecondUser'),
                     'peakCalendarSecondAll': peak_calendar_second([r['processed'] for r in window]),
                     'peakTenSecondAveragePerSecond': busiest_window([r['processed'] for r in window], 10.0) / 10.0,
                     'busiest60sPerSecond': busiest_window([r['processed'] for r in window], 60.0) / 60.0,
                     'busiest300sPerSecond': busiest_window([r['processed'] for r in window], 300.0) / 300.0,
                     'coordinatorAdmissions': extra.get('admissionWindow')},
         'ledger': ledger, 'grantCustody': custody, 'pacing': paced, 'witnessAge': witness, 'wireJitter': jitter,
-        'permits': permits, 'preflightPasses': passes_summary, 'attempts': attempts_summary,
-        'booking': booking_summary(dict(lane_counters), created_count, admissions, attempts_summary, health),
+        'permits': permits, 'preflightPasses': passes_summary, 'attempts': attempts_summary, 'budgetClasses': classes,
+        'booking': booking_summary(dict(lane_counters), created_count, admissions, attempts_summary, health, coordinator_counters),
         'coordinatorFailures': coordinator_failures(attempt_rows, dict(stopped), T, {str(k): v for k, v in per_minute.items()}),
         'health': health, 'stepTiming': step_timing, 'hotChannel': hot, 'largestChannelList': channel_items,
         'tokenRefreshRequests': refreshes, 'nonLaneDiscordRequests': non_lane,
@@ -1726,8 +1878,9 @@ def launch_gates(result):
         held = _unanswered(opened)
         _line(rows, 'open_admissions', 'Admissions left without an observed answer at the end of the run (by state)',
               not held, ('%d: %s' % (sum(r['count'] for r in held), _open_text(held))) if held else 'none', '0')
-    probes = d.get('budgetProbes')
-    good = [p for p in probes or [] if not p.get('error') and p.get('admitted') is not None]
+    all_probes = d.get('budgetProbes')
+    probes = [p for p in all_probes or [] if p.get('kind', 'bot') == 'bot']  # the bearer budget's probes are their own row below
+    good = [p for p in probes if not p.get('error') and p.get('admitted') is not None]
     if not good:
         _line(rows, 'budget_restored', 'The application budget is whole again once unanswered requests have aged out', None,
               'no probe ran (%s)' % (('probe failed: ' + str(probes[-1].get('error'))[:200]) if probes else
@@ -1743,30 +1896,71 @@ def launch_gates(result):
                 if waited >= 60 else 'The application budget right after the run (no delayed probe in this scenario)')
         _line(rows, 'budget_restored', name, last.get('admitted') == capacity if capacity else None, text,
               '%s of %s' % (capacity, capacity))
+    bearer_probes = [p for p in all_probes or [] if p.get('kind') == 'user']
+    if bearer_probes:
+        usable = [p for p in bearer_probes if not p.get('error') and p.get('admitted') is not None]
+        if not usable:
+            _line(rows, 'bearer_budget_restored', 'The bearer budget is whole again after the run', None,
+                  'probe failed: ' + str(bearer_probes[-1].get('error'))[:200], 'full capacity')
+        else:
+            capacity = usable[-1].get('capacity')
+            _line(rows, 'bearer_budget_restored', 'The bearer budget (the person\'s own bearer calls) is whole again after the run',
+                  all(p.get('admitted') == capacity for p in usable) if capacity else None,
+                  '; '.join('after %s s: %s of %s admitted%s' % (_fmt(p.get('waited')), p.get('admitted'), p.get('capacity'),
+                                                                  ' (window rolled during the probe)' if p.get('windowRolled') else '')
+                            for p in usable), '%s of %s' % (capacity, capacity))
     # Owner reply 16 (D-16): what the coordinator let leave must stay at or under the ceiling; the count of requests above it
-    # as the mock sees them arrive is REPORTED, not a failure. Both are printed, the second never softened.
+    # as the mock sees them arrive is REPORTED, not a failure. Both are printed, the second never softened. With a bearer budget
+    # (0cb19962) each class has its own ceiling and its own rows; the all-credential count stays beside them as information.
     admissions = (result.get('ceiling') or {}).get('coordinatorAdmissions') or {}
     jitter = result.get('wireJitter') or {}
     wire = admissions.get('wire') or {}
+    classes = result.get('budgetClasses')
+    ceiling = (result.get('ceiling') or {}).get('policyCeiling') or 25
     stamped = wire.get('peakTrailingSecond') if wire.get('peakTrailingSecond') is not None else jitter.get('sendPeakTrailingSecond')
     stamped_calendar = wire.get('peakCalendarSecond') if wire.get('peakCalendarSecond') is not None else jitter.get('sendPeakCalendarSecond')
-    ceiling = (result.get('ceiling') or {}).get('policyCeiling') or 25
+    if classes:
+        app = classes['app']
+        stamped, stamped_calendar, ceiling = app['stampedPeakTrailingSecond'], app['stampedPeakCalendarSecond'], app['ceiling']
     _line(rows, 'coordinator_stamped_ceiling',
-          'Coordinator-stamped sends (sent_at, the instant the coordinator let a request leave) in any trailing second (owner reply 16, D-16)',
+          'Coordinator-stamped sends (sent_at, the instant the coordinator let a request leave) in any trailing second%s (owner reply 16, D-16)' % (
+              ', application class' if classes else ''),
           None if stamped is None else stamped <= ceiling,
           'not measurable here (no admissions export)' if stamped is None else 'most in a trailing second %s, in a calendar second %s' % (
               stamped, stamped_calendar), '<= %s' % ceiling)
-    above = (result.get('ceiling') or {}).get('aboveTwentyFiveAll')
-    if above is not None:
-        by = jitter.get('aboveCeilingBy') or {}
-        rows.append({'id': 'arrival_above_ceiling',
-                     'name': 'Requests above %s in a trailing second as they arrive at the mock (owner reply 16, D-16: REPORTED, not a failure)' % ceiling,
-                     'expected': 'report',
+    if classes:
+        bearer = classes['bearer']
+        _line(rows, 'coordinator_stamped_bearer',
+              'Coordinator-stamped sends of the bearer class (the person\'s own bearer calls) in any trailing second',
+              bearer['stampedPeakTrailingSecond'] <= bearer['ceiling'],
+              'most in a trailing second %s, in a calendar second %s' % (bearer['stampedPeakTrailingSecond'], bearer['stampedPeakCalendarSecond']),
+              '<= %s' % bearer['ceiling'])
+
+    def reported(ident, name, count, peak, by, limit, unpaired=True):
+        rows.append({'id': ident, 'name': name, 'expected': 'report',
                      'measured': '%s requests (peak in a trailing second %s)%s' % (
-                         _count(above), (result.get('ceiling') or {}).get('peakTrailingSecondAll'),
+                         _count(count), peak,
                          ('; by cause: the coordinator had sent more than %s %s, wire jitter %s, the mock\'s processing order %s, not paired %s' % (
-                             ceiling, by.get('coordinator', 0), by.get('wire', 0), by.get('mock', 0), by.get('unpaired', 0))) if by or jitter else ''),
+                             limit, by.get('coordinator', 0), by.get('wire', 0), by.get('mock', 0), by.get('unpaired', 0))) if by else ''),
                      'verdict': 'REPORTED'})
+    if classes:
+        for key, ident, label in (('app', 'arrival_above_ceiling', 'application class'),
+                                  ('bearer', 'arrival_above_bearer_ceiling', 'bearer class')):
+            c = classes[key]
+            reported(ident, 'Requests above %s in a trailing second as they arrive at the mock, %s (owner reply 16, D-16: REPORTED, not a failure)' % (
+                c['ceiling'], label), c['aboveCeilingAtMock'], c['arrivalPeakTrailingSecond'], c.get('aboveCeilingBy') or {}, c['ceiling'])
+        above = (result.get('ceiling') or {}).get('aboveTwentyFiveAll')
+        if above is not None:
+            reported('arrival_above_ceiling_all',
+                     'Requests above %s in a trailing second as they arrive at the mock, all credentials together (what the standard\'s own line '
+                     'counts; with two budgets it may pass %s by the bearer\'s share: information, REPORTED)' % (ceiling, ceiling),
+                     above, (result.get('ceiling') or {}).get('peakTrailingSecondAll'), {}, ceiling)
+    else:
+        above = (result.get('ceiling') or {}).get('aboveTwentyFiveAll')
+        if above is not None:
+            reported('arrival_above_ceiling',
+                     'Requests above %s in a trailing second as they arrive at the mock (owner reply 16, D-16: REPORTED, not a failure)' % ceiling,
+                     above, (result.get('ceiling') or {}).get('peakTrailingSecondAll'), jitter.get('aboveCeilingBy') or {}, ceiling)
     permits = result.get('permits')
     if permits is None:
         _line(rows, 'permits_unused', 'Create permits that died unused', None, 'no create permit in the admissions export', '0')
@@ -2224,6 +2418,7 @@ def receipt(result, verdicts, config, differences, expectations=()):
         lines.append('')
     lines.extend(evidence_lines(result))
     lines.extend(attempt_lines(result.get('attempts')))
+    lines.extend(class_lines(result))
     lines.extend(booking_lines(result))
     lines.extend(coordinator_failure_lines(result.get('coordinatorFailures')))
     d = result['database']
@@ -2232,12 +2427,16 @@ def receipt(result, verdicts, config, differences, expectations=()):
     p = d.get('pooler') or {}
     if p:
         wt, ht, et = p.get('waitSeconds') or {}, p.get('transactionHoldSeconds') or {}, p.get('exchangeSeconds') or {}
-        lines.append('Pooler (%s, pool %s, %s ms per round trip, connection setup %s extra round trips): peak '
+        setup = ('connection setup %s extra round trips' % p.get('connectRtts') if p.get('mode') == 'pool' else
+                 'a relay: connection setup is the startup exchange, one round trip, and %s extra round trips emulated for TLS and SCRAM' % (
+                     _fmt(p.get('relayConnectRtts') or 0)))
+        lines.append('Pooler (%s, pool %s, %s ms per round trip, %s): peak '
                      'transactions holding a server connection %s, peak demand (holding + waiting) %s = %s of the pool, '
-                     'peak clients %s; %s transactions; wait for a server connection p50 %s s, p95 %s s, max %s s; wait '
+                     'peak clients %s; %s client connections opened in all; %s transactions; wait for a server connection p50 %s s, p95 %s s, max %s s; wait '
                      'timeouts %s; longest transaction hold %s s; longest statement exchange %s s; pooler CPU %s s.' % (
-                         p.get('mode'), p.get('poolSize'), p.get('latencyMs'), p.get('connectRtts'), p.get('assignedPeak'),
-                         p.get('demandPeak'), _fmt(d.get('poolerDemandShare')), p.get('clientPeak'), p.get('transactions'),
+                         p.get('mode'), p.get('poolSize'), p.get('latencyMs'), setup, p.get('assignedPeak'),
+                         p.get('demandPeak'), _fmt(d.get('poolerDemandShare')), p.get('clientPeak'), _count(p.get('clientsTotal')),
+                         p.get('transactions'),
                          _fmt(wt.get('p50')), _fmt(wt.get('p95')), _fmt(wt.get('max')), p.get('waitTimeouts'),
                          _fmt(ht.get('max')), _fmt(et.get('max')), _fmt(p.get('cpuSeconds'))))
         lines.append('')

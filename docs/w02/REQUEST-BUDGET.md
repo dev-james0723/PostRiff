@@ -336,6 +336,31 @@ window k. Whether it also protects a trailing second, the separate sliding-windo
 usable budget goes from about 25/(1 + d) back to 25. At d = 0.2 s that is 20.8 → 25, worth as much as 1.2 requests per
 post at r = 7. **Not a request reduction**, and nothing here proposes raising 25.
 
+### 4.10 Charge the person's bearer call to a budget of its own (built: the owner's D-2 option 1, limiter head 0658c58b)
+
+**What it defends against.** Nothing: it changes no check. Request 1 (`GET /oauth2/@me`, section 4.5) still runs for every post
+at send time with the person's own bearer, and nothing about what it proves changes. Only the window it is charged to does.
+
+**The change.** The written budget was 25 requests a second across every credential. The owner redefined it (reply 16,
+AUTHORIZATION-RECORD.md): bot-token requests at most 25 a second, the person's bearer calls budgeted separately. Request 1 is
+the only bearer call of an ordinary post (a token refresh, about weekly per identity, adds two; the interactive flows and the
+dark reply and webhook paths make others; OPEN-QUESTIONS Q21 lists every call site). It is now charged to a second exact sliding
+window of its own, 10 a second in the reviewed policy (the lane needs 4.0 a second of them at the bot's full rate), with the same
+guard, booking and proof as the application window. The other six requests of the post (requests 2 to 7) stay on the bot's 25.
+`SafetyPolicy` carries `bearer_capacity` and `bearer_window_seconds`, both or neither; a policy without them is what it was and
+is the way back. The policy tool refuses a bearer budget above 10 a second.
+
+**Equivalent or not.** Equivalent for every check. The bot's 25 a second, its exactness and its guard are untouched; the new
+ceiling is on the calls Discord's global limit for the bot does not count. It does redefine the written "all credentials" budget,
+which is why it needed the owner.
+
+**Effect.** 6 charged requests per post instead of 7. With the section 1 formula, P50 = 2,500·r/C: at C = 25 that is 10.0 minutes
+instead of 11.7; at the exact ceiling of 23.8 a second (guard 0.05) 10.5 instead of 12.3 (the ideal minimum of section 2 becomes 6
+bot requests plus 1 bearer). In the limiter's model of the lane (12 shards, claim 0.8 s, five seeds) booking with guard 0.05 and one
+budget gives 179.0 posts a minute and booking with the bearer budget 195.1, 7.04 requests a post, 0 releases; on the S1 shape that
+is about 172 posts a minute, a median of 14.5 minutes, p95 27.6, longest about 32 (OPEN-QUESTIONS Q21; a model, to be measured). The
+gain is the grant check no longer waiting for a bookable slot of the bot's window.
+
 ## 5. Predicted lateness for 5,000 posts due at once
 
 Model (inference): the policy binds throughout the burst, so the lane sustains the budget, which the GitHub-hosted S1

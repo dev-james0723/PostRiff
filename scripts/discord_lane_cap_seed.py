@@ -69,7 +69,7 @@ class Seeder:
         self.psycopg, self.authorization = psycopg, authorization
         self.run_tag = run_tag
         self.world = self.mock.World(workspaces=workspaces_total, read_limit=(1000, 1.0), global_ceiling=10 ** 6,
-                                     policy_ceiling=10 ** 6)
+                                     policy_ceiling=10 ** 6, bearer_ceiling=10 ** 6)
         self.transport = self.mock.InProcessTransport(self.world)
         self.env = dict(env)
         providers = registry_from_environment(self.env, transport=self.transport)

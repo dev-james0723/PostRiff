@@ -85,6 +85,28 @@ class MockCounters(unittest.TestCase):
         self.assertEqual(record['status'], 429)
         self.assertEqual(world.peak_bot, 60)
 
+    def test_the_bearer_class_is_counted_apart_from_the_application_class(self):
+        """With a bearer budget the person's own bearer calls (kind user) have a ceiling of their own and the application's 25 counts
+        every other credential: the all-credential count (what the standard's own line counts) may pass 25 by the bearer's share."""
+        now = [2000.0]
+        world = mock.World(workspaces=100, clock=lambda: now[0], policy_ceiling=5, bearer_ceiling=3)
+        bot = {'authorization': 'Bot ' + mock.BOT_TOKEN}
+        for number in range(7):  # seven application requests and five bearer requests inside 0.12 s
+            now[0] += 0.01
+            world.handle('GET', '/guilds/%s' % mock.guild_id(number), bot, None)
+            if number < 5:
+                now[0] += 0.01
+                world.handle('GET', '/oauth2/@me', {'authorization': 'Bearer ' + mock.bearer(number)}, None)
+        self.assertEqual(world.peak_app, 7)
+        self.assertEqual(world.peak_user, 5)
+        self.assertEqual(world.counters['abovePolicyApp'], 2, 'application requests 6 and 7 are above its 5')
+        self.assertEqual(world.counters['aboveBearer'], 2, 'bearer requests 4 and 5 are above its 3')
+        self.assertEqual(world.counters['abovePolicyAll'], 7, 'all credentials together: requests 6 to 12 are above 5')
+        users = [r for r in world.log if r['credential'] == 'user']
+        self.assertEqual([r['trailingUser'] for r in users], [1, 2, 3, 4, 5])
+        self.assertTrue(all('trailingApp' not in r for r in users) and all('trailingUser' not in r for r in world.log if r['credential'] == 'bot'))
+        self.assertEqual(world.snapshot()['peakTrailingSecondUser'], 5)
+
     def test_the_isolation_check_fires_on_a_create_in_another_tenants_channel(self):
         world = mock.World(workspaces=10)
         create(world, 3, 'w3-p0', 'n-own')
@@ -429,6 +451,67 @@ class OwnerReply16(unittest.TestCase):
         self.assertIn('3 requests', gates['arrival_above_ceiling']['measured'])
 
 
+class BudgetClasses(unittest.TestCase):
+    """With a bearer budget (the limiter's 0cb19962) the two classes are counted on their own: the application's 25 and the bearer's 10."""
+
+    POLICY = {'app_capacity': 25, 'app_window_seconds': 1, 'bearer_capacity': 10, 'bearer_window_seconds': 1}
+
+    @staticmethod
+    def build(app_times, user_times):
+        window, admissions = [], []
+        for kind, times in (('bot', app_times), ('user', user_times)):
+            for n, t in enumerate(times):
+                path = '/guilds/%d' % n if kind == 'bot' else '/oauth2/@me'
+                key = '%s%02d' % (kind, n)
+                window.append({'arrived': t + 0.01, 'processed': t + 0.02, 'method': 'GET', 'route': 'GET /x', 'credential': kind,
+                               'status': 200, 'pathKey': key, 'permit': 'id-%s-%d' % (kind, n)})
+                admissions.append([t, None, t, t + 0.1, t + 10.0, 'observed', 'GET', key, False, None, kind, 'id-%s-%d' % (kind, n)])
+        return window, admissions
+
+    def test_each_class_is_counted_against_its_own_ceiling(self):
+        # 30 application sends in 1.5 s (a steady 19.6 a second) and 12 bearer sends in 0.9 s: the bearer class is over its 10, the application is not.
+        app = [i * 0.051 for i in range(30)]
+        user = [i * 0.075 for i in range(12)]
+        window, admissions = self.build(app, user)
+        classes = analysis.budget_classes(window, admissions, self.POLICY, created_posts=6)
+        self.assertEqual((classes['appCapacity'], classes['bearerCapacity']), (25, 10))
+        self.assertEqual(classes['app']['stampedPeakTrailingSecond'], 20)
+        self.assertEqual(classes['bearer']['stampedPeakTrailingSecond'], 12, 'twelve bearer sends inside 0.825 s')
+        self.assertEqual(classes['app']['aboveCeilingAtMock'], 0)
+        self.assertEqual(classes['bearer']['aboveCeilingAtMock'], 2, 'the 11th and the 12th bearer request arrive over 10 in a second')
+        self.assertEqual((classes['app']['admissionsPerCreatedPost'], classes['bearer']['admissionsPerCreatedPost']), (5.0, 2.0))
+        self.assertIsNone(analysis.budget_classes(window, admissions, {'app_capacity': 25}), 'a policy without the pair has one budget')
+
+    def test_the_trailing_second_is_recomputed_when_the_mock_log_has_none(self):
+        window, _ = self.build([i * 0.051 for i in range(30)], [])
+        counts = analysis.trailing_counts(window, 'trailingApp')
+        self.assertEqual(max(counts.values()), 20)
+        logged = [dict(r, trailingApp=7) for r in window]
+        self.assertEqual(set(analysis.trailing_counts(logged, 'trailingApp').values()), {7}, 'the mock\'s own figure is used when it logged one')
+
+    def test_the_launch_gates_judge_each_class_and_report_the_arrivals_whole(self):
+        window, admissions = self.build([i * 0.051 for i in range(30)], [i * 0.075 for i in range(12)])
+        classes = analysis.budget_classes(window, admissions, self.POLICY, created_posts=6)
+        result = {'ceiling': {'policyCeiling': 25, 'aboveTwentyFiveAll': 9, 'peakTrailingSecondAll': 32, 'coordinatorAdmissions': None},
+                  'wireJitter': None, 'budgetClasses': classes,
+                  'database': {'budgetProbes': [{'kind': 'bot', 'admitted': 25, 'capacity': 25, 'waited': 3.0},
+                                                {'kind': 'user', 'admitted': 10, 'capacity': 10, 'waited': 0.0},
+                                                {'kind': 'bot', 'admitted': 25, 'capacity': 25, 'waited': 90.0},
+                                                {'kind': 'user', 'admitted': 9, 'capacity': 10, 'waited': 0.0}]}}
+        gates = {g['id']: g for g in analysis.launch_gates(result)}
+        self.assertEqual(gates['coordinator_stamped_ceiling']['verdict'], 'PASS')
+        self.assertEqual(gates['coordinator_stamped_bearer']['verdict'], 'FAIL', 'twelve bearer sends in a second is over its 10')
+        self.assertEqual(gates['budget_restored']['verdict'], 'PASS', 'the application probe is not the bearer probe')
+        self.assertEqual(gates['bearer_budget_restored']['verdict'], 'FAIL', '9 of 10 at the last probe')
+        for ident in ('arrival_above_ceiling', 'arrival_above_bearer_ceiling', 'arrival_above_ceiling_all'):
+            self.assertEqual(gates[ident]['verdict'], 'REPORTED', ident)
+        self.assertIn('2 requests', gates['arrival_above_bearer_ceiling']['measured'])
+        self.assertIn('9 requests', gates['arrival_above_ceiling_all']['measured'])
+        text = '\n'.join(analysis.class_lines({'budgetClasses': classes}))
+        self.assertIn('Bearer class', text)
+        self.assertIn('Requests above the ceiling', text)
+
+
 class AttemptLog(unittest.TestCase):
     """The coordinator attempt log: a wrapper that observes and changes nothing, and the statistics read from it."""
 
@@ -509,9 +592,31 @@ class AttemptLog(unittest.TestCase):
                 def release_discord_unsent(self, claimed, *, reason='shutdown', retry_after_seconds=None, rate_cause=None, rate_scope=None):
                     return claimed != 'not mine'
 
-            class DiscordProvider:
-                def __init__(self):
-                    self.rate_coordinator_degraded = False
+            if self.with_hooks == 'timed':
+                class DiscordProvider:
+                    """The limiter's 0cb19962: the flag is a property (for good when set, timed when a record failed)."""
+                    DEGRADED_SECONDS = 45.0
+
+                    def __init__(self):
+                        self._degraded_until = 0.0
+                        self.rate_coordinator_degraded = False
+
+                    @property
+                    def rate_coordinator_degraded(self):
+                        return self._degraded_for_good or time.monotonic() < self._degraded_until
+
+                    @rate_coordinator_degraded.setter
+                    def rate_coordinator_degraded(self, value):
+                        self._degraded_for_good = bool(value)
+                        if not value:
+                            self._degraded_until = 0.0
+
+                    def _coordinator_failed(self):
+                        self._degraded_until = time.monotonic() + self.DEGRADED_SECONDS
+            else:
+                class DiscordProvider:
+                    def __init__(self):
+                        self.rate_coordinator_degraded = False
 
             worker, connectors = types.ModuleType('postriff_phase2.hosted_worker'), types.ModuleType('postriff_phase2.social_connectors')
             worker.PostgresWorker, connectors.DiscordProvider = PostgresWorker, DiscordProvider
@@ -702,6 +807,85 @@ class AttemptLog(unittest.TestCase):
         self.assertGreater(summary['degraded']['firstAfterDue'], 59.0)
         self.assertEqual(summary['laneStopped'], {'coordinator_degraded': 3})
         self.assertEqual(summary['createsPerMinute']['median'], 145.0)
+
+    def test_a_busy_answer_carries_the_sqlstate_a_timed_degrade_is_an_event_and_the_totals_are_kept(self):
+        """From 0cb19962 a lock or statement timeout in a reservation is answered `coordinator_busy` (a RateDelayed raised in place of
+        RateCoordinatorBusy, both `from None`), a failed outcome record degrades the process for 45 s through `_coordinator_failed`, and
+        only a policy that does not parse sets the flag for good. The log keeps the SQLSTATE behind the busy answer, one event for each."""
+        import discord_lane_cap_invoke as invoke
+        self.with_hooks = 'timed'
+        budget, delayed, permit, identity = self.fake_coordinator()
+        unavailable, lock_error = self.fake_errors
+        worker_class, provider_class = self.hook_classes
+
+        class Busy(unavailable):
+            pass
+
+        def busy(self, method, path, *, identity, book_ahead=0.0):
+            try:
+                try:
+                    raise lock_error('canceling statement due to lock timeout')
+                except lock_error:
+                    raise Busy() from None
+            except Busy:
+                raise delayed(1.5, scope='application', cause='coordinator_busy') from None
+        budget.reserve_read = busy
+        path = Path(tempfile.mkdtemp(prefix='cap-attempts-')) / 'a.jsonl'
+        self.addCleanup(shutil.rmtree, path.parent, True)
+        handle = invoke.instrument_coordinator(str(path), 'lane7')
+        self.addCleanup(handle.close)
+        coordinator = budget()
+        with self.assertRaises(delayed) as caught:
+            coordinator.reserve_read('GET', '/guilds/1392000000000000007', identity=identity(), book_ahead=1.0)
+        self.assertEqual((caught.exception.retry_after_seconds, caught.exception.rate_cause), (1.5, 'coordinator_busy'), 'raised unchanged')
+        got = permit('p-1', identity())
+        with self.assertRaises(unavailable):
+            coordinator.observe(got, {'status': 'lock'})
+        provider = provider_class()
+        self.assertFalse(provider.rate_coordinator_degraded)
+        provider._coordinator_failed()  # what DiscordProvider does after an outcome could not be recorded
+        self.assertTrue(provider.rate_coordinator_degraded, 'the original method still runs')
+        provider.rate_coordinator_degraded = False
+        provider.rate_coordinator_degraded = True  # for good, as the OAuth service does for a policy that does not parse
+        self.assertTrue(provider.rate_coordinator_degraded)
+        self.assertEqual(len(invoke.COORDINATORS), 1)
+        handle.flush()
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        self.assertEqual(rows[0][7:11], ['R', 1.5, 'application', 'coordinator_busy:55P03'], 'the SQLSTATE behind the busy answer')
+        events = [r for r in rows if r[2] == 'event' and r[3] == 'degraded']
+        self.assertEqual([r[4].split(',')[0] for r in events], ['timed 45.0 s', 'permanent'])
+        self.assertEqual((events[0][9], events[0][10]), ('Unavailable', 'LockNotAvailable:55P03'), 'the failed call just before the timed one')
+        summary = analysis.coordinator_failures(rows, {'coordinator_degraded': 2}, rows[0][0] - 60.0, {})
+        self.assertEqual(summary['totals']['busyDelays'], 1)
+        self.assertEqual(summary['totals']['busyByState'], {'55P03': 1})
+        self.assertEqual(summary['totals']['lockTimeoutsInReserve'], 1, 'a lock timeout in a reservation is counted whether it surfaced as an error or as a busy answer')
+        self.assertEqual(summary['totals']['lockTimeoutsInObserve'], 1)
+        self.assertEqual((summary['degraded']['timed'], summary['degraded']['permanent'], summary['degraded']['events']), (1, 1, 2))
+        text = '\n'.join(analysis.coordinator_failure_lines(summary))
+        for expected in ('coordinator_busy', 'timed', 'permanent'):
+            self.assertIn(expected, text)
+        stats = analysis.attempt_statistics(rows, created_posts=1)
+        self.assertEqual(stats['refusalsByScopeAndCause'], {'application/coordinator_busy:55P03': 1})
+
+    def test_the_coordinators_own_booking_counters_are_summed_for_the_invocation(self):
+        import discord_lane_cap_invoke as invoke
+        budget, delayed, permit, identity = self.fake_coordinator()
+        path = Path(tempfile.mkdtemp(prefix='cap-attempts-')) / 'a.jsonl'
+        self.addCleanup(shutil.rmtree, path.parent, True)
+        invoke.COORDINATORS.clear()
+        handle = invoke.instrument_coordinator(str(path), 'lane1')
+        self.addCleanup(handle.close)
+        self.addCleanup(invoke.COORDINATORS.clear)
+        first, second = budget(), budget()
+        first.book = second.book = 0.01
+        first.reserve_read('GET', '/guilds/1392000000000000007', identity=identity(), book_ahead=1.0)
+        second.reserve_read('GET', '/guilds/1392000000000000008', identity=identity(), book_ahead=1.0)
+        second._booking['horizonRefusals'] += 3
+        totals = invoke.coordinator_totals()
+        self.assertEqual((totals['bookings'], totals['horizonRefusals']), (2, 3))
+        self.assertAlmostEqual(totals['bookedWaitSeconds'], 0.02, places=3)
+        invoke.COORDINATORS.clear()
+        self.assertIsNone(invoke.coordinator_totals())
 
     def test_a_tree_without_booking_is_logged_as_before(self):
         import discord_lane_cap_invoke as invoke
@@ -1085,6 +1269,124 @@ class ProfilesAndSettings(unittest.TestCase):
         self.assertEqual(runner.PROFILES['devset'], ['S1', 'S0-100', 'Fdb', 'Fcrash', 'F429'])
         self.assertEqual(len(runner.PROFILES['release']), 16)
         self.assertTrue(all(name in runner.SCENARIOS for items in runner.PROFILES.values() for name in items))
+
+    def test_the_loop_count_cells_differ_by_the_loop_count_alone_and_the_pair_by_the_pool_alone(self):
+        import discord_lane_capacity_run as runner
+        cells = {n: runner.settings_for(n, {}) for n in ('S1-lane56', 'S1-16', 'S1-24', 'S1-conn', 'S1-conn-pool')}
+        self.assertEqual([(cells[n]['shards'], cells[n]['lane_max_seconds']) for n in ('S1-lane56', 'S1-16', 'S1-24')],
+                         [(None, 56), (16, 56), (24, 56)], 'sens: 12, 16 and 24 loops, each budgeted 56 s')
+        self.assertTrue(all(cell['judge_as'] == 'S1' for cell in cells.values()))
+        self.assertEqual([(cells[n]['relay_connect_rtts'], cells[n]['db_pool'], cells[n]['lane_max_seconds'], cells[n]['shards'])
+                          for n in ('S1-lane56', 'S1-conn', 'S1-conn-pool')],
+                         [(0.0, False, 56, None), (4.0, False, 56, None), (4.0, True, 56, None)])
+
+    def test_the_pool_variables_reach_the_lane_processes_and_never_the_seeder(self):
+        import discord_lane_capacity_run as runner
+        harness = runner.Harness.__new__(runner.Harness)
+        harness.app_dsn, harness.credential_key, harness.cron_token = 'host=127.0.0.1', 'k', 't'
+        harness.generated = {'supabase_public': 'p', 'supabase_admin': 'a', 'oauth_app': 'o'}
+        harness.s = runner.settings_for('S1-conn-pool', {})
+        run = harness.environment(lane_on=True, policy='{}')
+        self.assertEqual(run['POSTRIFF_DB_POOL_ENABLED'], 'true')
+        self.assertNotIn('POSTRIFF_DB_POOL_MAX_CONNECTIONS', run, 'the code\'s defaults (20 and 64) apply unless a scenario sets them')
+        self.assertNotIn('POSTRIFF_DB_POOL_ENABLED', harness.environment(lane_on=False, policy='{}', seeding=True))
+        self.assertEqual(harness.environment(lane_on=False, policy='{}')['POSTRIFF_DB_POOL_ENABLED'], 'true', 'the flag-off run is pooled too')
+        harness.s = runner.settings_for('S1-conn-pool', {'db_pool_max_connections': 8, 'db_pool_max_waiting': 32})
+        run = harness.environment(lane_on=True, policy='{}')
+        self.assertEqual((run['POSTRIFF_DB_POOL_MAX_CONNECTIONS'], run['POSTRIFF_DB_POOL_MAX_WAITING']), ('8', '32'))
+        harness.s = runner.settings_for('S1-conn', {})
+        self.assertFalse([k for k in harness.environment(lane_on=True, policy='{}') if k.startswith('POSTRIFF_DB_POOL')])
+
+    def test_the_run_policy_is_the_tools_own_and_the_seeding_policy_opens_both_budgets(self):
+        import discord_lane_capacity_run as runner
+        folder = Path(tempfile.mkdtemp(prefix='cap-tree-'))
+        self.addCleanup(shutil.rmtree, folder, True)
+        (folder / 'scripts').mkdir()
+
+        def tree(defaults):
+            (folder / 'scripts' / 'discord_rate_policy.py').write_text(
+                'DEFAULTS = %r\n\ndef build(now, days=1, revision="r", **overrides):\n'
+                '    unknown = set(overrides) - set(DEFAULTS)\n    if unknown:\n        raise ValueError(sorted(unknown))\n'
+                '    return {**DEFAULTS, **overrides, "revision": revision}\n' % defaults)
+        harness = runner.Harness.__new__(runner.Harness)
+        harness.tree, harness.dir = folder, Path('/x/20261028T000000Z-S1-gha-pool20')
+        tree({'app_capacity': 25, 'bearer_capacity': 10})
+        harness.s = {'policy_capacity': 25, 'bearer_capacity': None}
+        run, seed, _ = harness.policies()
+        run, seed = json.loads(run), json.loads(seed)
+        self.assertEqual((run['app_capacity'], run['bearer_capacity']), (25, 10), 'the reviewed figures: the tool\'s own default for the bearer')
+        self.assertEqual((seed['app_capacity'], seed['bearer_capacity']), (20000, 20000), 'seeding waits on neither budget')
+        harness.s = {'policy_capacity': 25, 'bearer_capacity': 5}
+        self.assertEqual(json.loads(harness.policies()[0])['bearer_capacity'], 5, 'a scenario may change it (and is then information only)')
+        tree({'app_capacity': 25})  # a tree before the bearer budget: nothing of it is asked for
+        harness.s = {'policy_capacity': 100, 'bearer_capacity': None}
+        run, seed, _ = harness.policies()
+        self.assertEqual((json.loads(run), json.loads(seed)), ({'app_capacity': 100, 'revision': json.loads(run)['revision']},
+                                                               {'app_capacity': 20000, 'revision': json.loads(seed)['revision']}))
+
+    def test_the_receipt_says_what_a_new_connection_costs_in_the_mode_that_ran(self):
+        import discord_lane_capacity_run as runner
+        hosted = {'pooler': 'PgBouncer /usr/sbin/pgbouncer, transaction mode, pool 20, behind the harness relay adding 2.0 ms per round trip',
+                  'settings': {'db_connect_rtts': 4, 'relay_connect_rtts': 0.0}}
+        text = runner.connection_cost_text(hosted)
+        self.assertIn('one round trip per new connection', text)
+        self.assertIn('does not read db_connect_rtts', text, 'the hosted relay never applied the 4 round trips older receipts printed')
+        hosted['settings']['relay_connect_rtts'] = 4.0
+        self.assertIn('4 more for TLS and SCRAM', runner.connection_cost_text(hosted))
+        local = {'pooler': 'harness transaction pooler (pool 20, 2.0 ms per round trip)', 'settings': {'db_connect_rtts': 4}}
+        self.assertEqual(runner.connection_cost_text(local), '4 round trips per new connection')
+
+    def test_the_relay_delays_a_new_connection_by_the_asked_round_trips(self):
+        import socket
+        import threading
+
+        def echo_server():
+            server = socket.socket()
+            server.bind(('127.0.0.1', 0))
+            server.listen(8)
+
+            def serve():
+                while True:
+                    try:
+                        conn, _ = server.accept()
+                    except OSError:
+                        return
+                    threading.Thread(target=lambda c=conn: [c.sendall(c.recv(100)) for _ in range(1)], daemon=True).start()
+            threading.Thread(target=serve, daemon=True).start()
+            return server
+
+        def first_echo(extra):
+            server = echo_server()
+            folder = tempfile.mkdtemp(prefix='cap-relay-')
+            self.addCleanup(shutil.rmtree, folder, True)
+            self.addCleanup(server.close)
+            with socket.socket() as probe:
+                probe.bind(('127.0.0.1', 0))
+                port = probe.getsockname()[1]
+            argv = [sys.executable, '-B', str(SCRIPTS / 'discord_lane_cap_pooler.py'), '--mode', 'relay', '--listen-port', str(port),
+                    '--upstream-port', str(server.getsockname()[1]), '--latency-ms', '40', '--stats', os.path.join(folder, 'pooler.json')]
+            if extra:
+                argv += ['--relay-connect-rtts', str(extra)]
+            process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            self.addCleanup(process.wait, 10)
+            self.addCleanup(process.terminate)
+            self.assertIn('ready', process.stdout.readline())
+            began = time.monotonic()
+            with socket.create_connection(('127.0.0.1', port), timeout=10) as client:
+                client.sendall(b'startup')
+                self.assertEqual(client.recv(100), b'startup')
+            took = time.monotonic() - began
+            process.terminate()
+            process.wait(10)
+            process.stdout.close()
+            with open(os.path.join(folder, 'pooler-final.json')) as handle:
+                final = json.load(handle)
+            return took, final
+        plain, stats = first_echo(0)
+        slow, slow_stats = first_echo(3)
+        self.assertGreater(slow, plain + 0.10, 'three round trips of 40 ms more before the first byte goes upstream')
+        self.assertEqual((stats['mode'], stats['relayConnectRtts'], stats['connectRtts'], stats['clientsTotal']), ('relay', 0.0, None, 1))
+        self.assertEqual(slow_stats['relayConnectRtts'], 3.0)
 
     def test_the_delayed_budget_probe_runs_in_the_measured_scenarios_only(self):
         import discord_lane_capacity_run as runner

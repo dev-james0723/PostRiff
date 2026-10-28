@@ -113,7 +113,10 @@ class Stats:
                     'p95': round(pick(.95), 6), 'p99': round(pick(.99), 6), 'max': round(ordered[-1], 6)}
         result = {'mode': self.args.mode, 'poolSize': self.args.pool_size if self.args.mode == 'pool' else None,
                   'maxClients': self.args.max_clients if self.args.mode == 'pool' else None,
-                  'latencyMs': self.args.latency_ms, 'connectRtts': self.args.connect_rtts,
+                  'latencyMs': self.args.latency_ms,
+                  # connectRtts is read by the pool mode only; a relay (the hosted runs' mode) uses relayConnectRtts, 0 unless asked
+                  'connectRtts': self.args.connect_rtts if self.args.mode == 'pool' else None,
+                  'relayConnectRtts': getattr(self.args, 'relay_connect_rtts', 0.0) if self.args.mode == 'relay' else None,
                   'waitTimeoutSeconds': self.args.wait_timeout, 'at': time.time(),
                   'clients': self.clients, 'clientPeak': self.client_peak, 'clientsTotal': self.clients_total,
                   'clientsRefused': self.clients_refused, 'assigned': self.assigned, 'assignedPeak': self.assigned_peak,
@@ -382,6 +385,10 @@ class Relay:
         stats.clients += 1
         stats.clients_total += 1
         stats.note_demand()
+        if getattr(self.args, 'relay_connect_rtts', 0.0) > 0:
+            # The round trips a TLS handshake and a SCRAM exchange would cost a new connection to a real pooler; the startup message
+            # exchange itself is already delayed by the delay line (one round trip).
+            await asyncio.sleep(self.args.relay_connect_rtts * self.args.latency_ms / 1000.0)
         try:
             up_reader, up_writer = await asyncio.open_connection(self.args.upstream_host, self.args.upstream_port)
         except OSError:
@@ -459,7 +466,10 @@ def main(argv=None):
     parser.add_argument('--pool-size', type=int, default=20)
     parser.add_argument('--max-clients', type=int, default=200)
     parser.add_argument('--latency-ms', type=float, default=0.0)
-    parser.add_argument('--connect-rtts', type=float, default=4.0)
+    parser.add_argument('--connect-rtts', type=float, default=4.0, help='pool mode: round trips a new client connection costs (TLS, SCRAM)')
+    parser.add_argument('--relay-connect-rtts', type=float, default=0.0,
+                        help='relay mode: round trips added to every new client connection (what TLS and SCRAM cost beyond the '
+                             'startup exchange the relay already delays); 0 adds none')
     parser.add_argument('--wait-timeout', type=float, default=60.0)
     parser.add_argument('--server-options', default='', help="startup options for the server connections, e.g. '-c statement_timeout=1500'")
     parser.add_argument('--stats', required=True)

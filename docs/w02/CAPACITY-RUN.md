@@ -88,6 +88,8 @@ scenario measures the frozen worker, so point it at RC1: `--source-tree "$SCRATC
 | `S1` | 5,000 posts due at T over 2,000 workspaces | section 4 (lateness, duplicates, late sends, ceilings, held, database) |
 | `S2` | the same 5,000 with one workspace holding 3,000 | section 4 plus fairness |
 | `S2-100`, `S2-300`, `S2-1000` | the same 5,000 posts with the hot workspace holding 100, 300 or 1,000 (profile `s2sizes`; the 3,000 case above stays as the stress case) | judged as S2; the receipt adds the hot workspace's document size, per-transaction time, create rate while it has due posts (REPORTED) and posts per minute |
+| `S1-lane56`, `S1-16`, `S1-24` | S1 with 12, 16 and 24 lane loops (`/api/cron/discord-worker/0` to `n-1`), each loop budgeted 56 s (`POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS=56`): the loop count is the only lever that differs between the three (profile `sens`, one request for each `--latency`) | judged as S1 |
+| `S1-conn`, `S1-conn-pool` | S1-lane56 with every new database connection costing 4 more round trips (TLS and SCRAM, `relay_connect_rtts=4`), without and with the application's own connection pool (`POSTRIFF_DB_POOL_ENABLED=true`, the code's default limits 20 connections and 64 waiting, one pool for each process; scenario settings `db_pool`, `db_pool_max_connections`, `db_pool_max_waiting`) (profile `pool`, one request at `--latency 5`) | judged as S1 |
 | `S3` | 13,000 posts due at T | section 4; where approval expiry starts holding posts |
 | `S0-100`, `S0-250` | 100 or 250 posts due per minute for 20 minutes, 30% of them at a random second of their minute | `normalLoad` |
 | `baseline` | lane flag off, S1 data, 10 minutes, on the frozen RC1 | posts per minute of the minute worker |
@@ -110,7 +112,7 @@ requests, database share, statement timeouts) unless the standard marks it not a
 | `--source-tree` | (required) | detached checkout of the SHA under test; its SHA goes into every receipt |
 | `--mock-latency` | `uniform:50:150` | ms per Discord request; `fixed:300`, `uniform:150:300`; `--mock-tail-probability`/`--mock-tail-ms` add a tail |
 | `--db-latency-ms` | 2 | added per database round trip (half each way) [assumed: Vercel iad1 to the Supabase us-east-1 pooler] |
-| `--db-connect-rtts` | 4 | extra round trips per new client connection (TLS and SCRAM a hosted pooler adds) |
+| `--db-connect-rtts` | 4 | extra round trips per new client connection (TLS and SCRAM a hosted pooler adds): **read by the harness's own pooler only** (local runs). With `--pooler pgbouncer`, as every hosted run has it, the relay in front of PgBouncer does not read it: a new connection costs the startup exchange, one round trip, unless the scenario setting `relay_connect_rtts` (default 0; `S1-conn` and `S1-conn-pool` set 4) asks the relay for more. Receipts before the 0cb19962 measurement printed "4 round trips per new connection" for hosted runs too, which was wrong; they now say what ran |
 | `--max-db-connections` | 20 | pool size; demand beyond it waits like a transaction-mode pooler queue |
 | `--lane-max-seconds` | 50 | `POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS` (5 to 120 at 14b78944; at most 90 from 91629568) |
 | `--shards` | from `vercel.json` | number of lane cron routes |
@@ -170,6 +172,19 @@ no real secret.
   never turned into a pass. The standard's own line (`policy_ceiling`, "== 0" at the mock) is still computed as the
   standard is written; reading it as REPORTED is the owner's decision, not the harness's, and
   `docs/w02/capacity-standard.json` is not changed.
+- **Two budgets (the limiter's 0cb19962).** A policy made by the tested tree's own `scripts/discord_rate_policy.py` carries a
+  bearer budget (`bearer_capacity`, 10 a second reviewed): the person's own bearer calls (credential kind `user`, the grant check
+  `GET /oauth2/@me`) are charged to it and every other request to the application's 25. The run policy is the tool's own
+  (`--set bearer_capacity=N` changes it and makes the run INFORMATION ONLY); the seeding policy opens both to 20,000. The mock
+  keeps the trailing second of each class beside the all-credential one (`trailingApp`, `trailingUser`, ceilings 25 and the
+  policy's bearer figure), and the receipt's section "The two budgets" counts each class on its own: its admissions in the
+  coordinator, requests per created post, the most stamped (`sent_at`) in a trailing second (**must stay at or under the class's
+  ceiling: PASS or FAIL**), the most arriving at the mock and the requests above the ceiling with their cause (**REPORTED**,
+  D-16). The standard's own line (`policy_ceiling`, all credentials) counts the bearer class too, so with two budgets it can pass
+  25 by the bearer's share; that is the design, and the class rows are the ones that decide. The budget probes run for each class
+  (the bearer probe reserves reads with a synthetic bearer until refused: 10 of 10 is a whole budget). The health payload's
+  `coordinator.guards.bearer` and `coordinator.traffic.bearerAdmissions60s` are sampled with the rest, and each invocation writes the
+  coordinator's own `booking_stats()` (bookings, `horizonRefusals`, `gateStops`) into its result.
 - **Wire timing.** Each admission's `sent_at` (database clock) is joined, by path digest and in order, to the mock's
   arrival of that request. The invocation wrapper stamps every request it forwards with its cron source and with
   the time just before the HTTP call, so the delay splits into admission to call (inside the application) and call
@@ -261,7 +276,8 @@ mode. It uses no secret and no environment, has a read-only token, fetches exact
 | `devset` | the development measurement set: S1, S0-100, Fdb, Fcrash, F429, one runner each, all at once |
 | `s0100`, `fdb`, `fcrash`, `f429` | one scenario of the development set alone, to run it again after a failure or a change (the branch name is `claude/discord-capacity-run-<profile>-<suffix>` as for every profile) |
 | `s1lane56` | S1 with each lane loop budgeted 56 s (`POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS=56`) instead of 50: the duty-cycle lever alone, to read next to the S1 of the same tree |
-| `sens` | S1 (12 loops) and S1-24 (24 loops) in one request, for the database round trip sensitivity of the scope-B review: send one request for each `--latency` (5 and 10 ms; 2 ms is the harness default) and read the receipt's "Coordinator failures" section |
+| `sens` | S1-lane56 (12 loops), S1-16 (16) and S1-24 (24), each loop budgeted 56 s, in one request, for the loop-count and database-round-trip sensitivity (the scope-B review and the lane owner's `LOOPS.md`): send one request for each `--latency` (5 and 10 ms; 2 ms is the harness default) and read the receipt's "Coordinator failures" section |
+| `pool` | S1-conn and S1-conn-pool: the unpooled and the pooled arm of S1-lane56 with the connect cost of a TLS and SCRAM pooler; one request at `--latency 5` |
 | `faults` | F429, F5xx, Fcrash, Fdb, Fexpiry, Fstall, Fflip, Nmisroute, Ndup, Nceiling |
 | `release` | every scenario, baseline included |
 | `baseline` | the frozen minute worker on the request's baseline SHA (default RC1) |

@@ -12,10 +12,14 @@ Prints one JSON line: {"admitted": n, "refused": {...}, "seconds": s, "waited": 
 application capacity means the window is whole. Fewer means slots are still held. A probe that took longer than one
 window says so (`windowRolled`), and its count is then not a single window's.
 
-  python3 scripts/discord_lane_cap_budget_probe.py --source-tree TREE --dsn DSN --env RUN/env-run.json [--wait 330]
+`--kind user` probes the bearer budget instead (a policy with the bearer pair, rate_limits.BEARER_KIND): the same reads
+with a synthetic bearer identity, never sent anywhere, counted against `bearer_capacity`. The line then says "kind": "user".
+
+  python3 scripts/discord_lane_cap_budget_probe.py --source-tree TREE --dsn DSN --env RUN/env-run.json [--wait 330] [--kind user]
 """
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -28,6 +32,8 @@ def main(argv=None):
     parser.add_argument('--env', required=True, help="the run's env-run.json (policy, application id, bot token)")
     parser.add_argument('--wait', type=float, default=0.0, help='seconds to wait before probing')
     parser.add_argument('--max', type=int, default=80, help='stop after this many admissions')
+    parser.add_argument('--kind', choices=('bot', 'user'), default='bot',
+                        help="which budget to probe: the application's ('bot') or the bearer budget's ('user')")
     args = parser.parse_args(argv)
     tree = Path(args.source_tree).resolve()
     sys.path[:0] = [str(tree), str(tree / 'src')]
@@ -56,7 +62,9 @@ def main(argv=None):
             (self.connection.rollback if kind else self.connection.commit)()
             return False
     budget = SharedPostgresBudget(Reuse(), application, policy=policy)
-    identity = RequestIdentity.make(application, 'bot', bot_token)
+    # A synthetic bearer for the bearer budget: a person's bearer is never needed, nothing is sent.
+    identity = RequestIdentity.make(application, 'bot', bot_token) if args.kind == 'bot' else RequestIdentity.make(
+        application, 'user', 'cap-probe-bearer-' + os.urandom(8).hex())
     # Synthetic server ids the run never used (the mock's servers start at another base): a fresh route per probe.
     base = 1397000000000000000 + (int(time.time() * 1000) % 10 ** 8) * 1000
     permits, refused = [], None
@@ -80,8 +88,8 @@ def main(argv=None):
         except Exception:  # recorded below; the run is over, but say so
             pass
     print(json.dumps({'admitted': len(permits), 'refused': refused, 'seconds': round(elapsed, 3),
-                      'windowRolled': elapsed > 1.0, 'closed': closed, 'waited': args.wait,
-                      'capacity': json.loads(policy).get('app_capacity')}))
+                      'windowRolled': elapsed > 1.0, 'closed': closed, 'waited': args.wait, 'kind': args.kind,
+                      'capacity': json.loads(policy).get('app_capacity' if args.kind == 'bot' else 'bearer_capacity')}))
     return 0
 
 

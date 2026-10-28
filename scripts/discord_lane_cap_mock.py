@@ -118,11 +118,15 @@ class World:
     CREATE_LIMIT = (5, 5.0)
 
     def __init__(self, *, workspaces=10 ** 6, read_limit=(50, 1.0), global_ceiling=50, policy_ceiling=25,
-                 double_accept_every=0, injections=None, clock=time.time):
+                 double_accept_every=0, injections=None, clock=time.time, bearer_ceiling=10):
         self.workspaces = workspaces
         self.injections = [dict(rule, used=0) for rule in (injections or [])]
         self.read_limit = read_limit
         self.global_ceiling, self.policy_ceiling = global_ceiling, policy_ceiling
+        # With a bearer budget (the limiter's, from 0cb19962) the person's own bearer calls (kind `user`) have a ceiling of their own
+        # and the application's `policy_ceiling` counts every other credential: the mock keeps both classes' trailing seconds
+        # beside the all-credential one (which stays what the standard's own line counts).
+        self.bearer_ceiling = bearer_ceiling
         self.double_accept_every = double_accept_every
         self.clock = clock
         self.lock = threading.Lock()
@@ -131,13 +135,14 @@ class World:
         self.nonces = {}
         self.sequence = MESSAGE0
         self.trail_all, self.trail_bot = deque(), deque()
+        self.trail_app, self.trail_user = deque(), deque()  # the application's class (every credential but the bearer) and the bearer's
         self.log = []
         self.counters = dict.fromkeys(('requests', 'botRequests', 'userRequests', 'creates', 'createAttempts',
                                        'duplicateNonceCreates', 'duplicatePostCreates', 'doubleAccepted',
                                        'readbacks', 'global429', 'route429', 'aboveGlobalBot', 'abovePolicyAll',
-                                       'aboveGlobalAll', 'unauthorized', 'unknownRoute', 'notFound',
-                                       'injected', 'misrouted'), 0)
-        self.peak_all = self.peak_bot = 0
+                                       'aboveGlobalAll', 'abovePolicyApp', 'aboveBearer', 'unauthorized', 'unknownRoute',
+                                       'notFound', 'injected', 'misrouted'), 0)
+        self.peak_all = self.peak_bot = self.peak_app = self.peak_user = 0
         self.posts_created = {}
 
     # -- credentials ----------------------------------------------------------------------------------------------
@@ -222,6 +227,18 @@ class World:
                 self.counters['abovePolicyAll'] += 1
             if count_all > self.global_ceiling:
                 self.counters['aboveGlobalAll'] += 1
+            if kind == 'user':
+                count_user = self._trail(self.trail_user, now)
+                self.peak_user = max(self.peak_user, count_user)
+                record['trailingUser'] = count_user
+                if count_user > self.bearer_ceiling:
+                    self.counters['aboveBearer'] += 1
+            else:
+                count_app = self._trail(self.trail_app, now)
+                self.peak_app = max(self.peak_app, count_app)
+                record['trailingApp'] = count_app
+                if count_app > self.policy_ceiling:
+                    self.counters['abovePolicyApp'] += 1
             if kind == 'bot':
                 self.counters['botRequests'] += 1
                 count_bot = self._trail(self.trail_bot, now)
@@ -438,7 +455,8 @@ class World:
     def snapshot(self):
         with self.lock:
             return {'counters': dict(self.counters), 'peakTrailingSecondAll': self.peak_all,
-                    'peakTrailingSecondBot': self.peak_bot, 'logged': len(self.log), 'at': self.clock(),
+                    'peakTrailingSecondBot': self.peak_bot, 'peakTrailingSecondApp': self.peak_app,
+                    'peakTrailingSecondUser': self.peak_user, 'logged': len(self.log), 'at': self.clock(),
                     'injections': [{k: v for k, v in rule.items()} for rule in self.injections]}
 
 
@@ -587,7 +605,8 @@ def write_outputs(world, directory):
     with world.lock:
         log = list(world.log)
         snapshot = {'counters': dict(world.counters), 'peakTrailingSecondAll': world.peak_all,
-                    'peakTrailingSecondBot': world.peak_bot, 'logged': len(log), 'at': world.clock(),
+                    'peakTrailingSecondBot': world.peak_bot, 'peakTrailingSecondApp': world.peak_app,
+                    'peakTrailingSecondUser': world.peak_user, 'logged': len(log), 'at': world.clock(),
                     'injections': [dict(rule) for rule in world.injections]}
         nonces = {nonce: times for nonce, times in world.nonces.items()}
         posts = {post: times for post, times in world.posts_created.items()}
@@ -611,6 +630,8 @@ def main(argv=None):
     parser.add_argument('--read-limit', default='50:1', help='per-route read bucket LIMIT:SECONDS')
     parser.add_argument('--global-ceiling', type=int, default=50)
     parser.add_argument('--policy-ceiling', type=int, default=25)
+    parser.add_argument('--bearer-ceiling', type=int, default=10,
+                        help="the person's own bearer calls' ceiling per trailing second (the policy's bearer budget)")
     parser.add_argument('--double-accept-every', type=int, default=0,
                         help='negative control: every Nth create is accepted twice (0 = never)')
     parser.add_argument('--seed', type=int, default=None)
@@ -620,6 +641,7 @@ def main(argv=None):
     injections = json.loads(open(args.injections).read()) if args.injections else []
     world = World(workspaces=args.workspaces, read_limit=(int(limit), float(window)),
                   global_ceiling=args.global_ceiling, policy_ceiling=args.policy_ceiling,
+                  bearer_ceiling=args.bearer_ceiling,
                   double_accept_every=args.double_accept_every, injections=injections)
     server = Server(('127.0.0.1', args.port), Handler)
     server.world, server.latency = world, Latency(args.latency, args.tail_probability, args.tail_ms, args.seed)
@@ -656,7 +678,8 @@ def main(argv=None):
     with open(os.path.join(args.out, 'mock-config.json'), 'w') as handle:
         json.dump({'latency': server.latency.describe(), 'readLimit': [int(limit), float(window)],
                    'createLimit': list(World.CREATE_LIMIT), 'globalCeiling': args.global_ceiling,
-                   'policyCeiling': args.policy_ceiling, 'doubleAcceptEvery': args.double_accept_every,
+                   'policyCeiling': args.policy_ceiling, 'bearerCeiling': args.bearer_ceiling,
+                   'doubleAcceptEvery': args.double_accept_every,
                    'injections': injections, 'pid': os.getpid(), 'port': args.port}, handle)
     threading.Thread(target=periodic, daemon=True).start()
     print(json.dumps({'event': 'mock.ready', 'port': args.port, 'pid': os.getpid()}), flush=True)

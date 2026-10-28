@@ -216,8 +216,11 @@ def request_reader(fix):
         check('a %s request is the %s scenario alone, to run it again' % (profile, scenario), code == 0 and json.loads(
             values.get('matrix', '[]')) == [{'scenario': scenario, 'pool': 20}], out[-400:])
     code, out, values = fix.read_request({**good, 'profile': 'sens', 'pools': '20', 'db_latency_ms': '5'}, 'claude/discord-capacity-run-sens-r5')
-    check('a sens request is S1 with 12 loops and S1-24 with 24, one job each', code == 0 and json.loads(values.get('matrix', '[]')) == [
-        {'scenario': name, 'pool': 20} for name in ('S1', 'S1-24')] and values.get('latency') == '5', out[-400:])
+    check('a sens request is 12, 16 and 24 loops, each loop budgeted 56 s, one job each', code == 0 and json.loads(values.get('matrix', '[]')) == [
+        {'scenario': name, 'pool': 20} for name in ('S1-lane56', 'S1-16', 'S1-24')] and values.get('latency') == '5', out[-400:])
+    code, out, values = fix.read_request({**good, 'profile': 'pool', 'pools': '20', 'db_latency_ms': '5'}, 'claude/discord-capacity-run-pool-r5')
+    check('a pool request is the unpooled and the pooled arm of S1-lane56 with a TLS and SCRAM connect cost, one job each', code == 0 and json.loads(
+        values.get('matrix', '[]')) == [{'scenario': name, 'pool': 20} for name in ('S1-conn', 'S1-conn-pool')] and values.get('latency') == '5', out[-400:])
     code, out, values = fix.read_request({**good, 'profile': 's2sizes', 'pools': '20'}, 'claude/discord-capacity-run-s2sizes-z1')
     check('an s2sizes request is S2 with a hot workspace of 100, 300 and 1,000 posts', code == 0 and json.loads(values.get('matrix', '[]')) == [
         {'scenario': name, 'pool': 20} for name in ('S2-100', 'S2-300', 'S2-1000')], out[-400:])
@@ -308,7 +311,7 @@ def maker(fix):
         open(os.path.join(work, 'capacity/REQUEST.json')).read())['profile'] == 'lockbench'
         and git('rev-parse', '--abbrev-ref', 'HEAD', cwd=work, env=fix.env) == 'claude/discord-capacity-run-lockbench-lb1',
         done.stdout + done.stderr)
-    for profile in ('s2sizes', 'devset', 'fdb', 's0100', 's1lane56', 'sens'):
+    for profile in ('s2sizes', 'devset', 'fdb', 's0100', 's1lane56', 'sens', 'pool'):
         done = subprocess.run(['bash', MAKER, profile, 'p1', tree, harness], capture_output=True, text=True, env=env)
         work = re.search(r'work tree:\s+(\S+)', done.stdout).group(1) if done.returncode == 0 else None
         check('make_request_branch.sh builds a %s request' % profile, work is not None and git(

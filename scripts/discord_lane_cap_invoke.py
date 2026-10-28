@@ -33,6 +33,25 @@ BLOCKED = []
 # The permit the shared coordinator last admitted in this process. The next request this process sends carries it as
 # X-Cap-Permit, so the analysis can join an admission to its arrival at the mock exactly (not by path and order).
 CURRENT = {'permit': None}
+# The shared coordinators this process called (id -> object): at the end of the invocation their own counters (booking_stats:
+# bookings, seconds booked, horizonRefusals, gateStops) go into the invocation result.
+COORDINATORS = {}
+
+
+def coordinator_totals():
+    """The sum of booking_stats() of every coordinator this process called, or None when none had it (a tree without booking)."""
+    total = {}
+    for coordinator in list(COORDINATORS.values()):
+        getter = getattr(coordinator, 'booking_stats', None)
+        if getter is None:
+            continue
+        try:
+            for key, value in getter().items():
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    total[key] = total.get(key, 0) + value
+        except Exception:
+            continue
+    return total or None
 
 
 def fence_network():
@@ -145,9 +164,14 @@ def instrument_coordinator(path, source):
     Events go in the same file as rows with operation `event` and outcome V: a release of a post (the worker's
     release_discord_unsent: the reason, the seconds it was released for, the rate scope and cause; a coordinator that is
     unavailable releases for 300 s) and the moment `rate_coordinator_degraded` is set on the Discord provider of this process
-    (after that every request of the process is refused before transport), with the coordinator call that failed just before."""
+    (after that every request of the process is refused before transport), with the coordinator call that failed just before.
+    From 0cb19962 a failed outcome record degrades the process for 45 seconds (`DiscordProvider._coordinator_failed`, a timed
+    event 'timed 45.0 s, from ...') and only a policy that does not parse sets the flag for good ('permanent, set at ...'). A
+    reservation that met a lock or statement timeout is answered 'coordinator_busy' (the cause column then holds
+    'coordinator_busy:' and the SQLSTATE of the hidden failure: 55P03 a lock timeout, 57014 a statement timeout)."""
     import threading
     from postriff_phase2.discord import rate_limits as limits
+    COORDINATORS.clear()
     handle = open(path, 'a', buffering=1)
     cls = limits.SharedPostgresBudget
     waited = threading.local()  # seconds this thread spent in _wait_for_slot since the wrapped call began
@@ -171,15 +195,36 @@ def instrument_coordinator(path, source):
         except Exception:
             return None
 
+    def sqlstate_of(error):
+        return getattr(error, 'sqlstate', None) or getattr(getattr(error, 'diag', None), 'sqlstate', None) or ''
+
     def hidden_cause(error):
-        """The coordinator turns any failure inside its transaction into RateCoordinatorUnavailable and hides the cause
-        (`raise ... from None`); the context is still on the exception. Its class and SQLSTATE go in the cause column."""
-        if error is None or isinstance(error, limits.RateDelayed):
+        """The coordinator turns any failure inside its transaction into RateCoordinatorUnavailable (or, for a lock or statement
+        timeout, its subclass RateCoordinatorBusy) and hides the cause (`raise ... from None`); the context is still on the
+        exception. Its class and SQLSTATE go in the cause column. A reservation told 'coordinator_busy' (RateDelayed, raised in
+        place of RateCoordinatorBusy) carries the same chain one step further down: the SQLSTATE is looked for along it."""
+        if error is None or (isinstance(error, limits.RateDelayed) and getattr(error, 'rate_cause', None) != 'coordinator_busy'):
             return None
-        inner = getattr(error, '__context__', None) or getattr(error, '__cause__', None)
-        if inner is None:
+        chain, inner = [], error
+        while len(chain) < 8:
+            inner = getattr(inner, '__context__', None) or getattr(inner, '__cause__', None)
+            if inner is None:
+                break
+            chain.append(inner)
+        if not chain:
             return type(error).__name__
-        return '%s:%s' % (type(inner).__name__, getattr(inner, 'sqlstate', None) or getattr(getattr(inner, 'diag', None), 'sqlstate', None) or '')
+        for item in chain:
+            if sqlstate_of(item):
+                return '%s:%s' % (type(item).__name__, sqlstate_of(item))
+        return '%s:' % type(chain[0]).__name__
+
+    def cause_of(error):
+        """The cause column: the coordinator's own for a refusal, with the SQLSTATE of the hidden failure behind a 'coordinator_busy'
+        (55P03 a lock timeout, 57014 a statement timeout); the hidden failure's class and SQLSTATE for an error."""
+        cause = getattr(error, 'rate_cause', None)
+        if cause == 'coordinator_busy':
+            return 'coordinator_busy:' + (hidden_cause(error) or '').rpartition(':')[2]
+        return cause or hidden_cause(error)
 
     def emit(operation, method, target, identity, started, took, outcome, error=None, permit=None, booked=0.0, slept=0.0,
              room=None):
@@ -188,7 +233,7 @@ def instrument_coordinator(path, source):
                getattr(identity, 'kind', None), workspace(target), outcome,
                round(error.retry_after_seconds, 4) if isinstance(error, limits.RateDelayed) else None,
                getattr(error, 'rate_scope_kind', None) or (type(error).__name__ if failed else None),
-               getattr(error, 'rate_cause', None) or hidden_cause(error),
+               cause_of(error),
                getattr(permit, 'id', None), source, round(booked, 4), round(slept, 4),
                round(float(room), 3) if isinstance(room, (int, float)) else None]
         handle.write(json.dumps(row, separators=(',', ':')) + '\n')
@@ -219,6 +264,7 @@ def instrument_coordinator(path, source):
         @functools.wraps(original)
         def wrapper(self, *args, **kwargs):
             CURRENT['permit'] = None  # an earlier admission whose request never left must not stamp the next one
+            COORDINATORS.setdefault(id(self), self)
             started, began = time.time(), time.monotonic()
             waited.seconds = 0.0
             before = booked_total(self)
@@ -296,7 +342,9 @@ def instrument_coordinator(path, source):
     try:
         from postriff_phase2 import social_connectors
         provider_class = social_connectors.DiscordProvider
-        if 'rate_coordinator_degraded' not in provider_class.__dict__:
+        installed = provider_class.__dict__.get('rate_coordinator_degraded')
+        if installed is None:
+            # A tree where the flag is a plain attribute (set for good by the first failed observation): make it a property that says so.
             def degraded_get(self):
                 return self.__dict__.get('_cap_degraded', False)
 
@@ -309,6 +357,29 @@ def instrument_coordinator(path, source):
                     emit_event('degraded', '%s:%d after %s' % (frame.f_code.co_name, frame.f_lineno, failed[0] if failed else 'no failed call'),
                                None, failed[1] if failed else None, failed[2] if failed else None)
             provider_class.rate_coordinator_degraded = property(degraded_get, degraded_set)
+        elif isinstance(installed, property) and installed.fset is not None:
+            # From 0cb19962 the flag is a property of the class: set for good by the OAuth service when the reviewed policy does not
+            # parse, and for DiscordProvider.DEGRADED_SECONDS (45 s) by _coordinator_failed() when the coordinator could not record an
+            # outcome. Both are logged as events; the second is the one a database under load meets.
+            original_set = installed.fset
+
+            def permanent_set(self, value):
+                if value:
+                    frame = sys._getframe(1)
+                    emit_event('degraded', 'permanent, set at %s:%d' % (frame.f_code.co_name, frame.f_lineno), None, None, None)
+                return original_set(self, value)
+            provider_class.rate_coordinator_degraded = property(installed.fget, permanent_set, installed.fdel, installed.__doc__)
+        timed = getattr(provider_class, '_coordinator_failed', None)
+        if timed is not None:
+            @functools.wraps(timed)
+            def coordinator_failed(self, *args, **kwargs):
+                frame = sys._getframe(1)
+                failed = getattr(last_failed, 'value', None)
+                emit_event('degraded', 'timed %s s, from %s:%d after %s' % (
+                    getattr(self, 'DEGRADED_SECONDS', '?'), frame.f_code.co_name, frame.f_lineno, failed[0] if failed else 'no failed call'),
+                    None, failed[1] if failed else None, failed[2] if failed else None)
+                return timed(self, *args, **kwargs)
+            provider_class._coordinator_failed = coordinator_failed
     except (ImportError, AttributeError):
         pass
     return handle
@@ -399,6 +470,7 @@ def main(argv=None):
             result['body'] = {'raw': body[:2000].decode('utf-8', 'replace')}
         result['discordRequests'] = counts['discord']
         result['misroutedByHarness'] = counts['misrouted']
+        result['bookingStats'] = coordinator_totals()
         setup_error = getattr(app, 'setup_error', None)
         if setup_error is not None:
             result['setupError'] = type(setup_error).__name__ + ': ' + str(setup_error)[:500]

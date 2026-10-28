@@ -70,7 +70,11 @@ BASE = dict(workspaces=2000, posts=5000, hot_posts=0, per_minute=0, minutes=0, d
             lead_seconds=90, max_run_minutes=75, fixed_run_minutes=None, stall_detect_minutes=10,
             stall=None, flag_off=None, kills=None, kill_at_create=0, lock_injection=None, misroute_every=0,
             expiry_in_minutes=None, injections=None, seed_processes=4, judge_as=None, pinned=(),
-            budget_probe_delay_seconds=90, health_period_seconds=60, expect=())
+            budget_probe_delay_seconds=90, health_period_seconds=60, bearer_capacity=None,
+            # The application's own connection pool (POSTRIFF_DB_POOL_ENABLED and its two limits, hosted_app.pool_settings): off in
+            # production as far as is known. relay_connect_rtts: with `--pooler pgbouncer` the relay adds the round trips of a TLS and
+            # SCRAM connect to every new client connection (0 = none: a new connection then costs the startup exchange alone, one round trip).
+            db_pool=False, db_pool_max_connections=None, db_pool_max_waiting=None, relay_connect_rtts=0.0, expect=())
 
 SCENARIOS = {
     'smoke': dict(workspaces=10, posts=30, cron_period=20, lane_max_seconds=15, shards=4, lead_seconds=10,
@@ -84,11 +88,27 @@ SCENARIOS = {
     # S1 with one lever moved at a time; judged against section 4 as S1 is. No code or policy change: the loop budget
     # is the existing POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS (the lane clamps it at 90), warm is how the
     # invocation is started.
-    # The sensitivity cell of the scope-B review: 24 loops against the database round trip (profile sens, with S1 for 12).
-    'S1-24': dict(shards=24, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
-                  description='S1 with 24 lane shards (/api/cron/discord-worker/0 to 23) instead of 12: the sensitivity cell for '
-                              'a database round trip of 5 and 10 ms (profile sens, request with --latency). The reviewed shard '
-                              'count stays 12; the lane accepts up to 32.'),
+    # The sensitivity cells of the scope-B review and the lane owner's LOOPS.md: 16 and 24 loops against the database round trip.
+    # Profile sens (request it with --latency 5 and again with --latency 10): 12 loops are S1-lane56, 16 and 24 loops are the two cells
+    # below, all with each loop budgeted 56 s so that the loop count is the only lever that differs between the three.
+    'S1-16': dict(shards=16, lane_max_seconds=56, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
+                  description='S1 with 16 lane shards (/api/cron/discord-worker/0 to 15) instead of 12 and each loop budgeted 56 s: the '
+                              'sensitivity cell for a database round trip of 5 and 10 ms (profile sens, request with --latency). The '
+                              'reviewed shard count stays 12; the lane accepts up to 32.'),
+    'S1-24': dict(shards=24, lane_max_seconds=56, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
+                  description='S1 with 24 lane shards (/api/cron/discord-worker/0 to 23) instead of 12 and each loop budgeted 56 s: the '
+                              'sensitivity cell for a database round trip of 5 and 10 ms (profile sens, request with --latency). The '
+                              'reviewed shard count stays 12; the lane accepts up to 32.'),
+    # Profile pool (request it with --latency 5): S1-lane56 for the connection cost as the hosted harness has it (one round trip to
+    # set up a connection), then the same S1 with the connect cost of a TLS and SCRAM pooler (4 more round trips) without and with the
+    # application's connection pool (POSTRIFF_DB_POOL_ENABLED=true, the code's default limits 20 and 64).
+    'S1-conn': dict(lane_max_seconds=56, relay_connect_rtts=4.0, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
+                    description='S1-lane56 with every new database connection costing 4 more round trips (TLS and SCRAM, as the '
+                                "harness's own pooler emulates with db_connect_rtts): the unpooled arm of the connection-pool pair."),
+    'S1-conn-pool': dict(lane_max_seconds=56, relay_connect_rtts=4.0, db_pool=True, judge_as='S1',
+                         expect=('standard', 'isolation', 'clean_workers'),
+                         description='S1-conn with the application\'s connection pool on (POSTRIFF_DB_POOL_ENABLED=true; limits at the '
+                                     "code's defaults, 20 connections and 64 waiting, a pool for each process): the pooled arm."),
     'S1-lane56': dict(lane_max_seconds=56, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
                       description='S1 with each lane loop budgeted 56 s instead of 50 (POSTRIFF_DISCORD_PARALLEL_WORKER_'
                                   'MAX_SECONDS=56, a Production variable that needs its own approval but may be measured): '
@@ -445,6 +465,8 @@ class Harness:
             argv = [sys.executable, '-B', str(self.scripts / 'discord_lane_cap_pooler.py'), '--mode', 'relay',
                     '--listen-port', str(port), '--upstream-host', '127.0.0.1', '--upstream-port', str(bouncer),
                     '--latency-ms', str(s['db_latency_ms']), '--stats', str(stats)]
+            if s.get('relay_connect_rtts'):
+                argv += ['--relay-connect-rtts', str(s['relay_connect_rtts'])]
             self.app_dsn = 'host=127.0.0.1 port=%d dbname=postgres user=postgres sslmode=disable' % port
             self.config['pooler'] = 'PgBouncer %s, transaction mode, pool %d, behind the harness relay adding %.1f ms per round trip' % (
                 args.pgbouncer_bin, s['max_db_connections'], s['db_latency_ms'])
@@ -499,6 +521,9 @@ class Harness:
                 '--latency', s['mock_latency'], '--tail-probability', str(s['mock_tail_probability']),
                 '--tail-ms', str(s['mock_tail_ms']), '--read-limit', s['mock_read_limit'],
                 '--double-accept-every', str(s['double_accept_every'])]
+        bearer = (self.config.get('ratePolicy') or {}).get('bearer_capacity')
+        if bearer:  # the bearer class (the person's own bearer) is counted against its own budget's figure
+            argv += ['--bearer-ceiling', str(int(bearer))]
         self.mock_injection_file = None
         if s['injections']:
             self.mock_injection_file = self.dir / 'mock-injections.json'
@@ -523,7 +548,7 @@ class Harness:
     def workspace_count(self):
         return max(self.s['workspaces'], 1) + 2
 
-    def environment(self, *, lane_on, policy):
+    def environment(self, *, lane_on, policy, seeding=False):
         s = self.s
         env = {
             'POSTRIFF_DATABASE_URL': self.app_dsn,
@@ -554,6 +579,14 @@ class Harness:
                 env['POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_STEPS'] = str(s['lane_max_steps'])
         if s['misroute_every']:
             env['CAP_MISROUTE_EVERY'] = str(s['misroute_every'])
+        if s.get('db_pool') and not seeding:
+            # The application's own connection pool (hosted_app.pool_settings reads these three names; psycopg_pool, one pool for each
+            # process, min_size 0). Not for seeding, which talks to the database directly.
+            env['POSTRIFF_DB_POOL_ENABLED'] = 'true'
+            if s.get('db_pool_max_connections') is not None:
+                env['POSTRIFF_DB_POOL_MAX_CONNECTIONS'] = str(int(s['db_pool_max_connections']))
+            if s.get('db_pool_max_waiting') is not None:
+                env['POSTRIFF_DB_POOL_MAX_WAITING'] = str(int(s['db_pool_max_waiting']))
         return env
 
     def policies(self):
@@ -568,10 +601,17 @@ class Harness:
             for name in [n for n in sys.modules if n == 'postriff_phase2' or n.startswith(('postriff_phase2.', 'postriff_alpha'))]:
                 del sys.modules[name]
         now = time.time()
+        # The run's policy is the tool's own with the scenario's application capacity: a tree with a bearer budget (the tool's
+        # DEFAULTS carry bearer_capacity: 10 a second, the reviewed figure) runs with it, as production would. Seeding is not under
+        # test and must not wait on it: its policy opens both budgets wide (the bearer's connect calls are made by the seeder).
+        bearer = 'bearer_capacity' in getattr(tool, 'DEFAULTS', {})
+        extra = {}
+        if bearer and self.s.get('bearer_capacity') is not None:
+            extra['bearer_capacity'] = int(self.s['bearer_capacity'])  # a scenario that changes the figure (never the reviewed run)
         run = tool.build(now, days=1, revision='cap-run-' + self.dir.name[-24:].replace('_', '-'),
-                         app_capacity=self.s['policy_capacity'])
+                         app_capacity=self.s['policy_capacity'], **extra)
         seed = tool.build(now, days=1, revision='cap-seed-' + self.dir.name[-23:].replace('_', '-'),
-                          app_capacity=20000)
+                          app_capacity=20000, **({'bearer_capacity': 20000} if bearer else {}))
         return json.dumps(run), json.dumps(seed), run
 
     def write_environments(self):
@@ -587,7 +627,7 @@ class Harness:
         self.config['ratePolicy'] = policy
         on = self.environment(lane_on=self.s['lane'], policy=run_policy)
         off = self.environment(lane_on=False, policy=run_policy)
-        seed = self.environment(lane_on=False, policy=seed_policy)
+        seed = self.environment(lane_on=False, policy=seed_policy, seeding=True)
         seed['POSTRIFF_DATABASE_URL'] = self.admin_dsn
         for name, values in (('env-run.json', on), ('env-flag-off.json', off), ('env-seed.json', seed)):
             path = self.dir / name
@@ -1130,11 +1170,12 @@ class Harness:
 
     # -- collection ---------------------------------------------------------------------------------------------
 
-    def budget_probe(self, wait):
-        """How much of the application budget a fresh window grants now (scripts/discord_lane_cap_budget_probe.py)."""
+    def budget_probe(self, wait, kind='bot'):
+        """How much of the application budget ('bot'), or of the bearer budget ('user', a policy with the bearer pair), a fresh
+        window grants now (scripts/discord_lane_cap_budget_probe.py)."""
         argv = [sys.executable, '-I', '-B', str(self.scripts / 'discord_lane_cap_budget_probe.py'), '--source-tree',
-                str(self.tree), '--dsn', self.admin_dsn, '--env', str(self.env_run), '--wait', str(wait)]
-        self.log('budget probe in %.0f s: how many reads a fresh application window admits' % wait)
+                str(self.tree), '--dsn', self.admin_dsn, '--env', str(self.env_run), '--wait', str(wait), '--kind', kind]
+        self.log('budget probe in %.0f s: how many reads a fresh %s window admits' % (wait, 'application' if kind == 'bot' else 'bearer'))
         try:
             done = subprocess.run(argv, capture_output=True, text=True, timeout=wait + 120, cwd='/tmp')
             result = json.loads(done.stdout.strip().splitlines()[-1]) if done.returncode == 0 else {
@@ -1142,6 +1183,7 @@ class Harness:
         except Exception as error:  # the run is over; a probe failure is reported, never hidden
             result = {'error': '%s: %s' % (type(error).__name__, error)}
         result['at'] = time.time()
+        result.setdefault('kind', kind)
         self.log('budget probe: %s' % json.dumps(result)[:400])
         return result
 
@@ -1235,10 +1277,16 @@ class Harness:
         try:
             if not self.s['lane'] or not (self.tree / 'src/postriff_phase2/discord/rate_limits.py').exists():
                 return
+            # With a bearer budget (the policy carries the pair) the bearer window is probed right after each application probe.
+            bearer = bool((self.config.get('ratePolicy') or {}).get('bearer_capacity'))
             probes.append(self.budget_probe(3.0))
+            if bearer:
+                probes.append(self.budget_probe(0.0, 'user'))
             delay = self.s['budget_probe_delay_seconds']
             if delay:
                 probes.append(self.budget_probe(float(delay)))
+                if bearer:
+                    probes.append(self.budget_probe(0.0, 'user'))
                 with self.admin() as db:
                     after_wait = self.open_admissions(db)
         except Exception as error:  # never stops the run
@@ -1528,15 +1576,30 @@ def machine_line(result, config):
             'Vercel runs each invocation on its own instance. CPU contention here can only slow the lane.' % (where, load))
 
 
+def connection_cost_text(config):
+    """What a new database connection costs in this run, said as it is. The harness's own pooler emulates `db_connect_rtts` round trips
+    (TLS and SCRAM) for every new client connection; the relay in front of a real PgBouncer (the hosted runs) does not read that setting:
+    a new connection there costs the startup exchange, one round trip, plus `relay_connect_rtts` when the scenario asks for them. Receipts
+    before this text said '4 round trips per new connection' for the hosted runs too, which was not what the relay did."""
+    s = config['settings']
+    if str(config.get('pooler') or '').startswith('PgBouncer'):
+        extra = float(s.get('relay_connect_rtts') or 0)
+        if extra:
+            return 'one round trip per new connection (the startup exchange) and %g more for TLS and SCRAM (relay_connect_rtts)' % extra
+        return ('one round trip per new connection (the startup exchange) and none for TLS and SCRAM: the relay in front of PgBouncer '
+                'does not read db_connect_rtts, which only the harness\'s own pooler applies')
+    return '%d round trips per new connection' % s['db_connect_rtts']
+
+
 def differences(result, config):
     s = config['settings']
     items = [
         machine_line(result, config),
         'Database: %s, PostgreSQL %s, on the same machine (production: Supabase PostgreSQL 17.6 on Micro compute, '
         'max_connections 60, across the network). Pooler: %s; production uses Supavisor in transaction mode with TLS. '
-        'Network latency is emulated at %.1f ms per round trip with %d round trips per new connection; real '
+        'Network latency is emulated at %.1f ms per round trip with %s; real '
         'Supabase latency and its variance were not measured.' % (
-            config.get('database'), config.get('serverVersion'), config.get('pooler'), s['db_latency_ms'], s['db_connect_rtts']),
+            config.get('database'), config.get('serverVersion'), config.get('pooler'), s['db_latency_ms'], connection_cost_text(config)),
         'Discord: a mock on 127.0.0.1 (%s ms per request, plain HTTP, no TLS); it implements a 50/s global limit per '
         'trailing second, 5 creates per 5 s per channel and %s per read route. Real Discord latency, its real bucket '
         'sizes, Cloudflare and shared egress IPs were not exercised.' % (s['mock_latency'], s['mock_read_limit']),
@@ -1673,8 +1736,8 @@ def run_one(args, name):
     if name == 'baseline' and getattr(args, 'baseline_source_tree', None):
         args = copy.copy(args)
         args.source_tree = args.baseline_source_tree
-    if settings['policy_capacity'] != 25:
-        settings['information_only'] = True
+    if settings['policy_capacity'] != 25 or settings.get('bearer_capacity') is not None:
+        settings['information_only'] = True  # not the reviewed policy (the bearer budget's reviewed figure is the tool's default)
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     run_dir = Path(args.out) / ('%s-%s-%s' % (stamp, name, (args.label or 'run').replace(' ', '_')))
     harness = Harness(args, settings, name, run_dir)
