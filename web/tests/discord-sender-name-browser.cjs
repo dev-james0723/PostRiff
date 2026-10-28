@@ -294,11 +294,11 @@ const STATE_SCENARIOS = [
           const evidencePath = join(evidenceDir, `${combo}-${name}.png`);
           const box = target.getByRole('dialog');
           if (around) {
-            // Centred in the viewport, so the phone's fixed navigation bar does not cover the strip.
+            // The strip runs from above the control to just below it, which keeps the phone's fixed navigation bar out of the picture.
             await around.evaluate(element => element.scrollIntoView({block: 'center'}));
             await sleep(150);
             const at = await around.boundingBox();
-            await target.screenshot({path: evidencePath, clip: {x: 0, y: Math.max(0, at.y - 200), width, height: 440}});
+            await target.screenshot({path: evidencePath, clip: {x: 0, y: Math.max(0, at.y - 330), width, height: 420}});
           } else if (await box.count()) await box.screenshot({path: evidencePath});
           else await target.screenshot({path: evidencePath});
         }
