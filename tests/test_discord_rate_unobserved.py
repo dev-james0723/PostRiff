@@ -237,6 +237,35 @@ class LearnedRouteRecovery(Base):
         self.at(lapse + .5)                                # then the window is refilled once more
         self.assertEqual(self.wait_for(), 0)
 
+    def permits(self, count):
+        return [self.s.reserve('GET', PATH, identity=self.identity) for _ in range(count)]
+
+    def test_a_refilled_window_whose_permits_all_expired_unused_is_probed_again_at_once(self):
+        """The stuck route (reproduced with the coordinator alone: the next read was refused with 86,336 s on a one-day
+        policy). The refill reserved three permits for the new window; none was ever used, so no request left and no
+        answer can come to establish the window. It used to wait for that answer until the policy expired."""
+        self.send(headers(2, 1))                           # learns the route: three per second
+        self.at(1.1)
+        self.permits(3)                                    # the refill's slots, reserved and never used
+        self.assertEqual(self.route()['left'], 0)
+        self.assertGreater(self.route()['reset'], T0 + 3000, 'the sentinel: it waits for an answer')
+        self.at(1.6)                                       # the permits can still be used: a poll, not the sentinel
+        self.assertAlmostEqual(self.wait_for(), 1.0, places=6)
+        self.at(1.1 + 2 + 1e-3)                            # the permit lifetime (2 s here) is over
+        self.assertEqual(self.wait_for(), 0, 'granted at once')
+        self.permits(1)
+        self.assertIsNotNone(self.route()['freshAfter'], 'and the route is a probe again, as a cold one is')
+
+    def test_a_request_that_was_sent_keeps_the_wait_for_its_answer_even_if_the_other_permits_expired(self):
+        self.send(headers(2, 1))
+        self.at(1.1)
+        self.send({'status': 200, 'headers': {}})          # sent, and answered without headers: the window is not established
+        self.permits(2)
+        self.at(1.1 + 2 + 1e-3)
+        self.assertGreater(self.wait_for(), 0, 'a request left in this window: the wait ends with an answer or the lapse')
+        self.at(1.1 + 1 + MARGIN + .5)
+        self.assertEqual(self.wait_for(), 0)
+
     def test_nobody_is_quoted_the_policy_expiry_as_a_wait(self):
         """Every slot is already taken by requests in flight when the window ends (here synthetic rows for the same
         bucket): the refill leaves nothing, and the caller is told to ask again in a window, not at the policy's end."""

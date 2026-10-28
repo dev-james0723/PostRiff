@@ -126,6 +126,10 @@ class MemoryLedger:
             key,since,now=params if bounded else (params[0],None,params[1])
             self.result=[(sum(key in r['keys'] and (r['state'] in ('sent','uncertain') and (not bounded or self.unobserved_at(r)>since) or
                 r['state'] in ('reserved','sealed') and r['expires']>now) for r in self.admissions.values()),)]
+        elif sql.startswith('SELECT count(*) FROM public.pr_discord_request_admissions WHERE scope_keys @>'):
+            key,now,fresh_after=params   # _window_unused: usable permits, or requests sent since a learned window was refilled
+            self.result=[(sum(key in r['keys'] and (r['state'] in ('reserved','sealed') and r['expires']>now or
+                (r.get('sent') is not None and r['sent']>=fresh_after)) for r in self.admissions.values()),)]
         elif sql.startswith('WITH locked_alias AS MATERIALIZED'):
             bounded='coalesce(sent_at,reserved_at)' in sql
             pid,alias,auth,route,major,*rest=params

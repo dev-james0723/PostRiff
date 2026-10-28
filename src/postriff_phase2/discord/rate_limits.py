@@ -677,6 +677,12 @@ class SharedPostgresBudget:
         learned = row['kind'] == 'route' and row['learned']
         waiting = learned and row['freshAfter'] is not None
         lapsed = waiting and row['freshAfter'] + self._horizon(row['window']) <= now
+        if waiting and not lapsed and row['left'] <= 0 and not fresh and self._window_unused(cur, key, row['freshAfter'], now):
+            # Nothing is left to send AND nothing of this window can ever answer: every permit reserved on the route since
+            # the refill expired unused (a slow step, a released job) and no request was sent. The wait for an answer would
+            # last for ever, so the route is probed again at once, as a cold one is. (It used to stay closed until the
+            # policy expired, up to 31 days.) A request that WAS sent keeps the wait until its answer or the lapse above.
+            lapsed = True
         if row['cap'] is not None and (row['reset'] <= now or lapsed) and row['kind'] != 'policy':
             # The application row never refills: _slide derives its left/reset from the admissions at each reservation.
             if waiting and not lapsed:
@@ -698,6 +704,16 @@ class SharedPostgresBudget:
             # Still waiting for the answer that establishes the window, with nothing left to send: quote a poll or
             # the lapse of the wait, whichever is sooner, not the sentinel. (Denied below, so this is never stored.)
             row['reset'] = min(now + row['window'], row['freshAfter'] + self._horizon(row['window']))
+
+    def _window_unused(self, cur, key, fresh_after, now):
+        """True when no permit on the scope is still usable and no request on it was sent since `fresh_after`."""
+        cur.execute(f'''SELECT count(*) FROM {ADMISSIONS} WHERE scope_keys @> ARRAY[%s]::text[]
+            AND (state IN ('reserved','sealed') AND expires_at>to_timestamp(%s) OR sent_at>=to_timestamp(%s))''',
+            (key,now,fresh_after))
+        count = cur.fetchone()[0]
+        if type(count) is not int or count < 0:
+            raise RateCoordinatorUnavailable()
+        return count == 0
 
     def _slide(self, cur, row, now, reading):
         """Set the application row's `left` and `reset` from the admissions themselves (an exact sliding window).

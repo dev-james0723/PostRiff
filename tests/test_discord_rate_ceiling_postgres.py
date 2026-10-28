@@ -608,6 +608,23 @@ class ExactCeilingOnPostgres(unittest.TestCase):
                     self.assertLess(time.monotonic(), deadline, 'the probe must be freed within window + margin')
                     time.sleep(.3)
 
+    def test_a_refilled_learned_route_whose_permits_all_expired_unused_is_served_at_once(self):
+        """The stuck route, scratchpad stuck/repro.py as a test: a learned route (5 per second) is refilled, five permits are
+        reserved for the new window and none is ever used. The next read used to be refused with the policy's remaining life
+        (86,336 s on a one-day policy) because the window waited for an answer that no request could bring."""
+        stack = Stack(self.cluster, capacity=200, tenants=2, permit_ttl_seconds=1)
+        stack.wire.read_limit = (5, 1.0)
+        path = '/guilds/%s' % stack.tenants[0].guild
+        stack.read(0)                                                       # the probe: its answer teaches the route
+        stack.read(0)
+        time.sleep(1.2)                                                     # that window ends
+        permits = [stack.limiter.reserve('GET', path, identity=stack.identity) for _ in range(5)]   # the refill, five permits
+        self.assertEqual(len(permits), 5)
+        time.sleep(1.5)                                                     # every one expires unused: no request, no answer
+        answer = stack.provider._bot('GET', path)                           # was: RateDelayed, wait 86,336 s
+        self.assertEqual(answer['status'], 200)
+        self.assertEqual(len(stack.wire.calls), 3, 'the three real reads; nothing was sent for the unused permits')
+
     def test_a_learned_route_whose_answers_were_all_lost_is_served_again(self):
         """A route learned from headers is refilled and then every request of the new window is lost (here: sent and
         never answered). It used to wait for an answer that cannot come, with the policy's end as its next reset."""
