@@ -9,19 +9,23 @@ read from the code.
 
 | File | Change |
 |---|---|
-| `src/postriff_phase2/discord/lane.py` (new) | The lane: flag and budget parsing, shard parsing, the readiness test (`blocker`), one bounded loop per invocation, the pre-claim coordinator read, the bounded wait for a refused create permit, per-invocation counters and the log line; the minute cron's lag warning (`warn_if_lagging`); the health status (`status`). |
-| `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` only when the lane is on and the static part of `lane.blocker()` says it can run (the minute cron then does not claim Discord), and with the lane on adds the health status (`discordLaneStatus`) and logs the lag warning from its own report; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below). |
+| `src/postriff_phase2/discord/lane.py` (new) | The lane: flag and budget parsing, shard parsing, the readiness test (`blocker`), one bounded loop per invocation, the pre-claim coordinator read, the bounded wait for a refused create permit, per-invocation counters and the log line; the minute cron's lag warning (`warn_if_lagging`); the health status (`status`); the worker's guard for a document it cannot read (`LaneWorker.claim`). |
+| `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` when the lane is on and the static part of `lane.blocker()` says it can run (the minute cron then does not claim Discord), and whenever Discord is paused (`lane.paused()`, with the lane off or on but unable to run), and with the lane on adds the health status (`discordLaneStatus`) and logs the lag warning from its own report and, when the lane owns Discord, the projection; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below), with one deliberate exception: a paused Discord is a wait, not a hold, and the tick leaves it alone ("A paused Discord is a wait"). After review: the seal path and the unsent-permit recovery also release a permit an embargo or hold blocked before it was used ("A permit an embargo blocks before it is used"); the three releases for a rate wait call a hook that does nothing here and that the lane's worker uses to keep a post's place ("A release the shared budget caused keeps its place"). |
+| `src/postriff_phase2/discord/rate_limits.py`, `src/postriff_phase2/social_connectors.py` | After review, at the coordinator's request: `seal()` and `consume()` refuse a reserved or sealed permit that an embargo or hold blocked, before any transport, as `permit_blocked` (with the embargo's remaining time), `confirm_blocked_publish()` proves such an intent unsent from its admission row, and the sender turns that refusal into the same pre-transport signal as an expired unconsumed permit ("A permit an embargo blocks before it is used", below). |
 | `src/postriff_phase2/hosted_app.py` | Route `GET /api/cron/discord-worker/<shard>`: cron secret checked before the runtime starts (as the YouTube lanes); flag read per request; the request log files it under `cron`. |
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
-| `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. |
+| `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. A `discord-worker-protocol` check fails when any Discord feature flag is on (authorization v2, connections v2, rate limits, webhook, user install, engagement, the lane) and `POSTRIFF_DISCORD_WORKER_V1_ENABLED` is not 1 or true ("The worker flag and migration 128"). |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
-| `tests/test_discord_parallel_lane.py` (new) | 66 offline tests (run under the synthetic fence). |
-| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 34 real-PostgreSQL tests and their fixture; skipped under the fence. |
+| `tests/test_discord_parallel_lane.py` (new) | 104 offline tests (run under the synthetic fence). |
+| `tests/test_discord_worker_lifecycle.py` | Its in-memory database double answers the lane's projection due probe. |
+| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 62 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
 | `docs/w02/*` (new) | This file, the corrected plan, open questions, monitors, simulation results. |
 
-No migration, no new table, no new queue, no change to the coordinator, the claim, the lease protocol, the approval
-checks, the sender or the launch gate.
+No migration, no new table, no new queue; the claim, the lease protocol, the approval checks and the launch gate are
+unchanged. One change to the coordinator and the sender, made after review at the coordinator's request: a permit that
+an embargo or hold blocked before it was used, sealed or not, is proven unsent and released ("A permit an embargo
+blocks before it is used").
 
 ## Flags and limits
 
@@ -38,7 +42,7 @@ Prerequisites. The lane runs only with all of these; while any is missing the sh
 cron keeps Discord when one of the first four is missing (not when only its own process's coordinator is degraded);
 it cannot see the last three, which is what the lag warning is for:
 
-- `POSTRIFF_DISCORD_WORKER_V1_ENABLED` on: the lease protocol the lane uses. Without it the lane flag has no effect.
+- `POSTRIFF_DISCORD_WORKER_V1_ENABLED` on (1 or true): the lease protocol the lane uses. Without it the lane flag has no effect, and the preflight requires it whenever any Discord feature flag is on ("The worker flag and migration 128").
 - `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` (exact string): the shared coordinator that admits every request.
   Without it the loops stop with `coordinator_unavailable`, and the hosted runtime also turns Discord authorization
   off, so the minute cron holds each due Discord post and asks for its destination to be verified again (today's
@@ -100,7 +104,8 @@ time [simulated]. It adds a new path that can multiply invocations, which the co
 3. A first look before any claim. The readiness test `lane.blocker()` on this process's clock, with no database: a lane
    that cannot run stops here with its reason and its WARNING line, every minute. Then one statement on one
    connection: the database clock and the soonest `next_at` in the projection (migration 126, applied in production;
-   without the table the loop stops with `schema`), and the readiness test again on that clock. If nothing is due
+   without the table the loop stops with `schema`) over the workspaces not set aside (`_CLAIMABLE`; "A document the
+   claim cannot read", below), and the readiness test again on that clock. If nothing is due
    within 10 seconds the invocation stops (`idle`) before the coordinator read and before any claim [measured: one
    connection and one statement, where it used to open four connections for seven statements;
    `test_an_idle_shard_opens_one_connection_for_one_statement`]. The loop claims only through the projection's due
@@ -113,7 +118,8 @@ time [simulated]. It adds a new path that can multiply invocations, which the co
    - the readiness test `lane.blocker()` (the minute tick asks its static part, below), with this process's clock
      and then the database clock: rate limits off, or no coordinator, or a policy outside its validity stops the loop
      (`coordinator_unavailable`); a process whose coordinator lost an observation stops its own loops
-     (`coordinator_degraded`);
+     (`coordinator_degraded`); a paused Discord (execution disabled, authorization off) stops them before any claim
+     (`discord_paused`, "A paused Discord is a wait");
    - read the coordinator's four application-wide rows without locks (policy, bot global, bot credential, invalid
      budget), using the coordinator's own key derivation. A manual hold on the policy row stops the loop
      (`operator_hold`); a hold on another of them (the coordinator holds the credential row after a 401) stops it too
@@ -122,13 +128,14 @@ time [simulated]. It adds a new path that can multiply invocations, which the co
      jitter) before claiming, or ends the loop if it outlasts the budget (`rate_wait`);
    - one existing Discord-only step (`PostgresWorker.step(discord_only=True)`): claim one job from the least recently
      served due workspace (`FOR UPDATE ... SKIP LOCKED`, at most one live Discord lease per workspace), the permission
-     preflight, lease renewal, the create permit, the sealed intent, the create, the fenced completion; or a read-back;
+     preflight, lease renewal (once; the seal extends the lease itself, "The lease after the seal"), the create permit,
+     the sealed intent, the create, the fenced completion; or a read-back;
    - if nothing could be claimed: sleep until the soonest due work if it is within 10 seconds (a read-back is due five
      seconds after its create), back off briefly if work is overdue but held by another loop, and stop (`idle`) after six
      misses or when nothing is due soon.
 5. One log line, `discord.lane.completed`: shard, `stoppedBy`, elapsed seconds and counts only (claimed, posted,
    verified, held, uncertain, rateDelayed, leaseLost, recoveries, retries, deadLetters, claimMisses, rejected, notSent,
-   uncertainCreates, rateWaits, idleWaits, permitWaits). No workspace, job, channel, content or lease owner id. An
+   uncertainCreates, rateWaits, idleWaits, permitWaits, quarantined, positionsKept). No workspace, job, channel, content or lease owner id. An
    exception is logged with its class name only and re-raised, so the request returns 500 with its failure site.
 
 The one behavioural addition inside a step: when the create permit is refused because the application window is spent,
@@ -153,10 +160,11 @@ compares every SQL statement and parameter, every Discord request, the final sta
 off, and with the flag on but rate limits off, no coordinator, an expired or not-yet-valid policy or a bad lane
 budget; the one addition is the lag warning's log line]. With a bad lane budget the frozen path sends as before. In the
 coordinator states it cannot send in the hosted runtime either, but it records that on every post instead of leaving
-them silently scheduled: with rate limits off `runtime_from_environment` turns Discord authorization off, so each
-claimed post is held and its destination set to `verification_required` [measured offline with the frozen tick];
-otherwise each request is refused and the post released for five minutes, held once that passes its approval
-[reasoned]. That is today's production behaviour for those settings, with or without W-02.
+them silently scheduled: with rate limits off `runtime_from_environment` turns Discord authorization off, so Discord is
+paused. The frozen code held each claimed post and set its destination to `verification_required` [measured with the
+frozen tick]; the tick now claims no Discord post while it is paused and touches nothing ("A paused Discord is a
+wait"). Otherwise each request is refused and the post released for five minutes, held once that passes its approval
+[reasoned].
 
 Keeping Discord to one scheduler is a preference, not a safety property. The lease protocol (one live Discord lease per
 workspace, the lease owner and lease id rechecked at every step, an intent sealed before any create) makes the minute
@@ -185,6 +193,10 @@ leaves Discord to the lane, and only its own loops stop.
 | A spent invalid-request budget pauses every loop without claiming, and nothing is held early | pre-claim read applies the coordinator's rule to every capped row; when the coordinator spends that budget itself it also sets `blocked_until` to the reset, which the read already honoured | `test_a_spent_invalid_request_budget_is_waited_out_without_claiming`, with a control that the old loop claims, releases and holds every due post; `test_the_coordinator_embargoes_an_invalid_budget_it_spends_itself_and_the_lane_waits` |
 | One database connection per loop at a time | sequential transactions, none held across HTTP | `test_each_loop_holds_one_database_connection_at_a_time` |
 | The last step ends inside the function limit | admission deadline, budget capped at 90 s (a larger setting is clamped) | offline `test_no_budget_can_outlast_the_function_limit_with_one_step_in_flight`, `test_a_budget_above_ninety_seconds_is_clamped_to_ninety`, `test_a_configured_120_seconds_runs_for_90`, `test_no_step_starts_after_the_budget_...` |
+| One malformed job document stops only its own workspace | the lane's claim pins a failure of reading a document on the workspace being read and sets it aside for 300 s (its rotation cursor dated ahead), then goes on | `test_a_job_document_the_claim_cannot_read_stops_only_its_own_workspace`, `test_a_workspace_set_aside_is_skipped_until_its_window_ends_and_a_repaired_document_is_claimed_again`, `test_the_malformed_shapes_the_claim_already_handles_never_reach_the_guard`, `test_a_failure_in_every_workspace_is_the_claim_code_not_a_document_and_still_raises`; offline `Quarantine` |
+| A paused Discord (kill switch, authorization off, rate limits off) never holds a post or demotes a destination | the lane and the minute tick claim nothing while paused (the posts are not touched at all); a scoped claim that meets the pause releases the post unsent for a minute; a revoked connection or missing permission still holds | `test_a_paused_discord_is_not_claimed_by_the_lane_and_nothing_is_lost`, `test_a_paused_discord_leaves_the_minute_crons_posts_untouched_however_long_the_pause`, `test_recovery_after_rate_limits_were_off_waits_and_then_drains_exactly_once`, `test_recovery_after_the_coordinator_was_missing_waits_and_then_drains_exactly_once`, `test_a_revoked_connection_still_holds_the_post_and_asks_for_the_destination_again`; offline `PausedDiscord` |
+| A lease or approval lost after the seal never lets the create out | the consume guard rechecks lease, cancellation, approval, role and grant under the workspace lock; the lane no longer renews a second time | `test_a_withdrawal_after_the_seal_is_caught_by_the_consume_guard_not_a_second_renewal`, `test_a_lease_lost_after_the_seal_ends_uncertain_without_a_post_and_keeps_the_intent`, the seal and consume crash tests; the minute worker's step still renews twice: `test_the_minute_workers_step_still_renews_after_the_seal`; offline `NoSecondRenewal` |
+| A release the shared budget caused does not cost the tenant its turn, and no tenant gets more work for it | the post's `lastDispatchedAt` and the workspace cursor are put back, the retry is due at once, at most 3 times per post, system-wide causes only | `test_a_post_the_shared_budget_released_is_claimed_again_before_anything_else`, `test_permit_expiries_do_not_change_the_rotation_or_any_workspaces_share_of_the_work`, `test_the_position_is_kept_three_times_for_one_post_and_then_the_penalty_applies`; a tenant's own resource keeps the penalty: `test_a_release_caused_by_one_tenants_resource_keeps_its_penalty`, `test_a_transient_preflight_failure_keeps_its_penalty`; controls: `test_control_the_old_penalty_...`, `test_control_without_the_restore_...`; offline `PositionKept` |
 | Flag off, or on with the lane unable to run, is the frozen behaviour | flag read as the exact string; one readiness test (`lane.blocker`) for the tick (its static part) and the lane (the full rule); equivalence with `2a5a523d` | offline `FlagOffIsTheFrozenBase`, `LaneReadiness`, `ExistingTick` |
 
 How the PostgreSQL tests stay off the runner's clock (an early CI run failed the id-ordered fairness control with 19
@@ -200,6 +212,10 @@ of the 20 busy creates it counted; a faster runner gives the small tenants more 
   still waits to be sent or verified (at most four runs); fast runners use one.
 - The coordinator-cap pair runs at 3 requests per second (ceiling 6), a cap twelve loops meet on a slow runner too, and
   counts the loops' own application-window waits as the sign the cap was met.
+- The global-429 tests count from the coordinator's record of the 429 (its admission's outcome) to the embargo's end,
+  both on the database clock: nothing is admitted in that window, at most one request per other loop still arrives,
+  and each loop claims at most once in it. Counting from the 429's arrival at the mock widened both bounds on a slow
+  runner by however long the record took.
 
 ## Database connections
 
@@ -210,6 +226,175 @@ through the Supabase pooler: about 20 per post (claim, renewals, seal, completio
 connection churn, not the lane, is likely the largest part of a step's real latency; the pooled factory would remove it
 but is a separate setting.
 
+## A permit an embargo blocks before it is used
+
+An embargo or hold that the coordinator observes after a create's intent was sealed blocks that unused permit
+(`observe()`: every reserved or sealed admission in the blocked scope becomes `blocked`). The post used to end
+`uncertain` though nothing was sent, waiting for manual reconciliation: one global 429 could strand about one post
+per running loop. The invariant now: a sealed intent is retried only when `consume()` itself refuses its permit in the
+same call, before any transport, and the worker then proves from the admission row, under its lock in the workspace
+transaction, that the permit was blocked while sealed and never consumed (`confirm_blocked_publish`: state `blocked`,
+this intent, `sealed_at` set, no `sent_at`). `consume()` is the only way from a publish permit to its POST and commits
+`sent` before any transport, so that intent never left and never can. The intent is archived as unsent
+(`unsentProof` `embargo_blocked_admission`), the post goes back to scheduled for the embargo's remaining time (held
+with the existing "rate wait outlasts approval" reason if that passes its approval), and an event records it. It
+shares the eight-recovery bound of an expired unconsumed permit. Anything where the transport may have run (a failed
+or timed-out request, a lost response) and anything without the in-call refusal (a process killed between sealing
+and sending, a lease taken over, a restart) stays `uncertain` and is reconciled as before [measured on PostgreSQL:
+`test_a_global_429_seen_while_posts_are_sealed_sends_each_once_after_the_embargo` and its two controls].
+
+The sibling, a permit reserved but not yet sealed when the embargo or hold is observed, used to end `held` at the
+seal ("Discord rate permit expired or changed before sealing"): a new approval for a post nothing had touched.
+No intent exists there, so `seal()` now refuses such a permit (state `blocked`, no intent, never sent) as a rate
+wait for the embargo's remaining time, and the worker releases the post the way it releases a permit that expired
+before sealing (same eight-recovery bound; event "A Discord embargo blocked the rate permit before its intent was
+sealed") [measured on PostgreSQL: three loops each holding a reserved permit at a global 429; all three were held
+before the change, all three are sent once after the embargo now].
+
+## A document the claim cannot read
+
+One workspace's malformed Discord job used to stop the whole lane (independent review G2E-C-10). A job with `events: null`
+(or `attempts` or `discordReceipts` null, or `events` a string) raised in the claim, which rolled back; the rotation order
+(least recently served first) kept offering that workspace first, so no other workspace was ever claimed [measured on real
+PostgreSQL: every claim raised, the healthy due posts in the other workspaces were never claimed]. No customer path that
+writes such a document was found, so this is structural, not a known attack.
+
+The lane's worker (`LaneWorker.claim`; the loops' unscoped Discord claim only) now pins a failure of reading a document on
+the workspace being read and sets that workspace aside. Its rotation cursor is dated `QUARANTINE_SECONDS` (300) ahead and
+marked (`quarantinedUntil`), in its own short transaction (the failed claim's has rolled back), so the claim skips it until the
+window ends and then goes on to the next workspace, and the shards' own look at the queue (`_CLAIMABLE`, the loop's copy of the
+due probe) does not count it, so an idle system with one such workspace is still idle at the first look. Nothing else in the
+document changes: a repaired document is claimed again by itself when the window ends (the first normal claim clears the
+mark). It is counted (`quarantined`: the lane health status, `discord.lane.completed`, the shard answer's counters) and
+logged as one `discord.lane.quarantined` line with the exception class only, no workspace, job, channel or lease owner id.
+
+Only failures of reading a document are set aside (AttributeError, TypeError, KeyError, IndexError, ValueError); a database
+error, a lost revision or anything else is raised as before. One claim sets aside at most `MAX_QUARANTINES_PER_CLAIM` (2)
+workspaces: a third failure in the same claim is no longer one document but the claim code itself, and it raises as before,
+so a defect that hits every workspace is loud and cannot quietly set the queue aside. The six other malformed shapes the
+review found (the discord manifest or its channel missing, the manifest gone, `nextAt` a string, the approval digest or
+the authorization missing) were already held or skipped by the existing checks and never reach the guard [measured].
+
+Costs and limits [reasoned unless marked]: during its window the whole workspace waits, its healthy posts too (late, not
+lost; the lag warning fires when they are 300 s late, because the lag read still counts them, and the ops health payload
+shows the same lag); a document that stays broken is found again every 300 s, one log line each time; `quarantined` counts
+this process's events since it started, other processes count their own. The guard is the lane's worker only, so the
+minute cron's frozen Discord path (flag off, or the lane unable to run) keeps the old behaviour and
+`FlagOffIsTheFrozenBase` stays true byte for byte.
+
+## A release the shared budget caused keeps its place
+
+A claim stamps the post's `lastDispatchedAt` and the workspace's rotation cursor before the preflight. A post released
+unsent because a create permit ended unused used to go behind its never-claimed siblings, and its workspace to the back of
+the round, though it had completed nothing: in the 5,000-post run [independent review of the capacity receipt] 503 of 2,000
+workspaces were hit, a released post's median re-claim delay was 729 s, and those workspaces' posts were 26.6 minutes late
+against 15.3 for the others.
+
+When the denial is system-wide (the application window was spent: `rate_scope_kind` `application`; or a create permit
+ended unused: `rate_cause` `permit_expired`, before the seal or sealed and not consumed) the lane's worker
+(`LaneWorker._discord_rate_released`, called by the three rate releases in their own transaction) puts both stamps back as the
+claim found them (kept in memory from the candidate it read, never stored) and makes the retry due at once. Restoring only one
+of the two does almost nothing [reviewer's model: the workspace's next claim takes a due read-back and spends the turn], so
+both are restored. At most `MAX_POSITION_RESTORES` (3) times per post (`discordPositionRestores` on the job, counted per
+invocation as `positionsKept`); the retries stay bounded as before (`ratePermitRetries` at most 8, `rateReadRetries` under 3).
+A release that one tenant's resource caused keeps today's penalty: a learned or unknown route or channel window, the cold-route
+probe, an embargo (also one that blocked a permit), a provider 429, a window about to end, and a transient preflight failure;
+otherwise workspaces sharing a full channel could take their turn over and over. So does a post that is held or canceled by
+the release. The base worker's hook does nothing, so the minute cron's frozen path is unchanged.
+
+The snapshot is read from the candidate row the way the claim itself reads it: a mapping, or the JSON text of one (`LaneWorker._document`;
+the quarantine mark of a set-aside workspace is found in a text document the same way). A document that is neither takes no
+snapshot at all, and a post without one keeps today's penalty. A restore from an empty snapshot would pop the cursor and the
+dispatch stamp, a jump to the front of the rotation [found by the independent delta re-review; the PostgreSQL driver returns
+mappings, so only a driver that hands over text could reach it].
+
+Why this is fair [reasoned; the rotation and shares measured in `test_permit_expiries_do_not_change_the_rotation_or_any_workspaces_share_of_the_work`]:
+1. The round robin gives each tenant one claim per round while others wait: it bounds a tenant's share of *completed* work.
+   A claim released unsent completed none and spent shared admissions, so counting it as the tenant's turn charged the tenant
+   for a system event, and a random quarter of the tenants carried the system's failure.
+2. A restored turn is the same claim again, not an extra one. A tenant still completes at most one create per round while
+   others wait; the retry is the claim that was released, bounded as above, and other tenants lose at most that retried claim,
+   whose cost was spent anyway. With every fourth create permit ending unused, taking the immediate retries out leaves the
+   round-robin order and every workspace's number of posts as without the expiries.
+3. Only ordering metadata changes. `lastDispatchedAt` orders a workspace's jobs at claim; the cursor orders workspaces and feeds
+   the projection. No approval, lease, intent, permit or check changes.
+
+## The lease after the seal
+
+The step renewed the lease a second time after the intent was sealed and before the create: one more whole-document
+transaction on the seal-to-consume path, where 83 percent of the permit expiries of the 5,000-post run happened
+[independent review of the capacity receipt]. The lane's worker no longer does (`LaneWorker.renew_discord_lease`); the
+renewal after the preflight stays, and the base worker, so the minute cron's frozen path, renews twice as before.
+It added no authorization: the seal has just extended the lease to 45 s under the workspace lock, and consume()'s live
+guard (`_authorize_discord_rate_send`) rechecks the lease, cancellation, approval, role and grant under that lock, later
+than a renewal could. The skip applies only once that guard is attached to the sealed post (without it, with rate limits off,
+which the lane never runs with, the renewal stays).
+
+Consequence [measured on PostgreSQL]: a withdrawal, cancellation or approval change after the seal is refused by the consume
+guard instead of by the renewal. The permit is not consumed (the admission stays `sealed`), no POST starts, the sealed
+intent stays for manual reconciliation, and the post ends `uncertain` with the completion's "Discord delivery is uncertain.
+Reconcile before any further publication." (before: "Discord authority changed during renewal; no new dispatch is
+permitted"). A lease lost after the seal is refused by the same guard; the completion cannot write a lease that is no longer
+ours, so the next claim's expiry recovery records `uncertain` ("Expired Discord intent requires reconciliation; never
+repost"), as it did after the renewal's early return. The intent is kept either way and nothing is posted twice. One
+counter moves: a lease lost between the seal and the create is no longer counted in `leaseLost`; it shows as `uncertain`
+and `uncertainCreates`.
+
+## A paused Discord is a wait
+
+With Discord paused (execution disabled: the abort ladder's kill switch `POSTRIFF_OAUTH_DISCORD_DISABLED`, or a provider
+flag not set; or authorization off, which the hosted runtime also does without rate limits) the permission preflight
+refuses every post with a 409 "paused" error. The step completed each one as held with `not_sent` evidence, and that also
+sets its destination to `verification_required` [independent review of the send path; measured: 4 workspaces, 8 posts,
+4 of 4 destinations demoted, 8 of 8 posts held, 0 Discord requests]. After the switch was off again nothing posted and every
+customer had to authorize again, though the incident runbook says "existing grants stay stored".
+
+Now (1) the lane's loops stop before any claim (`lane.paused()`: the provider's flags, pure; `blocker()` still comes first,
+so a lane that cannot run says why), `stoppedBy` `discord_paused`: no post and no read-back is touched. (2) The minute tick
+does the same: `tick()` passes `exclude_discord=True` whenever `lane.paused()` is true, with the lane flag off (today's
+production) and with it on but the lane unable to run, so a pause never makes it claim a Discord post. The first version of
+this fix let the tick claim and release each post, and the independent re-review found the churn: every post was claimed
+again each minute for as long as the pause lasted, and each cycle appended a claim, a submitting and a release event and an
+attempt and rewrote the workspace document twice (measured on that version: five minutes of a pause added 15 events and
+5 attempts to a post; a day's kill switch would add some 4,300 events and 1,400 attempts per due post, in a document every
+later claim rewrites). The posts now wait untouched, with the stamps they had, and are claimed at once when the pause ends.
+A back-off that grows was rejected: it would delay the posts after the unpause. (3) A step that still meets the pause (a
+person's scoped "post now", a pause that began after the claim) releases the post unsent for `PAUSED_RETRY_SECONDS` (60)
+with the existing rate-wait release: no attempt is consumed, it is not counted in `rateDelays`, the destination is
+untouched, and the post is held only when the wait passes its approval, as for any rate wait (never sent late). A revoked
+connection or a missing permission is another error and still holds the post and asks for the destination again [measured].
+
+The frozen path: `FlagOffIsTheFrozenBase` pins the minute cron in the states it runs, none of which pauses Discord, and it
+stays green. In a paused state the minute cron now differs from the frozen code in two places: `tick()` leaves Discord
+alone, and the branch of the step that a scoped claim or a mid-step pause can still reach (the frozen code held the post
+and demoted the destination); together they are the one deliberate exception to "flag off is the frozen path". Read-backs
+too: neither the lane nor the minute tick claims the read-back of an already created post while paused, so the existing rule
+(a read-back that meets a disabled execution is completed `uncertain`: "The original Discord application is unavailable.
+Keep the receipt for manual review.") can only be reached by a scoped claim; the read-back is made after the pause.
+
+## The worker flag and migration 128
+
+Migration 128's guard trigger (installed in production) refuses the claim of a Discord post by a worker that does not use
+the fenced lease protocol: CheckViolation "Discord requires the current fenced worker protocol before dispatch."
+`POSTRIFF_DISCORD_WORKER_V1_ENABLED` (1 or true) is what makes the worker use it. With the flag unset or mistyped, the
+minute worker still claims a due Discord post the old way, the guard refuses, and the whole claim transaction aborts on
+every attempt: the tenant cursor does not advance, so the same workspace is first again every tick and the later
+workspaces of that claim, of any provider, are never processed [independent review of the send path, scope B: three ticks,
+another tenant's due post still scheduled]. This is the frozen worker's behaviour with that guard installed, with or without
+W-02, and the earlier statements that Discord is then "held, not sent" or "claimed and sent as before" were wrong for a
+database with migration 128.
+
+Fixed at the release, not in the frozen path: the hosted preflight now fails a build with any Discord feature flag on
+(authorization v2, connections v2, rate limits, webhook, user install, engagement, the lane) and the worker flag not 1 or
+true (`discord-worker-protocol`; the lane's own check stays). Environment changes reach new deployments only, so every
+deployment passes it. Not done, proposed (the owner decides, it touches the frozen path): in `PostgresWorker.claim`, react to
+that one CheckViolation (sqlstate 23514 and its message), roll back, run the claim again with `exclude_discord` for the rest
+of the process's life, count it (`discord_stats['fenced']`, created on first use so no trace changes) and log one WARNING.
+It acts only after the failure the frozen code raises, so `FlagOffIsTheFrozenBase` would stay green; the caveat is that in
+that state the minute worker would stop raising and leave Discord posts unsent. The simpler "the tick excludes Discord
+when the flag is off" is not proposed: it changes the trace `test_flag_on_without_the_worker_protocol_matches_the_base_exactly`
+pins.
+
 ## Fail-safe behaviour
 
 What each cause does, in the minute cron's tick, in the 12 shards, and on the customer's post [reasoned from the
@@ -218,21 +403,23 @@ quoted texts are the events and next actions the existing worker writes.
 
 | Cause | Minute tick | Shards | The customer's post | Signal |
 |---|---|---|---|---|
-| Flag off, or the lease protocol off | frozen path: claims and sends Discord as before W-02 | answer `{"enabled": false}` without starting the runtime | sent as before | `status.blocker` `disabled` |
+| Flag off, or the lease protocol off | frozen path: claims Discord as before W-02. With the worker flag off AND migration 128 installed (as in production) a due Discord post is refused by the database guard and the claim aborts for every provider ("The worker flag and migration 128"); the preflight now fails such a build | answer `{"enabled": false}` without starting the runtime | sent as before when the worker flag is on; with it off and migration 128 installed not sent, and the claim aborts | `status.blocker` `disabled`; the preflight's `discord-worker-protocol` |
 | Lane budget misconfigured | frozen path, sends as before | 503 `discord_lane_configuration`, nothing claimed | sent as before | shard 503s; `blocker` `configuration` |
-| Rate limits off | frozen path; the hosted runtime turns Discord authorization off, so each claimed post is held and its destination set to `verification_required` [measured offline] | stop at once, `coordinator_unavailable`, nothing claimed | held: "Discord destination, grant, media or rollout verification is unavailable. Nothing was posted."; the destination must be verified again | the preflight fails; WARNING shard lines; `blocker` `coordinator_unavailable` |
-| No coordinator or policy; policy expired or not yet valid | frozen path: each claimed post is released for five minutes, and held once that wait passes its approval | stop at once, `coordinator_unavailable` | later than scheduled ("Await Discord shared rate budget; no POST occurred and this approval remains frozen"), or held ("Discord rate wait outlasts approval; review the frozen destination and approve again") | WARNING shard lines; `blocker` `coordinator_unavailable`; `policyDaysLeft` at or below 0 |
+| Rate limits off; or rate limits on with no coordinator (no policy, or one that does not parse: `runtime_from_environment` then builds no coordinator and turns Discord authorization off) | frozen path; Discord authorization is off, so Discord is paused: the tick claims no Discord post and touches nothing (before K1: held, destination set to `verification_required`) [measured on PostgreSQL for both] | stop at once, `coordinator_unavailable`, nothing claimed | later than scheduled (the post is not touched while Discord is paused), sent after the repair if still inside its approval; held, never sent late, if its approval has ended by then; no destination is touched | the preflight fails; WARNING shard lines; `blocker` `coordinator_unavailable` |
+| Discord paused: execution disabled (the kill switch `POSTRIFF_OAUTH_DISCORD_DISABLED`, or a provider flag not set), or authorization off | the minute tick claims no Discord post (nothing is touched); a step that still meets the pause releases the post unsent for a minute (never held, destination untouched) | every loop stops before any claim, `discord_paused` (WARNING line) | waits; sent after the pause if still inside its approval; held (never sent late) once the wait passes its approval; no customer has to authorize again [measured on PostgreSQL: 4 workspaces, 8 posts: before, 4 of 4 destinations demoted and 8 of 8 posts held] | `discord_paused` lines; the ops health payload's `executionEnabled`, `authorizationV2`, `killSwitch` |
+| Policy expired or not yet valid (a well-formed policy outside its validity) | frozen path: each claimed post is released for five minutes, and held once that wait passes its approval | stop at once, `coordinator_unavailable` | later than scheduled ("Await Discord shared rate budget; no POST occurred and this approval remains frozen"), or held ("Discord rate wait outlasts approval; review the frozen destination and approve again") | WARNING shard lines; `blocker` `coordinator_unavailable`; `policyDaysLeft` at or below 0 |
 | Coordinator degraded in one process | leaves Discord to the lane | that process's loops stop, `coordinator_degraded`; other processes' loops send | sent by the healthy loops | WARNING lines from that process; its `blocker` `coordinator_degraded` |
 | Coordinator degraded in every lane process | leaves Discord to the lane | every loop stops, `coordinator_degraded` | waits; once its approval's hour has passed, held when next claimed ("Discord needs a current human approval bound to this exact destination and content") | WARNING lines; `discord.lane.lagging` after five minutes |
-| Operator hold on the policy row | leaves Discord to the lane (it cannot see the hold) | each loop stops before its next claim, `operator_hold` | waits; a post between sealing and sending may be left `uncertain` with nothing sent (Q4) | M6; `operator_hold` lines |
+| Operator hold on the policy row | leaves Discord to the lane (it cannot see the hold) | each loop stops before its next claim, `operator_hold` | waits; a post whose permit the hold blocked before it was used, sealed or not, is released unsent and sent once after the hold (Q4; a sealed one used to be left `uncertain`, a reserved one `held`, with nothing sent) | M6; `operator_hold` lines |
 | Shard crons not reaching the function | leaves Discord to the lane | nothing runs | waits; held after its approval's hour | no lane lines; `discord.lane.lagging` after five minutes |
 | Projection missing | leaves Discord to the lane | stop at once, `schema` | waits; held after its approval's hour | WARNING lines; `discord.lane.lagging` |
-| Embargo, circuit, spent window or invalid-request budget | leaves Discord to the lane | sleep it out, or stop with `rate_wait` | later than scheduled | M4; `rate_wait` lines |
+| Embargo, circuit, spent window or invalid-request budget | leaves Discord to the lane | sleep it out, or stop with `rate_wait` | later than scheduled; a post whose permit was reserved or sealed when the embargo is observed is released unsent and sent once after it [measured on PostgreSQL: three loops, a global 429, both cases] | M4; `rate_wait` lines |
 
 Recovery, measured on real PostgreSQL (`test_discord_parallel_lane_postgres.py`, section (i)): with rate limits off,
 an expired policy or no coordinator the shards claim nothing and the minute cron does what the rows above say; once the
 configuration is repaired, the lane creates every post still inside its approval exactly once and never sends a held
-one (with rate limits off every post was already held, so nothing is sent). A gap of minutes without shard crons logs
+one (with rate limits off, or with no coordinator, the posts waited unsent: those inside their approval are created
+once after the repair, the others were held, as with an expired policy). A gap of minutes without shard crons logs
 `discord.lane.lagging` every minute (`laneOwnsDiscord` true) while nothing is sent; when the crons return the backlog
 drains exactly once and fairly, and the warning stops. A policy that expires mid-run stops every loop
 (`coordinator_unavailable`); nothing is claimed or created after it, and renewal resumes, leaving at most the step each
@@ -267,6 +454,7 @@ secret; codes, numbers and booleans only), version 1, a shape kept stable for a 
 | `maxSteps` | integer or null | one invocation's step backstop; null when misconfigured |
 | `shards` | integer | cron entries, 12 |
 | `policyDaysLeft` | number or null | days until the reviewed policy expires, two decimals, negative once expired; null when no policy is visible (no coordinator, or the flag-off shard answer, which starts no runtime) |
+| `quarantined` | integer | workspaces this process has set aside since it started because the claim could not read their document ("A document the claim cannot read", below); 0 on a healthy system. The ops health payload copies this status, so it shows there too |
 
 In the minute cron's result `discordParallelLane` says whether that tick left Discord to the lane (the static causes)
 and `discordLaneStatus.blocker` what stops the lane in that process (the full rule): with only that process degraded
@@ -280,7 +468,7 @@ which carries no status.
 | A loop crashes between steps | nothing in flight; the next minute's loops continue |
 | A loop crashes mid-step before the intent | lease expires (45 s); released as unsent; sent once later |
 | A loop crashes after sealing or after the create left | never re-posted; the job is 'uncertain' for manual reconciliation; the request's admission keeps a slot until reviewed, and if it was the first request on that route, later posts to that channel wait until review (Q3) |
-| Operator hold set | every loop stops before its next claim; a post between sealing and sending may be recorded 'uncertain' with nothing sent (existing coordinator rule, Q4); queued posts wait |
+| Operator hold set | every loop stops before its next claim; a post whose permit the hold blocked before it was used is released unsent (Q4); queued posts wait |
 | Global 429 or circuit | loops sleep until it ends; the post whose read was refused waits and is sent later; a 429 on a create holds that post for review (existing rule) |
 | Budget exhausted | creates wait for the next window (bounded); reads wait as before |
 | Approval expires in the queue | held for a fresh approval when next claimed (monitor M7) |
@@ -289,6 +477,7 @@ which carries no status.
 | Flag on, projection missing | `schema`, nothing claimed (migration 126 is applied in production); the minute cron cannot see it without a query, so it still leaves Discord to the lane and `discord.lane.lagging` fires after five minutes |
 | Flag on, shard crons not reaching the lane (not registered, a 401, a 404, Deployment Protection, a platform skip; a `CRON_SECRET` under 16 characters fails the minute cron's own route too) | no `discord.lane.completed` lines; the minute cron (the lane able to run) leaves Discord alone, so posts wait; `discord.lane.lagging` fires after five minutes; after an hour their approvals lapse and they are held when next claimed |
 | Flag on, rate limits off, no coordinator, policy expired or not yet valid, or a bad lane budget | the lane cannot run anywhere: every loop stops at once with the reason (a bad budget answers 503 `discord_lane_configuration`), and the minute cron keeps the frozen Discord path |
+| A job document the claim cannot read (a null where a list belongs) | that workspace is set aside for 300 s, counted (`quarantined`) and logged once; every other workspace is claimed as usual; a third such failure in one claim is raised |
 | Build-level kill switch (`POSTRIFF_OAUTH_DISCORD_DISABLED`) | unchanged: a claimed post is held, as today |
 
 ## Turning it off
@@ -316,15 +505,38 @@ one whose wait outlasts its approval: `discord_worker.release_unsent` sets the s
 `discordWorker.queue.held` count every held post in their samples.
 
 The minute cron's lag warning, for the failures no lane line reports (a cron that never fires logs nothing): with the
-flag on, every tick reads the Discord report it already makes (`discordWorker.queue`) and logs one
-`discord.lane.lagging` line at WARNING when the oldest due, unleased Discord job is more than 300 seconds late
-(`lane.LAG_WARNING_SECONDS`). Fields, counts and codes only: `oldestEligibleLagSeconds`, `thresholdSeconds`,
-`laneOwnsDiscord`, `laneBlocker` (the readiness reason when the tick kept Discord; null, with `laneOwnsDiscord` true,
-when only the tick's own process has a degraded coordinator, whose shard lines then say `coordinator_degraded`),
-`depth`, `held`, `uncertain`, `deadLetters`. It adds no query [tested offline: the same statements with and without the
-warning]. Alert on any such line. It also fires while a large burst drains (5,000 posts take about 23 minutes), which
-is worth knowing too (Q1). It is blind where the report is: workspaces outside its sample (the first 256 by id, at
-most 4,096 Discord jobs) and a failed report (`queue.status` `unavailable`); M1 reads the whole projection.
+flag on, every tick logs one `discord.lane.lagging` line at WARNING when due Discord work has waited too long, or when it
+could not see the queue. It reads two sources. The Discord report the tick already makes (`discordWorker.queue`) samples
+the first 256 workspaces by id (at most 4,096 Discord jobs); its `oldestEligibleLagSeconds` is the oldest due, unleased
+job there, create or read-back (unchanged), and when the report fails its status is `unavailable`. When the lane owns
+Discord the report also tells creates from read-backs: `oldestEligibleCreateLagSeconds` (the oldest due post not yet
+created) and `oldestEligibleReadbackLagSeconds` (the oldest due post the claim would reconcile: a created post waiting for
+its read-back), because read-backs are deferred behind creates by design. When the lane owns Discord the tick also reads
+the projection's oldest due work, every workspace, in one indexed statement (`lane.projected_lag`, the shards' own due
+probe): `projectedLagSeconds`. A tick that kept Discord (the lane cannot run anywhere) runs only the frozen path's
+statements, reads no projection and has no split.
+
+The thresholds (M5): a create more than 300 s late (`LAG_WARNING_SECONDS`); a read-back more than 3,600 s late
+(`READBACK_LAG_WARNING_SECONDS`; in the 5,000-post run a created post was confirmed 18 minutes later at the median and 32 at
+the slowest); the projection's lag against 300 s, because it cannot tell a create from a read-back, unless the sample shows
+the deferral signature (a read-back waiting more than 300 s and no create that late), when it counts against 3,600 s. A
+report without the split (the frozen tick's) counts its whole `oldestEligibleLagSeconds` as before. The line also fires when
+the report is `unavailable`, or when the lane owns Discord and the projection cannot be read, and says which: `report`
+(`sample` or `unavailable`), `projection` (`read`, `unreadable`, or `not_read` when the tick kept Discord) and `lateKinds`
+(`creates`, `readbacks`, `projection`, or `sample` for a report without the split). Other fields, counts and codes only:
+`oldestEligibleLagSeconds`, `oldestEligibleCreateLagSeconds`, `oldestEligibleReadbackLagSeconds`, `projectedLagSeconds`,
+`thresholdSeconds`, `readbackThresholdSeconds`, `laneOwnsDiscord`, `laneBlocker` (the readiness reason when the tick kept
+Discord; null, with `laneOwnsDiscord` true, when only the tick's own process has a degraded coordinator, whose shard lines
+then say `coordinator_degraded`), `depth`, `held`, `uncertain`, `deadLetters` [tested on PostgreSQL: 300 workspaces with the
+only due post outside the sample, a report that fails, and a deferred read-back that no longer keeps the warning on while a
+late create or a read-back past an hour still does]. The projection's lag counts a post waiting for manual reconciliation
+(`uncertain`) as due, as the report does, and it does not know which deployment a post is bound to. Alert on any such line.
+A large burst still warns while its creates are late (5,000 posts take about 23 minutes), which is worth knowing (Q1); it no
+longer keeps warning for read-backs that wait behind them. Known limit: the projection (migration 126) holds one `next_at`
+per workspace, so the split is the sample's, and a late create hidden beyond the sample while read-backs drain is seen at the
+read-back threshold. An exact split over every workspace needs a projection column (a new migration, not made). Without a
+migration, a reader of the projection can take the oldest due `next_at` among workspaces with `last_claimed_at = 0`: a
+workspace the lane never served can only hold a create.
 
 ## Capacity
 
@@ -352,6 +564,21 @@ platform before any claim is made to customers.
   minute cron still leaves Discord to the lane, so due posts wait unsent. Nothing could be sent in that state either
   way; the signals are the shard lines (`coordinator_degraded`, at WARNING) and, after five minutes, the lag warning
   with `laneOwnsDiscord` true, which does not name the cause.
+- A learned route can close until the policy expires. When its window ends, the next reservation refills it and
+  sets its reset to the policy's expiry until a response from the new window gives the real one (`_roll`). If the
+  permits reserved after that refill all expire unused (a slow step, a released job), no request leaves, no response
+  comes back, and the route stays at nothing left: every later request on it is refused with a wait of the policy's
+  remaining life, so every later post to that channel is held ("Discord rate wait outlasts approval"), nothing
+  sent [measured: reproduced deterministically with the coordinator alone, a refused read waits 86,336 s on the
+  one-day test policy; seen under heavy CPU contention in the many-loops, cron-gap and fairness tests, where six to
+  ten posts on such channels ended held]. Coordinator code; left to the coordinator's reviewer.
+
+- A route whose first (cold) probe never got an answer refuses every later request with the probe window (about a second),
+  so the approved posts to that channel churn (claim, three admitted reads, release) until their approval ends [independent
+  review of the send path: 10 such guilds, 86 percent of the requests in 30 s were their reads]. A refusal by an embargo or a
+  circuit already carries the embargo's remaining time, and the release waits until its end (`nextAt` = release time plus
+  that wait; offline `PositionKept`, penalty cases); this refusal has no end to wait for. The cause is the coordinator's
+  (the unanswered admission keeps its slot, Q3); left to the coordinator's reviewer.
 
 ## Not done
 

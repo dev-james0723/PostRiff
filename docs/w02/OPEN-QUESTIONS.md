@@ -34,17 +34,22 @@ procedure to release such a row today. More concurrent loops mean more requests 
 flight at any instant, so W-02 raises the exposure. Options: a reviewed operator procedure (monitor M5 finds the rows);
 or an automatic release of unanswered reads after a fixed age (a read that left two minutes ago cannot still be using a
 one-second window), creates only after their job is reconciled. This is a coordinator change and needs the coordinator's
-reviewer.
+reviewer. Dependency: the coordinator rewrite on another branch changes how such rows are released, so the "no reviewed
+procedure" wording above will change with it; this branch does not touch that rule (its own change covers only a
+permit an embargo or hold blocked before it was used, never an admission that was sent).
 
 **Q4. What the operator hold does to a post mid-handoff.** Setting the hold also blocks every reserved-but-unused create
 permit (existing coordinator rule). A loop that had sealed a post's intent but not yet sent it records the post as
 'uncertain' though nothing was sent; it then waits for manual review [measured: test (e), at most one per loop]. Accept
-(the hold is an emergency brake), or have such a post recorded as provably unsent (a protocol change).
+(the hold is an emergency brake), or have such a post recorded as provably unsent (a protocol change). Since changed, for
+the hold and for an embargo alike (AS-BUILT.md, "A permit an embargo blocks before it is used"): when consume() refuses the blocked
+permit before any transport, the post is proven unsent and released, and a reserved permit blocked before sealing is a
+rate wait instead of a hold; a process that dies between sealing and sending still leaves its post 'uncertain'.
 
 **Q5. How many shards, and their cost.** The branch adds 12 cron entries (`/api/cron/discord-worker/0` to `/11`), so
 Vercel starts 12 invocations every minute whether or not there is work: about 17,000 a day, 520,000 a month. With the flag
 off each answers after the cron-secret check, without the runtime or the database. With the flag on and nothing due each
-runs about three short queries and stops. With work due, each runs up to 50 seconds. 12 loops keep 25 requests per second
+opens one connection for one statement and stops (none when the lane cannot run). With work due, each runs up to 50 seconds. 12 loops keep 25 requests per second
 busy at a per-request latency up to about 0.3 seconds [simulated]; 16 for 50 per second. Choose K, and whether the cron
 entries ship in the build before the flag is turned on (they cost invocations from the first minute).
 
@@ -78,3 +83,28 @@ starts. New infrastructure and cost.
 four permission reads, so each refused post spends four reads again in the next window (the existing step order reserves
 the create permit last) [reasoned; seen in the one-channel test]. Bounded by one workspace, one post at a time. Reserving
 the create permit before the permission reads would avoid it; that is a protocol change.
+
+**Q13. The minute worker with the worker flag off and migration 128 installed.** Found by the independent review of the
+send path: with `POSTRIFF_DISCORD_WORKER_V1_ENABLED` unset or mistyped, the minute worker claims a due Discord post the old
+way, migration 128's guard refuses it (CheckViolation) and the whole claim aborts on every attempt for every provider
+[reasoned and reproduced by the review]. Built: the hosted preflight now fails a build with any Discord feature flag on and
+the worker flag not 1 or true. Not built, because it touches the frozen path: a reactive guard in `PostgresWorker.claim`
+(react to that one CheckViolation, claim again without Discord for the rest of the process, count it, log one WARNING;
+`FlagOffIsTheFrozenBase` stays green, the minute worker would then leave Discord posts unsent instead of raising).
+Decide whether to build it (AS-BUILT, "The worker flag and migration 128").
+
+**Q14. What a paused Discord does to read-backs.** A paused Discord (kill switch, authorization off) now releases creates
+unsent and demotes nothing (AS-BUILT, "A paused Discord is a wait"), and the lane claims nothing while paused. An existing
+rule is unchanged: a read-back (reconciliation) of an already created post that meets a disabled execution is completed
+`uncertain` ("The original Discord application is unavailable. Keep the receipt for manual review."), and five such checks
+push it to a one-day wait. Neither the lane nor, since the K1 churn fix, the minute tick claims anything while Discord is
+paused (`tick()` passes `exclude_discord=True`), so only a scoped claim can still reach that rule and the read-back is
+made after the pause. Open: whether a scoped claim (a person's "post now") should wait too; today it reaches the
+preflight, which refuses with the pause, and the post is released unsent for a minute.
+
+**Q15. An exact split of creates and read-backs for monitoring.** The lag warning tells them apart in the report's sample
+and treats the projection's lag (one `next_at` per workspace, migration 126) as a create's unless the sample shows
+read-backs waiting. An exact split over every workspace, and the same split in the ops health payload (which reads the
+projection), needs two columns in the projection (a new migration, not made). Without one, the oldest due `next_at` among
+workspaces with `last_claimed_at = 0` is an exact create lag for workspaces the lane never served.
+

@@ -364,7 +364,7 @@ class HostedSocial:
         from .discord.authorization import grant_matches, wire_content, digest
         provider = self._provider(manifest)
         if provider is None or not getattr(provider, 'authorization_v2_enabled', False):
-            raise AlphaError('Discord publishing is paused pending authorization and rollout validation.', 409)
+            raise AlphaError('Discord publishing is paused pending authorization and rollout validation.', 409, code='discord_paused')
         grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
         if not grant_matches(manifest, grant, provider.session(grant['accessToken'])):
             raise AlphaError('Discord was reconnected or changed. Review the post again.', 409)
