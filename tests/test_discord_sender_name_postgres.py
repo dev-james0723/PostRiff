@@ -468,17 +468,30 @@ class ClaimFlowOnPostgres(unittest.TestCase):
         self.assertNotIn('discordSenderEdit', self.channel())
         self.assertEqual(len(self.config.patches), 1)
         self.assertIsNone(self.channel().get('discordSenderName'))
-        # What the coordinator does next is its own business (REQUESTS-TO-RATE-LIMITER R4): as shipped, a 403 opens a route
-        # circuit for the server until the policy expires. Either way the route sends nothing on its own and keeps no claim.
+        # What the coordinator does next is its own business (REQUESTS-TO-RATE-LIMITER R4). With R4 a 403 opens a short route
+        # circuit (circuit_seconds of the reviewed policy, doubling per consecutive refusal up to 16 minutes); without it the
+        # circuit lasts the policy lifetime. Either way the route sends nothing on its own, keeps no claim, and once the
+        # circuit has passed the very same request is admitted again.
         self.config.reject_patch = False
         retry = self.post(self.profile())
         self.assertNotIn('discordSenderEdit', self.channel())
         if retry[0] == 'ok':
             self.assertEqual(len(self.config.patches), 2)
-        else:
-            self.assertEqual(retry[:2], (429, 'discord_rate_delayed'))
-            self.assertGreater(retry[3]['retryAfterSeconds'], 3600, 'the measured embargo for the policy lifetime')
-            self.assertEqual(len(self.config.patches), 1, 'a delayed request is never sent')
+            return
+        self.assertEqual(retry[:2], (429, 'discord_rate_delayed'))
+        seconds = retry[3]['retryAfterSeconds']
+        self.assertGreater(seconds, 0)
+        if seconds > 960:
+            self.assertGreater(seconds, 3600, 'a coordinator without R4: the measured embargo for the policy lifetime')
+        self.assertEqual(len(self.config.patches), 1, 'a delayed request is never sent')
+        with self.cluster.connect(autocommit=True) as db:       # the circuit passes (either length): move its end, and the windows, into the past
+            db.execute("UPDATE public.pr_discord_rate_state SET circuit_until = circuit_until - interval '40 hours', "
+                       "blocked_until = blocked_until - interval '40 hours', reset_at = reset_at - interval '40 hours'")
+        again = self.post(self.profile())
+        self.assertEqual(again[0], 'ok', again[:3])
+        self.assertEqual(len(self.config.patches), 2)
+        self.assertEqual(self.admissions(), [('observed', 403), ('observed', 200)])
+        self.assertEqual(self.channel()['discordSenderName'], 'Real Claim Bot')
 
     def test_a_lost_response_leaves_an_uncertain_admission_that_a_read_after_the_deadline_retires(self):
         claim = self.lose_the_response()
