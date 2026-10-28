@@ -1,5 +1,6 @@
 import type { ApiError } from '@/lib/api/client';
-import type { DiscordCopy } from '@/lib/channels/discord-copy';
+import { hourlyCeilingBody, type DiscordCopy } from '@/lib/channels/discord-copy';
+import { hourlyCeilingLimit, isHourlyCeiling } from '@/lib/channels/discord-hourly-ceiling';
 
 /**
  * The launch gate, the server cap and the shared request coordinator refuse with stable codes, so the refusal can be
@@ -11,6 +12,9 @@ export function discordRefusal(error: ApiError, copy: DiscordCopy): string {
   if (error.code === 'discord_capacity_reached') return copy.capacityReached;
   if (error.code === 'discord_rate_delayed') return copy.rateDelayed;
   if (error.code === 'discord_rate_coordinator_unavailable') return copy.coordinatorUnavailable;
+  // The hourly ceiling: the explanation as one line. The approval screens show its title, what is left undone and the
+  // two ways forward as well (discord-hourly-ceiling-notice.tsx); every other caller gets the localized explanation here.
+  if (isHourlyCeiling(error)) return hourlyCeilingBody(copy, hourlyCeilingLimit(error));
   return error.message;
 }
 

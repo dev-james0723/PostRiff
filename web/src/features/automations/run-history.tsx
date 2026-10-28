@@ -2,6 +2,9 @@
 
 import { usePreferences } from '@/lib/preferences';
 import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
+import { calendarDayHref, draftHref, queueFailureText } from '@/lib/channels/discord-hourly-ceiling';
+import { HourlyCeilingActions } from '@/features/channels/discord-hourly-ceiling-notice';
+import { useLocalTimeZone } from '@/hooks/use-local-time-zone';
 
 /**
  * One run of a Raffi workflow automation (orchestration §2–§3): its lifecycle status, when it drafts, is reviewed and
@@ -73,6 +76,7 @@ export interface RunDetailProps {
 
 export function RunDetail({ run, timeZone, canApprove, busy, onDecide, onOpenRun }: RunDetailProps) {
   const dc = discordCopy(usePreferences().locale);
+  const zone = useLocalTimeZone();
   const shown = runStatus(run);
   const plan = runPlan(run, timeZone);
   const research = researchOutcome(run.research);
@@ -149,15 +153,33 @@ export function RunDetail({ run, timeZone, canApprove, busy, onDecide, onOpenRun
                   </StatusChip>
                 </div>
                 {(() => {
+                  // When the queue attempts ran out because the hour is full, the reason is the server's English sentence.
+                  // Say it in the person's language and offer the two ways forward; the draft was kept.
+                  const full = queueFailureText(dc, item.reason) ?? (item.state === 'failed' && !item.reason ? queueFailureText(dc, item.lastError) : null);
+                  const draft = draftHref(item.variantId);
                   const line = [
                     itemLine(item, policy, timeZone),
-                    item.reason,
-                    item.state === 'failed' && !item.reason ? item.lastError : null,
+                    full ?? item.reason,
+                    full === null && item.state === 'failed' && !item.reason ? item.lastError : null,
                     item.approvedVia === 'owner_preauthorization' && ['approved', 'scheduled', 'publishing', 'published'].includes(item.state) ? 'Approved by the owner’s standing permission.' : null,
                     item.decision?.note ? `Note: “${item.decision.note}”` : null,
                     cannotPublish ? `Drafts only: ${item.capability!.reason || `can’t publish to ${item.platform} yet.`}` : null
                   ].filter(Boolean).join(' ');
-                  return line ? <p className='text-muted-foreground text-xs leading-relaxed break-words'>{line}</p> : null;
+                  return line ? (
+                    <>
+                      <p className='text-muted-foreground text-xs leading-relaxed break-words' data-hourly-ceiling-queue-failed={full ? '' : undefined}>{line}</p>
+                      {full && (
+                        <HourlyCeilingActions
+                          copy={dc}
+                          compact
+                          actions={{
+                            ...(draft ? { chooseTime: { href: draft } } : {}),
+                            ...(item.publishAt ? { see: { href: calendarDayHref(item.publishAt * 1000, zone) } } : {})
+                          }}
+                        />
+                      )}
+                    </>
+                  ) : null;
                 })()}
                 {showActions && (
                   <div className='flex flex-wrap gap-2'>

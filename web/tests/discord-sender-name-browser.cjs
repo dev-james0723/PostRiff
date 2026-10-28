@@ -1,6 +1,7 @@
 /**
- * Actual app UI, synthetic APIs only (contract v2, docs/sender-name/UI-API-CONTRACT.md). No Discord credentials or
- * provider IO: every API response comes from this file, and every off-origin request is blocked.
+ * Actual app UI, synthetic APIs only (contract v2, docs/sender-name/UI-API-CONTRACT.md; the `ceiling` group follows
+ * docs/discord-custody-20261023/HOURLY-CEILING-CONTRACT.md). No Discord credentials or provider IO: every API response
+ * comes from this file, and every off-origin request is blocked.
  *
  * Each locale and width runs every case group; the receipt lists the cases that really ran and the run fails when one
  * is missing (REQUIRED_CASES / ONCE_CASES), so a skipped block cannot pass silently. In CI nothing narrows the run.
@@ -19,6 +20,8 @@ assert.equal(process.env.RAFII_DISCORD_SYNTHETIC_FENCE, '1');
 const root = join(__dirname, '../..'), base = 'http://127.0.0.1:4449';
 const input = JSON.parse(readFileSync(join(root, '.depot/discord-p0-ui.json')));
 const template = JSON.parse(readFileSync(join(__dirname, 'fixtures/wp04a-workspace.json')));
+/** The hourly ceiling's refusal exactly as the contract shows it (409, code, limit, windowSeconds, no retry field). */
+const ceilingContract = JSON.parse(readFileSync(join(__dirname, 'fixtures/discord-hourly-ceiling-contract.json')));
 const packs = JSON.parse(readFileSync(join(root, 'web/src/lib/channels/discord-copy.json')));
 const wid = input.job.manifest.workspaceId, actor = '00000000-0000-0000-0000-000000000001';
 const outDir = join(root, '.depot/discord-sender-name-browser');
@@ -46,10 +49,12 @@ const REQUIRED_CASES = [
   'keyboard-open-type-save', 'keyboard-tab-order', 'keyboard-escape-returns-focus', 'keyboard-state-actions',
   'schedule-preview-webhook', 'schedule-preview-bot', 'schedule-preview-lines-and-time',
   'review-preview-webhook', 'review-preview-bot',
-  'no-horizontal-overflow', 'long-values-wrap', 'reduced-motion', 'no-unexpected-requests'
+  'no-horizontal-overflow', 'long-values-wrap', 'reduced-motion', 'no-unexpected-requests',
+  'ceiling-single-dialog', 'ceiling-single-uses-server-limit', 'ceiling-single-unknown-code', 'ceiling-bulk-keeps-selection', 'ceiling-bulk-remove-then-approve', 'ceiling-bulk-unknown-code',
+  'ceiling-reply-dialog', 'ceiling-reply-unknown-code', 'ceiling-decision-dialog', 'ceiling-decision-unknown-code', 'ceiling-run-card-text', 'ceiling-no-page-errors'
 ];
 // Recorded once per run (English at 1280 px), because they do not depend on locale or width.
-const ONCE_CASES = ['dark-scheme-follows-app', 'axe-editor-light', 'axe-editor-dark', 'axe-blocked-state', 'evidence-screenshots'];
+const ONCE_CASES = ['dark-scheme-follows-app', 'axe-editor-light', 'axe-editor-dark', 'axe-blocked-state', 'axe-ceiling', 'evidence-screenshots'];
 const WANT = process.env.RAFII_SENDER_CASES ? new Set(process.env.RAFII_SENDER_CASES.split(',')) : null;
 const ONLY = process.env.RAFII_SENDER_COMBOS ? new Set(process.env.RAFII_SENDER_COMBOS.split(',')) : null;
 const run = (group) => !WANT || WANT.has(group);
@@ -170,7 +175,7 @@ const STATE_SCENARIOS = [
   const combos = [['en', 1280], ['en', 390], ['zh-Hant', 390], ['zh-Hans', 1280]].filter(([locale, width]) => !ONLY || ONLY.has(`${locale}-${width}`));
   try {
     stage = 'warm';
-    await warm('/app/channels'); await warm('/app/queue');
+    await warm('/app/channels'); await warm('/app/queue'); if (run('ceiling')) await warm('/app/automations');
     const launchOptions = {headless: true,
       ...(process.env.RAFII_TEST_FONTCONFIG ? {env: {...process.env, FONTCONFIG_FILE: process.env.RAFII_TEST_FONTCONFIG}} : {}),
       ...(process.env.RAFII_TEST_CHROMIUM ? {
@@ -208,11 +213,13 @@ const STATE_SCENARIOS = [
       snapshot.state.workspace.id = wid;
       snapshot.state.phase2 = {...snapshot.state.phase2, channels, jobs: [], reviews: [], assets: []};
       snapshot.state.speaker.activeRevision = null;
-      const world = {profiles: {}, gets: [], posts: [], unexpected: [], blocked: 0, version: 1, getAnswer: null, postAnswer: null, release: null, hold: false, variants: [], reviews: [], jobs: [], providers: [], verifies: [], verifyAnswer: null, activity: 0, preferences: {timeZone: 'UTC', locale}};
+      const world = {profiles: {}, gets: [], posts: [], unexpected: [], blocked: 0, version: 1, getAnswer: null, postAnswer: null, release: null, hold: false, variants: [], reviews: [], jobs: [], providers: [], verifies: [], verifyAnswer: null, activity: 0, preferences: {timeZone: 'UTC', locale},
+        actions: [], actionAnswer: null, raffi: null, engagement: null};
       const reset = () => {
         world.profiles = {[HOOK]: profile('webhook', HOOK), [BOT]: profile('bot', BOT)};
         world.gets = []; world.posts = []; world.getAnswer = null; world.postAnswer = null; world.hold = false; world.release = null; world.jobs = []; world.verifies = []; world.verifyAnswer = null;
         world.providers = [providerFor({bot: true, webhook: true})];
+        world.actions = []; world.actionAnswer = null; world.raffi = null; world.engagement = null;
         delete hook.discordSenderName;
       };
       reset();
@@ -253,6 +260,31 @@ const STATE_SCENARIOS = [
           if (webhook) hook.discordSenderName = body.name;
           return send(world.profiles[id]);
         }
+        // Approvals: a case sets `actionAnswer` to the refusal it wants to see. The synthetic server never approves anything.
+        if (path === `/api/workspaces/${wid}/actions` && req.method() === 'POST') {
+          const body = req.postDataJSON(); world.actions.push(body);
+          const answer = world.actionAnswer?.(body);
+          if (answer) return send(answer.body, answer.status);
+          world.unexpected.push(`POST ${path} ${body.action}`); return send({error: 'Unexpected synthetic mutation', code: 'invalid_request'}, 400);
+        }
+        const engagement = /^\/api\/workspaces\/[^/]+\/channels\/[^/]+\/discord-engagement(?:\/(read|preview|approve))?$/.exec(path);
+        if (engagement && world.engagement) {
+          const state = world.engagement, step = engagement[1] ?? null;
+          if (step === null && req.method() === 'GET') return send(state.status);
+          if (step === 'read' && req.method() === 'POST') return send(state.inbox);
+          if (step === 'preview' && req.method() === 'POST') {
+            const body = req.postDataJSON(), number = ++state.previews, stamp = body.localTime ? Math.floor(Date.parse(body.localTime + 'Z') / 1000) : state.now;
+            return send({reviewId: `synthetic-reply-${number}`, digest: hash(`reply-${number}`), expiresAt: stamp + 3600, parent: state.inbox.messages[0],
+              manifest: {actor, channelId: BOT, destinationId: body.destinationId, payload: {text: body.text}, timing: {timestamp: stamp, timeZone: 'UTC'},
+                discord: {target: state.status.destinations[0].target}, engagementReply: {parentMessageId: body.parentMessageId}}});
+          }
+          if (step === 'approve' && req.method() === 'POST') {
+            const body = req.postDataJSON(); state.approvals.push(body);
+            const answer = state.answer?.(body);
+            if (answer) return send(answer.body, answer.status);
+          }
+          world.unexpected.push(`${req.method()} ${path}`); return send({error: 'Unexpected synthetic mutation', code: 'invalid_request'}, 400);
+        }
         if (path.endsWith('/time-savings/activity') && req.method() === 'POST') { world.activity++; return send({ok: true}); }
         // The card's Verify request: what records a bot's nickname. The synthetic server says verified unless a case says otherwise.
         if (path.endsWith('/verify') && req.method() === 'POST') {
@@ -265,7 +297,11 @@ const STATE_SCENARIOS = [
         if (path === '/api/catalog') return send({authMode: 'dev', execution: 'dev-synthetic', phase2: true, templates: [], routes: [], profileMetadata: {}});
         if (path === '/api/me') return send({userId: actor, displayName: 'Synthetic tester', preferences: world.preferences, mfa: {}});
         if (path === '/api/workspaces') return send({workspaces: [{workspaceId: wid, name: 'Synthetic Discord', plan: 'studio', membership: template.snapshot.membership, memberCounts: {owner: 1}}]});
-        if (path === `/api/workspaces/${wid}`) { snapshot.state.variants = world.variants; snapshot.state.phase2.reviews = world.reviews; snapshot.state.phase2.jobs = world.jobs; return send(snapshot); }
+        if (path === `/api/workspaces/${wid}`) {
+          snapshot.state.variants = world.variants; snapshot.state.phase2.reviews = world.reviews; snapshot.state.phase2.jobs = world.jobs;
+          if (world.raffi) snapshot.state.raffi = world.raffi; else delete snapshot.state.raffi;
+          return send(snapshot);
+        }
         if (path.endsWith('/memory')) return send(template.memory);
         if (path.endsWith('/memory/proposals')) return send({pending: [], recent: [], learning: {items: []}});
         if (path.endsWith('/audit')) return send({events: []});
@@ -311,8 +347,8 @@ const STATE_SCENARIOS = [
           theme: element.getAttribute('data-theme-option'), label: element.getAttribute('aria-label'), text: (element.textContent || '').trim().slice(0, 80),
           heading: element.tagName === 'H3' ? element.closest('[data-testid]')?.getAttribute('data-testid') : null, field: element.tagName === 'INPUT' && element.type !== 'checkbox'};
       });
-      const overflow = () => page.evaluate(() => {
-        const box = document.querySelector('[data-testid="discord-sender-dialog"]') ?? document.querySelector('[role="dialog"]');
+      const overflow = (selector = null) => page.evaluate((chosen) => {
+        const box = (chosen && document.querySelector(chosen)) ?? document.querySelector('[data-testid="discord-sender-dialog"]') ?? document.querySelector('[role="dialog"]');
         const bad = [];
         if (box) {
           const outer = box.getBoundingClientRect();
@@ -324,9 +360,9 @@ const STATE_SCENARIOS = [
           }
         }
         return {document: document.documentElement.scrollWidth > innerWidth + 1, dialog: box ? box.scrollWidth > box.clientWidth + 1 : false, bad: bad.slice(0, 5)};
-      });
-      const assertFits = async what => {
-        const result = await overflow();
+      }, selector);
+      const assertFits = async (what, selector = null) => {
+        const result = await overflow(selector);
         assert.deepEqual(result, {document: false, dialog: false, bad: []}, `horizontal overflow at ${what}: ${JSON.stringify(result)}`);
       };
       const open = async (kind, {keyboard = true} = {}) => {
@@ -1134,6 +1170,363 @@ const STATE_SCENARIOS = [
         world.jobs = [];
       }
 
+      // ---------------------------------------------------------------- the Discord hourly ceiling (docs/discord-custody-20261023/HOURLY-CEILING-CONTRACT.md)
+      // The synthetic server answers an approval with the contract's 409 (or with another 409); it never approves anything.
+      if (run('ceiling')) {
+        stage = combo + ':ceiling';
+        const future = Math.floor(Date.now() / 1000) + 30 * 86400;
+        const at = index => future + index * 3600;
+        const ceilingReview = index => {
+          const review = structuredClone(input.review);
+          review.id = `synthetic-ceiling-review-${index}`; review.digest = hash(`ceiling-digest-${index}`);
+          review.manifest.idempotencyKey = hash(`ceiling-post-${index}`);
+          review.manifest.variantId = index === 0 ? input.variant.id : `${input.variant.id}-${index}`;
+          review.manifest.platform = 'Discord'; review.manifest.channelId = HOOK; review.manifest.senderKind = 'webhook';
+          review.manifest.payload = {...review.manifest.payload, text: `Doors open at 7 (${index})`};
+          review.manifest.expiresAt = at(index) + 7200;
+          review.manifest.timing = {...review.manifest.timing, timestamp: at(index), utc: new Date(at(index) * 1000).toISOString(), local: new Date(at(index) * 1000).toISOString().slice(0, 16)};
+          delete review.manifest.discordSenderName; delete review.manifest.discordBotNickname;
+          return review;
+        };
+        /** The contract's refusal, with the limit it names (the owner may change it). */
+        const refuse = (limit = ceilingContract.body.limit) => () => ({status: ceilingContract.status, body: {...ceilingContract.body, limit,
+          error: ceilingContract.body.error.replace(String(ceilingContract.body.limit), String(limit))}});
+        const paused = () => ({status: 409, body: {error: 'Approvals for this account are paused.', code: 'approvals_paused_synthetic'}});
+        const dayOf = seconds => page.evaluate(([epoch]) => {
+          const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(epoch * 1000).map(part => [part.type, part.value]));
+          return `${parts.year}-${parts.month}-${parts.day}`;
+        }, [seconds]);
+        const tapTarget = async (locator, what) => {
+          const box = await locator.boundingBox();
+          assert.ok(box && box.height >= 44 && box.width >= 44, `${what} is a 44 px target (${box && Math.round(box.width)}x${box && Math.round(box.height)})`);
+        };
+        /** Nothing in the refusal offers a second send, a wait or a countdown. */
+        const assertNoRetry = async (scope, what) => {
+          assert.doesNotMatch(await scope.innerText(), /retry|try again|reload|countdown|再試|重試|再试|重试|重新載入|重新加载/i, `${what}: words`);
+          assert.equal(await scope.locator('time, progress, [role="timer"], [aria-live], [data-retry], [data-countdown]').count(), 0, `${what}: elements`);
+        };
+        const snap = async (locator, name) => {
+          // The dev server's own overlays (route indicator, query devtools button) are not part of the app; keep them out of the pictures.
+          if (!(await page.evaluate(() => Boolean(document.getElementById('rafii-evidence-style'))))) {
+            await page.addStyleTag({content: 'nextjs-portal,[data-nextjs-toast],[data-next-badge-root],.tsqd-parent-container,.tsqd-open-btn-container{display:none!important}'}).then(handle => handle.evaluate(element => { element.id = 'rafii-evidence-style'; }));
+          }
+          await sleep(200);
+          await locator.screenshot({path: join(outDir, `${combo}-${name}.png`)});
+          if (evidenceDir) await locator.screenshot({path: join(evidenceDir, `${combo}-${name}.png`)});
+        };
+        const noToast = async what => assert.equal(await page.locator('[data-sonner-toast]').count(), 0, `${what}: no toast`);
+        // Uncaught errors and React's own warnings (hydration, keys, state updates during render) on these surfaces are failures.
+        const trouble = [];
+        const onPageError = error => trouble.push(`pageerror: ${String(error).slice(0, 200)}`);
+        const onConsole = message => { if (message.type() === 'error' && /hydrat|Warning:|unique "key"|Cannot update a component|Maximum update depth/i.test(message.text())) trouble.push(`console: ${message.text().slice(0, 200)}`); };
+        page.on('pageerror', onPageError); page.on('console', onConsole);
+        // WCAG 2 A and AA on each new surface, once per run (English at 1280 px): the injected script is lost on every navigation, so it is added where needed.
+        const axeCeiling = async (selector, what) => {
+          if (locale !== 'en' || width !== 1280) return;
+          if (!(await page.evaluate(() => typeof window.axe !== 'undefined'))) await page.addScriptTag({path: require.resolve('axe-core/axe.min.js')});
+          const violations = (await page.evaluate(([sel]) => axe.run(document.querySelector(sel), {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa']}}), [selector]))
+            .violations.map(v => `${v.id}: ${v.nodes.slice(0, 2).map(n => n.target.join(' ')).join(' | ')}`);
+          assert.deepEqual(violations, [], `axe: ${what}`);
+          axed.add(what);
+        };
+        const axed = new Set();
+        const toastWith = async text => { const toast = page.locator('[data-sonner-toast]').filter({hasText: text}); await toast.first().waitFor(); return toast.first(); };
+
+        // ------------------------------------------------------------ one approval, from the Queue card
+        stage = combo + ':ceiling-single';
+        reset(); world.reviews = [ceilingReview(0)]; world.actionAnswer = refuse();
+        await page.goto(base + '/app/queue', {waitUntil: 'domcontentloaded'});
+        const approveButton = page.locator('button[data-review-approve]');
+        await approveButton.waitFor(); assert.equal(await approveButton.count(), 1);
+        await approveButton.click();
+        const refusalDialog = page.locator('[data-hourly-ceiling-dialog]'); await refusalDialog.waitFor();
+        assert.equal(await page.getByRole('dialog', {name: copy.hourlyCeilingTitle, exact: true}).count(), 1, 'the dialog is named by its title');
+        assert.equal(squash(await refusalDialog.locator('[data-hourly-ceiling-body]').innerText()), squash(fill(copy.hourlyCeilingBody, {limit: 300})));
+        assert.equal(squash(await refusalDialog.locator('[data-hourly-ceiling-state]').innerText()), squash(copy.hourlyCeilingNothingApproved));
+        assert.equal(squash(await refusalDialog.locator('[data-hourly-ceiling-moved]').innerText()), squash(copy.hourlyCeilingMoved), 'a move ends here: the earlier time is already cancelled');
+        const chooseTime = refusalDialog.locator('[data-hourly-ceiling-action="choose-time"]'), seePosts = refusalDialog.locator('[data-hourly-ceiling-action="see-posts"]');
+        assert.equal(squash(await chooseTime.innerText()), squash(copy.hourlyCeilingChooseTime));
+        assert.equal(await chooseTime.getAttribute('href'), `/app/queue?view=drafts&draft=${encodeURIComponent(input.variant.id)}`);
+        assert.equal(squash(await seePosts.innerText()), squash(copy.hourlyCeilingSeePosts));
+        assert.equal(await seePosts.getAttribute('href'), `/app/calendar?view=day&date=${await dayOf(at(0))}`, 'the Calendar day of the post, in the browser zone');
+        const closeRefusal = refusalDialog.locator('[data-hourly-ceiling-close]');
+        assert.equal(squash(await closeRefusal.innerText()), squash(copy.hourlyCeilingClose));
+        const described = await page.evaluate(() => {
+          const box = document.querySelector('[data-hourly-ceiling-dialog]'), id = box?.getAttribute('aria-describedby');
+          return id ? document.getElementById(id)?.innerText ?? null : null;
+        });
+        assert.ok(described, 'the dialog has a description');
+        for (const part of [fill(copy.hourlyCeilingBody, {limit: 300}), copy.hourlyCeilingNothingApproved, copy.hourlyCeilingMoved]) assert.ok(squash(described).includes(squash(part)), `a screen reader is told: ${part}`);
+        for (const [target, what] of [[chooseTime, 'choose another time'], [seePosts, 'see the posts'], [closeRefusal, 'close']]) await tapTarget(target, what);
+        await assertNoRetry(refusalDialog, 'single approve');
+        await noToast('single approve');
+        await assertFits('ceiling single dialog');
+        assert.equal(world.actions.length, 1);
+        assert.deepEqual(Object.keys(world.actions[0]).sort(), ['action', 'expectedRevision', 'payload']);
+        assert.equal(world.actions[0].action, 'p2_approve');
+        assert.deepEqual(world.actions[0].payload, {reviewId: 'synthetic-ceiling-review-0', digest: hash('ceiling-digest-0'), confirmed: true});
+        await snap(refusalDialog, 'ceiling-single-dialog');
+        await axeCeiling('[data-hourly-ceiling-dialog]', 'single dialog');
+        await sleep(1500); assert.equal(world.actions.length, 1, 'no automatic retry');
+        await page.keyboard.press('Escape'); await refusalDialog.waitFor({state: 'detached'});
+        await until(() => approveButton.evaluate(element => element === document.activeElement), 'focus back on the approve button');
+        // The review is untouched and still waiting: the same card, the same button, nothing approved.
+        assert.equal(await approveButton.count(), 1);
+        await sleep(300); assert.equal(world.actions.length, 1, 'closing the explanation sends nothing');
+        pass('ceiling-single-dialog');
+
+        // The limit in the text is the response's own when it carries one (the owner may change the ceiling).
+        world.actionAnswer = refuse(250);
+        await approveButton.click(); await refusalDialog.waitFor();
+        assert.equal(squash(await refusalDialog.locator('[data-hourly-ceiling-body]').innerText()), squash(fill(copy.hourlyCeilingBody, {limit: 250})));
+        assert.equal(world.actions.length, 2, 'a second press is a second request, made by the person');
+        await closeRefusal.click(); await refusalDialog.waitFor({state: 'detached'});
+        pass('ceiling-single-uses-server-limit');
+
+        // Any other refusal keeps the old path: a toast with the server's words and a way to reload.
+        world.actionAnswer = paused;
+        await approveButton.click();
+        const pausedToast = await toastWith('Couldn’t approve this post');
+        assert.match(await pausedToast.innerText(), /Approvals for this account are paused\./);
+        assert.match(await pausedToast.innerText(), /Reload/);
+        assert.equal(await refusalDialog.count(), 0, 'no ceiling dialog for another code');
+        assert.equal(world.actions.length, 3);
+        pass('ceiling-single-unknown-code');
+
+        // ------------------------------------------------------------ several approvals at once, from the Queue
+        stage = combo + ':ceiling-bulk';
+        reset(); world.reviews = [0, 1, 2].map(ceilingReview); world.actionAnswer = refuse();
+        await page.goto(base + '/app/queue', {waitUntil: 'domcontentloaded'});
+        const approveAll = page.getByRole('button', {name: 'Approve all 3', exact: true});
+        await approveAll.waitFor(); await approveAll.click();
+        const bulk = page.getByRole('dialog');
+        await bulk.getByRole('heading', {name: 'Approve 3 posts?', exact: true}).waitFor();
+        const rows = bulk.locator('li[data-review-id]'), primary = bulk.locator('[data-approve-many-primary]'), removes = bulk.locator('[data-approve-many-remove]');
+        const bulkNotice = bulk.locator('[data-hourly-ceiling][data-place="bulk"]');
+        assert.equal(await rows.count(), 3); assert.equal(await removes.count(), 0, 'nothing to remove before a refusal');
+        await primary.click();
+        await bulkNotice.waitFor();
+        assert.equal(squash(await bulkNotice.locator('h3').innerText()), squash(copy.hourlyCeilingTitle));
+        assert.equal(squash(await bulkNotice.locator('[data-hourly-ceiling-body]').innerText()), squash(fill(copy.hourlyCeilingBody, {limit: 300})));
+        assert.equal(squash(await bulkNotice.locator('[data-hourly-ceiling-state]').innerText()), squash(copy.hourlyCeilingBulkNone), 'it says that no post was approved and the selection is unchanged');
+        const bulkSee = bulkNotice.locator('[data-hourly-ceiling-action="see-posts"]');
+        assert.equal(squash(await bulkSee.innerText()), squash(copy.hourlyCeilingSeePostsMany));
+        assert.equal(await bulkSee.getAttribute('href'), `/app/calendar?view=day&date=${await dayOf(at(0))}`);
+        assert.equal(await bulkNotice.locator('[data-hourly-ceiling-action="choose-time"]').count(), 0, 'the response does not say which post crossed, so there is no one time to change');
+        assert.equal(await page.evaluate(() => { const focus = document.activeElement; return focus?.tagName === 'H3' && Boolean(focus.closest('[data-hourly-ceiling]')); }), true, 'the keyboard moves to the explanation');
+        assert.equal(await rows.count(), 3, 'the selection is kept');
+        assert.equal(await primary.isDisabled(), true, 'the same selection is not offered again');
+        assert.equal(await removes.count(), 3, 'every post can be taken out');
+        for (let index = 0; index < 3; index++) {
+          const remove = removes.nth(index);
+          assert.equal(squash(await remove.innerText()), squash(copy.hourlyCeilingRemove));
+          assert.ok((await remove.getAttribute('aria-label')).startsWith(copy.hourlyCeilingRemoveFor.split('{name}')[0]), 'the name starts with the visible word');
+          await tapTarget(remove, `remove ${index}`);
+        }
+        await assertNoRetry(bulkNotice, 'bulk approve'); await noToast('bulk approve');
+        await assertFits('ceiling bulk dialog');
+        assert.equal(world.actions.length, 1);
+        assert.equal(world.actions[0].action, 'p2_approve_many');
+        assert.deepEqual(world.actions[0].payload.reviews.map(row => row.reviewId), [0, 1, 2].map(index => `synthetic-ceiling-review-${index}`));
+        assert.equal(world.actions[0].payload.confirmed, true);
+        await snap(bulk, 'ceiling-bulk-notice');
+        await axeCeiling('[role="dialog"]', 'bulk dialog');
+        await sleep(1500); assert.equal(world.actions.length, 1, 'no automatic retry');
+        pass('ceiling-bulk-keeps-selection');
+
+        // Take a post out: the refusal belonged to the old selection, so the rest can be approved again (and is refused again here).
+        await removes.nth(1).click();
+        await until(async () => (await rows.count()) === 2, 'the row is gone');
+        assert.equal(await bulkNotice.count(), 0, 'a changed selection is a new question');
+        assert.equal(await primary.isDisabled(), false);
+        assert.equal(squash(await primary.innerText()), 'Approve 2');
+        await bulk.getByRole('heading', {name: 'Approve 2 posts?', exact: true}).waitFor();
+        assert.equal(await primary.evaluate(element => element === document.activeElement), true, 'the keyboard lands on the button that approves what is left');
+        assert.equal(await removes.count(), 2, 'the remove buttons stay');
+        assert.equal(await bulk.locator('li[data-review-id="synthetic-ceiling-review-1"]').count(), 0);
+        await primary.click(); await bulkNotice.waitFor();
+        assert.equal(world.actions.length, 2);
+        assert.deepEqual(world.actions[1].payload.reviews.map(row => row.reviewId), ['synthetic-ceiling-review-0', 'synthetic-ceiling-review-2'], 'the removed post is not in the next request');
+        await removes.first().click();
+        await until(async () => (await rows.count()) === 1, 'the second row is gone');
+        assert.equal(await removes.count(), 0, 'the last post cannot be removed');
+        assert.equal(await primary.isDisabled(), false);
+        await bulk.getByRole('heading', {name: 'Approve 1 post?', exact: true}).waitFor();
+        // Closing starts over: a fresh dialog has the whole batch, no explanation and no remove buttons.
+        await bulk.getByRole('button', {name: 'Cancel', exact: true}).click(); await bulk.waitFor({state: 'detached'});
+        await approveAll.click();
+        await bulk.getByRole('heading', {name: 'Approve 3 posts?', exact: true}).waitFor();
+        assert.equal(await rows.count(), 3); assert.equal(await bulkNotice.count(), 0); assert.equal(await removes.count(), 0); assert.equal(await primary.isDisabled(), false);
+        assert.equal(world.actions.length, 2);
+        pass('ceiling-bulk-remove-then-approve');
+
+        // Another refusal keeps the old path: a toast, the selection, and the same button to press again.
+        world.actionAnswer = paused;
+        await primary.click();
+        const bulkToast = await toastWith('Couldn’t approve these posts');
+        assert.match(await bulkToast.innerText(), /Approvals for this account are paused\./);
+        assert.equal(await bulkNotice.count(), 0, 'no ceiling notice for another code');
+        assert.equal(await removes.count(), 0);
+        assert.equal(await rows.count(), 3);
+        assert.equal(await primary.isDisabled(), false);
+        assert.equal(world.actions.length, 3);
+        pass('ceiling-bulk-unknown-code');
+        await bulk.getByRole('button', {name: 'Cancel', exact: true}).click().catch(() => {});
+
+        // ------------------------------------------------------------ a reply to a message (engagement)
+        stage = combo + ':ceiling-reply';
+        reset(); world.reviews = []; world.variants = [];
+        const replyTarget = bot.discordDestinations[0];
+        world.engagement = {previews: 0, approvals: [], answer: refuse(), now: future,
+          status: {implemented: true, enabled: true, canReply: true, jobs: [],
+            destinations: [{target: replyTarget, targetDigest: hash('reply-target'), contentAccess: 'mentions_only', broaderContentEligible: false, permissions: {analytics: true, inbox: true, reply: true}, expiresAt: future + 86400}],
+            limits: {inbox: 'Synthetic inbox limits.', analytics: 'Synthetic analytics limits.', retention: 'Synthetic retention.', broaderAccess: 'Synthetic broader access.', unavailable: []}},
+          inbox: {kind: 'inbox', contentAccess: 'mentions_only', target: replyTarget, observedAt: future - 60, coverage: 'latest_page_only', pageLimit: 50, mayHaveOlderMessages: false,
+            messages: [{id: '9001', parentMessageId: null, content: 'What time do the doors open?', contentAvailability: 'visible_bot_mention', author: 'Synthetic fan', replyable: true, url: 'https://discord.com/channels/555555/7777777/9001'}]}};
+        await page.goto(base + '/app/channels', {waitUntil: 'domcontentloaded'});
+        await page.getByRole('button', {name: 'Discord analytics & conversations', exact: true}).first().click();
+        await page.getByRole('combobox', {name: 'Engagement destination'}).waitFor();
+        const openReplyReview = async (text, time) => {
+          if (await page.getByRole('textbox', {name: 'Exact Discord reply', exact: true}).count() === 0) {
+            await page.getByRole('button', {name: 'Read partial inbox', exact: true}).click();
+            await page.getByRole('region', {name: 'Partial Discord inbox'}).getByRole('button', {name: 'Write a reply', exact: true}).click();
+          }
+          await page.getByRole('textbox', {name: 'Exact Discord reply', exact: true}).fill(text);
+          if (time) await page.locator('input[aria-label="Discord reply time"]').fill(time);
+          await page.getByRole('button', {name: 'Review exact reply', exact: true}).click();
+          const review = page.getByRole('dialog', {name: 'Approve this exact Discord reply', exact: true}); await review.waitFor();
+          return review;
+        };
+        const reviewDialog = await openReplyReview('The doors open at 7.');
+        const replyApprove = reviewDialog.getByRole('button', {name: 'Approve this exact reply', exact: true});
+        await replyApprove.click();
+        const replyNotice = reviewDialog.locator('[data-hourly-ceiling][data-place="reply"]'); await replyNotice.waitFor();
+        assert.equal(squash(await replyNotice.locator('h3').innerText()), squash(copy.hourlyCeilingTitle));
+        assert.equal(squash(await replyNotice.locator('[data-hourly-ceiling-body]').innerText()), squash(fill(copy.hourlyCeilingBody, {limit: 300})));
+        assert.equal(squash(await replyNotice.locator('[data-hourly-ceiling-state]').innerText()), squash(copy.hourlyCeilingReply));
+        assert.equal(await replyNotice.locator('[data-hourly-ceiling-moved]').count(), 0);
+        const replySee = replyNotice.locator('[data-hourly-ceiling-action="see-posts"]');
+        assert.equal(await replySee.getAttribute('href'), `/app/calendar?view=day&date=${await dayOf(future)}`);
+        const replyChoose = replyNotice.locator('[data-hourly-ceiling-action="choose-time"]');
+        assert.equal(squash(await replyChoose.innerText()), squash(copy.hourlyCeilingChooseTime));
+        for (const [target, what] of [[replyChoose, 'choose another time'], [replySee, 'see the posts']]) await tapTarget(target, `reply ${what}`);
+        await assertNoRetry(replyNotice, 'reply'); await noToast('reply');
+        assert.equal(await reviewDialog.isVisible(), true, 'the review stays open');
+        assert.equal(await replyApprove.isDisabled(), true, 'the same review is not offered again');
+        assert.equal(await page.evaluate(() => { const focus = document.activeElement; return focus?.tagName === 'H3' && Boolean(focus.closest('[data-hourly-ceiling]')); }), true);
+        assert.equal(world.engagement.approvals.length, 1);
+        assert.deepEqual(world.engagement.approvals[0], {reviewId: 'synthetic-reply-1', digest: hash('reply-1'), confirmed: true});
+        await assertFits('ceiling reply dialog', '[role="dialog"][data-slot="dialog-content"]');
+        await snap(reviewDialog, 'ceiling-reply-notice');
+        await axeCeiling('[role="dialog"][data-slot="dialog-content"]', 'reply dialog');
+        await sleep(1500); assert.equal(world.engagement.approvals.length, 1, 'no automatic retry');
+        // Choose another time: back to the reply form, with the keyboard on its time field, and a new review can be approved.
+        await replyChoose.click(); await reviewDialog.waitFor({state: 'detached'});
+        await until(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Discord reply time'), 'the time field has the keyboard');
+        const nextReview = await openReplyReview('The doors open at 7.', '2031-03-04T09:05');
+        assert.equal(await nextReview.locator('[data-hourly-ceiling]').count(), 0, 'a new review is a new question');
+        assert.equal(await nextReview.getByRole('button', {name: 'Approve this exact reply', exact: true}).isDisabled(), false);
+        pass('ceiling-reply-dialog');
+        // Any other refusal keeps the old path: the message at the top of the panel, and the review is closed.
+        world.engagement.answer = paused;
+        await nextReview.getByRole('button', {name: 'Approve this exact reply', exact: true}).click();
+        await nextReview.waitFor({state: 'detached'});
+        await page.getByText('Approvals for this account are paused.', {exact: true}).waitFor();
+        assert.equal(await page.locator('[data-hourly-ceiling]').count(), 0);
+        assert.equal(world.engagement.approvals.length, 2);
+        pass('ceiling-reply-unknown-code');
+        world.engagement = null;
+
+        // ------------------------------------------------------------ an automation post: the decision, and the card after the queue attempts
+        stage = combo + ':ceiling-decision';
+        reset();
+        const automationVariant = {...input.variant, id: 'synthetic-automation-draft', text: 'Doors open at 7 tonight.', revision: 1};
+        const automationDestination = bot.discordDestinations[0];
+        const automationItem = {destinationId: automationDestination.id, key: `Discord|${BOT}|en`, platform: 'Discord', channelId: BOT, account: bot.account, language: 'en',
+          variantId: automationVariant.id, variantRevision: 1, state: 'ready_for_review', publishAt: at(0)};
+        const queueFailed = (number, reason) => ({key: `Discord|${BOT}|en`, platform: 'Discord', channelId: BOT, account: bot.account, language: 'en', variantId: `${automationVariant.id}-${number}`,
+          state: 'failed', reason, publishAt: at(number), attempts: 3, lastError: null});
+        const runOf = (id, items, daysBack) => ({id, taskId: 'task-ceiling', state: 'completed', scheduledFor: at(0) - daysBack * 86400, anchorAt: at(0) - daysBack * 86400, lifecycle: 'drafted', policy: 'review', items});
+        world.variants = [automationVariant];
+        world.raffi = {campaignPlanning: {campaigns: [], recurringTasks: [{
+          id: 'task-ceiling', campaignId: 'campaign-ceiling', version: 1, status: 'active', name: 'Weekly doors-open note', authorityVersion: 2, route: 'synthetic-writer', createdAt: future - 1e6, updatedAt: future - 1e5,
+          schedule: {kind: 'weekly', weekdays: ['Thursday'], localTime: '09:00', timeZone: 'UTC'}, destinations: [{platform: 'Discord', language: 'en', channelId: BOT}], accountLabels: {[BOT]: bot.account}}],
+          occurrences: [runOf('run-ceiling-1', [automationItem], 0), runOf('run-ceiling-2', [queueFailed(1, ceilingContract.queueFailureReason)], 1),
+            runOf('run-ceiling-3', [queueFailed(2, "It couldn't be queued in time, so it was not published. The draft is kept.")], 2)]}};
+        world.actionAnswer = refuse();
+        await page.goto(base + '/app/automations', {waitUntil: 'domcontentloaded'});
+        const pendingRun = page.locator('[data-automation-run="run-ceiling-1"]');
+        await pendingRun.waitFor();
+        await pendingRun.getByRole('button', {name: /^Approve the .* post$/}).click();
+        const decision = page.getByRole('dialog');
+        await decision.getByRole('checkbox').check();
+        const decide = decision.getByRole('button', {name: 'Approve post', exact: true});
+        await until(async () => !(await decide.isDisabled()), 'the approval is ready');
+        await decide.click();
+        const decisionNotice = decision.locator('[data-hourly-ceiling][data-place="decision"]'); await decisionNotice.waitFor();
+        assert.equal(squash(await decisionNotice.locator('h3').innerText()), squash(copy.hourlyCeilingTitle));
+        assert.equal(squash(await decisionNotice.locator('[data-hourly-ceiling-body]').innerText()), squash(fill(copy.hourlyCeilingBody, {limit: 300})));
+        assert.equal(squash(await decisionNotice.locator('[data-hourly-ceiling-state]').innerText()), squash(copy.hourlyCeilingDecision), 'the post stays ready for review');
+        const decisionSee = decisionNotice.locator('[data-hourly-ceiling-action="see-posts"]');
+        assert.equal(await decisionSee.getAttribute('href'), `/app/calendar?view=day&date=${await dayOf(at(0))}`);
+        assert.equal(await decisionNotice.locator('[data-hourly-ceiling-action="choose-time"]').count(), 0, 'an automation post has no time of its own to choose');
+        await tapTarget(decisionSee, 'decision see the posts');
+        await assertNoRetry(decisionNotice, 'decision'); await noToast('decision');
+        assert.equal(await decision.isVisible(), true, 'the dialog stays');
+        assert.equal(await decide.isDisabled(), true, 'the same request is not offered again');
+        assert.equal(await page.evaluate(() => { const focus = document.activeElement; return focus?.tagName === 'H3' && Boolean(focus.closest('[data-hourly-ceiling]')); }), true);
+        assert.equal(world.actions.length, 1);
+        assert.equal(world.actions[0].action, 'raffi_run_decide'); assert.equal(world.actions[0].payload.decision, 'approve');
+        await assertFits('ceiling decision dialog');
+        await snap(decision, 'ceiling-decision-notice');
+        await axeCeiling('[role="dialog"]', 'decision dialog');
+        await sleep(1500); assert.equal(world.actions.length, 1, 'no automatic retry');
+        pass('ceiling-decision-dialog');
+        // Another refusal keeps the old path: a toast with the server's words, and the dialog can send again.
+        await decision.getByRole('button', {name: 'Not now', exact: true}).click(); await decision.waitFor({state: 'detached'});
+        world.actionAnswer = paused;
+        await pendingRun.getByRole('button', {name: /^Approve the .* post$/}).click();
+        await decision.getByRole('checkbox').check();
+        await until(async () => !(await decide.isDisabled()), 'the approval is ready again');
+        await decide.click();
+        const decisionToast = await toastWith('Approvals for this account are paused.');
+        assert.ok(decisionToast);
+        assert.equal(await decision.locator('[data-hourly-ceiling]').count(), 0);
+        await until(async () => !(await decide.isDisabled()), 'the dialog can send again');
+        assert.equal(world.actions.length, 2);
+        pass('ceiling-decision-unknown-code');
+        await decision.getByRole('button', {name: 'Not now', exact: true}).click(); await decision.waitFor({state: 'detached'});
+
+        // The card of a post the scheduler could not queue: the server's English sentence, said in the person's language.
+        stage = combo + ':ceiling-run-card';
+        const failedRun = page.locator('[data-automation-run="run-ceiling-2"]'), otherRun = page.locator('[data-automation-run="run-ceiling-3"]');
+        await failedRun.waitFor();
+        const failedLine = failedRun.locator('[data-hourly-ceiling-queue-failed]');
+        assert.equal(squash(await failedLine.innerText()), squash(fill(copy.hourlyCeilingQueueFailed, {limit: 300})));
+        assert.ok(!(await failedRun.innerText()).includes('This hour is full'), 'the English sentence is replaced, not repeated');
+        const cardChoose = failedRun.locator('[data-hourly-ceiling-action="choose-time"]'), cardSee = failedRun.locator('[data-hourly-ceiling-action="see-posts"]');
+        assert.equal(await cardChoose.getAttribute('href'), `/app/queue?view=drafts&draft=${encodeURIComponent(automationVariant.id + '-1')}`, 'the approved draft was kept');
+        assert.equal(await cardSee.getAttribute('href'), `/app/calendar?view=day&date=${await dayOf(at(1))}`);
+        for (const [target, what] of [[cardChoose, 'choose another time'], [cardSee, 'see the posts']]) await tapTarget(target, `card ${what}`);
+        assert.doesNotMatch(await failedRun.innerText(), /retry|try again|countdown|再試|重試|再试|重试/i);
+        assert.equal(await failedRun.getByRole('button', {name: /^Approve the/}).count(), 0, 'a failed post has no approve button; the draft is the way back');
+        assert.equal(squash(await otherRun.innerText()).includes("It couldn't be queued in time, so it was not published. The draft is kept."), true, 'another reason is shown as the server wrote it');
+        assert.equal(await otherRun.locator('[data-hourly-ceiling-action]').count(), 0);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'the card fits the page');
+        await snap(failedRun, 'ceiling-run-card');
+        await axeCeiling('[data-automation-run="run-ceiling-2"]', 'run card');
+        pass('ceiling-run-card-text');
+        if (locale === 'en' && width === 1280 && run('ceiling')) {
+          assert.deepEqual([...axed].sort(), ['bulk dialog', 'decision dialog', 'reply dialog', 'run card', 'single dialog'], 'axe ran on every new surface');
+          once.add('axe-ceiling');
+        }
+
+        page.off('pageerror', onPageError); page.off('console', onConsole);
+        assert.deepEqual(trouble, [], 'no uncaught errors or React warnings on the new surfaces');
+        pass('ceiling-no-page-errors');
+        world.raffi = null; world.variants = []; world.reviews = []; world.actionAnswer = null; world.engagement = null;
+      }
+
       // ---------------------------------------------------------------- layout, motion, requests
       if (run('layout')) {
         stage = combo + ':layout';
@@ -1199,7 +1592,7 @@ const STATE_SCENARIOS = [
       }
 
       // ---------------------------------------------------------------- nothing but the sender-name routes was written
-      assert.deepEqual(world.unexpected, [], 'The sender editor must never publish, connect or approve posts');
+      assert.deepEqual(world.unexpected, [], 'Only the sender-name routes and the refused approvals of the ceiling cases may be written; nothing is ever published, connected or approved');
       assert.equal(world.blocked, 0, 'No request left the isolated app');
       pass('no-unexpected-requests');
       await context.close();

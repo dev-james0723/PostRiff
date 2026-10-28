@@ -2,8 +2,11 @@
 
 import { usePreferences } from '@/lib/preferences';
 import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
+import { calendarDayHref, hourlyCeilingLimit, isHourlyCeiling } from '@/lib/channels/discord-hourly-ceiling';
 import { botNicknameView } from '@/lib/channels/discord-sender-name';
 import { DiscordMessagePreview } from '@/features/channels/discord-message-preview';
+import { HourlyCeilingNotice } from '@/features/channels/discord-hourly-ceiling-notice';
+import { useLocalTimeZone } from '@/hooks/use-local-time-zone';
 
 /**
  * Approve, request changes to, or reject one post of an automation run (`raffi_run_decide`, orchestration §4).
@@ -86,6 +89,9 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
   const [confirmed, setConfirmed] = useState(false);
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
+  // The Discord hourly ceiling refused the approval: the limit it names. The post stays "Ready for review".
+  const [full, setFull] = useState<number | null>(null);
+  const zone = useLocalTimeZone();
   const [destinationId, setDestinationId] = useState(item.destinationId ?? '');
   const connection = state?.phase2?.channels.find((c) => c.id === item.channelId);
   const destinations = connection?.discordDestinations?.filter((d) => d.status === 'authorized' && d.authorizationGeneration === connection.discordAuthorizationGeneration) ?? [];
@@ -109,7 +115,7 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
             ? 'This browser can’t verify the sources for this approval. Try another browser.'
             : null
       : null;
-  const ready = !sending && !blocked && (decision !== 'approve' || (confirmed && digestsReady && (item.platform !== 'Discord' || !item.publishAt || Boolean(discordTarget)))) && (decision !== 'revise' || note.trim().length > 0);
+  const ready = !sending && !blocked && full === null && (decision !== 'approve' || (confirmed && digestsReady && (item.platform !== 'Discord' || !item.publishAt || Boolean(discordTarget)))) && (decision !== 'revise' || note.trim().length > 0);
 
   async function send() {
     if (!ready) return;
@@ -136,6 +142,12 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
       toast.success(text.done);
       onClose();
     } catch (error) {
+      if (isHourlyCeiling(error)) {
+        // The plan is full at that hour, so the same request would be refused again: show why and where to look, keep the dialog.
+        setFull(hourlyCeilingLimit(error));
+        setSending(false);
+        return;
+      }
       if (error instanceof ApiError && error.code === 'approval_expired') toast.error('Too late to approve: its publish time has passed.');
       else toast.error(error instanceof ApiError ? error.message : 'Couldn’t send. Try again.');
       setSending(false);
@@ -253,6 +265,14 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
           </div>
         )}
         {blocked && <Note>{blocked}</Note>}
+        {full !== null && (
+          <HourlyCeilingNotice
+            copy={dc}
+            place='decision'
+            limit={full}
+            actions={item.publishAt ? { see: { href: calendarDayHref(item.publishAt * 1000, zone) }, onNavigate: onClose } : undefined}
+          />
+        )}
         {decision === 'approve' && !blocked && (
           <Checkbox
             checked={confirmed}

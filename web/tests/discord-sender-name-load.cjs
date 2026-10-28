@@ -29,6 +29,14 @@ function install() {
   const resolveFilename = Module._resolveFilename;
   Module._resolveFilename = function (request, parent, ...rest) {
     const mapped = request.startsWith('@/') ? path.join(root, 'src', request.slice(2)) : request;
+    // webpack and tsc take `discord-copy.ts` before `discord-copy.json` for the request `./discord-copy`; node's own
+    // order is the other way round, so an extensionless request is pointed at the TypeScript file when there is one.
+    const base = mapped.startsWith('.') && parent && parent.filename ? path.resolve(path.dirname(parent.filename), mapped) : path.isAbsolute(mapped) ? mapped : null;
+    if (base) {
+      for (const extension of ['.ts', '.tsx']) {
+        if (fs.existsSync(base + extension) && fs.statSync(base + extension).isFile()) return base + extension;
+      }
+    }
     return resolveFilename.call(this, mapped, parent, ...rest);
   };
   for (const extension of ['.ts', '.tsx']) {

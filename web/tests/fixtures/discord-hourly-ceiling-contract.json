@@ -1,0 +1,17 @@
+{
+  "schema": "rafii.discord-hourly-ceiling-contract.v1",
+  "source": "docs/discord-custody-20261023/HOURLY-CEILING-CONTRACT.md on origin/claude/discord-rc2-g2a-fixes-20261023 at 217a2c8f (owner decision, reply 16, D-4, 2026-10-28)",
+  "status": 409,
+  "body": {
+    "error": "This hour is full: a workspace can have at most 300 approved Discord posts scheduled within any one hour. Approve fewer posts in that hour, or spread them over more hours.",
+    "code": "discord_workspace_hourly_ceiling",
+    "limit": 300,
+    "windowSeconds": 3600
+  },
+  "copy": {
+    "title": "That hour is full",
+    "body": "A workspace can have at most {limit} approved Discord posts in any one hour. Approve fewer posts in that hour, or spread them over more hours.",
+    "actions": ["Choose another time", "See the posts in that hour"]
+  },
+  "queueFailureReason": "It couldn't be queued: This hour is full: a workspace can have at most 300 approved Discord posts scheduled within any one hour. Approve fewer posts in that hour, or spread them over more hours. The approved draft is kept."
+}

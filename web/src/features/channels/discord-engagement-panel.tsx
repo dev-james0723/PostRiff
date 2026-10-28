@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -8,7 +8,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Textarea } from '@/components/ui/textarea';
 import { StateMessage } from '@/components/rafii';
 import { ApiError } from '@/lib/api/client';
+import { useLocalTimeZone } from '@/hooks/use-local-time-zone';
 import { discordCopy } from '@/lib/channels/discord-copy';
+import { calendarDayHref, hourlyCeilingLimit, isHourlyCeiling } from '@/lib/channels/discord-hourly-ceiling';
 import { discordRefusal } from '@/lib/channels/discord-refusal';
 import { usePreferences } from '@/lib/preferences';
 import { keys } from '@/lib/api/hooks';
@@ -16,6 +18,7 @@ import type { ChannelView } from '@/lib/api/types';
 import type { DiscordEngagementMessage, DiscordEngagementPermissions, DiscordEngagementRead, DiscordEngagementStatus, DiscordReplyReview } from '@/lib/channels/discord-engagement';
 import { formatDateTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { HourlyCeilingNotice } from './discord-hourly-ceiling-notice';
 import { CONTROL_44, DIALOG_ELEVATED, SHEET_ELEVATED } from './rafii-materials';
 import { cn } from '@/lib/utils';
 
@@ -40,14 +43,22 @@ export function DiscordEngagementPanel({ channel, mode = 'all' }: { channel: Cha
   const [review, setReview] = useState<DiscordReplyReview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The Discord hourly ceiling refused this exact review: the limit it names. The review stays open and waiting.
+  const [refused, setRefused] = useState<{ reviewId: string; limit: number } | null>(null);
+  const zone = useLocalTimeZone();
+  // "Choose another time" closes the review and puts the keyboard on the reply form's time field.
+  const wantTime = useRef(false);
   const destination = status?.destinations.find((item) => item.target.id === selected);
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const full = review && refused?.reviewId === review.reviewId ? refused : null;
 
-  async function run(action: () => Promise<void>) {
+  /** `handled` may take over a refusal (return true) so the screen the person is on keeps its state. */
+  async function run(action: () => Promise<void>, handled?: (cause: unknown) => boolean) {
     setBusy(true);
     setError(null);
     try { await action(); }
     catch (cause) {
+      if (handled?.(cause)) return;
       setError(cause instanceof ApiError ? discordRefusal(cause, copy) : cause instanceof Error ? cause.message : 'The request did not complete. Reload its state before trying again.');
       // Previously delivered provider data is never presented as a fresh read.
       setData(null);
@@ -97,6 +108,7 @@ export function DiscordEngagementPanel({ channel, mode = 'all' }: { channel: Cha
 
   function prepare() {
     if (!destination || !parent) return;
+    setRefused(null);
     void run(async () => {
       setReview(await api.discordReplyPreview(workspaceId, channel.id, {
         destinationId: destination.target.id, parentMessageId: parent.id, text,
@@ -106,13 +118,18 @@ export function DiscordEngagementPanel({ channel, mode = 'all' }: { channel: Cha
   }
 
   function approve() {
-    if (!review) return;
+    if (!review || full) return;
     const frozen = review;
     void run(async () => {
       await api.discordReplyApprove(workspaceId, channel.id, { reviewId: frozen.reviewId, digest: frozen.digest, confirmed: true });
       setReview(null); setParent(null); setText('');
       await reload();
       void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+    }, (cause) => {
+      // A full hour is the plan's answer: keep the review open and unchanged, say why, and offer no second send of it.
+      if (!isHourlyCeiling(cause)) return false;
+      setRefused({ reviewId: frozen.reviewId, limit: hourlyCeilingLimit(cause) });
+      return true;
     });
   }
 
@@ -211,7 +228,14 @@ export function DiscordEngagementPanel({ channel, mode = 'all' }: { channel: Cha
         </SheetContent>
       </Sheet>
       <Dialog open={Boolean(review)} onOpenChange={(value) => { if (!value && !busy) setReview(null); }}>
-        <DialogContent className={DIALOG_ELEVATED}>
+        <DialogContent
+          className={DIALOG_ELEVATED}
+          finalFocus={() => {
+            if (!wantTime.current) return true;
+            wantTime.current = false;
+            return document.getElementById(`${controlId}-time`);
+          }}
+        >
           <DialogHeader><DialogTitle>Approve this exact Discord reply</DialogTitle><DialogDescription>Your approval covers only this text, parent message, destination and time. A changed parent or revoked access stops dispatch.</DialogDescription></DialogHeader>
           {review && <div className='flex flex-col gap-3 text-sm'>
             <p className='break-all'>{review.manifest.discord.target.guildName} · {review.manifest.discord.target.channelName}<br />Server {review.manifest.discord.target.guildId} · channel {review.manifest.discord.target.channelId}</p>
@@ -220,8 +244,19 @@ export function DiscordEngagementPanel({ channel, mode = 'all' }: { channel: Cha
             <p className='font-medium'>Frozen reply</p><p className='rafii-quiet whitespace-pre-wrap break-words rounded-md p-3'>{review.manifest.payload.text}</p>
             <p>{formatDateTime(review.manifest.timing.timestamp)} · {review.manifest.timing.timeZone}</p>
             <p className='text-muted-foreground'>No mentions or reply notifications. Review expires {formatDateTime(review.expiresAt)}.</p>
+            {full && <HourlyCeilingNotice
+              copy={copy}
+              place='reply'
+              limit={full.limit}
+              actions={{
+                // The time is chosen in the reply form behind this dialog.
+                chooseTime: { onClick: () => { wantTime.current = true; setReview(null); } },
+                see: { href: calendarDayHref(review.manifest.timing.timestamp * 1000, zone) },
+                onNavigate: () => setReview(null)
+              }}
+            />}
           </div>}
-          <DialogFooter><Button variant='glass' disabled={busy} onClick={() => setReview(null)}>Back to editing</Button><Button variant='action' disabled={busy || !review} onClick={approve}>Approve this exact reply</Button></DialogFooter>
+          <DialogFooter><Button variant='glass' disabled={busy} onClick={() => setReview(null)}>Back to editing</Button><Button variant='action' disabled={busy || !review || Boolean(full)} onClick={approve}>Approve this exact reply</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>
