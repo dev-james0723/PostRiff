@@ -32,6 +32,7 @@ Labels: [Certain] measured or read exactly; [Likely] strong inference; [Guessing
 - **What would change my mind:** a measured packing under 0.9 after the rewrite, or a measured Vercel to Supabase round trip above 4 ms (the coordinator lock alone then caps below 25 a second).
 - **Reversible:** each option is a code or configuration change on a new build.
 - **Needed by:** only when the measured margin is known.
+- **Update 15:21Z on 2026-10-28 (hosted development runs on the booking head `02fd679b`, [Certain: measured]).** Lane at 56 s: median 14.51 / p95 28.16 / max 29.68 minutes against 12 / 25 / 40 (lane at 50 s: 15.66 / 30.55 / 32.37; before booking: 19.77 / 37.87 / 43.52). A loop cycle is about 0.58 s (Discord 0.10, database 0.157 for 44.6 statements, booked sleep 0.128, Python and runner 0.257 on a 4-vCPU box), so twelve loops, not the 25 a second, are the limit today and the guard (+2%) and the bearer budget (+6%) can add only a little until the loops are faster or more. [Guessing: arithmetic on assumed latencies] on a Production-like cycle the median would be about 13 minutes at a 2 ms database round trip, 16 at 5 ms, 22 at 10 ms. Reaching 12 needs more loops (16 to 24), fewer statements per request, a fast database and the approved levers together. I will bring you a ranked decision (D-17: loops, statements, Supabase compute class, the stamp ceiling, or what to promise) when the limiter's round-trip analysis and the final-head measurement are in; nothing to decide yet.
 
 ## D-3. What the normal-load promise is
 
