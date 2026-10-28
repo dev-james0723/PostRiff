@@ -19,6 +19,7 @@ The class is built by `make_wire(LifecycleWire, APP, BOT, GUILD)` because Lifecy
 constants come from the checkout under test (Q05_TARGET_ROOT), not from this branch.
 """
 import copy
+import hashlib
 import threading
 from urllib.parse import urlsplit
 
@@ -68,6 +69,24 @@ def make_wire(LifecycleWire, APP, BOT, GUILD):
 
         # -- transport --------------------------------------------------------- #
         def __call__(self, method, url, **kwargs):
+            return self._rate_headers(method, url, self._answer(method, url, **kwargs))
+
+        @staticmethod
+        def _rate_headers(method, url, result):
+            """Discord answers every request with its rate-limit bucket headers; the shared admission
+            coordinator learns each route's bucket from them (an unlearned route is probed at one request per
+            second). A generous synthetic bucket per exact path, as the checkout's own engagement tests use."""
+            if isinstance(result, dict):
+                headers = dict(result.get('headers') or {})      # never mutate a dict the base wire may share
+                result['headers'] = headers
+                if not any(str(k).lower() == 'x-ratelimit-bucket' for k in headers):
+                    path = urlsplit(url).path
+                    headers.update({'X-RateLimit-Bucket': hashlib.sha256(f'{method} {path}'.encode()).hexdigest()[:16],
+                                    'X-RateLimit-Limit': '1000', 'X-RateLimit-Remaining': '999',
+                                    'X-RateLimit-Reset-After': '1'})
+            return result
+
+        def _answer(self, method, url, **kwargs):
             parts = urlsplit(url)
             path = parts.path.removeprefix('/api/v10')
             with self.q05_lock:

@@ -486,7 +486,7 @@ class Case:
                  token_key, *, body=None, mutation=False, expected=("403", "404"),
                  needs=None, victim_key=None, scope=None, differential=False,
                  owner_token_key=None, twin_path=None, expect_status=None, expect_body=None,
-                 expect_prefix=None, deferred=None):
+                 expect_prefix=None, deferred=None, expect_pairs=None, role_profile=None, late=False):
         self.cid = cid
         self.method = method
         self.template = template
@@ -514,6 +514,13 @@ class Case:
         self.expect_status = expect_status
         self.expect_body = expect_body
         self.expect_prefix = expect_prefix
+        # "role" scope: the accepted (status, error body) answers of another member of the same workspace,
+        # or, for a GET a member may make, the profile it must get ("readonly": a 200 offering no edit and
+        # answered without Discord; "manager": a read-only profile OR an editable one, never a write).
+        self.expect_pairs = expect_pairs
+        self.role_profile = role_profile
+        # run after the attack phase (a same-workspace read the contract allows may read Discord)
+        self.late = late
         # a ws_scope differential that cannot run inline (the owner's request has its own write side
         # effects on this line): it is the named control, run after the attack phase; if that control
         # does not PASS, this case is downgraded to INCONCLUSIVE.
@@ -878,23 +885,33 @@ ROLE_POST_SKIP = {("connmgr", "bot")}
 
 
 def role_expect(role, kind, method, contract):
-    """The exact answer another member of the SAME workspace must get, per sender-name contract version.
-    Returns (status, set of accepted error bodies, twin?, readonly?). readonly: a v2 non-authorizer GET is a
-    read-only 200 profile (editable false, not_authorizing_member, answered without any Discord read)."""
+    """What another member of the SAME workspace must get, per sender-name contract version.
+    Returns (accepted (status, error body) pairs, twin?, profile). profile is None for a refusal, else the
+    200 a GET must answer: "readonly" (editable false with not_authorizing_member, answered without any
+    Discord read) or "manager" (readonly, or an editable profile of exactly that connection; never a write).
+    A "manager" GET runs after the attack phase, since the contract lets it read Discord."""
     if role in ("viewer", "editor"):
-        # Contract v2 says "same body as a foreign or non-existent workspace"; the implementation keeps the
-        # permission body. Both are refusals before any object is read (and the twin must match).
-        return 403, {PERMISSION_DENY_BODY, GATE_DENY_BODY}, True, False
+        # A member without connection-management: refused before any object is read (the contract says to
+        # branch on the code, permission_denied; the earlier draft named the gate body, also accepted). The
+        # never-existing-connection twin must get the same answer.
+        return {(403, PERMISSION_DENY_BODY), (403, GATE_DENY_BODY)}, True, None
     if role == "removed":
-        return 403, {GATE_DENY_BODY}, True, False                     # no longer a member: the tenant gate
+        return {(403, GATE_DENY_BODY)}, True, None                    # no longer a member: the tenant gate
     # connmgr / admin: hold connection-management, but did not authorize this connection
     if contract >= 2:
+        if kind == "webhook":
+            # Contract head: a webhook name is a Rafii setting that any member with connection-management may
+            # edit (only a bot nickname, a shared Discord object, is authorizer-only); an authorizer-only build
+            # is stricter and also accepted. The probe's never-current fingerprint is refused either way.
+            if method == "GET":
+                return set(), False, "manager"
+            return {(403, UNAVAILABLE_BODY), (409, SENDER_STALE_BODY)}, False, None
         if method == "GET":
-            return 200, set(), False, True
-        return 403, {UNAVAILABLE_BODY}, False, False
+            return set(), False, "readonly"
+        return {(403, UNAVAILABLE_BODY)}, False, None
     if kind == "webhook":
-        return 403, {AUTHORIZER_DENY_BODY}, False, False
-    return 404, {IDENTITY_DENY_BODY}, False, False
+        return {(403, AUTHORIZER_DENY_BODY)}, False, None
+    return {(404, IDENTITY_DENY_BODY)}, False, None
 
 
 MALFORMED_CONNECTIONS = (("short", "x"), ("dots", ".."), ("quote", "discord-webhook-%27%20OR%201%3D1--"),
@@ -1010,7 +1027,7 @@ def build_sender_cases(disc, config):
                 for method, ck, blast in (("GET", "read", ""), ("POST", "write", "state")):
                     if method == "POST" and (role, kind) in ROLE_POST_SKIP:
                         continue
-                    status, bodies, twin, readonly = role_expect(role, kind, method, contract)
+                    pairs, twin, profile = role_expect(role, kind, method, contract)
                     cid = f"{ck}.sender.role.{role}.{kind}.{owner}"
                     tmpl = f"/api/workspaces/{oph}/channels/<{owner}.{kind}>/{SENDER_ROUTE}"
                     direction = f"{owner}:{role}"
@@ -1023,14 +1040,13 @@ def build_sender_cases(disc, config):
                         cases.append(_not_built(cid, method, tmpl, direction, ck, blast, None,
                                                 f"no {kind} connection discovered"))
                     else:
-                        c = Case(cid, method, tmpl, direction, ck, blast, route(o_ws, oconn), tok_key,
-                                 body=STALE_SENDER_BODY if method == "POST" else None,
-                                 mutation=(method == "POST"), scope="role", expect_status=status,
-                                 expect_body=bodies,
-                                 twin_path=route(o_ws, NONEXISTENT_CONNECTION[kind]) if twin else None,
-                                 deferred=f"control.sender.{'get' if method == 'GET' else 'post_stale'}.{kind}.{owner}")
-                        c.readonly_profile = readonly
-                        cases.append(c)
+                        cases.append(Case(
+                            cid, method, tmpl, direction, ck, blast, route(o_ws, oconn), tok_key,
+                            body=STALE_SENDER_BODY if method == "POST" else None,
+                            mutation=(method == "POST"), scope="role", expect_pairs=pairs, role_profile=profile,
+                            late=profile == "manager",
+                            twin_path=route(o_ws, NONEXISTENT_CONNECTION[kind]) if twin else None,
+                            deferred=f"control.sender.{'get' if method == 'GET' else 'post_stale'}.{kind}.{owner}"))
 
     # ---- owner controls (run after the attack phase) --------------------------------------------- #
     for owner in ("A", "B"):
@@ -1219,7 +1235,8 @@ def run_case(client, case, disc, flags):
         case.verdict = "INCONCLUSIVE"
         case.note = reason
 
-    if provider is not None and provider[0] > 0:
+    # (a "manager" settings read may legitimately read Discord; its scoring checks the provider itself)
+    if provider is not None and provider[0] > 0 and case.role_profile != "manager":
         case.verdict = "FAIL"
         case.note = f"the refused request reached the provider ({provider[0]} request(s), {provider[1]} write(s))"
         return
@@ -1303,21 +1320,44 @@ def run_sender_sequence(client, steps, flags):
         fail_all([restore], f"restoring the original name answered {st} (INCONCLUSIVE)")
 
 
-def _score_attack(client, case, status, text, obj, err, markers, inconclusive):
-    if case.scope == "role" and getattr(case, "readonly_profile", False):
-        # contract v2: a member who holds connection-management but did not authorize the connection may READ
-        # its settings — a read-only 200 (editable false, not_authorizing_member) answered without Discord.
-        if status != 200 or not isinstance(obj, dict):
-            return inconclusive(f"expected a read-only 200 profile, got {status}")
-        codes = [r.get("code") for r in (obj.get("unavailable") or []) if isinstance(r, dict)]
-        if obj.get("editable") is not False or "not_authorizing_member" not in codes:
-            case.verdict, case.note = "FAIL", "a member who did not authorize the connection was offered an edit"
-            return
-        if obj.get("observedAt") is not None:
+def _score_role_profile(client, case, status, text, obj, markers, inconclusive):
+    """Contract v2: a member who holds connection-management but did not authorize the connection may READ
+    its sender settings. "readonly" (a bot nickname, authorizer-only): a 200 that offers no edit
+    (editable false, not_authorizing_member) and was answered without any Discord read. "manager" (a
+    webhook name, which the contract head lets any connection manager edit): that read-only answer, or an
+    editable profile of exactly the requested connection that wrote nothing to Discord."""
+    provider = client.last_provider
+    if status != 200 or not isinstance(obj, dict):
+        return inconclusive(f"expected a 200 settings profile, got {status}")
+    if leak_detected(text, markers):
+        case.verdict, case.note = "FAIL", "victim marker present in response"
+        return
+    if obj.get("connectionId") != case.path.split("/")[5]:
+        case.verdict, case.note = "FAIL", "the settings profile is not the requested connection's"
+        return
+    codes = [r.get("code") for r in (obj.get("unavailable") or []) if isinstance(r, dict)]
+    if obj.get("editable") is False and "not_authorizing_member" in codes:
+        if obj.get("observedAt") is not None or (provider is not None and provider[0] > 0):
             case.verdict, case.note = "FAIL", "a non-authorizer's read made a Discord read"
             return
         case.verdict = "PASS"
+        if case.role_profile == "manager":
+            case.note = "read-only for a non-authorizing manager (stricter than the contract head)"
         return
+    if case.role_profile == "manager" and obj.get("editable") is True and not codes:
+        if provider is not None and provider[1] > 0:
+            case.verdict, case.note = "FAIL", "a settings read wrote to the provider"
+            return
+        case.verdict, case.note = "PASS", "editable for a connection manager (contract head: webhook names)"
+        return
+    if case.role_profile == "manager":
+        return inconclusive("neither the read-only nor the manager profile (another reason was reported)")
+    case.verdict, case.note = "FAIL", "a member who did not authorize the connection was offered an edit"
+
+
+def _score_attack(client, case, status, text, obj, err, markers, inconclusive):
+    if case.scope == "role" and case.role_profile:
+        return _score_role_profile(client, case, status, text, obj, markers, inconclusive)
     if case.scope == "malformed":
         # A malformed id must get a clean JSON 4xx: never accepted, never a server error, no leak.
         if status == 0 or 300 <= status <= 399 or status in (401, 429):
@@ -1385,8 +1425,8 @@ def _score_attack(client, case, status, text, obj, err, markers, inconclusive):
 
     if case.scope == "role":
         # Another member of the SAME workspace: must be refused by the exact control the feature names
-        # (permission / authorizing member / the gate for a removed member).
-        if status == case.expect_status and err in _as_set(case.expect_body):
+        # (permission / authorizing member / the gate for a removed member / the stale fingerprint).
+        if (status, err) in (case.expect_pairs or ()):
             case.verdict = "PASS"
             return
         return inconclusive(f"refused with {status}, but not by the expected control")
@@ -1605,7 +1645,9 @@ def main(argv=None):
 
     # 3. build and run attack cases
     cases = build_matrix(disc, config, flags)
-    attack_cases = [c for c in cases if c.kind in ("read", "write")]
+    attack_cases = [c for c in cases if c.kind in ("read", "write") and not c.late]
+    # same-workspace reads the contract allows (they may read Discord): after the attack phase, before controls
+    late_cases = [c for c in cases if c.kind in ("read", "write") and c.late]
     control_cases = [c for c in cases if c.kind == "control"]
     audit_checks = [c for c in control_cases if c.scope == "audit_leak"]
     sequences = [c for c in control_cases if c.scope == "sequence"]
@@ -1621,7 +1663,7 @@ def main(argv=None):
         after = {k: snapshot(client, config, k) for k in ("A", "B")}
         # 5. controls (owner on own workspace; may change own state legitimately). The audit-leak checks run
         #    first, before any owner control writes audit rows of its own.
-        for c in audit_checks + plain_controls:
+        for c in audit_checks + late_cases + plain_controls:
             run_case(client, c, disc, flags)
         for owner in ("A", "B"):
             steps = [c for c in sequences if c.cid.endswith("." + owner)]
@@ -1637,7 +1679,7 @@ def main(argv=None):
     # 5b. deferred owner differentials: a workspace-scope or same-workspace refusal only counts once the
     #     route's owner control (run above, after the attacks) proved the owner gets past those checks.
     by_id = {c.cid: c for c in cases}
-    for c in attack_cases:
+    for c in attack_cases + late_cases:
         if c.deferred and c.verdict == "PASS":
             control = by_id.get(c.deferred)
             if control is None or control.verdict != "PASS":
@@ -1678,7 +1720,7 @@ def main(argv=None):
         mc.note = f"{len(missing_ids)} expected case id(s) absent from the run: " + ",".join(missing_ids)
         extra_cases.append(mc)
 
-    all_cases = attack_cases + control_cases + snapshot_cases + extra_cases
+    all_cases = attack_cases + late_cases + control_cases + snapshot_cases + extra_cases
     summary = summarize(all_cases, smoke=flags.smoke)
     # fold snapshot FAILs into failed count already done by summarize (kind=control)
     # but snapshot FAIL is counted as controls_failed/inconclusive which is correct.
