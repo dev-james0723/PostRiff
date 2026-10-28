@@ -44,6 +44,9 @@ MAX_SHARDS = 32
 # reserve. The budget starts when the route runs, so a cold start's imports before it get their own allowance. The
 # margin is room, not a bound: the default database factory (hosted_app.postgres_factory) opens a connection per
 # transaction with an 8-second connect timeout and sets no statement_timeout, so nothing caps a step's database time.
+# Booking adds to that worst case: each of those seven requests may first wait up to BOOK_AHEAD_SECONDS (one second) for its
+# slot inside the coordinator's reserve, so a step is seven seconds longer at most (147 of the 160 seconds; at the 90-second
+# maximum budget 23 seconds of margin remain). The budget is read before each step only, as before.
 FUNCTION_SECONDS = 300
 STEP_RESERVE_SECONDS = 160
 COLD_START_SECONDS = 20

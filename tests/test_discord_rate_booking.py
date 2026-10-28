@@ -361,6 +361,27 @@ class BookedPermits(Booked):
                                         sleep=self.sleep, monotonic=lambda: self.mono)
         self.denied(lambda: expiring.reserve('GET', self.path(), identity=self.identity, book_ahead=1.0))
 
+    def test_the_wait_stops_at_the_caller_s_deadline_whatever_was_booked(self):
+        """A booking is only made while the slot and the permit's life fit before the caller's deadline, so the deadline can
+        fall inside the sleep only if this process stalled (or a clock moved): then the sleep ends at the deadline, the permit
+        is left to expire unused and the caller is told so."""
+        self.fill()
+        self.at(.9)
+        slot = 1 + SPAN_EPS
+        stall = {'done': False}
+
+        def stalling_sleep(seconds):
+            self.sleeps.append(seconds)
+            self.mono += seconds + (5.0 if not stall['done'] else 0.0)   # the process was frozen for five seconds
+            stall['done'] = True
+        waiting = SharedPostgresBudget(self.db.connection, APP, policy=self.policy, sleep=stalling_sleep, monotonic=lambda: self.mono)
+        with self.assertRaises(RateDelayed) as caught:
+            waiting.reserve('GET', self.path(), identity=self.identity, book_ahead=1.0, valid_until=T0 + slot + self.policy['permit_ttl_seconds'] + .05)
+        self.assertEqual((caught.exception.rate_cause, caught.exception.rate_scope_kind), ('permit_expired', 'permit'))
+        self.assertEqual(len(self.sleeps), 1, 'it did not go on sleeping to a slot past its deadline')
+        permit_row = [r for r in self.rows() if r['state'] == 'reserved'][-1]
+        self.assertAlmostEqual(permit_row['reserved'], T0 + slot, places=6, msg='the permit is left to expire on its own')
+
     def test_an_immediate_permit_is_unchanged_by_all_this(self):
         self.at(0)
         permit = self.create(valid_until=T0 + .5)

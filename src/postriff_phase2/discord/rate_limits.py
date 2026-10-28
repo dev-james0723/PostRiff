@@ -1085,21 +1085,30 @@ class SharedPostgresBudget:
             permit = Permit(str(uuid.uuid4()),self.application_key,method,_digest(path),identity,binding_hash(binding),expiry)
             self._store_and_insert(cur,rows,keys,previous,permit,route,major,bucket,binding,read_sent,slot)
         if slot is not None:
-            self._wait_for_slot(permit,slot-now,read_at,read_sent)
+            self._wait_for_slot(permit,slot-now,read_at,read_sent,
+                                deadline-now if valid_number(valid_until) and not read_sent else None)
         return permit
 
-    def _wait_for_slot(self, permit, booked, read_at, read_sent):
+    def _wait_for_slot(self, permit, booked, read_at, read_sent, deadline_in=None):
         """Sleep until the booked slot has come: after the commit, no lock held. `booked` seconds after the database clock was
         read, counted on this process's monotonic clock from the moment that reading arrived, so the time the reservation itself
         took is not slept twice and a send is never early (the reading reached us a moment after it was taken). Then, for a read
-        that slept, the gate: one last look at whether anything stopped its route meanwhile."""
+        that slept, the gate: one last look at whether anything stopped its route meanwhile. `deadline_in`, for a create, is how
+        many seconds after the reading the caller's own deadline (its lease or approval) falls: the sleep stops there, whatever
+        was booked, and the permit is left to expire unused (a booking is only made while the slot and the permit's life fit
+        before it, so this is the process that stalled, or a clock that moved)."""
         self._count_booking(bookings=1,bookedWaitSeconds=booked)
         slept = 0.0
         for _ in range(int(booked/.1)+20):  # slices of 0.1 s; the bound only guards a sleep that never advances a clock
-            remaining = booked-(self._monotonic()-read_at)
+            elapsed = self._monotonic()-read_at
+            if deadline_in is not None and elapsed >= deadline_in:
+                raise RateDelayed(.05,cause='permit_expired',scope='permit')
+            remaining = booked-elapsed
             if remaining <= 0:
                 break
             pause = min(remaining,.1)
+            if deadline_in is not None:
+                pause = min(pause,max(deadline_in-elapsed,.001))
             self._sleep(pause)
             slept += pause
         if read_sent and slept >= self.BOOK_GATE_MIN_SECONDS:
