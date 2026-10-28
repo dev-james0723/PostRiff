@@ -41,11 +41,24 @@ class UnansweredRequests(Base):
         self.at(1 + MARGIN + 1e-3)
         self.assertEqual(self.free_slots(), 3)
 
+    def lost_write(self):
+        """A write consumed and then lost (the process died, or the transport failed): `uncertain` for good."""
+        path = '/channels/%d/messages' % (700000000000000000 + self.serial)
+        self.serial += 1
+        permit = self.s.reserve('POST', path, identity=self.identity)
+        self.s.consume(permit, 'POST', path)
+        self.s.note_transport_failure(permit)
+        self.forget_routes()
+        return permit
+
     def test_a_hundred_leaked_requests_older_than_the_margin_do_not_reduce_the_budget(self):
         self.make(200, 1)
-        for _ in range(100):
-            self.s.note_transport_failure(self.read(answered=False))   # sent, then a transport error: never resolved
-        self.assertEqual({row['state'] for row in self.db.admissions.values()}, {'uncertain'})
+        for number in range(100):
+            if number % 2:
+                self.read(answered=False)                             # sent, then the observation failed or the process died
+            else:
+                self.lost_write()                                    # sent, then a transport error: outcome unknown
+        self.assertEqual({row['state'] for row in self.db.admissions.values()}, {'sent', 'uncertain'})
         self.at(1 + 2e-6)
         self.assertEqual(self.free_slots(), 100)          # a hundred slots held while they can still matter
         self.at(1 + MARGIN - 1e-3)
@@ -55,7 +68,7 @@ class UnansweredRequests(Base):
         self.assertEqual(len(self.db.admissions), 100, 'the rows are kept as evidence; they just stop counting')
 
     def test_one_leaked_request_inside_its_window_still_counts(self):
-        self.s.note_transport_failure(self.read(answered=False))
+        self.lost_write()
         self.read()
         self.read()
         self.assertEqual(self.denied().rate_scope_kind, 'application')
@@ -69,8 +82,7 @@ class UnansweredRequests(Base):
 
     def test_the_cold_probe_of_a_route_is_released_when_its_unanswered_request_ages_out(self):
         path = '/channels/%s' % A
-        permit = self.s.reserve_read('GET', path, identity=self.identity)
-        self.s.note_transport_failure(permit)
+        self.s.reserve_read('GET', path, identity=self.identity)                    # sent; its answer never comes
         again = lambda: self.s.reserve_read('GET', path, identity=self.identity)  # noqa: E731
         self.at(3)
         self.assertIn(self.denied(again).rate_scope_kind, ('discovery', 'unknown_route'))  # the probe's answer is unknown
@@ -79,15 +91,49 @@ class UnansweredRequests(Base):
         self.at(1 + MARGIN + 1e-3)
         self.assertIsInstance(again(), Permit)                              # it probes again
 
-    def test_twenty_six_hostile_guilds_stall_a_victim_only_for_window_plus_margin(self):
+    def test_the_cold_probe_of_a_write_is_released_when_its_lost_request_ages_out(self):
+        path = '/channels/%s/messages' % A
+        permit = self.s.reserve('POST', path, identity=self.identity)
+        self.s.consume(permit, 'POST', path)
+        self.s.note_transport_failure(permit)                                      # outcome unknown: uncertain
+        again = lambda: self.s.reserve('POST', path, identity=self.identity)      # noqa: E731
+        self.at(3)
+        self.assertIn(self.denied(again).rate_scope_kind, ('discovery', 'unknown_route'))
+        self.at(1 + MARGIN + 1e-3)
+        self.assertIsInstance(again(), Permit)
+
+    def test_a_failed_cold_probe_of_a_read_is_not_held_beyond_its_window(self):
+        """A read has no effect to be unsure of, and once its transport has returned nothing of it is still on the way."""
+        path = '/channels/%s' % A
+        permit = self.s.reserve_read('GET', path, identity=self.identity)
+        self.s.note_transport_failure(permit)
+        self.assertEqual(self.db.admissions[permit.id]['state'], 'observed')
+        again = lambda: self.s.reserve_read('GET', path, identity=self.identity)  # noqa: E731
+        self.assertIn(self.denied(again).rate_scope_kind, ('discovery', 'unknown_route'))   # inside the probe's own window
+        self.at(1 + 2e-6)
+        self.assertIsInstance(again(), Permit)
+
+    def test_twenty_five_failed_reads_or_oversized_answers_leave_the_whole_budget_after_their_window(self):
         """Unit form of the reviewer's reproduction: each hostile guild's answer is refused after it arrived (a channel
-        list over 256 KiB), so the request is recorded as uncertain. Twenty-five of them used to cost the whole
-        budget for good."""
+        list over 256 KiB). It used to be recorded as uncertain, and twenty-five of them took the whole budget for good
+        (a guild owner could make that happen to every tenant). A read is now resolved the moment its transport returns."""
+        self.make(25, 1)
+        for _ in range(25):
+            self.s.note_transport_failure(self.read(answered=False))
+        victim = lambda: self.s.reserve_read('GET', '/guilds/%d' % 700000000000000999, identity=self.identity)  # noqa: E731
+        self.assertEqual(self.denied(victim).rate_scope_kind, 'application')   # inside the window they are admissions
+        self.at(1 + 2e-6)
+        self.assertEqual(self.free_slots(), 25)           # one window later nothing of them is held
+        self.assertEqual({row['state'] for row in self.db.admissions.values()}, {'observed'})
+
+    def test_twenty_six_lost_writes_stall_a_victim_only_for_window_plus_margin(self):
+        """A write whose outcome is unknown keeps its slot for the margin and no longer. Twenty-five of them used to cost
+        the whole budget for good."""
         self.make(25, 1)
         leaked = 0
         for _ in range(26):
             try:
-                self.s.note_transport_failure(self.read(answered=False))
+                self.lost_write()
                 leaked += 1
             except RateDelayed:
                 pass

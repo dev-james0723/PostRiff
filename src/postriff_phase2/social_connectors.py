@@ -391,6 +391,7 @@ class DiscordProvider(OAuthProvider):
 
     def _discord_http(self, method, path, *, credential_kind, bearer=None, user_id=None, **kwargs):
         from .discord.rate_limits import Permit, RateDelayed, RateCoordinatorUnavailable, UnconsumedPublishPermit, ReadAdmissionDelayed
+        from .providers import ProviderResponseLimit
         read_authorize = kwargs.pop('read_authorize', None)
         write_authorize = kwargs.pop('write_authorize', None)
         write_admitted = kwargs.pop('write_admitted', None)
@@ -484,10 +485,16 @@ class DiscordProvider(OAuthProvider):
                 raise
         try:
             response = self.transport(method, self.API + path, **kwargs)
-        except Exception:
+        except Exception as error:
             if self.rate_v1_enabled:
                 try:
-                    self.rate_limiter.note_transport_failure(permit)
+                    if isinstance(error, ProviderResponseLimit):
+                        # Discord answered and the answer was refused for its size: the outcome is known, the request is
+                        # not lost. (Recorded as lost it would hold a slot of the shared budget; a guild owner could
+                        # make a read of a large server do that on demand.)
+                        self.rate_limiter.observe(permit, error.response)
+                    else:
+                        self.rate_limiter.note_transport_failure(permit)
                 except Exception:
                     self.rate_coordinator_degraded = True
             raise

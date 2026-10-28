@@ -457,14 +457,14 @@ class ExactCeilingOnPostgres(unittest.TestCase):
         stack.provider.transport = providers.http_transport      # the real transport, with its real 256 KiB cap
         return stack, hostile, (lambda *handlers: Opener())
 
-    def test_twenty_six_hostile_guilds_stall_the_application_only_for_window_plus_margin(self):
-        """Failing before: 25 of the 26 refused answers were recorded as uncertain, the application row stayed at 0, and
-        a victim's read was refused in every later window. The margin is shortened here so the run takes seconds; the
-        default (30 s) is proved by the fake-clock tests."""
+    def test_twenty_six_hostile_guilds_leave_the_budget_whole(self):
+        """The reviewer's reproduction. Each hostile guild's channel list is a 200 over 256 KiB, which the real transport
+        refuses AFTER it arrived. Failing before: every refused answer was recorded as an uncertain admission, 25 of them
+        took the shared budget to 0 for every tenant, and nothing released them. Now the refusal is an observed outcome:
+        no admission is left unresolved and one window later the whole budget is there."""
+        from postriff_alpha.domain import AlphaError
         stack, hostile, opener = self.hostile_world(26)
-        with patch.object(SharedPostgresBudget, 'UNOBSERVED_MARGIN_SECONDS', 1.5, create=True), \
-                patch.object(providers, 'build_opener', opener):
-            from postriff_alpha.domain import AlphaError
+        with patch.object(providers, 'build_opener', opener):
             refused = 0
             for tenant in stack.tenants[:26]:
                 try:
@@ -472,20 +472,29 @@ class ExactCeilingOnPostgres(unittest.TestCase):
                 except AlphaError:
                     refused += 1
             self.assertEqual(refused, 26)
-            self.assertGreaterEqual(self.states(stack).get('uncertain', 0), 25, 'the leak is real: refused answers are uncertain admissions')
-            victim = stack.tenants[27]
-            served_after = None
-            began = time.monotonic()
-            while time.monotonic() - began < 8:
-                try:
-                    stack.provider._bot('GET', '/guilds/%s' % victim.guild)
-                    served_after = time.monotonic() - began
-                    break
-                except RateDelayed as error:
-                    self.assertEqual(error.rate_scope_kind, 'application')
-                    time.sleep(.25)
-            self.assertIsNotNone(served_after, 'a victim is served again once the leaked requests are older than window + margin')
-            self.assertLess(served_after, 1 + 1.5 + 2.5)
+        states = self.states(stack)
+        self.assertEqual({key: value for key, value in states.items() if key in ('sent', 'uncertain')}, {})
+        self.assertGreaterEqual(states.get('observed', 0), 25, 'every admitted call is resolved, none left unresolved')
+        time.sleep(1 + GUARD + .25)
+        admitted = self.burst(stack, 30)
+        self.assertGreaterEqual(admitted, 25, 'the whole budget is back one window after the attack')
+        self.assertLessEqual(busiest_closed(stack.stamps(), 1.0), 25)
+
+    def test_one_hostile_guild_with_a_learned_route_cannot_leak_or_open_a_circuit(self):
+        """The refined reproduction: a route learned from the answer's own headers, then answered over the cap again and
+        again. It used to leak one uncertain admission a call and open the route's circuit after three."""
+        from postriff_alpha.domain import AlphaError
+        stack, hostile, opener = self.hostile_world(1)
+        with patch.object(providers, 'build_opener', opener):
+            for _ in range(5):
+                with self.assertRaises(AlphaError):
+                    stack.provider._bot('GET', '/guilds/%s/channels' % stack.tenants[0].guild)
+        states = self.states(stack)
+        self.assertEqual(states, {'observed': 5})
+        with self.cluster.connect(autocommit=True) as db:
+            circuits, streaks = db.execute('SELECT count(*) FILTER (WHERE circuit_until IS NOT NULL),max(error_streak) '
+                                           'FROM public.pr_discord_rate_state').fetchone()
+        self.assertEqual((circuits, streaks), (0, 0), 'a refusal for size is not an outage')
 
     def test_requests_whose_observation_failed_or_whose_process_died_stop_holding_slots(self):
         """Twenty-five reads admitted and never observed (observe() timed out on its lock, or the process died after the

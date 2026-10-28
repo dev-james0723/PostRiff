@@ -484,7 +484,7 @@ class RandomizedAgainstModel(unittest.TestCase):
         model = SlidingModel(capacity, window, MARGIN, guard)
         outstanding = []      # (permit, path, model row) in the order they were admitted
         every_wire = {}       # each admission's wire time (its reservation until a permit is used), kept because old rows are pruned
-        serial, on_hold = 0, False
+        serial, on_hold, tightened = 0, False, False
         span = model.span
         steps = [0, 1e-6, 2e-6, .5e-6, .01, .2, window / 2, window - 1e-6, window, window + .5e-6, window + 2e-6,
                  span - 1e-6, span, span + .5e-6, span + 2e-6, 2 * window, 3.7, MARGIN, window + MARGIN + 2e-6,
@@ -505,13 +505,18 @@ class RandomizedAgainstModel(unittest.TestCase):
             if roll < .55:  # a reservation, of a random kind
                 read = rng.random() < .5
                 serial += 1
-                path = '/guilds/%d' % (700000000000000000 + serial)
+                method = 'GET' if read or rng.random() < .5 else 'POST'   # a write that is lost stays unresolved; a read does not
+                path = ('/guilds/%d' if method == 'GET' else '/channels/%d/messages') % (700000000000000000 + serial)
                 expected = model.decide(now)
                 try:
-                    permit = (limiter.reserve_read if read else limiter.reserve)('GET', path, identity=identity)
+                    permit = (limiter.reserve_read if read else limiter.reserve)(method, path, identity=identity)
                 except RateDelayed as error:
                     self.assertEqual(expected[0], 'wait', label(step, 'denied but the model grants'))
-                    self.assertAlmostEqual(error.retry_after_seconds, max(.001, expected[1]), places=7, msg=label(step, 'wait'))
+                    detail = 'wait; scope %s, method %s, read %s, the model said %r' % (error.rate_scope_kind, method, read, expected)
+                    if tightened:   # admissions made under the larger cap can outnumber what is scanned: the quote may be longer
+                        self.assertGreaterEqual(error.retry_after_seconds, max(.001, expected[1]) - 1e-7, label(step, detail))
+                    else:
+                        self.assertAlmostEqual(error.retry_after_seconds, max(.001, expected[1]), places=7, msg=label(step, detail))
                     self.assertEqual(error.rate_scope_kind, 'application', label(step, 'scope'))
                 except RateCoordinatorUnavailable:
                     self.assertTrue(on_hold, label(step, 'unavailable without a hold'))
@@ -523,27 +528,29 @@ class RandomizedAgainstModel(unittest.TestCase):
                     row = {'at': at, 'state': 'sent' if read else 'reserved', 'sent': at if read else None,
                            'expires': permit.expires_at}
                     model.rows.append(row)
-                    outstanding.append((permit, path, row))
+                    outstanding.append((permit, method, path, row))
             elif roll < .70 and outstanding and not on_hold:   # consume a permit that was not a read
-                permit, path, row = rng.choice(outstanding)
+                permit, method, path, row = rng.choice(outstanding)
                 if row['state'] == 'reserved':
                     try:
-                        limiter.consume(permit, 'GET', path)
+                        limiter.consume(permit, method, path)
                     except RateDelayed:
                         self.assertLessEqual(row['expires'], now, label(step, 'consume refused before expiry'))
                     else:
                         row['state'], row['sent'] = 'sent', now
                         every_wire[permit.id] = now
             elif roll < .85 and outstanding and not on_hold:   # resolve a sent request one way or another
-                permit, path, row = rng.choice(outstanding)
+                permit, method, path, row = rng.choice(outstanding)
                 if row['state'] == 'sent':
                     how = rng.choice(('answer', 'answer', 'fail', 'abandon'))
+                    if how == 'abandon' and method != 'GET':
+                        how = 'fail'
                     if how == 'answer':
                         limiter.observe(permit, OK)
                         row['state'] = 'observed'
                     elif how == 'fail':
                         limiter.note_transport_failure(permit)
-                        row['state'] = 'uncertain'
+                        row['state'] = 'observed' if method == 'GET' else 'uncertain'   # a read is resolved at once
                     else:
                         limiter.abandon_unsent_read(permit)
                         row['state'] = 'blocked'
@@ -554,6 +561,7 @@ class RandomizedAgainstModel(unittest.TestCase):
                     rows[0]['hold'] = on_hold
             elif roll < .93 and not on_hold:   # a reviewed policy tightens the cap
                 capacity = max(1, capacity - rng.choice((0, 1, 2)))
+                tightened = tightened or capacity < model.capacity
                 model.capacity = min(model.capacity, capacity)
                 limiter = SharedPostgresBudget(db.connection, APP, policy={**base, 'revision': 'tight-%d' % step,
                                                                            'app_capacity': capacity})

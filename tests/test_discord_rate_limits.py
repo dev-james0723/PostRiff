@@ -19,6 +19,7 @@ from postriff_phase2.discord.rate_limits import (
     RateCoordinatorUnavailable, route_identity, seconds, retry_hint,
     classify_response, publish_binding, _digest, observation_remaining,
 )
+from postriff_phase2.providers import ProviderResponseLimit
 from postriff_phase2.social_connectors import DiscordProvider
 
 APP='123456789012345678'
@@ -659,7 +660,7 @@ class RateLimits(unittest.TestCase):
         permit=self.s.reserve_read('GET',self.path,identity=self.identity)
         with self.assertRaises(RateCoordinatorUnavailable):self.s.consume(permit,'GET',self.path)
         self.s.note_transport_failure(permit);self.db.now+=3
-        with self.assertRaises(RateDelayed):self.s.reserve_read('GET','/channels/'+A,identity=self.identity)
+        self.assertIsInstance(self.s.reserve_read('GET','/channels/'+A,identity=self.identity),Permit)   # a failed read is not held
 
     def test_atomic_read_late_insert_rolls_back_all_debits_before_transport(self):
         self.db.insert_delay=2
@@ -691,11 +692,22 @@ class RateLimits(unittest.TestCase):
         with self.assertRaises((RateDelayed,RateCoordinatorUnavailable)):self.s.consume(second,'GET',other_path)
         with self.assertRaises(RateDelayed):self.reserve('/guilds/333333333333333333')
 
-    def test_ambiguous_cold_probe_keeps_its_major_blocked(self):
-        first=self.reserve();self.s.consume(first,'GET',self.path)
+    def test_ambiguous_cold_probe_of_a_write_keeps_its_major_blocked(self):
+        post='/channels/'+A+'/messages'
+        first=self.s.reserve('POST',post,identity=self.identity);self.s.consume(first,'POST',post)
         self.s.note_transport_failure(first);self.db.now+=3
+        self.assertEqual(self.db.admissions[first.id]['state'],'uncertain')
         with self.assertRaises(RateDelayed):self.reserve('/channels/'+A)
         self.assertIsInstance(self.reserve('/channels/'+B+'/messages/'+A),Permit)
+
+    def test_a_failed_cold_probe_read_frees_its_major_after_one_window(self):
+        first=self.reserve();self.s.consume(first,'GET',self.path)
+        self.s.note_transport_failure(first)
+        self.assertEqual(self.db.admissions[first.id]['state'],'observed','a read is resolved at once: nothing of it is still on its way')
+        self.assertEqual(self.db.admissions[first.id]['status'],503)
+        with self.assertRaises(RateDelayed):self.reserve('/channels/'+A)   # its probe window is not over yet
+        self.db.now+=3
+        self.assertIsInstance(self.reserve('/channels/'+A),Permit)
 
     def test_route_aliases_share_budget_and_major_resources_stay_separate(self):
         other='/channels/'+A+'/messages'
@@ -731,13 +743,57 @@ class RateLimits(unittest.TestCase):
         with self.assertRaises(RateDelayed) as caught:self.reserve()
         self.assertGreaterEqual(caught.exception.retry_after_seconds,20)
         self.assertNotIn(_digest('older'),[r[0] for r in self.db.maps.values()])
-    def test_ambiguous_timeout_keeps_spent_slot_and_never_calls_post_twice(self):
-        self.learn();self.db.now+=1.1
-        p=self.reserve();self.s.consume(p,'GET',self.path);self.s.note_transport_failure(p)
+    def test_ambiguous_timeout_of_a_write_keeps_its_spent_slot_across_windows(self):
+        post='/channels/'+A+'/messages'
+        def write():return self.s.reserve('POST',post,identity=self.identity)
+        learner=write();self.s.consume(learner,'POST',post)
+        self.s.observe(learner,{'status':200,'headers':{'X-RateLimit-Bucket':'learned-post','X-RateLimit-Limit':'3',
+            'X-RateLimit-Remaining':'2','X-RateLimit-Reset-After':'1'}});self.db.now+=1.1
+        p=write();self.s.consume(p,'POST',post);self.s.note_transport_failure(p)
         self.assertEqual(self.db.admissions[p.id]['state'],'uncertain')
         self.db.now+=1.1
-        self.reserve();self.reserve()
-        with self.assertRaises(RateDelayed):self.reserve()
+        write();write()
+        with self.assertRaises(RateDelayed):write()
+
+    def test_an_answer_refused_for_its_size_is_an_observed_outcome_not_a_lost_request(self):
+        """The transport raises after the answer arrived (a body over its cap). The status and headers it saw are what the
+        coordinator records, so the route learns from them and no slot stays held; the error still reaches the caller."""
+        big={'X-RateLimit-Bucket':'big-answers','X-RateLimit-Limit':'5','X-RateLimit-Remaining':'4','X-RateLimit-Reset-After':'5'}
+        def oversize(method,url,**kwargs):
+            raise ProviderResponseLimit(200,big)
+        self.p.transport=oversize
+        for number in range(8):
+            with self.assertRaises(AlphaError) as caught:self.p._bot('GET','/guilds/%s'%(A[:-1]+str(number)))
+            self.assertEqual((caught.exception.status,str(caught.exception)),(502,'Provider response limit exceeded.'))
+        self.assertEqual({row['state'] for row in self.db.admissions.values()},{'observed'})
+        self.assertEqual({row['status'] for row in self.db.admissions.values()},{200})
+        learned=[row for row in self.db.states.values() if row['kind']=='route' and row['learned']]
+        self.assertTrue(learned,'the headers of the refused answer taught the route')
+        self.assertTrue(all(row['streak']==0 and not row['circuit'] for row in learned),'a size refusal is not an outage')
+
+    def test_a_transport_failure_resolves_a_read_at_once_and_leaves_a_write_uncertain_and_not_reusable(self):
+        def unreachable(method,url,**kwargs):
+            raise AlphaError('The provider is temporarily unreachable.',503)
+        self.p.transport=unreachable
+        with self.assertRaises(AlphaError):self.p._bot('GET','/guilds/'+A)
+        with self.assertRaises(AlphaError):
+            self.p._discord_http('POST','/oauth2/token',credential_kind='oauth',headers={'Authorization':'Basic synthetic'},form={'grant_type':'authorization_code'})
+        read,write=sorted(self.db.admissions.values(),key=lambda row:row['seq'])
+        self.assertEqual((read['method'],read['state'],read['status']),('GET','observed',503))
+        self.assertEqual((write['method'],write['state'],write['status']),('POST','uncertain',503))
+        permit=Permit(write['id'],self.s.application_key,'POST',write['path'],RequestIdentity.make(APP,'oauth','synthetic-secret'),None,write['expires'])
+        with self.assertRaises(RateCoordinatorUnavailable):self.s.consume(permit,'POST','/oauth2/token')   # a sent permit is never sent again
+
+    def test_a_timed_out_read_is_not_pending_but_a_timed_out_write_is(self):
+        self.learn();self.db.now+=1.1
+        read=self.reserve();self.s.consume(read,'GET',self.path);self.s.note_transport_failure(read)
+        post='/channels/'+B+'/messages'
+        write=self.s.reserve('POST',post,identity=self.identity);self.s.consume(write,'POST',post);self.s.note_transport_failure(write)
+        self.assertEqual([self.db.admissions[p.id]['state'] for p in (read,write)],['observed','uncertain'])
+        self.assertEqual(self.db.admissions[read.id]['status'],503)
+        pending=lambda permit:self.s._pending(self.db,next(k for k in self.db.admissions[permit.id]['keys'] if k.startswith('50:')),self.db.now,since=self.db.now-31)  # noqa: E731
+        self.assertEqual((pending(read),pending(write)),(0,1))
+
     def test_bot401_circuit_is_shared_user401_does_not_disable_bot(self):
         self.send({'status':401,'headers':{}})
         replica=SharedPostgresBudget(self.db.connection,APP,policy=self.policy)

@@ -1184,9 +1184,15 @@ class SharedPostgresBudget:
                     WHERE auth_key=%s AND route_key=%s AND major_key=%s AND state IN ('reserved','sealed','sent','uncertain')
                     AND NOT scope_keys @> ARRAY[%s]::text[]''',
                     (new_bucket,seq,permit.identity.auth_key,*meta,new_bucket,alias_key,permit.identity.auth_key,*meta,alias_key))
+            # A request whose outcome is unknown stays `uncertain` and keeps its slot for _horizon, because a write may
+            # have happened and nothing says it did not. A read has no effect to be unsure of and, once the transport has
+            # returned (here: raised), nothing of it is still on its way: it is resolved now as a server failure, so it
+            # holds its slot only for its own span like any answered request. Left `uncertain` it was a leak that a
+            # remote party could cause on demand (a read that fails after the answer arrived).
+            lost = transport_failure and not (permit.method == 'GET' and permit.binding_hash is None)
             cur.execute(f'''UPDATE {ADMISSIONS} SET state=%s,status_code=%s,rate_scope=%s,outcome_at=clock_timestamp()
                 WHERE id=%s::uuid AND state='sent' ''',
-                ('uncertain' if transport_failure else 'observed',classification['status'],classification['scope'],permit.id))
+                ('uncertain' if lost else 'observed',classification['status'],classification['scope'],permit.id))
             if cur.rowcount != 1:
                 raise RateCoordinatorUnavailable()
             if shared_keys and any(row['hold'] or max(row['blocked'] or 0,row['circuit'] or 0)>now for row in rows.values()):
