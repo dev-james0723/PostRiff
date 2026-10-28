@@ -100,6 +100,9 @@ jobs:
           same = before['files'] == after['files'] and before['baseHead'] == after['baseHead'] == os.environ['SOURCE_SHA']
           results = {name:os.environ[name] for name in ('PYTHON_RESULT','MULTIMODE_RESULT','BUILD_RESULT')}
           print('DISCORD_HYBRID_CI_VERDICT '+json.dumps({'source':os.environ['SOURCE_SHA'],'fingerprint':after['fingerprint'],'sourceUnchanged':same,'gates':results,'execution':'public-standard-runner-synthetic-provider','liveDiscord':'NOT_RUN','deployment':'NOT_RUN'}))
+          if not same:
+              # Names only: which of the pinned source files differ between the start and the end of the run.
+              print('DISCORD_HYBRID_CI_SOURCE_DIFF '+json.dumps(sorted(name for name in set(before['files'])|set(after['files']) if before['files'].get(name) != after['files'].get(name))[:50]))
           raise SystemExit(0 if same and all(value == 'success' for value in results.values()) else 1)
           PY
 # Standard public runner only. No cache saves, retained artifacts, paid runner or deployment.
