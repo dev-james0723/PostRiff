@@ -219,8 +219,10 @@ call p50 50.3, p99.9 280.6 ms; call to arrival p50 0.8, p99.9 14.7 ms). The floo
 to cover the spread: for each request and the 26th after it in send order (windows at the ceiling, 41,780 of them), the later
 one arrived under a second after the first in 54 windows (0.129%); the delay of the first minus the delay of the later one was
 p99 38, p99.9 148, p99.99 193, max 214 ms, against a smallest slack of 103.7 ms (the 0.1 s guard in force). The same on F429
-(0.088%, p99.9 145 ms) and S0-100 (0.106%, p99.9 159 ms). So 0.1 s holds the ceiling at the mock in about 99.9% of the windows
-at the ceiling, about 0.15 s in 99.9% and 0.2 s in 99.99% (inference from these delays). The runner is CPU-saturated, which
+(0.088%, p99.9 145 ms) and S0-100 (0.106%, p99.9 159 ms). With the 0.1 s guard 0.09 to 0.13% of the windows at the ceiling were
+violated at the mock; the median slack of those windows is 146 to 156 ms, more than the minimum. Had every window sat at the 0.1 s
+minimum, the share would have been 0.30 to 0.43%; a guard of 0.15 s would give 0.09 to 0.14%, 0.2 s 0 to 0.014%, and 0.25 s none in
+these runs (inference from the measured delays of S1, S0-100 and F429). The runner is CPU-saturated, which
 inflates application-side variance, and the real network variance between Vercel and Discord is not modelled.
 
 ### Why S1 got slower: released posts and repeated passes
