@@ -1,5 +1,5 @@
 import type { DiscordCopy } from './discord-copy';
-import { formatRetryTime, formatWait, type BlockedSenderState, type SenderNameIssue } from './discord-sender-name';
+import { formatRetryTime, formatWait, type BlockedSenderState, type SenderKind, type SenderNameIssue } from './discord-sender-name';
 
 type CopyKey = keyof DiscordCopy;
 
@@ -31,6 +31,8 @@ export const SENDER_STATE_COPY: Record<BlockedSenderState, { title: CopyKey; bod
   reconnect_required: { title: 'senderStateReconnectRequiredTitle', body: 'senderStateReconnectRequiredBody', next: 'senderStateReconnectRequiredNext' },
   write_unconfirmed: { title: 'senderStateWriteUnconfirmedTitle', body: 'senderStateWriteUnconfirmedBody', next: 'senderStateWriteUnconfirmedNext' },
   write_refused: { title: 'senderStateWriteRefusedTitle', body: 'senderStateWriteRefusedBody', next: 'senderStateWriteRefusedNext' },
+  write_rate_limited: { title: 'senderStateWriteRateLimitedTitle', body: 'senderStateWriteRateLimitedBody', next: 'senderStateWriteRateLimitedNext' },
+  evidence_invalid: { title: 'senderStateEvidenceInvalidTitle', body: 'senderStateEvidenceInvalidBody', next: 'senderStateEvidenceInvalidNext' },
   rate_limited: { title: 'senderStateRateLimitedTitle', body: 'senderStateRateLimitedBody', next: 'senderStateRateLimitedNext' },
   rate_delayed: { title: 'senderStateRateDelayedTitle', body: 'senderStateRateDelayedBody', next: 'senderStateRateDelayedNext' },
   upstream_unavailable: { title: 'senderStateUpstreamUnavailableTitle', body: 'senderStateUpstreamUnavailableBody', next: 'senderStateUpstreamUnavailableNext' },
@@ -78,9 +80,13 @@ const ISSUE_COPY: Record<SenderNameIssue, CopyKey> = {
   reserved_word: 'senderIssueReserved'
 };
 
-/** The message for one broken rule, with the numbers filled in. */
-export function senderIssueMessage(copy: DiscordCopy, issue: SenderNameIssue, numbers: { length: number; limit: number; over: number }): string {
-  return copy[ISSUE_COPY[issue]]
+/**
+ * The message for one broken rule, with the numbers filled in. A bot nickname refuses fewer reserved words than a
+ * webhook name does, so its message names only those.
+ */
+export function senderIssueMessage(copy: DiscordCopy, issue: SenderNameIssue, numbers: { length: number; limit: number; over: number }, kind: SenderKind = 'webhook'): string {
+  const key: CopyKey = issue === 'reserved_word' && kind === 'bot' ? 'senderIssueReservedBot' : ISSUE_COPY[issue];
+  return copy[key]
     .replace('{length}', String(numbers.length))
     .replace('{limit}', String(numbers.limit))
     .replace('{over}', String(numbers.over));
@@ -90,3 +96,19 @@ export function senderIssueMessage(copy: DiscordCopy, issue: SenderNameIssue, nu
 export function fillCount(text: string, values: { count?: number; limit?: number }): string {
   return text.replace('{count}', String(values.count ?? '')).replace('{limit}', String(values.limit ?? ''));
 }
+
+/** What a finished verification says, in the person's words: verified, "try again" (nothing was extended), or not verified with the reason. */
+export function verifyMessage(copy: DiscordCopy, outcome: { verified: boolean; state?: string; detail?: string }): { kind: 'done' | 'repeat' | 'failed'; text: string } {
+  if (outcome.verified) return { kind: 'done', text: copy.senderVerifyDone };
+  if (outcome.state === 'verification_unavailable') return { kind: 'repeat', text: copy.senderVerifyRepeat };
+  const detail = (outcome.detail || outcome.state || '').replace(/_/g, ' ').trim();
+  return { kind: 'failed', text: copy.senderVerifyFailed.replace('{detail}', detail || '…') };
+}
+
+/**
+ * The held-post event the nickname guard writes (`discord_bot_nickname_changed`). The job carries only the English
+ * event line, no code, so this matches the stable part of it; if the sentence ever changes the action simply does not
+ * show (the editor still offers Verify).
+ */
+export const NICKNAME_HOLD_LINE = /server nickname is no longer the one this post was approved under/i;
+export const isNicknameHoldNote = (note: string | null | undefined): boolean => typeof note === 'string' && NICKNAME_HOLD_LINE.test(note);

@@ -30,9 +30,9 @@ const text = (markup) => markup.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').
 // ---------------------------------------------------------------------------------------------------------------
 
 test('the editor gives the same verdict, and the same first reason, as the server for every shared case', () => {
-  assert.equal(verdicts.schema, 'rafii.discord-sender-name-verdicts.v3');
+  assert.equal(verdicts.schema, 'rafii.discord-sender-name-verdicts.v4');
   assert.deepEqual(verdicts.limits, logic.SENDER_LIMIT);
-  assert.ok(verdicts.cases.length >= 110);
+  assert.ok(verdicts.cases.length >= 120);
   for (const shared of verdicts.cases) {
     const check = logic.checkSenderName(nameOf(shared), shared.kind);
     const label = `${shared.kind}: ${shared.note}`;
@@ -95,17 +95,33 @@ test('zero width joiners are accepted only where the server accepts them', () =>
   assert.deepEqual(logic.checkSenderName(family.repeat(5), 'bot').issues, ['too_long']);
 });
 
-test('reserved words apply to both kinds and fold the way the server folds', () => {
-  for (const word of ['discord', 'Discord', 'DISCORD', 'xClydex', 'diſcord', 'D1scord', 'd i s c o r d', 'dis_cord', 'P0stR1ff', 'RAFII', 'dіscord', 'DİSCORD', 'ClYdE']) {
-    for (const kind of ['webhook', 'bot']) assert.ok(logic.checkSenderName(word, kind).issues.includes('reserved_word'), `${kind} ${word}`);
+test('reserved words fold the way the server folds, and a bot nickname refuses fewer of them than a webhook name', () => {
+  const webhookOnly = ['discord', 'Discord', 'DISCORD', 'xClydex', 'diſcord', 'D1scord', 'd i s c o r d', 'dis_cord', 'dіscord', 'DİSCORD', 'ClYdE'];
+  const both = ['P0stR1ff', 'RAFII', 'r a f i i', 'Rafii Helper', 'xpostriffx'];
+  for (const word of [...webhookOnly, ...both]) assert.ok(logic.checkSenderName(word, 'webhook').issues.includes('reserved_word'), `webhook ${word}`);
+  for (const word of both) assert.ok(logic.checkSenderName(word, 'bot').issues.includes('reserved_word'), `bot ${word}`);
+  // Discord restricts usernames, not server nicknames: only the product's names stay reserved on a bot.
+  for (const word of [...webhookOnly, 'Everyone', 'HERE', 'he re']) assert.ok(!logic.checkSenderName(word, 'bot').issues.includes('reserved_word'), `bot ${word}`);
+  for (const name of ['Everyone', 'HERE', 'he re']) {
+    assert.ok(logic.isReservedName(name, 'webhook'), name);
+    assert.ok(!logic.isReservedName(name, 'bot'), name);
   }
-  for (const name of ['Everyone', 'HERE', 'he re']) assert.ok(logic.isReservedName(name), name);
   for (const fine of ['Here Maps', 'Everyone Welcome', 'Hero', 'Traffic Updates', 'Safari News', 'Acme Weekly']) {
-    assert.ok(!logic.isReservedName(fine), fine);
+    for (const kind of ['webhook', 'bot']) assert.ok(!logic.isReservedName(fine, kind), `${kind} ${fine}`);
   }
+  assert.deepEqual(logic.RESERVED_PARTS.bot, ['rafii', 'postriff']);
+  assert.deepEqual(logic.RESERVED_WHOLE.bot, []);
   // Look-alike folding is the server's table, character for character.
   assert.deepEqual(logic.reservedSkeletons('Dïscörd'), ['discord', 'discord']);
   assert.deepEqual(logic.reservedSkeletons('C1yde'), ['ciyde', 'clyde']);
+});
+
+test('an unpaired surrogate is a control character, never a crash', () => {
+  for (const kind of ['webhook', 'bot']) {
+    assert.deepEqual(logic.checkSenderName('a\ud800b', kind).issues, ['control_or_format']);
+    // Alone it is also nothing visible; the server reports the first rule, and the first is this one.
+    assert.equal(logic.checkSenderName('\udc00', kind).issues[0], 'control_or_format');
+  }
 });
 
 test('every broken rule is listed in the server order, not only the first', () => {
@@ -164,6 +180,12 @@ test('a refused request maps to the state the contract names, never to a guessed
   assert.equal(first({ status: 503, code: 'discord_connection_required' }).key, 'provider_unavailable');
   // The provider is not ready: a 503 that still names its reason.
   assert.deepEqual(states({ status: 503, code: 'discord_sender_name_unavailable', reasons: [{ code: 'provider_unavailable' }] }).map((state) => state.key), ['provider_unavailable']);
+  // Discord answered the write itself with a rate limit: its own state, with Discord's wait; unchanged, and not a permission problem.
+  assert.deepEqual(first({ status: 429, code: 'discord_sender_write_rate_limited', retryAfterSeconds: 31 }), { key: 'write_rate_limited', retryAfterSeconds: 31, retryAtMs: NOW + 31_000, signInAgain: false });
+  assert.equal(first({ status: 409, code: 'discord_sender_evidence_invalid' }).key, 'evidence_invalid');
+  assert.equal(first({ status: 503, code: 'discord_rate_coordinator_unavailable' }).key, 'provider_unavailable');
+  // Rafii's own throttle names what is left of a 10 minute window.
+  assert.deepEqual(first({ status: 429, code: 'rate_limited', retryAfterSeconds: 600 }), { key: 'rate_limited', retryAfterSeconds: 600, retryAtMs: NOW + 600_000, signInAgain: false });
   // Discord's shared request capacity is its own state, with the wait it named; Rafii's own throttle stays rate_limited.
   assert.deepEqual(first({ status: 429, code: 'discord_rate_delayed', retryAfterSeconds: 7 }), { key: 'rate_delayed', retryAfterSeconds: 7, retryAtMs: NOW + 7_000, signInAgain: false });
   assert.equal(first({ status: 429, code: 'discord_rate_delayed' }).retryAtMs, null);
@@ -186,14 +208,14 @@ test('a refused request maps to the state the contract names, never to a guessed
 
 test('only the states that can change offer a check, and a check is a read', () => {
   const offered = logic.SENDER_STATES.filter((key) => logic.canCheckAgain(key));
-  assert.deepEqual(offered.sort(), ['bot_missing_change_nickname', 'edit_pending', 'failed', 'nickname_authority_other_workspace', 'person_missing_manage_nicknames', 'person_role_below_bot', 'provider_unavailable', 'rate_delayed', 'rate_limited', 'reconnect_required', 'stale', 'upstream_unavailable', 'write_refused', 'write_unconfirmed'].sort());
+  assert.deepEqual(offered.sort(), ['bot_missing_change_nickname', 'edit_pending', 'evidence_invalid', 'failed', 'nickname_authority_other_workspace', 'person_missing_manage_nicknames', 'person_role_below_bot', 'provider_unavailable', 'rate_delayed', 'rate_limited', 'reconnect_required', 'stale', 'upstream_unavailable', 'write_rate_limited', 'write_refused', 'write_unconfirmed'].sort());
   // The contract: these three are answered without Discord and must not be retried.
   for (const key of ['sender_names_disabled', 'bot_nickname_disabled', 'not_authorizing_member']) assert.equal(logic.canCheckAgain(key), false, key);
   assert.equal(logic.canCheckAgain('ready'), false);
 });
 
-test('the twenty states are the nineteen the copy explains plus ready', () => {
-  assert.equal(logic.SENDER_STATES.length, 20);
+test('the twenty-two states are the twenty-one the copy explains plus ready', () => {
+  assert.equal(logic.SENDER_STATES.length, 22);
   assert.deepEqual([...logic.UNAVAILABLE_CODES], ['sender_names_disabled', 'bot_nickname_disabled', 'provider_unavailable', 'not_authorizing_member', 'session_reverification_required', 'person_missing_manage_nicknames', 'person_role_below_bot', 'bot_missing_change_nickname', 'nickname_authority_other_workspace', 'edit_pending'], 'the server order of the reasons (REASON_ORDER)');
   assert.equal(logic.SENDER_STATES[0], 'ready');
   assert.deepEqual([...stateCopy.BLOCKED_STATES].sort(), logic.SENDER_STATES.filter((key) => key !== 'ready').sort());
@@ -222,28 +244,19 @@ test('retry times and waits are formatted for the reader and never invented', ()
   assert.match(stateCopy.recheckLine(en, state(1792749120000, null), 'en', 'UTC', 1792749000000), /^Rafii can check again at \d{1,2}:\d{2}/);
 });
 
-test('the two switches explain themselves without asking Discord anything', () => {
-  const state = (feature, kind) => logic.classifySenderFeature(feature, kind, NOW);
-  assert.equal(state(undefined, 'bot'), null);
-  assert.equal(state(null, 'webhook'), null);
-  assert.equal(state({}, 'bot'), null);
-  assert.equal(state({ senderNames: true, botNickname: true }, 'bot'), null);
-  assert.equal(state({ senderNames: false, botNickname: false }, 'bot').key, 'sender_names_disabled');
-  assert.equal(state({ senderNames: false, botNickname: false }, 'webhook').key, 'sender_names_disabled');
-  assert.equal(state({ senderNames: true, botNickname: false }, 'bot').key, 'bot_nickname_disabled');
-  // The bot switch never switches webhook names off (the owner's rule: webhook names come first).
-  assert.equal(state({ senderNames: true, botNickname: false }, 'webhook'), null);
-});
-
-test('the provider view\'s per-mode flags are read per kind and unknown is not off', () => {
-  const off = (modes, kind) => logic.senderProviderSaysOff(modes, kind);
-  assert.equal(off(undefined, 'bot'), false);
-  assert.equal(off({}, 'webhook'), false);
-  assert.equal(off({ bot: { nickname: { enabled: true } }, webhook: { senderName: { enabled: true } } }, 'bot'), false);
-  assert.equal(off({ bot: { nickname: { enabled: false } } }, 'bot'), true);
-  assert.equal(off({ bot: { nickname: { enabled: false } } }, 'webhook'), false, 'the bot flag never switches webhook names off');
-  assert.equal(off({ webhook: { senderName: { enabled: false } } }, 'webhook'), true);
-  assert.equal(off({ webhook: { senderName: { enabled: false } } }, 'bot'), false);
+test('the card offers the control only when the provider view says yes for that kind', () => {
+  const offers = (modes, kind) => logic.senderProviderOffers(modes, kind);
+  // Every switch is off unless the server says "true", so a view that is missing, empty or false offers nothing.
+  assert.equal(offers(undefined, 'bot'), false);
+  assert.equal(offers(null, 'webhook'), false);
+  assert.equal(offers({}, 'webhook'), false);
+  assert.equal(offers({ bot: { nickname: {} }, webhook: { senderName: {} } }, 'bot'), false, 'a flag that is not present is not a yes');
+  assert.equal(offers({ bot: { nickname: { enabled: false } }, webhook: { senderName: { enabled: false } } }, 'bot'), false);
+  assert.equal(offers({ bot: { nickname: { enabled: true } } }, 'bot'), true);
+  assert.equal(offers({ webhook: { senderName: { enabled: true } } }, 'webhook'), true);
+  assert.equal(offers({ bot: { nickname: { enabled: true } } }, 'webhook'), false, 'the bot flag never opens webhook names');
+  assert.equal(offers({ webhook: { senderName: { enabled: true } } }, 'bot'), false, 'the webhook flag never opens bot nicknames');
+  assert.equal(offers({ webhook: { enabled: true, senderName: { enabled: false } } }, 'webhook'), false, 'the webhook route being open is not the name flag');
 });
 
 test('a bot nickname is drawn only when it is known, and a hold is claimed only when something is recorded', () => {
@@ -253,6 +266,20 @@ test('a bot nickname is drawn only when it is known, and a hold is claimed only 
   assert.deepEqual(logic.botNicknameView('Concert helper', 'manifest'), { name: 'Concert helper', source: 'approved', hold: 'approved' });
   assert.deepEqual(logic.botNicknameView(null, 'channel'), { name: null, source: 'bot_username', hold: 'pending' });
   assert.deepEqual(logic.botNicknameView('', 'manifest'), { name: null, source: 'bot_username', hold: 'approved' });
+});
+
+test('a verification says what happened, and the held-post line is recognised without a code', () => {
+  const say = (outcome, locale = 'en') => stateCopy.verifyMessage(packs[locale], outcome);
+  assert.deepEqual(say({ verified: true, state: 'read_verified' }), { kind: 'done', text: packs.en.senderVerifyDone });
+  assert.deepEqual(say({ verified: false, state: 'verification_unavailable' }), { kind: 'repeat', text: packs.en.senderVerifyRepeat });
+  assert.equal(say({ verified: false, state: 'reauthorization_required', detail: 'The bot is not in this server.' }).text, 'The connection could not be verified: The bot is not in this server.');
+  assert.equal(say({ verified: false, state: 'reauthorization_required' }).text, 'The connection could not be verified: reauthorization required');
+  assert.equal(say({ verified: false }, 'zh-Hant').kind, 'failed');
+  // The line the worker writes when a bot post is held for a changed nickname (contract, held event line).
+  assert.ok(stateCopy.isNicknameHoldNote('The Rafii bot’s server nickname is no longer the one this post was approved under; nothing was posted. Review the post again.'));
+  assert.ok(stateCopy.isNicknameHoldNote("The Rafii bot's server nickname is no longer the one this post was approved under. Nothing was posted."));
+  assert.ok(!stateCopy.isNicknameHoldNote('Discord custom sender names are switched off; nothing was posted.'));
+  assert.ok(!stateCopy.isNicknameHoldNote(null) && !stateCopy.isNicknameHoldNote(undefined));
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -337,8 +364,13 @@ test('the messages never name another workspace and say what the person can do',
   assert.match(english('write_refused').body, /The nickname is unchanged, nothing is waiting, and Rafii did not try again/);
   assert.match(english('write_refused').next, /Check again/);
   assert.notEqual(english('write_refused').title, english('write_unconfirmed').title, 'a refusal and an unconfirmed write are different news');
-  assert.match(packs.en.senderCardOffBot, /shared by everyone who uses the bot/);
-  assert.doesNotMatch(packs.en.senderCardOff, /switched off|Edit sender name/, 'the card note claims no cause and does not point at a button that is not there');
+  assert.match(english('write_rate_limited').body, /not a permission problem/);
+  assert.match(english('write_rate_limited').body, /The nickname is unchanged, nothing is waiting, and Rafii did not try again/);
+  assert.notEqual(english('write_rate_limited').title, english('rate_delayed').title, 'Discord refusing the write is not the shared budget running out');
+  assert.match(english('evidence_invalid').body, /Nothing was changed/);
+  assert.match(english('evidence_invalid').next, /reconnect the Discord installation/);
+  assert.match(english('rate_limited').next, /Wait until the time shown/);
+  for (const gone of ['senderCardOff', 'senderCardOffBot', 'senderWhyButton', 'senderViewTitle', 'senderViewDescription']) assert.ok(!(gone in packs.en), `${gone}: with nothing shown while editing is unavailable the card needs no such line`);
   assert.match(english('rate_limited').body, /Nothing was changed/);
   assert.match(english('upstream_unavailable').body, /Nothing was changed/);
   assert.match(english('workspace_permission').next, /workspace owner or administrator/);
@@ -362,6 +394,9 @@ test('validation messages fill their numbers and name the rule', () => {
   assert.equal(packs.en.senderRuleLength.replace('{limit}', '80'), '80 characters at most. Emoji and some symbols count as 2.');
   assert.match(packs.en.senderRuleForbidden, /@ # : < > and ```/);
   assert.match(packs.en.senderRuleReserved, /Discord, Clyde, Rafii, PostRiff, everyone or here/);
+  assert.equal(packs.en.senderRuleReservedBot, 'Not Rafii or PostRiff. Look-alikes count too.');
+  assert.doesNotMatch(stateCopy.senderIssueMessage(packs.en, 'reserved_word', numbers, 'bot'), /Discord|Clyde|everyone/);
+  assert.match(stateCopy.senderIssueMessage(packs.en, 'reserved_word', numbers, 'webhook'), /Discord/);
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -388,6 +423,12 @@ test('a webhook post is shown with its custom name, the APP tag, a time and its 
     assert.ok(markup.includes(copy.previewAvatarWebhook), `${locale} avatar note`);
     assert.ok(markup.includes(copy.previewFidelity), `${locale} fidelity note`);
     assert.match(markup, /data-discord-sender-preview/);
+    // A screen reader gets the message as one named group, described by the notes that say what the picture cannot show.
+    assert.match(markup, /role="group"/);
+    assert.ok(markup.includes(`aria-label="${copy.previewMessageLabel}"`), `${locale} group label`);
+    const notesId = /aria-describedby="([^"]+)"/.exec(markup)?.[1];
+    assert.ok(notesId && markup.includes(`id="${notesId}"`), `${locale} the group points at the notes`);
+    assert.match(markup, /data-preview-avatar[^>]*aria-hidden="true"|aria-hidden="true"[^>]*data-preview-avatar/);
   }
 });
 
@@ -516,7 +557,7 @@ test('each availability state renders its own message in every locale with a sta
   const seen = new Set();
   for (const locale of LOCALES) {
     for (const key of stateCopy.BLOCKED_STATES) {
-      const timed = key === 'edit_pending' || key === 'rate_limited' || key === 'rate_delayed';
+      const timed = key === 'edit_pending' || key === 'rate_limited' || key === 'rate_delayed' || key === 'write_rate_limited';
       const markup = renderToStaticMarkup(React.createElement(SenderStatePanel, {
         state: { key, retryAfterSeconds: timed ? 90 : null, retryAtMs: timed ? 1792750000000 : null, signInAgain: false },
         copy: packs[locale], locale, timeZone: 'UTC', id: 'x', nowMs: 1792749000000, checkedAtMs: 1792749000000
@@ -544,6 +585,9 @@ test('a held change names its wait and its time; an alert is announced as one', 
   assert.match(panel(pending(1792748000000, 90), { nowMs: 1792749000000 }), /check again now/);
   assert.match(panel({ key: 'rate_limited', retryAtMs: 1792749060000, retryAfterSeconds: 60, ...base }, { nowMs: 1792749000000 }), /Rafii can check again in about 60 seconds, at/);
   assert.match(panel({ key: 'rate_delayed', retryAtMs: 1792749007000, retryAfterSeconds: 7, ...base }, { nowMs: 1792749000000 }), /Rafii can check again in about 7 seconds, at/);
+  assert.match(panel({ key: 'write_rate_limited', retryAtMs: 1792749031000, retryAfterSeconds: 31, ...base }, { nowMs: 1792749000000 }), /Rafii can check again in about 31 seconds, at/);
+  // Rafii's own window runs up to ten minutes.
+  assert.match(panel({ key: 'rate_limited', retryAtMs: 1792749600000, retryAfterSeconds: 600, ...base }, { nowMs: 1792749000000 }), /Rafii can check again in about 10 minutes, at/);
   assert.match(panel(pending(null, null)), /id="p-recheck"/);
   // The two held states say different things.
   assert.notEqual(text(panel(pending(null, null))), text(panel({ key: 'rate_limited', retryAtMs: null, retryAfterSeconds: null, ...base })));

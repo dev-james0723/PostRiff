@@ -17,9 +17,13 @@ export const SENDER_LIMIT: Record<SenderKind, number> = { webhook: 80, bot: 32 }
 /** Substrings the server refuses (mentions, channels, emoji syntax, code fences, Discord's own username rules). */
 export const FORBIDDEN_CHARACTERS: readonly string[] = ['@', '#', ':', '```', '<', '>'];
 
-/** Reserved after folding case, accents, width, look-alike letters, separators and digit substitutions. */
-export const RESERVED_PARTS: readonly string[] = ['discord', 'clyde', 'rafii', 'postriff'];
-export const RESERVED_WHOLE: readonly string[] = ['everyone', 'here'];
+/**
+ * Reserved after folding case, accents, width, look-alike letters, separators and digit substitutions. A webhook name
+ * follows Discord's own username rule plus the product's names; a bot nickname only the product's names (Discord
+ * restricts usernames, not server nicknames), and no whole name is reserved for it.
+ */
+export const RESERVED_PARTS: Record<SenderKind, readonly string[]> = { webhook: ['discord', 'clyde', 'rafii', 'postriff'], bot: ['rafii', 'postriff'] };
+export const RESERVED_WHOLE: Record<SenderKind, readonly string[]> = { webhook: ['everyone', 'here'], bot: [] };
 
 /** The stable `reason` values of `discord_sender_name_invalid`, in the order the server tests them. */
 export type SenderNameIssue =
@@ -135,9 +139,9 @@ export function reservedSkeletons(name: string): string[] {
   return LEET.map((table) => plain.replace(/[0-9]/g, (digit) => table[digit] ?? digit));
 }
 
-export function isReservedName(name: string): boolean {
+export function isReservedName(name: string, kind: SenderKind): boolean {
   const skeletons = reservedSkeletons(name);
-  return skeletons.some((skeleton) => RESERVED_PARTS.some((part) => skeleton.includes(part)) || RESERVED_WHOLE.includes(skeleton));
+  return skeletons.some((skeleton) => RESERVED_PARTS[kind].some((part) => skeleton.includes(part)) || RESERVED_WHOLE[kind].includes(skeleton));
 }
 
 export interface SenderNameCheck {
@@ -174,7 +178,7 @@ export function checkSenderName(name: string, kind: SenderKind, options: SenderN
   if (Array.from(name).some((character) => BLANKS.has(character)) || !HAS_VISIBLE.test(name)) issues.push('invisible');
   if (forbidden.some((part) => name.includes(part))) issues.push('forbidden_character');
   if (name.includes('://') || URL_LIKE.test(name)) issues.push('url_like');
-  if (isReservedName(name)) issues.push('reserved_word');
+  if (isReservedName(name, kind)) issues.push('reserved_word');
   return { length, codePoints, limit, issues, over: Math.max(0, length - limit) };
 }
 
@@ -205,6 +209,8 @@ export const SENDER_STATES = [
   'reconnect_required',
   'write_unconfirmed',
   'write_refused',
+  'write_rate_limited',
+  'evidence_invalid',
   'rate_limited',
   'rate_delayed',
   'upstream_unavailable',
@@ -301,11 +307,17 @@ export function classifySenderRefusal(error: SenderRefusal, nowMs: number = Date
   if (error.code === 'discord_sender_edit_pending') return [blocked('edit_pending', nowMs, { wait: error.retryAfterSeconds })];
   // Discord's shared request capacity has no room (not Rafii's own throttle): its own state, with the wait it named.
   if (error.code === 'discord_rate_delayed') return [blocked('rate_delayed', nowMs, { wait: error.retryAfterSeconds })];
+  // Discord answered the write itself with a rate limit: unchanged, nothing waits, and not a permission problem.
+  if (error.code === 'discord_sender_write_rate_limited') return [blocked('write_rate_limited', nowMs, { wait: error.retryAfterSeconds })];
   if (error.code === 'rate_limited' || error.status === 429) return [blocked('rate_limited', nowMs, { wait: error.retryAfterSeconds })];
   if (error.code === 'discord_sender_name_required' && error.status === 409) return [blocked('stale', nowMs)];
   if (error.code === 'discord_sender_write_unconfirmed') return [blocked('write_unconfirmed', nowMs)];
   // Discord answered the write with a refusal: the nickname is unchanged and nothing waits.
   if (error.code === 'discord_sender_write_refused') return [blocked('write_refused', nowMs)];
+  // Discord's answer about the server, roles or permissions was not usable; nothing was written.
+  if (error.code === 'discord_sender_evidence_invalid') return [blocked('evidence_invalid', nowMs)];
+  // The shared request coordinator failed after the readiness check passed: Rafii's side, temporary.
+  if (error.code === 'discord_rate_coordinator_unavailable') return [blocked('provider_unavailable', nowMs)];
   // 409: the stored authorization no longer matches (reconnect). 503: Discord connections are paused for the whole provider, which a reconnect cannot fix.
   if (error.code === 'discord_connection_required') return [blocked(error.status === 503 ? 'provider_unavailable' : 'reconnect_required', nowMs)];
   if (error.code === 'permission_denied') return [blocked('workspace_permission', nowMs)];
@@ -331,26 +343,24 @@ export function classifySenderProfile(profile: SenderAvailabilityFields, nowMs: 
   return states.length > 0 ? states : [blocked('failed', nowMs)];
 }
 
-/** The server's two global switches: the `feature` object of a GET. */
-export interface SenderFeature {
-  senderNames?: boolean;
-  botNickname?: boolean;
-}
-
 /**
  * The provider view's per-mode flags (`providers[discord].discordModes`): `bot.nickname.enabled` and
  * `webhook.senderName.enabled`. They fold the two switches together with whether Rafii is ready to make Discord
- * requests, so a `false` cannot say which of those it is.
+ * requests. Every switch is off unless the server sets it to the exact string "true", so at the opening the answer is
+ * no for everyone.
  */
 export interface SenderProviderModes {
   bot?: { nickname?: { enabled?: boolean } };
   webhook?: { senderName?: { enabled?: boolean } };
 }
 
-/** True when the provider view says this kind of sender name cannot be edited right now; unknown (absent) is false. */
-export function senderProviderSaysOff(modes: SenderProviderModes | null | undefined, kind: SenderKind): boolean {
+/**
+ * Whether the card may show the sender-name control at all. Only a flag that says yes counts: a flag that is false, or
+ * a provider view that does not carry it, shows nothing (no editor, no button, no note), as the contract asks.
+ */
+export function senderProviderOffers(modes: SenderProviderModes | null | undefined, kind: SenderKind): boolean {
   if (!modes) return false;
-  return kind === 'bot' ? modes.bot?.nickname?.enabled === false : modes.webhook?.senderName?.enabled === false;
+  return kind === 'bot' ? modes.bot?.nickname?.enabled === true : modes.webhook?.senderName?.enabled === true;
 }
 
 /** What a preview can say about a bot's nickname, from `ChannelView.discordBotNickname` or `Manifest.discordBotNickname`. */
@@ -372,14 +382,6 @@ export function botNicknameView(value: string | null | undefined, stage: 'channe
   const hold = stage === 'manifest' ? 'approved' : 'pending';
   if (value === null || value === '') return { name: null, source: 'bot_username', hold };
   return { name: value, source: stage === 'manifest' ? 'approved' : 'observed', hold };
-}
-
-/** The state a switch already explains, without asking Discord anything; null when the switches allow editing (or are unknown). */
-export function classifySenderFeature(feature: SenderFeature | null | undefined, kind: SenderKind, nowMs: number = Date.now()): BlockedState | null {
-  if (!feature) return null;
-  if (feature.senderNames === false) return blocked('sender_names_disabled', nowMs);
-  if (kind === 'bot' && feature.botNickname === false) return blocked('bot_nickname_disabled', nowMs);
-  return null;
 }
 
 /** States in which the person can usefully press "Check again" (a read, never a second write). */

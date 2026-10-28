@@ -5,6 +5,9 @@ import type { DiscordCopy } from '../../lib/channels/discord-copy';
 import { formatRetryTime, type BlockedState, type SenderKind } from '../../lib/channels/discord-sender-name';
 import { recheckLine, senderStateCopy } from '../../lib/channels/discord-sender-state-copy';
 
+/** The states that name a wait: the line under them says how long and until when. */
+const TIMED: ReadonlySet<string> = new Set(['edit_pending', 'rate_limited', 'rate_delayed', 'write_rate_limited']);
+
 export interface SenderStatePanelProps {
   state: BlockedState;
   /** Which kind of connection this is; the held-post sentence of the master switch is only true for webhooks. */
@@ -55,7 +58,7 @@ export function SenderStatePanel({ state, kind, copy, locale, timeZone, id, role
           {copy.senderStateHeldNote}
         </p>
       )}
-      {(state.key === 'edit_pending' || state.key === 'rate_limited' || state.key === 'rate_delayed') && (
+      {TIMED.has(state.key) && (
         <p id={`${id}-recheck`} data-recheck data-retry-after-seconds={state.retryAfterSeconds ?? undefined} className='text-sm font-medium'>
           {recheckLine(copy, state, locale, timeZone, nowMs)}
         </p>

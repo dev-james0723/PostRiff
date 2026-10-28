@@ -1,6 +1,6 @@
 {
- "schema": "rafii.discord-sender-name-verdicts.v3",
- "about": "The first rule sender_names.name_problem (commit b03fc7ae) finds for each name, or null when the name is accepted. Shared by tests/test_discord_sender_name_ui_contract.py (backend) and web/tests/discord-sender-name.test.cjs (editor).",
+ "schema": "rafii.discord-sender-name-verdicts.v4",
+ "about": "The first rule sender_names.name_problem (backend 9f170585) finds for each name, or null when the name is accepted. Shared by tests/test_discord_sender_name_ui_contract.py (backend) and web/tests/discord-sender-name.test.cjs (editor).",
  "limits": {
   "webhook": 80,
   "bot": 32
@@ -448,8 +448,8 @@
   },
   {
    "kind": "bot",
-   "reason": "reserved_word",
-   "note": "reserved on a bot too",
+   "reason": null,
+   "note": "a bot nickname may contain Discord (only webhook names refuse it)",
    "name": "DISCORD Support"
   },
   {
@@ -502,8 +502,8 @@
   },
   {
    "kind": "bot",
-   "reason": "reserved_word",
-   "note": "clyde with a dash",
+   "reason": null,
+   "note": "a bot nickname may contain Clyde",
    "name": "Cl-yde"
   },
   {
@@ -520,8 +520,8 @@
   },
   {
    "kind": "bot",
-   "reason": "reserved_word",
-   "note": "whole name here",
+   "reason": null,
+   "note": "the whole names everyone and here are webhook rules only",
    "name": "HERE"
   },
   {
@@ -589,6 +589,60 @@
    "reason": null,
    "note": "the capital sharp s is not a reserved word",
    "name": "Di\u1e9e"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "a bot nickname may contain Discord",
+   "name": "Discord Helper"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "digit swaps of Discord are fine on a bot",
+   "name": "D1scord"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "a bot nickname may be Clyde",
+   "name": "Clyde"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "a bot nickname may be Everyone",
+   "name": "Everyone"
+  },
+  {
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "the product name on a bot",
+   "name": "Rafii Helper"
+  },
+  {
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "digit swaps of the old product name on a bot",
+   "name": "P0stR1ff"
+  },
+  {
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "spaced letters of the product name on a bot",
+   "name": "r a f i i"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "an unpaired high surrogate",
+   "name": "a\ud800b"
+  },
+  {
+   "kind": "bot",
+   "reason": "control_or_format",
+   "note": "an unpaired low surrogate alone",
+   "name": "\udc00"
   },
   {
    "kind": "webhook",

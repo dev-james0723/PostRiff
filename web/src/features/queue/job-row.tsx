@@ -8,6 +8,8 @@ import { JobCancelHold } from '@/components/jobs/job-cancel-hold';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { TableCell, TableRow } from '@/components/ui/table';
+import { DiscordNicknameHoldAction } from '@/features/channels/discord-nickname-hold-action';
+import { isNicknameHoldNote } from '@/lib/channels/discord-sender-state-copy';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import {
@@ -80,9 +82,14 @@ function StateNote({ job, note, className }: { job: QueueJob; note: string; clas
     );
   }
   return (
-    <JobNote className={className} title={note}>
-      {note}
-    </JobNote>
+    <>
+      <JobNote className={className} title={note}>
+        {note}
+      </JobNote>
+      {job.state === 'held' && job.manifest.platform === 'Discord' && job.manifest.senderKind !== 'webhook' && job.manifest.channelId && isNicknameHoldNote(note) && (
+        <DiscordNicknameHoldAction channelId={job.manifest.channelId} />
+      )}
+    </>
   );
 }
 

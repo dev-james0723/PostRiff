@@ -1,5 +1,5 @@
 """The sender-name editor in the web app checks a name before saving with a copy of
-`sender_names.name_problem` (contract v2, docs/sender-name/UI-API-CONTRACT.md, rules as of backend commit b03fc7ae).
+`sender_names.name_problem` (contract v2, docs/sender-name/UI-API-CONTRACT.md, rules as of backend commit 9f170585).
 This test keeps the verdict fixture that both sides share honest: the real validator must give exactly the
 verdicts the editor's tests assume. If the backend rules change (limit, reserved words, normalization, character
 classes, joiners) this fails until the fixture and `web/src/lib/channels/discord-sender-name.ts` are updated together.
@@ -36,9 +36,9 @@ class SenderNameUiContract(unittest.TestCase):
         cls.document = json.loads(FIXTURE.read_text(encoding='utf-8'))
 
     def test_fixture_shape(self):
-        self.assertEqual(self.document['schema'], 'rafii.discord-sender-name-verdicts.v3')
+        self.assertEqual(self.document['schema'], 'rafii.discord-sender-name-verdicts.v4')
         self.assertEqual(self.document['limits'], {'webhook': 80, 'bot': 32})
-        self.assertGreaterEqual(len(self.document['cases']), 110)
+        self.assertGreaterEqual(len(self.document['cases']), 120)
         reasons = {case['reason'] for case in self.document['cases']}
         self.assertEqual(reasons - {None}, {
             'empty', 'surrounding_space', 'not_normalized', 'too_long', 'control_or_format', 'spacing',
@@ -68,6 +68,7 @@ class SenderNameUiContract(unittest.TestCase):
         # The editor's rules list names exactly these.
         self.assertEqual(sender_names._FORBIDDEN, ('@', '#', ':', '```', '<', '>'))
         self.assertEqual(sender_names._RESERVED_PARTS, ('discord', 'clyde', 'rafii', 'postriff'))
+        self.assertEqual(sender_names._BOT_RESERVED_PARTS, ('rafii', 'postriff'))
         self.assertEqual(sender_names._RESERVED_WHOLE, ('everyone', 'here'))
         rules = sender_names._rules('webhook')
         self.assertEqual(rules['forbiddenCharacters'], ['@', '#', ':', '```', '<', '>'])

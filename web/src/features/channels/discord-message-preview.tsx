@@ -122,6 +122,7 @@ export function DiscordMessagePreview({
   className
 }: DiscordMessagePreviewProps) {
   const headingId = useId();
+  const notesId = useId();
   const { resolvedTheme } = useTheme();
   const [choice, setChoice] = useState<PreviewTheme | null>(null);
   // Fixed for the life of the preview unless the person flips it, so a sample time never ticks.
@@ -179,6 +180,9 @@ export function DiscordMessagePreview({
       </div>
       <div
         data-preview-message
+        role='group'
+        aria-label={copy.previewMessageLabel}
+        aria-describedby={notesId}
         className='flex min-w-0 items-start gap-3 rounded-lg border p-3 text-[15px]'
         style={{ background: palette.surface, borderColor: palette.edge, color: palette.text }}
       >
@@ -218,7 +222,7 @@ export function DiscordMessagePreview({
           ))}
         </div>
       </div>
-      <div className='text-muted-foreground flex flex-col gap-1 text-xs leading-relaxed' data-preview-notes>
+      <div id={notesId} className='text-muted-foreground flex flex-col gap-1 text-xs leading-relaxed' data-preview-notes>
         {nameNotes.map((note) => (
           <p key={note} data-preview-name-note>
             {note}

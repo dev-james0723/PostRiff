@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,14 +23,12 @@ import {
   SENDER_LIMIT,
   canCheckAgain,
   checkSenderName,
-  classifySenderFeature,
   classifySenderProfile,
   classifySenderRefusal,
   formatRetryTime,
   isSenderNameIssue,
-  senderProviderSaysOff,
+  senderProviderOffers,
   type BlockedState,
-  type SenderFeature,
   type SenderKind,
   type SenderReason,
   type SenderRefusal
@@ -42,6 +40,7 @@ import { cn } from '@/lib/utils';
 import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN } from './rafii-materials';
 import { DiscordMessagePreview, type PreviewNameSource } from './discord-message-preview';
 import { SenderStatePanel } from './discord-sender-state-panel';
+import { useVerifyDiscordConnection } from './use-verify-discord-connection';
 
 type Origin = 'open' | 'check' | 'save';
 
@@ -92,17 +91,26 @@ function previewSource(profile: DiscordSenderProfile | null, dirty: boolean): Pr
   }
 }
 
+/**
+ * The sender-name control of one Discord card. The provider view says whether this kind of name can be edited at all
+ * (every switch is off unless the server turns it on, and Rafii must be ready to make Discord requests); when it does not
+ * say yes nothing is rendered: no editor, no button and no note, so there is no dead control. The dialog still explains
+ * every per-person or per-server reason the routes report once the control is offered.
+ */
 export function DiscordSenderNameControl({ channel, provider }: { channel: ChannelView; provider?: ProviderView }) {
   const { workspaceId } = useWorkspaceApi();
-  return <SenderNameEditor key={`${workspaceId}:${channel.id}`} channel={channel} provider={provider} />;
+  const kind: SenderKind = channel.discordConnectionKind === 'webhook' ? 'webhook' : 'bot';
+  if (!senderProviderOffers(provider?.discordModes, kind)) return null;
+  return <SenderNameEditor key={`${workspaceId}:${channel.id}`} channel={channel} />;
 }
 
-function SenderNameEditor({ channel, provider }: { channel: ChannelView; provider?: ProviderView }) {
+function SenderNameEditor({ channel }: { channel: ChannelView }) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const { locale, timeZone } = usePreferences();
   const copy = discordCopy(locale);
   const signInAgain = useSignInAgain();
+  const verify = useVerifyDiscordConnection(channel.id, copy);
   const id = useId();
   const request = useRef(0);
   const inFlight = useRef(false);
@@ -123,15 +131,6 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
 
   const connectionKind: SenderKind = channel.discordConnectionKind === 'webhook' ? 'webhook' : 'bot';
   const kind: SenderKind = profile?.senderKind ?? connectionKind;
-  // Whether editing is available at all: from the provider view's per-mode flags (switches and readiness folded
-  // together), else the two switches an earlier read in this page session learned (shared by every card). They only add
-  // a line under the button; the dialog always asks.
-  const switchesKey = ['discord-sender-switches', workspaceId] as const;
-  const learned = useQuery({ queryKey: switchesKey, queryFn: () => null as SenderFeature | null, enabled: false, staleTime: Infinity, gcTime: Infinity }).data ?? null;
-  const learnedOff = classifySenderFeature(learned, connectionKind);
-  const providerOff = senderProviderSaysOff(provider?.discordModes, connectionKind);
-  // Known without asking again: the card then offers the explanation instead of an editor (the contract: do not render the editor when the provider says it is unavailable).
-  const cannotEditNow = learnedOff !== null || providerOff;
   const isBot = kind === 'bot';
   const limit = profile?.rules?.maxLength ?? profile?.maxLength ?? SENDER_LIMIT[kind];
   const check = checkSenderName(name, kind, { limit, forbidden: profile?.rules?.forbiddenCharacters });
@@ -208,7 +207,6 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
   function apply(next: DiscordSenderProfile, from: Origin) {
     const now = Date.now();
     const blocked = classifySenderProfile(next, now);
-    if (next.feature) client.setQueryData(switchesKey, next.feature);
     setProfile(next);
     setName(next.name ?? '');
     setShared(false);
@@ -291,7 +289,7 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
       if (mode === 'save' && cause instanceof ApiError && cause.status === 400 && cause.code === 'discord_sender_name_invalid') {
         // Refused before anything was sent to Discord: the fingerprint is still good, so the form stays for a fix.
         const reason = cause.body?.reason;
-        setRefusal(isSenderNameIssue(reason) ? senderIssueMessage(copy, reason, check) : fillCount(copy.senderIssueSummary, { limit }));
+        setRefusal(isSenderNameIssue(reason) ? senderIssueMessage(copy, reason, check, kind) : fillCount(copy.senderIssueSummary, { limit }));
         focusOn('name');
       } else {
         explain(cause, 'save');
@@ -376,20 +374,13 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
       <Button
         variant='glass'
         className={CONTROL_44}
-        aria-label={`${cannotEditNow ? copy.senderWhyButton : copy.senderEdit} · ${channel.account}`}
+        aria-label={`${copy.senderEdit} · ${channel.account}`}
         aria-haspopup='dialog'
-        aria-describedby={cannotEditNow ? `${id}-card-hint` : undefined}
         data-discord-sender-edit
-        data-availability={learnedOff?.key ?? (providerOff ? 'unavailable' : 'unknown')}
         onClick={show}
       >
-        {cannotEditNow ? copy.senderWhyButton : copy.senderEdit}
+        {copy.senderEdit}
       </Button>
-      {cannotEditNow && (
-        <span id={`${id}-card-hint`} className='text-muted-foreground basis-full text-xs' data-discord-sender-edit-hint>
-          {connectionKind === 'bot' ? copy.senderCardOffBot : copy.senderCardOff}
-        </span>
-      )}
       <Dialog
         open={open}
         onOpenChange={(value) => {
@@ -404,9 +395,9 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
           className={cn(DIALOG_ELEVATED, 'max-h-[calc(100dvh-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-lg')}
         >
           <DialogHeader>
-            <DialogTitle>{cannotEditNow ? copy.senderViewTitle : copy.senderEdit}</DialogTitle>
+            <DialogTitle>{copy.senderEdit}</DialogTitle>
             <DialogDescription>
-              {channel.account}. {cannotEditNow ? copy.senderViewDescription : copy.senderEditDescription}
+              {channel.account}. {copy.senderEditDescription}
             </DialogDescription>
           </DialogHeader>
           <form id={formId} onSubmit={submit} noValidate className='flex min-w-0 flex-col gap-4 py-2'>
@@ -466,7 +457,7 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
                       <li>{copy.senderRuleSpaces}</li>
                       <li>{copy.senderRuleForbidden}</li>
                       <li>{copy.senderRuleUrl}</li>
-                      <li>{copy.senderRuleReserved}</li>
+                      <li>{isBot ? copy.senderRuleReservedBot : copy.senderRuleReserved}</li>
                     </ul>
                   )}
                   {editable ? (
@@ -487,7 +478,7 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
                     <ul id={issuesId} className='text-destructive flex list-disc flex-col gap-0.5 pl-5 text-xs' data-sender-issues>
                       {check.issues.map((issue) => (
                         <li key={issue} data-issue={issue}>
-                          {senderIssueMessage(copy, issue, check)}
+                          {senderIssueMessage(copy, issue, check, kind)}
                         </li>
                       ))}
                     </ul>
@@ -532,6 +523,27 @@ function SenderNameEditor({ channel, provider }: { channel: ChannelView; provide
                     <p id={`${id}-bot-warning`} className='text-muted-foreground text-xs' data-sender-bot-warning>
                       {copy.senderBotSaveWarning}
                     </p>
+                    <div className='flex min-w-0 flex-col gap-1' data-sender-verify>
+                      <Button
+                        type='button'
+                        variant='glass'
+                        className={cn(CONTROL_44, ARIA_DISABLED, 'self-start')}
+                        aria-disabled={busy !== null || verify.busy}
+                        aria-describedby={`${id}-verify-hint`}
+                        data-sender-verify-button
+                        onClick={() => {
+                          if (busy === null && !verify.busy) void verify.run();
+                        }}
+                      >
+                        {verify.busy ? copy.senderVerifying : copy.senderVerifyLabel}
+                      </Button>
+                      <p id={`${id}-verify-hint`} className='text-muted-foreground text-xs'>
+                        {copy.senderVerifyHint}
+                      </p>
+                      <p role='status' aria-live='polite' className='text-xs' data-sender-verify-result={verify.result?.kind}>
+                        {verify.result?.text}
+                      </p>
+                    </div>
                   </>
                 )}
                 {!isBot && editable && profile.savedName != null && (
