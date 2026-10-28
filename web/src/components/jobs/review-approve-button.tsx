@@ -1,11 +1,17 @@
 'use client';
 
+import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { StatefulButton } from '@/components/motion/button';
+import { HourlyCeilingDialog } from '@/features/channels/discord-hourly-ceiling-notice';
 import { useFlash } from '@/hooks/use-flash';
+import { useLocalTimeZone } from '@/hooks/use-local-time-zone';
 import { useAct } from '@/lib/api/hooks';
 import type { Review } from '@/lib/api/types';
 import { reportActionError } from '@/features/queue/action-error';
+import { discordCopy } from '@/lib/channels/discord-copy';
+import { calendarDayHref, draftHref, hourlyCeilingLimit, isHourlyCeiling } from '@/lib/channels/discord-hourly-ceiling';
+import { usePreferences } from '@/lib/preferences';
 import { STATUS } from '@/lib/status-labels';
 
 /** Submits only the exact reviewed digest and verifies the returned receipt before claiming success. */
@@ -14,20 +20,30 @@ export function ReviewApproveButton({ review, revision, allowed, nowSeconds, onR
   onReload: () => void; onOpenJob: (jobId: string) => void;
 }) {
   const act = useAct();
-  const [outcome, flashOutcome] = useFlash<'success' | 'error'>();
+  const [outcome, flashOutcome] = useFlash<'success' | 'error' | 'full'>();
+  // The Discord hourly ceiling refuses the approval: the limit it names, while the explanation is open.
+  const [full, setFull] = useState<number | null>(null);
+  const copy = discordCopy(usePreferences().locale);
+  const zone = useLocalTimeZone();
+  const button = useRef<HTMLButtonElement>(null);
   const manifest = review.manifest;
+  const seeHref = useMemo(() => calendarDayHref(Date.parse(manifest.timing.utc), zone), [manifest.timing.utc, zone]);
   const expired = manifest.expiresAt <= nowSeconds;
   const actionLabel = manifest.platform === 'Douyin'
     ? 'Approve Douyin video & schedule'
     : 'Approve & schedule';
   if (!allowed || review.status !== 'needs_review') return null;
+  const draft = draftHref(manifest.variantId);
   return (
+    <>
           <StatefulButton
-            state={act.isPending ? 'loading' : (outcome ?? 'idle')}
+            ref={button}
+            state={act.isPending ? 'loading' : outcome === 'full' ? 'error' : (outcome ?? 'idle')}
             loadingText='Approving…'
             successText='Scheduled'
-            errorText='Try again'
+            errorText={outcome === 'full' ? copy.hourlyCeilingButton : 'Try again'}
             disabled={expired}
+            data-review-approve={review.id}
             // Approved: the card is on its way out. It keeps full opacity so "Scheduled" reads, but takes no second click.
             aria-disabled={outcome === 'success' || undefined}
             onClick={() => {
@@ -57,6 +73,12 @@ export function ReviewApproveButton({ review, revision, allowed, nowSeconds, onR
                     }
                   },
                   onError: (err) => {
+                    // A full hour is the plan's answer, not a failure to retry: the review is unchanged and still waiting.
+                    if (isHourlyCeiling(err)) {
+                      setFull(hourlyCeilingLimit(err));
+                      flashOutcome('full');
+                      return;
+                    }
                     reportActionError(err, 'Couldn’t approve this post', onReload);
                     flashOutcome('error');
                   }
@@ -66,5 +88,17 @@ export function ReviewApproveButton({ review, revision, allowed, nowSeconds, onR
           >
             {actionLabel}
           </StatefulButton>
+          <HourlyCeilingDialog
+            open={full !== null}
+            onOpenChange={(open) => { if (!open) setFull(null); }}
+            finalFocus={button}
+            copy={copy}
+            place='single'
+            limit={full ?? hourlyCeilingLimit(null)}
+            // The web has no Move action: a move is a cancel, a new review for the new time, and this approval.
+            moving
+            actions={{ ...(draft ? { chooseTime: { href: draft } } : {}), see: { href: seeHref } }}
+          />
+    </>
   );
 }

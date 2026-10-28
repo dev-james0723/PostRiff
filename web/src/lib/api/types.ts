@@ -165,8 +165,8 @@ export interface WorkerBinding { environment: 'preview'; origin: string }
 
 export interface DiscordModes {
   identity?: { senderKind: 'none'; canPublish: false };
-  bot?: { senderKind: 'bot' };
-  webhook: { senderKind?: 'webhook'; enabled: boolean; status?: string; payloadTypes?: string[] };
+  bot?: { senderKind: 'bot'; nickname?: { enabled: boolean } };
+  webhook: { senderKind?: 'webhook'; enabled: boolean; status?: string; payloadTypes?: string[]; senderName?: { enabled: boolean } };
   userInstall: { senderKind?: 'interaction'; enabled: boolean; status?: string; installUrl?: string; canPublish?: false; canSchedule?: false };
 }
 
@@ -193,6 +193,8 @@ export interface DiscordDestination {
 export interface Manifest {
   senderKind?: 'bot' | 'webhook';
   discordSenderName?: string;
+  /** Bot posts: the server nickname recorded when the post was approved (null: the bot had none). Absent: nothing was recorded. */
+  discordBotNickname?: string | null;
   destinationId?: string;
   discord?: { schema: 'rafii.discord.publish.v2'; target: DiscordDestination; wireDigest: string; deliveryDigest: string; operationDigest: string; publicationId: string };
   workerBinding?: WorkerBinding;
@@ -432,7 +434,7 @@ export interface ChannelFolder {
 export interface Phase2State {
   execution: string;
   trial: Trial;
-  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[]; discordConnectionKind?: 'installation' | 'webhook'; discordSenderName?: string }[];
+  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[]; discordConnectionKind?: 'installation' | 'webhook'; discordSenderName?: string; discordBotNickname?: string | null }[];
   assets: Asset[];
   reviews: Review[];
   jobs: Job[];
@@ -688,6 +690,7 @@ export interface RunSkill {
 export interface RunItemDecision {
   discord?: Manifest['discord'];
   discordSenderName?: string | null;
+  discordBotNickname?: string | null;
   timing?: Manifest['timing'];
   decision: 'approve' | 'reject' | 'revise' | string;
   by: string;
@@ -1478,6 +1481,12 @@ export interface Capability {
 
 export interface ChannelView {
   discordSenderName?: string | null;
+  /**
+   * Bot installations: the nickname a review would record now (what Discord last reported for the bot, `null` when it
+   * has none). Absent when nothing would be recorded (the nickname capability is off, or nothing has been observed).
+   * An approval of a bot post has to carry this value back (docs/sender-name/UI-NEEDS.md, R1).
+   */
+  discordBotNickname?: string | null;
   discordEngagement?: { implemented: boolean; enabled: boolean };
   defaultDestinationId?: string | null;
   discordDestinations?: DiscordDestination[];
@@ -1507,15 +1516,64 @@ export interface ChannelView {
   pictureDigest?: string | null;
 }
 
+/** One reason a sender name cannot be changed now (`unavailable` on a GET, `reasons` on a refused POST). */
+export interface DiscordSenderReason {
+  code: string;
+  /** Seconds until a held change or a throttle can be checked again. */
+  retryAfterSeconds?: number;
+}
+
+export interface DiscordSenderRules {
+  minLength: number;
+  maxLength: number;
+  lengthUnit: string;
+  surroundingSpace: boolean;
+  forbiddenCharacters: string[];
+  reservedWords: boolean;
+  singleSpacesOnly: boolean;
+}
+
+/**
+ * `GET`/`POST /channels/{id}/discord-sender-name` (contract v2, docs/sender-name/UI-API-CONTRACT.md). Every field after
+ * `state` is optional here so a v1 body, which has only the first eight, still reads as an editable profile.
+ */
 export interface DiscordSenderProfile {
   connectionId: string;
   senderKind: 'bot' | 'webhook';
   scope: 'server' | 'connection';
   guildId: string;
+  /** What Discord shows for the next message (the effective name), or '' when it is not known. */
   name: string;
   maxLength: number;
   fingerprint: string;
   state: 'verified';
+  contractVersion?: number;
+  rules?: DiscordSenderRules;
+  effectiveName?: string | null;
+  nameSource?: 'saved_override' | 'webhook_default' | 'observed_nickname' | 'bot_username' | 'none';
+  /** Webhook: the override Rafii freezes into future reviews. Bot: the nickname Rafii last set. */
+  savedName?: string | null;
+  /** What Discord itself reported at `observedAt` (epoch seconds); null when no Discord read was made. */
+  observedName?: string | null;
+  observedAt?: number | null;
+  /** Bot only: the nickname in Discord differs from the one Rafii last set. */
+  externalChange?: boolean;
+  feature?: { senderNames: boolean; botNickname: boolean };
+  editable?: boolean;
+  /** Empty exactly when `editable` is true. */
+  unavailable?: DiscordSenderReason[];
+  preview?: {
+    currentDisplayName: string | null;
+    badge: string;
+    audience: 'this_connection' | 'everyone_in_server';
+    queuedPostsKeepApprovedName: boolean;
+    /** Bot: an approved post is held at dispatch, and nothing is sent, when Discord shows another nickname than the recorded one. */
+    queuedBotPostsHoldIfNicknameChanges: boolean;
+  };
+  /** Present and true on the body of a successful POST. */
+  saved?: boolean;
+  /** Present and true on the body of a successful reset (the custom webhook name was removed). */
+  reset?: boolean;
 }
 
 export interface ProviderView {

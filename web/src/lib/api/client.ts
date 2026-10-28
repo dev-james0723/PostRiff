@@ -93,6 +93,11 @@ export class ApiError extends Error {
   requestId?: string;
   /** What the person can do next, when the server says (e.g. `complete_mfa` / `enroll_mfa` on a security step-up). */
   nextAction?: string;
+  /**
+   * The whole JSON error body when it is an object, for the fields a screen reads by name (Discord sender names:
+   * `reason`, `reasons`, `retryAfterSeconds`). `message` stays the English diagnostic; branch on `code` and these.
+   */
+  body?: Record<string, unknown>;
   constructor(message: string, status: number, code?: string, requestId?: string) {
     super(message);
     this.name = 'ApiError';
@@ -118,17 +123,20 @@ async function parse<T>(res: Response): Promise<T> {
     let message = 'The workspace could not complete that request.';
     let code: string | undefined;
     let nextAction: string | undefined;
+    let fields: Record<string, unknown> | undefined;
     try {
       const body = (await res.json()) as { error?: unknown; code?: unknown; nextAction?: unknown };
       if (typeof body?.error === 'string' && body.error) message = body.error;
       if (typeof body?.code === 'string') code = body.code;
       if (typeof body?.nextAction === 'string') nextAction = body.nextAction;
+      if (body && typeof body === 'object' && !Array.isArray(body)) fields = body as Record<string, unknown>;
     } catch {
       /* keep the generic message */
     }
     const requestId = res.headers.get('X-Request-ID') ?? undefined;
     const error = new ApiError(message, res.status, code, requestId && /^[a-f0-9]{32}$/.test(requestId) ? requestId : undefined);
     if (nextAction) error.nextAction = nextAction;
+    if (fields) error.body = fields;
     throw error;
   }
   if (res.status === 204) return undefined as T;
@@ -385,7 +393,7 @@ export function createApi(getToken: TokenSource) {
       }),
     discordEngagement: (w: string, id: string) => get<DiscordEngagementStatus>(`${ws(w)}/channels/${encodeURIComponent(id)}/discord-engagement`),
     discordSenderProfile: (w: string, id: string) => get<DiscordSenderProfile>(`${ws(w)}/channels/${encodeURIComponent(id)}/discord-sender-name`),
-    setDiscordSenderName: (w: string, id: string, body: { name: string; fingerprint: string; confirmed: boolean; sharedServerConfirmed?: boolean }) =>
+    setDiscordSenderName: (w: string, id: string, body: { name?: string; fingerprint: string; confirmed: boolean; sharedServerConfirmed?: boolean; reset?: boolean }) =>
       send<DiscordSenderProfile>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/discord-sender-name`, body),
     discordEngagementConsent: (w: string, id: string, body: { destinationId: string; targetDigest: string; permissions: DiscordEngagementPermissions; confirmed: boolean; contentAccess?: 'mentions_only' | 'approved_content' }) =>
       send<DiscordEngagementStatus>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/discord-engagement/consent`, body),

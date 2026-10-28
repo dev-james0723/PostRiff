@@ -1,6 +1,8 @@
 'use client';
 
 import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
+import { botNicknameView } from '@/lib/channels/discord-sender-name';
+import { DiscordMessagePreview } from '@/features/channels/discord-message-preview';
 
 import { publishingSupport } from '@/lib/channels/publishing-support';
 
@@ -153,7 +155,8 @@ function editSteps(variant: SnapshotVariant | undefined, activeVoice: number | n
  */
 export function ScheduleDialog({ open, onOpenChange, variantId: preselected, assetId: preselectedAsset, onPrepared }: ScheduleDialogProps) {
   const snapshot = useSnapshot();
-  const discordUiCopy = discordCopy(usePreferences().locale);
+  const { locale } = usePreferences();
+  const discordUiCopy = discordCopy(locale);
   const access = useWorkspaceAccess();
   // Preparing a review is in the server's approve class (`permissions.py`); say so before anyone fills the form in.
   const canPrepare = checkAccess(access, { permission: 'approve' });
@@ -250,6 +253,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const discordDestinations = channel?.discordDestinations?.filter((d) => d.status === 'authorized' && d.authorizationGeneration === channel.discordAuthorizationGeneration) ?? [];
   const discordDestination = discordDestinations.find((d) => d.id === discordDestinationId);
   const webhookOnly = channel?.discordConnectionKind === 'webhook';
+  const botNickname = botNicknameView(channel?.discordBotNickname, 'channel');
   useEffect(() => { if (webhookOnly) setAssetId(''); }, [webhookOnly, defaultAsset]);
   const needsOptions = Boolean(channel && NEEDS_OPTIONS.has(channel.platform));
   const youtubeNow = channel?.platform === 'YouTube' && publishOptions?.publicationMode === 'now';
@@ -392,6 +396,21 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 </NativeSelect>
                 {discordDestination && <p className='text-muted-foreground text-xs' data-discord-target>{discordDestination.guildName} ({discordDestination.guildId}) · {discordDestination.channelName} ({discordDestination.channelId})</p>}
                 <p className='text-muted-foreground text-xs'>The preview freezes this destination. Changing the connection default will keep approved posts on their original channel.</p>
+                <DiscordMessagePreview
+                  kind={webhookOnly ? 'webhook' : 'bot'}
+                  name={webhookOnly ? channel.discordSenderName ?? null : botNickname.name}
+                  nameSource={webhookOnly ? (channel.discordSenderName ? 'saved' : 'unknown') : botNickname.source}
+                  botHold={webhookOnly ? undefined : botNickname.hold}
+                  text={variant?.text ?? ''}
+                  publishAt={chosenAt !== null ? new Date(chosenAt) : null}
+                  timeZone={timeZone}
+                  copy={discordUiCopy}
+                  locale={locale}
+                  heading={discordUiCopy.previewHeading}
+                  headingLevel='h4'
+                  compact
+                  className='pt-1'
+                />
               </div>
             )}
             {steps.updateWaiting && canEdit && <p className='text-muted-foreground text-xs'>Uses the updated version in your current voice.</p>}

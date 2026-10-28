@@ -2,6 +2,11 @@
 
 import { usePreferences } from '@/lib/preferences';
 import { discordCopy, discordSenderLabel } from '@/lib/channels/discord-copy';
+import { calendarDayHref, hourlyCeilingLimit, isHourlyCeiling } from '@/lib/channels/discord-hourly-ceiling';
+import { botNicknameView } from '@/lib/channels/discord-sender-name';
+import { DiscordMessagePreview } from '@/features/channels/discord-message-preview';
+import { HourlyCeilingNotice } from '@/features/channels/discord-hourly-ceiling-notice';
+import { useLocalTimeZone } from '@/hooks/use-local-time-zone';
 
 /**
  * Approve, request changes to, or reject one post of an automation run (`raffi_run_decide`, orchestration §4).
@@ -73,7 +78,8 @@ export function RunDecisionDialog({ target, onClose, act }: { target: DecisionTa
 }
 
 function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onClose: () => void; act: (action: string, payload: Record<string, unknown>) => Promise<Snapshot> }) {
-  const dc = discordCopy(usePreferences().locale);
+  const { locale } = usePreferences();
+  const dc = discordCopy(locale);
   const { run, item, decision, automationName, timeZone } = target;
   const snapshot = useSnapshot();
   const state = snapshot.data?.state;
@@ -83,10 +89,15 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
   const [confirmed, setConfirmed] = useState(false);
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
+  // The Discord hourly ceiling refused the approval: the limit it names. The post stays "Ready for review".
+  const [full, setFull] = useState<number | null>(null);
+  const zone = useLocalTimeZone();
   const [destinationId, setDestinationId] = useState(item.destinationId ?? '');
   const connection = state?.phase2?.channels.find((c) => c.id === item.channelId);
   const destinations = connection?.discordDestinations?.filter((d) => d.status === 'authorized' && d.authorizationGeneration === connection.discordAuthorizationGeneration) ?? [];
   const discordTarget = destinations.find((d) => d.id === destinationId);
+  const discordWebhook = discordTarget?.senderKind === 'webhook' || connection?.discordConnectionKind === 'webhook';
+  const botNickname = botNicknameView(connection?.discordBotNickname, 'channel');
   const text = TITLES[decision];
   const when = item.publishAt ? runLabel(item.publishAt * 1000, timeZone) : null;
   const edited = variant && typeof item.variantRevision === 'number' && variant.revision !== item.variantRevision;
@@ -104,7 +115,7 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
             ? 'This browser can’t verify the sources for this approval. Try another browser.'
             : null
       : null;
-  const ready = !sending && !blocked && (decision !== 'approve' || (confirmed && digestsReady && (item.platform !== 'Discord' || !item.publishAt || Boolean(discordTarget)))) && (decision !== 'revise' || note.trim().length > 0);
+  const ready = !sending && !blocked && full === null && (decision !== 'approve' || (confirmed && digestsReady && (item.platform !== 'Discord' || !item.publishAt || Boolean(discordTarget)))) && (decision !== 'revise' || note.trim().length > 0);
 
   async function send() {
     if (!ready) return;
@@ -119,13 +130,24 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
         excludedUnknowns: unknowns,
         acknowledgedWarnings: warnings,
         ...(item.platform === 'Discord' && item.publishAt ? { destinationId, destinationGeneration: discordTarget?.resourceGeneration, publishAt: item.publishAt,
-          ...(discordTarget?.senderKind === 'webhook' ? { discordSenderName: connection?.discordSenderName ?? null } : {}) } : {}),
+          // The approval states which sender it was shown: a webhook's custom name, or the bot nickname a review records.
+          ...(discordTarget?.senderKind === 'webhook'
+            ? { discordSenderName: connection?.discordSenderName ?? null }
+            : connection?.discordBotNickname !== undefined
+              ? { discordBotNickname: connection.discordBotNickname }
+              : {}) } : {}),
         sourceUse: rewriteSources.flatMap((s) => (digests?.[s.id] ? [{ sourceId: s.id, factsDigest: digests[s.id] }] : [])),
         ...(note.trim() ? { note: note.trim() } : {})
       });
       toast.success(text.done);
       onClose();
     } catch (error) {
+      if (isHourlyCeiling(error)) {
+        // The plan is full at that hour, so the same request would be refused again: show why and where to look, keep the dialog.
+        setFull(hourlyCeilingLimit(error));
+        setSending(false);
+        return;
+      }
       if (error instanceof ApiError && error.code === 'approval_expired') toast.error('Too late to approve: its publish time has passed.');
       else toast.error(error instanceof ApiError ? error.message : 'Couldn’t send. Try again.');
       setSending(false);
@@ -171,6 +193,22 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
           </Surface>
         ) : (
           <p className='text-muted-foreground text-sm'>This draft isn’t available.</p>
+        )}
+        {item.platform === 'Discord' && variant && decision === 'approve' && (
+          <DiscordMessagePreview
+            kind={discordWebhook ? 'webhook' : 'bot'}
+            name={discordWebhook ? connection?.discordSenderName ?? null : botNickname.name}
+            nameSource={discordWebhook ? (connection?.discordSenderName ? 'saved' : 'unknown') : botNickname.source}
+            botHold={discordWebhook ? undefined : botNickname.hold}
+            text={variant.text}
+            publishAt={item.publishAt ? new Date(item.publishAt * 1000) : null}
+            timeZone={timeZone}
+            copy={dc}
+            locale={locale}
+            heading={dc.previewHeading}
+            headingLevel='h3'
+            compact
+          />
         )}
         {edited && <Note>Edited after Rafii wrote it. You’re deciding on the text as it is now.</Note>}
         {variant?.proposedUpdate && <Note>A newer version is waiting in Queue → Drafts. This decision covers the text shown here.</Note>}
@@ -227,6 +265,14 @@ function DecisionContent({ target, onClose, act }: { target: DecisionTarget; onC
           </div>
         )}
         {blocked && <Note>{blocked}</Note>}
+        {full !== null && (
+          <HourlyCeilingNotice
+            copy={dc}
+            place='decision'
+            limit={full}
+            actions={item.publishAt ? { see: { href: calendarDayHref(item.publishAt * 1000, zone) }, onNavigate: onClose } : undefined}
+          />
+        )}
         {decision === 'approve' && !blocked && (
           <Checkbox
             checked={confirmed}

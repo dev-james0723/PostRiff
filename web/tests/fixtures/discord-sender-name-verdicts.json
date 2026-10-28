@@ -1,0 +1,772 @@
+{
+ "schema": "rafii.discord-sender-name-verdicts.v4",
+ "about": "The first rule sender_names.name_problem (backend 9f170585) finds for each name, or null when the name is accepted. Shared by tests/test_discord_sender_name_ui_contract.py (backend) and web/tests/discord-sender-name.test.cjs (editor).",
+ "limits": {
+  "webhook": 80,
+  "bot": 32
+ },
+ "cases": [
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "plain brand",
+   "name": "Acme Weekly"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "plain brand",
+   "name": "Acme Bot"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "CJK with an inner space",
+   "name": "D Festival \u516c\u544a"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "CJK",
+   "name": "D Festival \u52a9\u624b"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "precomposed accents are NFC",
+   "name": "Caf\u00e9 M\u00fcller"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "Cyrillic",
+   "name": "\u0414\u0430\u0439\u0434\u0436\u0435\u0441\u0442 \u043d\u043e\u0432\u043e\u0441\u0442\u0435\u0439"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "Arabic",
+   "name": "\u0627\u0644\u0623\u062e\u0628\u0627\u0631"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "Japanese",
+   "name": "\u9031\u520a\u30cb\u30e5\u30fc\u30b9"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "emoji",
+   "name": "\ud83c\udfb5 Daily Notes"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "exactly 80 characters",
+   "unit": "a",
+   "repeat": 80
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "exactly 32 characters",
+   "unit": "a",
+   "repeat": 32
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "40 emoji = 80 UTF-16 units",
+   "unit": "\ud83d\ude00",
+   "repeat": 40
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "16 emoji = 32 UTF-16 units",
+   "unit": "\ud83d\ude00",
+   "repeat": 16
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "here inside a longer name is fine",
+   "name": "Here Maps"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "everyone inside a longer name is fine",
+   "name": "Everyone Welcome"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "contains \"ffic\" but is not reserved",
+   "name": "Traffic Updates"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "contains \"afari\" but is not reserved",
+   "name": "Safari News"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "a symbol is fine",
+   "name": "Star \u2605 Team"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "a variation selector is a mark, not a format character",
+   "name": "Caf\u00e9\ufe0f"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "an ampersand is fine",
+   "name": "Fish & Chips"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "digits and brackets are fine",
+   "name": "Q3 results (draft)"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "hero is not \"here\"",
+   "name": "Hero"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "plain nickname",
+   "name": "Concert helper"
+  },
+  {
+   "kind": "webhook",
+   "reason": "empty",
+   "note": "empty",
+   "name": ""
+  },
+  {
+   "kind": "bot",
+   "reason": "empty",
+   "note": "empty",
+   "name": ""
+  },
+  {
+   "kind": "webhook",
+   "reason": "empty",
+   "note": "one space",
+   "name": " "
+  },
+  {
+   "kind": "webhook",
+   "reason": "empty",
+   "note": "spaces",
+   "name": "   "
+  },
+  {
+   "kind": "bot",
+   "reason": "empty",
+   "note": "ideographic space only",
+   "name": "\u3000"
+  },
+  {
+   "kind": "webhook",
+   "reason": "empty",
+   "note": "a tab only",
+   "name": "\t"
+  },
+  {
+   "kind": "webhook",
+   "reason": "surrounding_space",
+   "note": "leading space",
+   "name": " lead"
+  },
+  {
+   "kind": "bot",
+   "reason": "surrounding_space",
+   "note": "trailing space",
+   "name": "trail "
+  },
+  {
+   "kind": "webhook",
+   "reason": "surrounding_space",
+   "note": "leading no-break space",
+   "name": "\u00a0Acme"
+  },
+  {
+   "kind": "webhook",
+   "reason": "surrounding_space",
+   "note": "trailing ideographic space",
+   "name": "Acme\u3000"
+  },
+  {
+   "kind": "webhook",
+   "reason": "not_normalized",
+   "note": "e plus combining acute is NFD",
+   "name": "Cafe\u0301"
+  },
+  {
+   "kind": "bot",
+   "reason": "not_normalized",
+   "note": "A plus ring is NFD",
+   "name": "A\u030a"
+  },
+  {
+   "kind": "webhook",
+   "reason": "too_long",
+   "note": "81 characters",
+   "unit": "a",
+   "repeat": 81
+  },
+  {
+   "kind": "bot",
+   "reason": "too_long",
+   "note": "33 characters",
+   "unit": "a",
+   "repeat": 33
+  },
+  {
+   "kind": "webhook",
+   "reason": "too_long",
+   "note": "41 emoji = 82 UTF-16 units",
+   "unit": "\ud83d\ude00",
+   "repeat": 41
+  },
+  {
+   "kind": "bot",
+   "reason": "too_long",
+   "note": "17 emoji = 34 UTF-16 units",
+   "unit": "\ud83d\ude00",
+   "repeat": 17
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "line feed",
+   "name": "bad\nname"
+  },
+  {
+   "kind": "bot",
+   "reason": "control_or_format",
+   "note": "tab",
+   "name": "bad\tname"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "NUL",
+   "name": "bad\u0000name"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "right-to-left override",
+   "name": "bad\u202ename"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "left-to-right isolate",
+   "name": "bad\u2066name"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "zero width space",
+   "name": "zero\u200bwidth"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "zero width joiner",
+   "name": "join\u200dder"
+  },
+  {
+   "kind": "bot",
+   "reason": "control_or_format",
+   "note": "byte order mark",
+   "name": "bom\ufeffname"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "tag character",
+   "name": "tag\udb40\udc41name"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "private use",
+   "name": "pua\ue000name"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "unassigned code point",
+   "name": "gap\u0378name"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "line separator",
+   "name": "line\u2028sep"
+  },
+  {
+   "kind": "bot",
+   "reason": "control_or_format",
+   "note": "next line control",
+   "name": "next\u0085line"
+  },
+  {
+   "kind": "webhook",
+   "reason": "spacing",
+   "note": "two spaces",
+   "name": "a  b"
+  },
+  {
+   "kind": "webhook",
+   "reason": "spacing",
+   "note": "inner no-break space",
+   "name": "a\u00a0b"
+  },
+  {
+   "kind": "bot",
+   "reason": "spacing",
+   "note": "inner ideographic space",
+   "name": "a\u3000b"
+  },
+  {
+   "kind": "webhook",
+   "reason": "spacing",
+   "note": "inner em space",
+   "name": "a\u2003b"
+  },
+  {
+   "kind": "webhook",
+   "reason": "invisible",
+   "note": "Hangul filler",
+   "name": "\u3164"
+  },
+  {
+   "kind": "webhook",
+   "reason": "invisible",
+   "note": "blank Braille",
+   "name": "\u2800\u2800"
+  },
+  {
+   "kind": "webhook",
+   "reason": "invisible",
+   "note": "Hangul choseong filler inside",
+   "name": "a\u115fb"
+  },
+  {
+   "kind": "webhook",
+   "reason": "invisible",
+   "note": "only a combining mark",
+   "name": "\u0301"
+  },
+  {
+   "kind": "bot",
+   "reason": "invisible",
+   "note": "halfwidth Hangul filler",
+   "name": "\uffa0"
+  },
+  {
+   "kind": "webhook",
+   "reason": "forbidden_character",
+   "note": "mention",
+   "name": "@everyone"
+  },
+  {
+   "kind": "bot",
+   "reason": "forbidden_character",
+   "note": "mention inside",
+   "name": "Team @here"
+  },
+  {
+   "kind": "webhook",
+   "reason": "forbidden_character",
+   "note": "user mention",
+   "name": "<@123456789012345678>"
+  },
+  {
+   "kind": "bot",
+   "reason": "forbidden_character",
+   "note": "channel mention",
+   "name": "<#123456789012345678>"
+  },
+  {
+   "kind": "webhook",
+   "reason": "forbidden_character",
+   "note": "hash",
+   "name": "#general"
+  },
+  {
+   "kind": "webhook",
+   "reason": "forbidden_character",
+   "note": "colon",
+   "name": "News: Daily"
+  },
+  {
+   "kind": "bot",
+   "reason": "forbidden_character",
+   "note": "emoji syntax",
+   "name": ":smile:"
+  },
+  {
+   "kind": "webhook",
+   "reason": "forbidden_character",
+   "note": "code fence",
+   "name": "```code```"
+  },
+  {
+   "kind": "webhook",
+   "reason": "url_like",
+   "note": "www host",
+   "name": "www.example.com"
+  },
+  {
+   "kind": "bot",
+   "reason": "url_like",
+   "note": "www inside",
+   "name": "Visit www.example.com"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "reserved",
+   "name": "Discord"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "a bot nickname may contain Discord (only webhook names refuse it)",
+   "name": "DISCORD Support"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "full-width letters",
+   "name": "\uff44\uff49\uff53\uff43\uff4f\uff52\uff44"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "accents",
+   "name": "D\u00efsc\u00f6rd"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "Cyrillic i",
+   "name": "d\u0456scord"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "several Cyrillic look-alikes",
+   "name": "d\u0456s\u0441\u043erd clone"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "digit one for i",
+   "name": "D1scord"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "spaced letters",
+   "name": "d i s c o r d"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "separator",
+   "name": "dis_cord"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "clyde",
+   "name": "Clyde"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "a bot nickname may contain Clyde",
+   "name": "Cl-yde"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "digit one for l",
+   "name": "C1yde"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "whole name everyone",
+   "name": "Everyone"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "the whole names everyone and here are webhook rules only",
+   "name": "HERE"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "whole name here with a space",
+   "name": "he re"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "the product name",
+   "name": "Rafii Support"
+  },
+  {
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "the product name on a bot",
+   "name": "rafii"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "the old product name",
+   "name": "PostRiff Official"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "digit swaps",
+   "name": "P0stR1ff"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "long s",
+   "name": "di\u017fcord"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "dotted capital I",
+   "name": "D\u0130SCORD"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "dotless i is a look-alike",
+   "name": "d\u0131scord"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "inside a word",
+   "name": "xdiscordx"
+  },
+  {
+   "kind": "webhook",
+   "reason": "reserved_word",
+   "note": "mixed case",
+   "name": "cLyDe Bot"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "the capital sharp s is not a reserved word",
+   "name": "Di\u1e9e"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "a bot nickname may contain Discord",
+   "name": "Discord Helper"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "digit swaps of Discord are fine on a bot",
+   "name": "D1scord"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "a bot nickname may be Clyde",
+   "name": "Clyde"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "a bot nickname may be Everyone",
+   "name": "Everyone"
+  },
+  {
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "the product name on a bot",
+   "name": "Rafii Helper"
+  },
+  {
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "digit swaps of the old product name on a bot",
+   "name": "P0stR1ff"
+  },
+  {
+   "kind": "bot",
+   "reason": "reserved_word",
+   "note": "spaced letters of the product name on a bot",
+   "name": "r a f i i"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "an unpaired high surrogate",
+   "name": "a\ud800b"
+  },
+  {
+   "kind": "bot",
+   "reason": "control_or_format",
+   "note": "an unpaired low surrogate alone",
+   "name": "\udc00"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "ZWJ inside a family emoji sequence",
+   "name": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67 Family News"
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "ZWJ after an emoji and its variation selector",
+   "name": "\u2764\ufe0f\u200d\ud83d\udd25 Fire"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "ZWJ after a skin tone modifier",
+   "name": "\ud83d\udc69\ud83c\udffd\u200d\ud83d\udcbb Dev"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "rainbow flag sequence",
+   "name": "\ud83c\udff3\ufe0f\u200d\ud83c\udf08 Pride"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "Persian ZWNJ between letters",
+   "name": "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "Devanagari ZWNJ between a mark and a letter",
+   "name": "\u0915\u094d\u200c\u0937"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "ZWJ between two modifier symbols is accepted by the server",
+   "name": "^\u200d^"
+  },
+  {
+   "kind": "webhook",
+   "reason": null,
+   "note": "10 family emoji = 50 code points and exactly 80 UTF-16 units",
+   "unit": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67",
+   "repeat": 10
+  },
+  {
+   "kind": "webhook",
+   "reason": "too_long",
+   "note": "11 family emoji = 88 UTF-16 units",
+   "unit": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67",
+   "repeat": 11
+  },
+  {
+   "kind": "bot",
+   "reason": null,
+   "note": "4 family emoji = exactly 32 UTF-16 units",
+   "unit": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67",
+   "repeat": 4
+  },
+  {
+   "kind": "bot",
+   "reason": "too_long",
+   "note": "5 family emoji = 40 UTF-16 units",
+   "unit": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67",
+   "repeat": 5
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWNJ between Latin letters",
+   "name": "a\u200cb"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWJ at the start",
+   "name": "\u200dabc"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWJ at the end",
+   "name": "abc\u200d"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWJ between an emoji and a letter",
+   "name": "\ud83d\udc69\u200dx"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWJ followed by a variation selector",
+   "name": "\ud83d\udc69\u200d\ufe0f\ud83d\udc68"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "two joiners in a row",
+   "name": "\ud83d\udc69\u200d\u200d\ud83d\udc68"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWNJ before a space",
+   "name": "\u0628\u200c \u0628"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWNJ at the start",
+   "name": "\u200c\u0628"
+  },
+  {
+   "kind": "webhook",
+   "reason": "control_or_format",
+   "note": "ZWJ between Arabic letters (a ZWJ only joins symbols)",
+   "name": "\u0645\u200d\u0645"
+  }
+ ]
+}

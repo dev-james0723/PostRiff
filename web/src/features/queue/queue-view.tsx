@@ -641,6 +641,7 @@ function Queue() {
         revision={revision}
         nowSeconds={nowSeconds}
         onReload={reload}
+        onRemove={(reviewId) => setBatch((b) => ({ ...b, reviews: b.reviews.filter((review) => review.id !== reviewId) }))}
       />
       <JobDetailSheet
         jobId={params.job}
