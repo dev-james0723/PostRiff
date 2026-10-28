@@ -59,7 +59,14 @@ def fence_network():
     socket.socket.connect, socket.socket.connect_ex, socket.getaddrinfo = connect, connect_ex, getaddrinfo
 
 
-def shim_discord_transport(mock_port):
+def source_tag(path):
+    """Which cron route an invocation serves, as a short tag the mock logs on every request it forwards."""
+    if path.startswith('/api/cron/discord-worker/'):
+        return 'lane' + path.rsplit('/', 1)[1][:6]
+    return 'minute' if path == '/api/cron/worker' else 'other'
+
+
+def shim_discord_transport(mock_port, source='other'):
     import urllib.request
     from urllib.error import URLError
     from postriff_phase2 import providers
@@ -91,8 +98,11 @@ def shim_discord_transport(mock_port):
                         channel = path.split('/')[2]
                         path = '/channels/%d/messages' % (int(channel) + 1)
                         counts['misrouted'] += 1
-                rewritten = urllib.request.Request(local + path, data=request.data,
-                                                   headers=dict(request.header_items()), method=request.get_method())
+                headers = dict(request.header_items())
+                headers['X-Cap-Source'] = source
+                headers['X-Cap-Call-At'] = repr(time.time())  # the last thing before the call: the wire time's lower bound
+                rewritten = urllib.request.Request(local + path, data=request.data, headers=headers,
+                                                   method=request.get_method())
                 return opener.open(rewritten, timeout=timeout)
         return Opener()
     providers.build_opener = build_opener
@@ -144,7 +154,7 @@ def main(argv=None):
               'scheduledAt': args.start_at, 'mode': 'warm' if args.warm else 'cold'}
     try:
         import api.index as entry
-        counts = shim_discord_transport(args.mock_port)
+        counts = shim_discord_transport(args.mock_port, source_tag(args.path))
         app = entry.app
         result['importedAt'] = time.time()
         if args.warm:

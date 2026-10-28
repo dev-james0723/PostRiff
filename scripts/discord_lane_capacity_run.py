@@ -41,6 +41,7 @@ import sys
 import threading
 import time
 import traceback
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -66,11 +67,12 @@ BASE = dict(workspaces=2000, posts=5000, hot_posts=0, per_minute=0, minutes=0, d
             cron_period=60, cron_jitter=(0.0, 1.0), max_duration=300, invocation_mode='cold',
             lead_seconds=90, max_run_minutes=75, fixed_run_minutes=None, stall_detect_minutes=10,
             stall=None, flag_off=None, kills=None, kill_at_create=0, lock_injection=None, misroute_every=0,
-            expiry_in_minutes=None, injections=None, seed_processes=4, judge_as=None, pinned=(), expect=())
+            expiry_in_minutes=None, injections=None, seed_processes=4, judge_as=None, pinned=(),
+            budget_probe_delay_seconds=90, expect=())
 
 SCENARIOS = {
     'smoke': dict(workspaces=10, posts=30, cron_period=20, lane_max_seconds=15, shards=4, lead_seconds=10,
-                  max_run_minutes=4, seed_processes=1, stall_detect_minutes=2,
+                  max_run_minutes=4, seed_processes=1, stall_detect_minutes=2, budget_probe_delay_seconds=None,
                   description='Tiny end-to-end check of the harness itself: 30 posts in 10 workspaces, 20-second '
                               'cron period, 4 shards. Not a capacity measurement.',
                   expect=('all_verified', 'no_duplicates', 'no_late_sends', 'isolation', 'clean_workers')),
@@ -96,6 +98,15 @@ SCENARIOS = {
     'S2': dict(hot_posts=3000, max_run_minutes=80,
                description='The same 5,000 posts, one hot workspace holding 3,000 and 2,000 spread over 1,999 '
                            'workspaces (fairness).', expect=('standard', 'isolation', 'clean_workers')),
+    # S2 with a smaller hot workspace, to find where the one-document-per-workspace design stops keeping up (profile
+    # s2sizes). Same 5,000 posts: the hot workspace holds N and the rest are spread over 1,999 workspaces. Judged as S2.
+    'S2-100': dict(hot_posts=100, max_run_minutes=80, judge_as='S2', expect=('standard', 'isolation', 'clean_workers'),
+                   description='S2 with a hot workspace of 100 posts (the other 4,900 over 1,999 workspaces).'),
+    'S2-300': dict(hot_posts=300, max_run_minutes=80, judge_as='S2', expect=('standard', 'isolation', 'clean_workers'),
+                   description='S2 with a hot workspace of 300 posts (the other 4,700 over 1,999 workspaces).'),
+    'S2-1000': dict(hot_posts=1000, max_run_minutes=80, judge_as='S2', expect=('standard', 'isolation', 'clean_workers'),
+                    description='S2 with a hot workspace of 1,000 posts (the other 4,000 over 1,999 workspaces); the '
+                                'physical bound of one create per second in its one channel is 16.7 minutes.'),
     'S3': dict(workspaces=2000, posts=13000, max_run_minutes=80,
                description='13,000 posts due in the same minute: where approval expiry starts holding posts.',
                expect=('standard', 'isolation', 'clean_workers')),
@@ -149,10 +160,11 @@ SCENARIOS = {
                   description='Flag flip: the lane flag is off from T+2 to T+6 min (the minute worker takes Discord '
                               'back), then on again.', expect=('fflip', 'no_duplicates', 'no_late_sends', 'isolation')),
     'Nmisroute': dict(workspaces=200, posts=200, misroute_every=10, max_run_minutes=12, stall_detect_minutes=4,
+                      budget_probe_delay_seconds=None,
                       description='Negative control: the harness rewrites about one create in ten to another '
                                   'tenant\'s channel at the wire; the isolation check must fire.',
                       expect=('negative_misroute',)),
-    'Ndup': dict(workspaces=200, posts=200, double_accept_every=25, max_run_minutes=12,
+    'Ndup': dict(workspaces=200, posts=200, double_accept_every=25, max_run_minutes=12, budget_probe_delay_seconds=None,
                  description='Negative control: the mock accepts every 25th create twice; the duplicate counters '
                              'must fire.', expect=('negative_duplicates',)),
     'Nceiling': dict(workspaces=600, posts=1200, policy_capacity=100, information_only=True, mock_latency='uniform:5:20',
@@ -165,6 +177,8 @@ PROFILES = {
     'release': ['smoke', 'S1', 'S2', 'S0-100', 'S0-250', 'baseline', 'F429', 'F5xx', 'Fcrash', 'Fdb', 'Fexpiry',
                 'Fstall', 'Fflip', 'Nmisroute', 'Ndup', 'Nceiling'],
     'stress': ['S1', 'S2'],
+    's2sizes': ['S2-100', 'S2-300', 'S2-1000'],
+    'devset': ['S1', 'S0-100', 'Fdb', 'Fcrash', 'F429'],
     'failures': ['F429', 'F5xx', 'Fcrash', 'Fdb', 'Fexpiry', 'Fstall', 'Fflip'],
     'controls': ['Nmisroute', 'Ndup', 'Nceiling'],
 }
@@ -501,12 +515,12 @@ class Harness:
         env = {
             'POSTRIFF_DATABASE_URL': self.app_dsn,
             'POSTRIFF_SUPABASE_URL': 'https://capacity-harness-synthetic.supabase.co',  # shape only; DNS is fenced
-            'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': 'sb_publishable_capacity_harness_synthetic_000',
-            'POSTRIFF_SUPABASE_SECRET_KEY': 'sb_secret_capacity_harness_synthetic_000000',
+            'POSTRIFF_SUPABASE_PUBLISHABLE_KEY': self.generated['supabase_public'],
+            'POSTRIFF_SUPABASE_SECRET_KEY': self.generated['supabase_admin'],
             'POSTRIFF_CREDENTIAL_KEY': self.credential_key,
             'POSTRIFF_PUBLIC_BASE_URL': 'https://rafii.example.invalid',
             'POSTRIFF_OAUTH_DISCORD_CLIENT_ID': mock_tools.APP,
-            'POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET': 'cap-client-secret-synthetic-0000000000',
+            'POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET': self.generated['oauth_app'],
             'POSTRIFF_DISCORD_BOT_TOKEN': mock_tools.BOT_TOKEN,
             'POSTRIFF_OAUTH_DISCORD_REVIEWED': 'true',
             'POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED': 'true',
@@ -518,7 +532,7 @@ class Harness:
             'POSTRIFF_DISCORD_GUILD_CAP': '10000',
             'POSTRIFF_WORKER_MAX_JOBS': str(s['worker_max_jobs']),
             'POSTRIFF_WORKER_MAX_SECONDS': str(s['worker_max_seconds']),
-            'CRON_SECRET': self.cron_secret,
+            'CRON_SECRET': self.cron_token,
         }
         if lane_on:
             env['POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED'] = 'true'
@@ -550,7 +564,12 @@ class Harness:
     def write_environments(self):
         from cryptography.fernet import Fernet
         self.credential_key = Fernet.generate_key().decode()
-        self.cron_secret = 'cap-cron-' + os.urandom(16).hex()
+        # Credential-shaped values are made fresh for every run (nothing of the kind is a literal in this repository) and
+        # exist only in the run's own environment files, which are not uploaded.
+        self.cron_token = 'cap-cron-' + os.urandom(16).hex()
+        self.generated = {'supabase_public': 'sb_publishable_' + os.urandom(16).hex(),
+                          'supabase_admin': 'sb_secret_' + os.urandom(16).hex(),
+                          'oauth_app': 'cap-client-' + os.urandom(16).hex()}
         run_policy, seed_policy, policy = self.policies()
         self.config['ratePolicy'] = policy
         on = self.environment(lane_on=self.s['lane'], policy=run_policy)
@@ -706,6 +725,9 @@ class Harness:
             # run would start with less than the reviewed capacity.
             raise RuntimeError('seeding left request admissions open %s; the run would start with a reduced budget'
                                % json.dumps(open_slots, sort_keys=True))
+        if s['hot_posts']:
+            # The hot workspace's document as seeded: its size and one read-modify-write of it, before any worker runs.
+            self.config['documentAtSeed'] = self.document_probe()
         self.config.update(seedingSeconds=round(done - started, 1), seedingEndedAt=done,
                            leadSecondsActual=round(self.reference - done, 1), discordCredentials=credentials)
         self.log('seeded in %.0f s: %d scheduled jobs, %d Discord credentials; lead to T %.0f s' % (
@@ -900,8 +922,8 @@ class Harness:
                     with self.admin() as db:
                         db.autocommit = False
                         began = time.time()
-                        db.execute("SELECT 1 FROM public.pr_discord_rate_state WHERE kind='policy' FOR UPDATE")
-                        rows = db.execute("""SELECT id FROM public.pr_workspaces WHERE state ? 'phase2'
+                        db.execute("/*cap-harness*/ SELECT 1 FROM public.pr_discord_rate_state WHERE kind='policy' FOR UPDATE")
+                        rows = db.execute("""/*cap-harness*/ SELECT id FROM public.pr_workspaces WHERE state ? 'phase2'
                             ORDER BY random() LIMIT %s FOR UPDATE SKIP LOCKED""", (spec.get('workspaceRows', 0),)).fetchall()
                         time.sleep(spec['hold'])
                         db.commit()
@@ -912,7 +934,7 @@ class Harness:
 
     # -- sampling and the end condition ---------------------------------------------------------------------------
 
-    PENDING_SQL = """SELECT count(*) FILTER (WHERE j->>'state' NOT IN ('verified','held','failed','canceled')
+    PENDING_SQL = """/*cap-harness*/ SELECT count(*) FILTER (WHERE j->>'state' NOT IN ('verified','held','failed','canceled')
               AND NOT (j->>'state'='uncertain' AND coalesce((j->>'nextAt')::float8,0) > extract(epoch from now())+3600)),
             count(*) FILTER (WHERE j->>'state'='verified'), count(*) FILTER (WHERE j->>'state'='held'),
             count(*) FILTER (WHERE j->>'state'='uncertain'), count(*) FILTER (WHERE j->>'state'='failed'),
@@ -931,7 +953,7 @@ class Harness:
             try:
                 if db is None or db.closed:
                     db = self.admin()
-                row = db.execute("""SELECT count(*) FILTER (WHERE backend_type='client backend'),
+                row = db.execute("""/*cap-harness*/ SELECT count(*) FILTER (WHERE backend_type='client backend'),
                         count(*) FILTER (WHERE backend_type='client backend' AND state='active'),
                         max(extract(epoch from clock_timestamp()-query_start)) FILTER (WHERE backend_type='client backend' AND state='active'),
                         count(*) FILTER (WHERE wait_event_type='Lock')
@@ -1040,9 +1062,127 @@ class Harness:
 
     # -- collection ---------------------------------------------------------------------------------------------
 
+    def budget_probe(self, wait):
+        """How much of the application budget a fresh window grants now (scripts/discord_lane_cap_budget_probe.py)."""
+        argv = [sys.executable, '-I', '-B', str(self.scripts / 'discord_lane_cap_budget_probe.py'), '--source-tree',
+                str(self.tree), '--dsn', self.admin_dsn, '--env', str(self.env_run), '--wait', str(wait)]
+        self.log('budget probe in %.0f s: how many reads a fresh application window admits' % wait)
+        try:
+            done = subprocess.run(argv, capture_output=True, text=True, timeout=wait + 120, cwd='/tmp')
+            result = json.loads(done.stdout.strip().splitlines()[-1]) if done.returncode == 0 else {
+                'error': (done.stderr or done.stdout)[-800:]}
+        except Exception as error:  # the run is over; a probe failure is reported, never hidden
+            result = {'error': '%s: %s' % (type(error).__name__, error)}
+        result['at'] = time.time()
+        self.log('budget probe: %s' % json.dumps(result)[:400])
+        return result
+
+    OPEN_ADMISSIONS_SQL = """SELECT state,is_publish,credential_kind,
+               CASE WHEN state IN ('reserved','sealed') THEN expires_at>clock_timestamp() END,count(*),
+               max(extract(epoch from clock_timestamp()-coalesce(sent_at,reserved_at)))::double precision,
+               count(*) FILTER (WHERE coalesce(sent_at,reserved_at)<clock_timestamp()-interval '60 seconds')
+        FROM public.pr_discord_request_admissions WHERE state IN ('sent','uncertain','reserved','sealed')
+        GROUP BY 1,2,3,4 ORDER BY 1,2,3,4"""
+
+    def open_admissions(self, db):
+        """Admissions without an observed answer, by state, kind and publish or not, with their age. A sent or an
+        uncertain admission has no answer to wait for; a reserved or sealed one is open while its permit lives."""
+        return [{'state': state, 'publish': publish, 'kind': kind, 'unexpired': live, 'count': count,
+                 'oldestAgeSeconds': oldest, 'olderThan60Seconds': old}
+                for state, publish, kind, live, count, oldest, old in db.execute(self.OPEN_ADMISSIONS_SQL).fetchall()]
+
+    def document_probe(self):
+        """The largest workspace document (most jobs): its size, and one read-modify-write of it timed three times and
+        rolled back, on a direct connection with nothing else running (S2's hot workspace). None without a workspace."""
+        import psycopg
+        try:
+            with self.admin() as db:
+                largest = db.execute("""SELECT id::text,length(state::text),pg_column_size(state),
+                           jsonb_array_length(coalesce(state#>'{phase2,jobs}','[]'::jsonb))
+                    FROM public.pr_workspaces ORDER BY jsonb_array_length(coalesce(state#>'{phase2,jobs}','[]'::jsonb)) DESC
+                    LIMIT 1""").fetchone()
+        except Exception as error:
+            return {'error': '%s: %s' % (type(error).__name__, error)}
+        if not largest:
+            return None
+        timings = []
+        for _ in range(3):
+            try:
+                with psycopg.connect(self.admin_dsn, prepare_threshold=None) as conn:
+                    began = time.time()
+                    revision, raw = conn.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s FOR UPDATE',
+                                                 (largest[0],)).fetchone()
+                    state = raw if isinstance(raw, dict) else json.loads(raw)
+                    text = json.dumps(state)
+                    conn.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s AND revision=%s',
+                                 (text, largest[0], revision))
+                    timings.append(round(time.time() - began, 3))
+                    conn.rollback()
+            except Exception as error:
+                timings.append('error: %s' % error)
+                break
+        return {'jobs': largest[3], 'textBytes': largest[1], 'storedBytes': largest[2], 'readModifyWriteSeconds': timings,
+                'note': 'timed with nothing else running, rolled back', 'at': time.time()}
+
+    def write_invocation_summary(self):
+        """The per-invocation results without their log lines, small enough to keep as an artifact: the worker figures
+        of the analysis then survive a download that has no invocations/ folder."""
+        folder = self.dir / 'invocations'
+        if not folder.is_dir():
+            return
+        keep = []
+        for path in sorted(folder.glob('*.json')):
+            try:
+                item = json.loads(path.read_text())
+            except ValueError:
+                item = {'path': path.name, 'exception': 'unreadable result'}
+            item.pop('logs', None)
+            keep.append(item)
+        (self.dir / 'invocations-summary.json').write_text(json.dumps(keep, separators=(',', ':')))
+
+    def budget_checks(self):
+        """After the run: how much of the application budget a fresh window grants at once, and again after
+        `budget_probe_delay_seconds` (longer than any age bound for an unanswered request), with the admissions still
+        open at each point. A launch gate that reports; it never stops the run, and an error in it is recorded."""
+        probes, after_wait = [], None
+        self.budget_probes, self.open_after_wait = [], None
+        try:
+            if not self.s['lane'] or not (self.tree / 'src/postriff_phase2/discord/rate_limits.py').exists():
+                return
+            probes.append(self.budget_probe(3.0))
+            delay = self.s['budget_probe_delay_seconds']
+            if delay:
+                probes.append(self.budget_probe(float(delay)))
+                with self.admin() as db:
+                    after_wait = self.open_admissions(db)
+        except Exception as error:  # never stops the run
+            probes.append({'error': '%s: %s' % (type(error).__name__, error), 'at': time.time()})
+        self.budget_probes = probes
+        self.open_after_wait = after_wait
+
     def collect(self):
         rows = []
         with self.admin() as db:
+            slow, heavy, writes, statements = [], [], [], None
+            if self.config.get('pgStatStatements'):
+                try:
+                    # The harness's own recurring statements carry a /*cap-harness*/ comment and are left out.
+                    mine = "query NOT LIKE '%cap-harness%' AND query NOT ILIKE '%pg_stat_statements%'"
+                    slow = [{'query': q, 'calls': c, 'meanMs': m, 'maxMs': x} for q, c, m, x in db.execute(
+                        "SELECT query,calls,mean_exec_time,max_exec_time FROM pg_stat_statements WHERE " + mine +
+                        " ORDER BY max_exec_time DESC LIMIT 15").fetchall()]
+                    heavy = [{'query': q, 'calls': c, 'meanMs': m, 'maxMs': x, 'totalSeconds': t / 1000.0}
+                             for q, c, m, x, t in db.execute(
+                        "SELECT query,calls,mean_exec_time,max_exec_time,total_exec_time FROM pg_stat_statements WHERE " + mine +
+                        " ORDER BY total_exec_time DESC LIMIT 10").fetchall()]
+                    writes = [{'query': q, 'calls': c, 'meanMs': m, 'maxMs': x} for q, c, m, x in db.execute(
+                        "SELECT query,calls,mean_exec_time,max_exec_time FROM pg_stat_statements WHERE " + mine +
+                        r" AND query ~* '^\s*update\s+(public\.)?pr_workspaces\y' ORDER BY max_exec_time DESC LIMIT 3").fetchall()]
+                    calls, total_ms = db.execute("SELECT coalesce(sum(calls),0),coalesce(sum(total_exec_time),0) "
+                                                 "FROM pg_stat_statements WHERE " + mine).fetchone()
+                    statements = {'calls': int(calls), 'execSeconds': float(total_ms) / 1000.0}
+                except Exception:
+                    slow, heavy, writes, statements = [], [], [], None
             jobs = db.execute("""SELECT j->>'id',j->>'state',(j#>'{discordWorker,deadLetter}') IS NOT NULL,
                     coalesce((j->>'checks')::int,0),j->>'nextAction',coalesce(jsonb_array_length(j->'discordDispatchIntents'),0)
                 FROM public.pr_workspaces w CROSS JOIN LATERAL jsonb_array_elements(coalesce(w.state#>'{phase2,jobs}','[]'::jsonb)) j
@@ -1050,13 +1190,37 @@ class Harness:
             admissions = dict(db.execute('SELECT state,count(*) FROM public.pr_discord_request_admissions GROUP BY state').fetchall())
             holds = db.execute("""SELECT kind,count(*) FILTER (WHERE manual_hold),count(*) FILTER (WHERE blocked_until>clock_timestamp()),
                 count(*) FILTER (WHERE circuit_until>clock_timestamp()),count(*) FROM public.pr_discord_rate_state GROUP BY kind""").fetchall()
-            # The coordinator's own clock: every admission reserved during the run (rows still in the table at the end).
+            # The coordinator's own clock: every admission reserved during the run (rows still in the table at the end),
+            # up to the end of the run (the budget probes come after it).
             start = self.config.get('runStartedAt') or 0
+            stop = self.config.get('childrenStoppedAt') or self.config.get('endedAt') or time.time()
             admitted = [float(t) for (t,) in db.execute(
                 """SELECT extract(epoch from reserved_at)::double precision FROM public.pr_discord_request_admissions
-                   WHERE reserved_at >= to_timestamp(%s) ORDER BY 1""", (start,)).fetchall()]
+                   WHERE reserved_at >= to_timestamp(%s) AND reserved_at < to_timestamp(%s) ORDER BY 1""",
+                (start, stop)).fetchall()]
             by_kind = dict(db.execute("""SELECT coalesce(credential_kind,'?'),count(*) FROM public.pr_discord_request_admissions
-                   WHERE reserved_at >= to_timestamp(%s) GROUP BY 1""", (start,)).fetchall())
+                   WHERE reserved_at >= to_timestamp(%s) AND reserved_at < to_timestamp(%s) GROUP BY 1""",
+                (start, stop)).fetchall())
+            # Admissions left without an observed answer (a launch gate): by state, kind and publish or not.
+            open_admissions = self.open_admissions(db)
+            # Create permits of the run, by how they ended: used, died before the seal (still reserved), died after
+            # the seal (blocked with a seal time), stopped before the seal (blocked, no seal), left open (sent).
+            permit_fates = [{'state': st, 'sealed': sealed, 'sent': sent, 'count': n} for st, sealed, sent, n in db.execute(
+                """SELECT state,sealed_at IS NOT NULL,sent_at IS NOT NULL,count(*) FROM public.pr_discord_request_admissions
+                   WHERE is_publish AND reserved_at >= to_timestamp(%s) AND reserved_at < to_timestamp(%s)
+                   GROUP BY 1,2,3 ORDER BY 1,2,3""", (start, stop)).fetchall()]
+            retries = db.execute("""SELECT coalesce(sum((j#>>'{discordWorker,ratePermitRetries}')::int),0),
+                       coalesce(sum((j#>>'{discordWorker,rateReadRetries}')::int),0),
+                       coalesce(sum((j#>>'{discordWorker,unsentFailures}')::int),0),
+                       coalesce(max((j#>>'{discordWorker,ratePermitRetries}')::int),0)
+                FROM public.pr_workspaces w CROSS JOIN LATERAL jsonb_array_elements(coalesce(w.state#>'{phase2,jobs}','[]'::jsonb)) j
+                WHERE j#>>'{manifest,platform}'='Discord'""").fetchone()
+            job_retries = {'ratePermitRetries': retries[0], 'rateReadRetries': retries[1], 'unsentFailures': retries[2],
+                           'ratePermitRetriesMaxPerJob': retries[3]}
+            identity_hours = [float(h) for (h,) in db.execute(
+                """SELECT (extract(epoch from access_expires_at)-%s)/3600.0 FROM public.pr_encrypted_credentials
+                   WHERE provider='discord' AND access_expires_at IS NOT NULL AND revoked_at IS NULL""",
+                (self.config.get('dueAt') or start,)).fetchall()]
             # Admission to observation (d): while a request is in flight its admission stays pending, and a window
             # restart charges it again (cap - pending), so the usable rate is about cap / (1 + mean d).
             held = [float(d) for (d,) in db.execute(
@@ -1068,14 +1232,16 @@ class Harness:
                                 'peakTrailingSecond': analysis.peak_trailing(admitted, 1.0),
                                 'peakCalendarSecond': analysis.peak_calendar_second(admitted),
                                 'admissionToOutcomeSeconds': analysis.describe(held) if held else None}
-            slow = []
-            if self.config.get('pgStatStatements'):
-                try:
-                    slow = [{'query': q, 'calls': c, 'meanMs': m, 'maxMs': x} for q, c, m, x in db.execute(
-                        """SELECT query,calls,mean_exec_time,max_exec_time FROM pg_stat_statements
-                           ORDER BY max_exec_time DESC LIMIT 15""").fetchall()]
-                except Exception:
-                    slow = []
+            # Every admission of the run, compact, for the analysis (jitter against the mock's arrivals, permit timing).
+            with open(self.dir / 'admissions.jsonl', 'w') as handle:
+                for row in db.execute("""SELECT extract(epoch from reserved_at)::double precision,
+                           extract(epoch from sealed_at)::double precision,extract(epoch from sent_at)::double precision,
+                           extract(epoch from outcome_at)::double precision,extract(epoch from expires_at)::double precision,
+                           state,method,left(path_key,16),is_publish,publication_id,credential_kind
+                    FROM public.pr_discord_request_admissions
+                    WHERE reserved_at >= to_timestamp(%s) AND reserved_at < to_timestamp(%s) ORDER BY request_seq""",
+                        (start, stop)):
+                    handle.write(json.dumps(row, separators=(',', ':')) + '\n')
         manifest = analysis.load_jsonl(self.dir / 'seed-manifest.jsonl')
         by_job = {row['job']: row['post'] for row in manifest}
         by_post, notes = {}, {}
@@ -1099,10 +1265,19 @@ class Harness:
                     log_errors[match.group(1)] = log_errors.get(match.group(1), 0) + 1
                 if 'duration:' in line:
                     slow_lines += 1
+        document = self.document_probe()
+        buckets = Counter(
+            'expired at T' if h <= 0 else 'under 1 h' if h < 1 else '1 to 6 h' if h < 6 else '6 to 24 h' if h < 24
+            else '1 to 6 days' if h < 144 else '6 to 7 days' if h < 168 else '7 days or more' for h in identity_hours)
         extra = {'admissionsByState': admissions, 'rateStateHolds': [
             {'kind': k, 'manualHold': h, 'blocked': b, 'circuit': c, 'rows': n} for k, h, b, c, n in holds],
-            'slowestStatements': slow, 'logErrorsBySqlstate': log_errors, 'statementsOverOneSecond': slow_lines,
-            'lockInjections': self.lock_windows, 'kills': self.kills, 'admissionWindow': admission_window}
+            'slowestStatements': slow, 'heaviestStatements': heavy, 'workspaceWrites': writes,
+            'statementTotals': statements, 'logErrorsBySqlstate': log_errors, 'statementsOverOneSecond': slow_lines,
+            'lockInjections': self.lock_windows, 'kills': self.kills, 'admissionWindow': admission_window,
+            'openAdmissions': open_admissions, 'permitFates': permit_fates, 'jobRetries': job_retries,
+            'largestDocument': document, 'documentAtSeed': self.config.get('documentAtSeed'),
+            'identityExpiryAtDue': dict(buckets), 'identityShortestHours': min(identity_hours, default=None),
+            'budgetProbes': getattr(self, 'budget_probes', None)}
         (self.dir / 'database-final.json').write_text(json.dumps(extra, default=str))
 
     def shutdown_children(self):
@@ -1184,10 +1359,17 @@ class Harness:
                 threads.append(thread)
             self.watch()
             self.shutdown_children()
+            self.config['childrenStoppedAt'] = time.time()
             self.stop.set()
             for thread in threads:
                 thread.join(timeout=30)
             self.collect()
+            self.write_invocation_summary()
+            self.budget_checks()
+            if self.budget_probes or self.open_after_wait is not None:
+                final = json.loads((self.dir / 'database-final.json').read_text())
+                final['budgetProbes'], final['openAdmissionsAfterWait'] = self.budget_probes, self.open_after_wait
+                (self.dir / 'database-final.json').write_text(json.dumps(final, default=str))
             self.config['loadAtEnd'] = open('/proc/loadavg').read().strip()
             (self.dir / 'config.json').write_text(json.dumps(self.config, indent=1, default=str))
         except BaseException as error:
@@ -1396,16 +1578,16 @@ def suite_receipt(out, profile, runs, planned):
     lines = ['# Capacity suite receipt: profile `%s`' % profile, '',
              'Generated %s by `scripts/discord_lane_capacity_run.py profile`. One line per planned scenario; a scenario '
              'that did not run says NOT RUN and claims nothing.' % now_iso(), '',
-             '| Scenario | Run | Source SHA | Standard (PASS/FAIL/NOT MEASURED) | Expected behaviour | Load peak |',
-             '|---|---|---|---|---|---|']
+             '| Scenario | Run | Source SHA | Standard (PASS/FAIL/NOT MEASURED) | Expected behaviour | Launch gates | Load peak |',
+             '|---|---|---|---|---|---|---|']
     for name in planned:
         entry = runs.get(name)
         if not entry:
-            lines.append('| %s | NOT RUN | | | | |' % name)
+            lines.append('| %s | NOT RUN | | | | | |' % name)
             continue
         run_dir, result = entry
         if result.get('error') or 'verdicts' not in result:
-            lines.append('| %s | `%s` | | HARNESS ERROR: %s | | |' % (name, run_dir.name, result.get('error')))
+            lines.append('| %s | `%s` | | HARNESS ERROR: %s | | | |' % (name, run_dir.name, result.get('error')))
             continue
         counts = {}
         for v in result['verdicts']:
@@ -1413,15 +1595,19 @@ def suite_receipt(out, profile, runs, planned):
         expect = {}
         for e in result['expectations']:
             expect[e['verdict']] = expect.get(e['verdict'], 0) + 1
-        lines.append('| %s | `%s` | `%s` | %s | %s | %s |' % (
+        gates = {}
+        for g in result.get('launchGates') or []:
+            gates[g['verdict']] = gates.get(g['verdict'], 0) + 1
+        lines.append('| %s | `%s` | `%s` | %s | %s | %s | %s |' % (
             name, run_dir.name, (result.get('sourceSha') or '')[:12],
             ', '.join('%s %d' % item for item in sorted(counts.items()) if item[0] != 'NOT APPLICABLE'),
-            ', '.join('%s %d' % item for item in sorted(expect.items())), result.get('machineLoad1Max')))
+            ', '.join('%s %d' % item for item in sorted(expect.items())),
+            ', '.join('%s %d' % item for item in sorted(gates.items())), result.get('machineLoad1Max')))
     lines.append('')
     Path(out, 'SUITE-%s.md' % profile).write_text('\n'.join(lines) + '\n')
 
 
-def main(argv=None):
+def build_parser():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                      formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -1468,6 +1654,11 @@ def main(argv=None):
     again.add_argument('--recover', action='store_true',
                        help='an interrupted run: restart its leftover throwaway cluster, collect, then analyse (PARTIAL)')
     sub.add_parser('scenarios', help='list scenarios and profiles')
+    return parser
+
+
+def main(argv=None):
+    parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == 'scenarios':
         for name, spec in SCENARIOS.items():

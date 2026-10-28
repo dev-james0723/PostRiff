@@ -219,6 +219,251 @@ class ScenarioSettings(unittest.TestCase):
         self.assertEqual((s1['max_db_connections'], s1['db_latency_ms'], s1['pinnedOverridesIgnored']), (20, 2.0, None))
 
 
+class WireTimingAndPermits(unittest.TestCase):
+    """Admission-to-wire spread, witness age, permit deaths, the hot channel and the launch gates, on made-up logs."""
+
+    @staticmethod
+    def key(path):
+        import hashlib
+        return hashlib.sha256(path.encode('utf-8')).hexdigest()[:16]
+
+    def record(self, path, arrived, trailing, **extra):
+        return {'arrived': arrived, 'processed': arrived + 0.05, 'method': 'GET', 'route': 'GET /guilds/{id}',
+                'credential': 'bot', 'status': 200, 'pathKey': self.key(path), 'trailingAll': trailing, **extra}
+
+    @staticmethod
+    def admission(path_key, sent, state='observed', publish=False, sealed=None, reserved=None, expires=None):
+        reserved = sent if reserved is None else reserved
+        return [reserved, sealed, sent, sent + 0.1, (reserved + 10.0) if expires is None else expires, state, 'GET',
+                path_key, publish, None, 'bot']
+
+    def test_the_mock_logs_the_wire_path_the_source_and_the_call_time(self):
+        world = mock.World(workspaces=2)
+        wire = '/guilds/%s?with_counts=true' % mock.guild_id(1)
+        headers = {'authorization': 'Bot ' + mock.BOT_TOKEN, 'x-cap-source': 'lane3', 'x-cap-call-at': '1234.5678'}
+        record = world.handle('GET', '/guilds/%s' % mock.guild_id(1), headers, None, wire_path=wire)[3]
+        self.assertEqual(record['pathKey'], self.key(wire), 'the digest is of the target as sent, query included')
+        self.assertEqual((record['src'], record['callAt']), ('lane3', 1234.5678))
+        plain = world.handle('GET', '/guilds/%s' % mock.guild_id(1), {'authorization': 'Bot ' + mock.BOT_TOKEN}, None)[3]
+        self.assertEqual(plain['pathKey'], self.key('/guilds/%s' % mock.guild_id(1)))
+        self.assertNotIn('src', plain)
+
+    def test_wire_jitter_pairs_requests_and_attributes_the_requests_above_25(self):
+        window, admissions = [], []
+        # 1. 30 sends 50 ms apart (at most 20 in any trailing second at the coordinator) whose arrivals bunch within
+        #    10 ms: the last five arrive as the 26th to 30th in their trailing second: wire jitter.
+        for number in range(30):
+            path = '/guilds/%d' % (100 + number)
+            admissions.append(self.admission(self.key(path), 2000.0 + 0.05 * number))
+            window.append(self.record(path, 2001.5 + 0.0003 * number, 1 + number, callAt=2000.01 + 0.05 * number))
+        # 2. 40 sends at the same instant: the coordinator itself sent more than 25 in that second.
+        for number in range(40):
+            path = '/guilds/%d' % (200 + number)
+            admissions.append(self.admission(self.key(path), 3000.0))
+            window.append(self.record(path, 3000.01 + 0.0001 * number, 1 + number))
+        # 3. One request the mock counted as the 26th by its own processing order, with nothing near it: mock only.
+        admissions.append(self.admission(self.key('/guilds/300'), 4000.0))
+        window.append(self.record('/guilds/300', 4000.02, 26))
+        # 4. An arrival no admission explains, counted above 25; and an admission that never reached the mock.
+        window.append(self.record('/guilds/400', 5000.0, 30))
+        admissions.append(self.admission(self.key('/guilds/500'), 6000.0))
+        result = analysis.wire_jitter(sorted(window, key=lambda r: r['arrived']), admissions)
+        self.assertEqual((result['paired'], result['admissionsSent'], result['admissionsWithoutArrival'],
+                          result['arrivalsWithoutAdmission']), (71, 72, 1, 1))
+        self.assertEqual(result['aboveCeilingBy'], {'wire': 5, 'coordinator': 15, 'mock': 1, 'unpaired': 1})
+        self.assertEqual(result['aboveCeilingAtMock'], 22)
+        self.assertEqual(result['sendPeakTrailingSecond'], 40)
+        self.assertAlmostEqual(result['admissionToArrival']['min'], 0.01, places=3)
+        self.assertAlmostEqual(result['admissionToArrival']['max'], 1.5, places=3)
+        self.assertEqual(result['admissionToCall']['n'], 30)
+        self.assertAlmostEqual(result['admissionToCall']['p50'], 0.01, places=4)
+        self.assertGreater(result['spreadAboveMedianP999'], 1.4, 'p99.9 is the 1.5 s bunching, the median is 10 ms')
+        self.assertEqual(result['creates'], None)
+
+    def test_wire_jitter_is_none_without_an_admissions_export_or_digests(self):
+        self.assertIsNone(analysis.wire_jitter([{'arrived': 1.0}], []))
+        self.assertIsNone(analysis.wire_jitter([{'arrived': 1.0}], [self.admission('0' * 16, 1.0)]))
+
+    def test_witness_age_runs_from_the_grant_check_to_the_create(self):
+        def rec(route, at, **extra):
+            return {'arrived': at, 'route': route, 'status': 200, 'credential': 'bot', 'tenant': 7, **extra}
+        window = [rec('GET /oauth2/@me', 100.0), rec('GET /guilds/{id}', 100.2), rec('GET /guilds/{id}/members/{id}', 100.4),
+                  rec('GET /guilds/{id}/members/{id}', 100.6), rec('GET /guilds/{id}/channels', 100.8),
+                  rec(analysis.CREATE, 105.0, created=True),
+                  rec('GET /oauth2/@me', 200.0), rec('GET /guilds/{id}', 200.2), rec('GET /guilds/{id}/channels', 200.8),
+                  rec(analysis.CREATE, 230.0, created=True)]
+        result = analysis.witness_age(window, {})
+        self.assertEqual((result['creates'], result['oldestFromGrantCheck'], result['withoutWitness']), (2, 2, 0))
+        self.assertAlmostEqual(result['oldest']['p50'], 5.0)
+        self.assertAlmostEqual(result['oldest']['max'], 30.0)
+        self.assertAlmostEqual(result['newest']['p50'], 4.2)
+        self.assertIsNone(analysis.witness_age([rec(analysis.CREATE, 5.0, created=True)], {}))
+
+    def test_permit_stats_separate_the_deaths_before_and_after_the_seal(self):
+        rows = [self.admission('a' * 16, 10.0, 'observed', True, sealed=10.2),
+                self.admission('b' * 16, 11.0, 'reserved', True)[:2] + [None] + self.admission('b' * 16, 11.0, 'reserved', True)[3:],
+                self.admission('c' * 16, 12.0, 'blocked', True, sealed=12.5),
+                self.admission('d' * 16, 13.0, 'blocked', True)[:1] + [None, None] + self.admission('d' * 16, 13.0, 'blocked', True)[3:],
+                self.admission('e' * 16, 14.0, 'sent', True, sealed=14.1),
+                self.admission('f' * 16, 15.0)]  # a read: not a permit
+        stats = analysis.permit_stats(rows)
+        self.assertEqual((stats['permits'], stats['used'], stats['diedBeforeSeal'], stats['diedAfterSeal'],
+                          stats['stoppedBeforeSeal'], stats['leftOpen']), (5, 1, 1, 1, 1, 1))
+        self.assertAlmostEqual(stats['sealLatency']['max'], 0.5)
+        self.assertIsNone(analysis.permit_stats([self.admission('f' * 16, 15.0)]))
+
+    def test_the_hot_channel_rate_is_per_second_while_the_workspace_had_due_posts(self):
+        posts = {'h%d' % n: {'index': 0, 'createdAt': 1000.0 + 1.25 * n if n < 80 else None, 'due': 1000.0} for n in range(100)}
+        posts.update({'s%d' % n: {'index': 1 + n, 'createdAt': 1010.0, 'due': 1000.0} for n in range(5)})
+        window = [{'processed': 1200.0}]
+        hot = analysis.hot_channel(posts, window, 1000.0)
+        self.assertEqual((hot['posts'], hot['sent'], hot['notSent'], hot['allSent']), (100, 80, 20, False))
+        self.assertAlmostEqual(hot['createsPerSecondWhileDue'], 80 / 200.0)
+        self.assertAlmostEqual(hot['steadyCreatesPerSecond'], 79 / (1.25 * 79))
+        self.assertEqual(sum(hot['postsPerMinute'].values()), 80)
+        self.assertIsNone(analysis.hot_channel({'a': {'index': 0, 'createdAt': 1.0, 'due': 0.0}}, [], 0.0))
+
+    def test_the_launch_gates_report_and_never_raise(self):
+        failing = {'database': {
+            'openAdmissions': [{'state': 'sent', 'publish': True, 'kind': 'bot', 'unexpired': None, 'count': 3,
+                                'oldestAgeSeconds': 900.0, 'olderThan60Seconds': 3},
+                               {'state': 'reserved', 'publish': True, 'kind': 'bot', 'unexpired': False, 'count': 5,
+                                'oldestAgeSeconds': 900.0, 'olderThan60Seconds': 5}],
+            'budgetProbes': [{'admitted': 22, 'capacity': 25, 'waited': 3.0, 'refused': {'scope': 'application'}},
+                             {'admitted': 22, 'capacity': 25, 'waited': 93.0, 'refused': {'scope': 'application'}}],
+            'jobRetries': {'ratePermitRetries': 4, 'ratePermitRetriesMaxPerJob': 2}},
+            'permits': {'permits': 50, 'diedBeforeSeal': 4, 'diedAfterSeal': 1}}
+        gates = {g['id']: g for g in analysis.launch_gates(failing)}
+        self.assertEqual({k: g['verdict'] for k, g in gates.items()},
+                         {'open_admissions': 'FAIL', 'budget_restored': 'FAIL', 'permits_unused': 'FAIL'})
+        self.assertIn('3: bot sent create: 3', gates['open_admissions']['measured'], 'expired reserved permits are not counted')
+        whole = {'database': {'openAdmissions': [], 'budgetProbes': [{'admitted': 25, 'capacity': 25, 'waited': 93.0}],
+                              'jobRetries': {}}, 'permits': {'permits': 9, 'diedBeforeSeal': 0, 'diedAfterSeal': 0}}
+        self.assertEqual({g['verdict'] for g in analysis.launch_gates(whole)}, {'PASS'})
+        none = {k: g['verdict'] for k, g in {g['id']: g for g in analysis.launch_gates({'database': {}})}.items()}
+        self.assertEqual(none, {'open_admissions': 'NOT MEASURED', 'budget_restored': 'NOT MEASURED', 'permits_unused': 'NOT MEASURED'})
+        broken = {'database': {'budgetProbes': [{'error': 'boom', 'at': 1.0}]}}
+        self.assertEqual({g['id']: g['verdict'] for g in analysis.launch_gates(broken)}['budget_restored'], 'NOT MEASURED')
+
+
+class CrashInjector(unittest.TestCase):
+    """Fcrash's random kills land inside a loop, and a kill with nothing to hit is recorded as missed."""
+
+    class Fake:
+        def __init__(self, pid):
+            self.pid, self.killed = pid, False
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            self.killed = True
+
+    def harness(self, reference, processes):
+        import threading
+        import discord_lane_capacity_run as runner
+        harness = runner.Harness.__new__(runner.Harness)
+        harness.s = {'kills': [0], 'kill_at_create': 0}
+        harness.stop = threading.Event()
+        harness.reference = reference
+        harness.kills = []
+        harness.inv_lock = threading.Lock()
+        harness.events_lock = threading.Lock()
+        harness.events = open(os.devnull, 'w')
+        harness.log_handle = open(os.devnull, 'w')
+        self.addCleanup(harness.events.close)
+        self.addCleanup(harness.log_handle.close)
+        harness.dir = Path(tempfile.mkdtemp(prefix='cap-injector-'))
+        self.addCleanup(shutil.rmtree, harness.dir, True)
+        (harness.dir / 'mock').mkdir()
+        harness.invocations = {'%d-lane' % n: {'process': p, 'path': '/api/cron/discord-worker/%d' % n, 'scheduled': reference}
+                               for n, p in enumerate(processes)}
+        return harness
+
+    def run_injector(self, harness, seconds):
+        import threading
+        import time
+        thread = threading.Thread(target=harness.crash_injector, daemon=True)
+        thread.start()
+        deadline = time.time() + seconds
+        while time.time() < deadline and not harness.kills:
+            time.sleep(0.05)
+        harness.stop.set()
+        thread.join(5)
+
+    def test_a_random_kill_is_delivered_20_seconds_into_its_minute_to_a_running_loop(self):
+        import time
+        processes = [self.Fake(100 + n) for n in range(3)]
+        harness = self.harness(time.time() - 20.5, processes)
+        self.run_injector(harness, 5)
+        self.assertEqual([k['kind'] for k in harness.kills], ['random'])
+        self.assertEqual(sum(p.killed for p in processes), 1)
+        early = self.harness(time.time() - 5, [self.Fake(1)])  # 15 s before the kill's moment: nothing yet
+        self.run_injector(early, 1)
+        self.assertEqual(early.kills, [])
+
+    def test_a_kill_with_no_running_loop_is_recorded_as_missed_after_30_seconds(self):
+        import time
+        harness = self.harness(time.time() - 51, [])
+        self.run_injector(harness, 5)
+        self.assertEqual([k['kind'] for k in harness.kills], ['random_missed'])
+
+    def test_the_receipt_row_names_planned_delivered_and_missed(self):
+        config = {'settings': {'kills': [3, 5, 8], 'kill_at_create': 2}, 'expect': ['fcrash'], 'ratePolicy': {}}
+        kills = [{'kind': 'random'}, {'kind': 'random'}, {'kind': 'random_missed'}, {'kind': 'at_create'}, {'kind': 'at_create_missed'}]
+        result = {'_posts': {}, '_window': [], '_states': {}, 'dueAt': 0.0, 'kills': kills, 'endReason': 'every post terminal',
+                  'outcomes': {'verifiedInDatabase': 0}, 'duplicates': {}, 'workers': {}}
+        row = next(r for r in analysis.expectations(result, config, {}) if r['id'] == 'fcrash_kills')
+        self.assertEqual(row['verdict'], 'FAIL')
+        self.assertIn('planned 5 (3 random, 2 during a create); delivered 3 (2 random, 1 during a create); '
+                      'missed 2 (1 random, 1 during a create)', row['measured'])
+
+
+class ProfilesAndSettings(unittest.TestCase):
+    def test_the_s2_sizes_keep_five_thousand_posts_and_one_hot_workspace(self):
+        import discord_lane_capacity_run as runner
+        for name, hot in (('S2-100', 100), ('S2-300', 300), ('S2-1000', 1000)):
+            settings = runner.settings_for(name, {})
+            harness = runner.Harness.__new__(runner.Harness)
+            harness.s = settings
+            layout = harness.plan()
+            sizes = sorted((len(d) for _, d in layout), reverse=True)
+            self.assertEqual((sum(sizes), sizes[0], len(layout), settings['judge_as']), (5000, hot, 2000, 'S2'), name)
+            self.assertLessEqual(sizes[1], 5, 'every other workspace is small (the fairness measure counts at most five)')
+        self.assertEqual(runner.PROFILES['s2sizes'], ['S2-100', 'S2-300', 'S2-1000'])
+        self.assertEqual(runner.settings_for('S2', {})['hot_posts'], 3000, 'the 3,000 case stays as the stress case')
+
+    def test_the_devset_is_the_limiter_measurement_and_release_is_unchanged(self):
+        import discord_lane_capacity_run as runner
+        self.assertEqual(runner.PROFILES['devset'], ['S1', 'S0-100', 'Fdb', 'Fcrash', 'F429'])
+        self.assertEqual(len(runner.PROFILES['release']), 16)
+        self.assertTrue(all(name in runner.SCENARIOS for items in runner.PROFILES.values() for name in items))
+
+    def test_the_delayed_budget_probe_runs_in_the_measured_scenarios_only(self):
+        import discord_lane_capacity_run as runner
+        delayed = {n: runner.settings_for(n, {})['budget_probe_delay_seconds'] for n in runner.SCENARIOS}
+        self.assertEqual({n for n, v in delayed.items() if not v}, {'smoke', 'Nmisroute', 'Ndup'})
+        self.assertEqual(delayed['S1'], 90)
+
+    def test_the_workflows_command_line_leaves_fdbs_pool_and_round_trip_alone(self):
+        import re as _re
+        import discord_lane_capacity_run as runner
+        text = (ROOT / 'docs/w02/ci/discord-lane-capacity.yml.txt').read_text()
+        block = text[text.index('Run the scenario'):]
+        block = block[:block.index('- name:', 10)]
+        line = ' '.join(_re.sub(r'\\\s*\n', ' ', block).split())
+        argv = _re.search(r'discord_lane_capacity_run\.py (run .*?)(?: uptime|$)', line).group(1)
+        argv = argv.replace('"$SCENARIO"', 'Fdb').replace('"$GITHUB_WORKSPACE/tree"', '/x').replace('"$RUNNER_TEMP/capacity"', '/y')
+        argv = argv.replace('"gha-pool${POOL}"', 'gha-pool20').replace('"$POOL"', '20').replace('"$LATENCY"', '2')
+        args = runner.build_parser().parse_args(argv.split())
+        settings = runner.settings_for(args.scenario, runner.overrides_from(args))
+        self.assertEqual((args.max_db_connections, args.db_latency_ms), (20, 2.0), 'the workflow does pass them: ' + argv)
+        self.assertEqual((settings['max_db_connections'], settings['db_latency_ms'], settings['db_statement_timeout_ms']),
+                         (6, 8.0, 1500))
+        s1 = runner.settings_for('S1', runner.overrides_from(runner.build_parser().parse_args(argv.replace('Fdb', 'S1').split())))
+        self.assertEqual((s1['max_db_connections'], s1['db_latency_ms']), (20, 2.0))
+
+
 @unittest.skipIf(FENCED, 'the synthetic transport fence refuses any database but the guarded runner\'s')
 @unittest.skipUnless(LIVE, 'needs PostgreSQL server binaries (POSTRIFF_PG_BIN) and psycopg')
 class LiveSmoke(unittest.TestCase):

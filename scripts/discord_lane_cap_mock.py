@@ -177,13 +177,27 @@ class World:
 
     # -- the API --------------------------------------------------------------------------------------------------
 
-    def handle(self, method, path, headers, body, *, arrived=None):
-        """(status, headers, body, record) for one request processed now."""
+    def handle(self, method, path, headers, body, *, arrived=None, wire_path=None):
+        """(status, headers, body, record) for one request processed now. `wire_path` is the request target as sent,
+        query string included (the coordinator digests that string); `path` is the routed part."""
         now = self.clock()
         kind, person = self.credential(headers)
         template = route_class(method, path)
         record = {'arrived': arrived if arrived is not None else now, 'processed': now, 'method': method,
-                  'route': template, 'credential': kind or 'none'}
+                  'route': template, 'credential': kind or 'none',
+                  # The coordinator's own path digest (sha256 of the same path), shortened: joins each admission to
+                  # its arrival here (admission-to-wire jitter).
+                  'pathKey': hashlib.sha256((path if wire_path is None else wire_path).encode('utf-8')).hexdigest()[:16]}
+        # The harness's invocation wrapper tags each request it forwards: which cron route made it (so traffic that is
+        # not the lane's is visible at the mock) and the wall-clock time just before the HTTP call was made (so the
+        # delay inside the application is told apart from the delay between the call and this arrival).
+        source = headers.get('x-cap-source')
+        if source:
+            record['src'] = str(source)[:16]
+        try:
+            record['callAt'] = round(float(headers['x-cap-call-at']), 6)
+        except (KeyError, TypeError, ValueError):
+            pass
         if kind == 'user' and person is not None:
             record['tenant'] = person  # the workspace whose person's bearer this is (request ledger)
         # Which tenant a server or channel route serves, before any injection decides the answer (an injected ban page
@@ -363,6 +377,7 @@ class World:
                 return 200, headers, {'user': {'id': parts[3]}, 'roles': [], 'pending': False,
                                       'communication_disabled_until': None}
             if len(parts) == 3 and parts[2] == 'channels':
+                record['items'] = 1  # one text channel per server (production servers list many)
                 return 200, headers, [{'id': channel_id(index), 'guild_id': guild, 'name': 'capacity', 'type': 0,
                                        'position': 0, 'permission_overwrites': []}]
             return 404, headers, {'message': 'Unknown Member', 'code': 10007}
@@ -497,7 +512,8 @@ class Handler(BaseHTTPRequestHandler):
         time.sleep(latency / 2)
         headers = {k.lower(): v for k, v in self.headers.items()}
         status, answer_headers, answer, record = server.world.handle(method, path[len(API_PREFIX):], headers, body,
-                                                                     arrived=arrived)
+                                                                     arrived=arrived,
+                                                                     wire_path=self.path[len(API_PREFIX):])
         delay = record.pop('delayAnswer', None)
         if delay:
             if record.pop('announceKill', False):

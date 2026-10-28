@@ -230,6 +230,194 @@ def request_ledger(window, posts):
     }
 
 
+def _spread(values):
+    """Nearest-rank percentiles of a list of seconds, or None when it is empty."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    return {'n': len(ordered), 'min': ordered[0], 'p50': quantile(ordered, .5), 'p90': quantile(ordered, .9),
+            'p99': quantile(ordered, .99), 'p999': quantile(ordered, .999), 'max': ordered[-1]}
+
+
+def _answered(record):
+    status = record.get('status')
+    return isinstance(status, int) and 200 <= status < 300 and not record.get('injected')
+
+
+def witness_age(window, posts):
+    """Per create: how old the permission witness was when the create reached the mock. A create's pass is the run of
+    its workspace's requests since that workspace's previous create or read-back: the person's grant check
+    (`GET /oauth2/@me`, when the mock could attribute it to the workspace), the server read, the two member reads and
+    the channel list. The oldest witness is the grant check, else the server read; the newest is the channel list.
+    Ages are arrival at the mock to the create's arrival, in seconds; percentiles p50 / p90 / p99 / max."""
+    by_tenant = defaultdict(list)
+    for record in window:
+        tenant = tenant_of(record)
+        if tenant is not None:
+            by_tenant[tenant].append(record)
+    oldest, newest, from_grant, without = [], [], 0, 0
+    for tenant, records in by_tenant.items():
+        records.sort(key=lambda r: r['arrived'])
+        for position, record in enumerate(records):
+            if not record.get('created'):
+                continue
+            guild_at = grant_at = channels_at = None
+            for earlier in reversed(records[max(0, position - 12):position]):
+                route = earlier.get('route')
+                if route in (CREATE, READBACK):
+                    break  # the previous job of this workspace: its requests are not this create's witness
+                if not _answered(earlier):
+                    continue
+                if route == 'GET /guilds/{id}/channels' and channels_at is None:
+                    channels_at = earlier['arrived']
+                elif route == 'GET /guilds/{id}' and guild_at is None:
+                    guild_at = earlier['arrived']
+                elif route == 'GET /oauth2/@me' and guild_at is not None:
+                    grant_at = earlier['arrived']
+                    break
+            first = grant_at if grant_at is not None else guild_at
+            if first is None or record['arrived'] - first >= 120:
+                without += 1
+                continue
+            from_grant += grant_at is not None
+            oldest.append(record['arrived'] - first)
+            if channels_at is not None and record['arrived'] - channels_at < 120:
+                newest.append(record['arrived'] - channels_at)
+    if not oldest:
+        return None
+    return {'creates': len(oldest), 'withoutWitness': without, 'oldestFromGrantCheck': from_grant,
+            'oldest': _spread(oldest), 'newest': _spread(newest)}
+
+
+def pair_admissions(window, admissions, max_gap=30.0):
+    """Join each admission that was sent to the mock's arrival of that request: same path digest, in order, an arrival
+    no earlier than 5 ms before the admission's send time and within `max_gap` seconds after it. Returns
+    (pairs [(send time, record, is publish)], sends without an arrival, every send time sorted)."""
+    sends, every = defaultdict(list), []
+    for row in admissions:
+        sent, key = row[2], row[7]
+        if sent is None:
+            continue  # reserved or blocked without ever being sent
+        sends[key].append((sent, bool(row[8]) if len(row) > 8 else False))
+        every.append(sent)
+    arrivals = defaultdict(list)
+    for record in window:
+        if record.get('pathKey'):
+            arrivals[record['pathKey']].append(record)
+    pairs, unpaired = [], 0
+    for key, items in sends.items():
+        items.sort()
+        hits = sorted(arrivals.get(key, ()), key=lambda r: r['arrived'])
+        cursor = 0
+        for at, publish in items:
+            while cursor < len(hits) and hits[cursor]['arrived'] < at - 0.005:
+                cursor += 1  # an arrival from before this send belongs to no send of this path
+            if cursor < len(hits) and hits[cursor]['arrived'] - at <= max_gap:
+                pairs.append((at, hits[cursor], publish))
+                cursor += 1
+            else:
+                unpaired += 1
+    every.sort()
+    return pairs, unpaired, every
+
+
+def wire_jitter(window, admissions, ceiling=25):
+    """Admission-to-wire spread, per request, and what it does to the ceiling.
+
+    Each admission's send time (the coordinator's `sent_at`, database clock) is joined to the mock's arrival of that
+    request. Where the invocation wrapper stamped the call (`callAt`, the last thing before the HTTP call), the delay is
+    split into admission to call (inside the application) and call to arrival (loopback, and the mock's accept and
+    thread start on the same loaded machine). The requests the mock counted above `ceiling` in their trailing second
+    are then attributed: the coordinator had already sent more than `ceiling` in the trailing second of their send time
+    ('coordinator'), or not, but more than `ceiling` had arrived in the trailing second of their arrival ('wire'), or
+    neither, and only the mock's own processing order (it counts up to half a latency after arrival) put them over
+    ('mock'). Returns None when the run has no admissions export or the mock logged no path digests."""
+    if not admissions or not any(r.get('pathKey') for r in window[:200]):
+        return None
+    import bisect
+    pairs, unpaired, every = pair_admissions(window, admissions)
+    keyed = sum(1 for r in window if r.get('pathKey'))
+    if not pairs:
+        return None
+    total = [r['arrived'] - at for at, r, _ in pairs]
+    app_side = [r['callAt'] - at for at, r, _ in pairs if 'callAt' in r]
+    wire_side = [r['arrived'] - r['callAt'] for _, r, _ in pairs if 'callAt' in r]
+    creates = [r['arrived'] - at for at, r, publish in pairs if publish]
+    reads = [r['arrived'] - at for at, r, publish in pairs if not publish]
+    arrivals = sorted(r['arrived'] for r in window)
+    send_of = {id(r): at for at, r, _ in pairs}
+    causes = Counter()
+    for record in window:
+        if (record.get('trailingAll') or 0) <= ceiling:
+            continue
+        at = send_of.get(id(record))
+        if at is None:
+            causes['unpaired'] += 1
+            continue
+        sent_in_second = bisect.bisect_right(every, at) - bisect.bisect_right(every, at - 1.0)
+        arrived_in_second = (bisect.bisect_right(arrivals, record['arrived'])
+                             - bisect.bisect_right(arrivals, record['arrived'] - 1.0))
+        causes['coordinator' if sent_in_second > ceiling else 'wire' if arrived_in_second > ceiling else 'mock'] += 1
+    all_total = _spread(total)
+    return {'paired': len(pairs), 'admissionsSent': len(every), 'admissionsWithoutArrival': unpaired,
+            'arrivalsWithoutAdmission': keyed - len(pairs),
+            'admissionToArrival': all_total, 'admissionToCall': _spread(app_side), 'callToArrival': _spread(wire_side),
+            'creates': _spread(creates), 'reads': _spread(reads),
+            'spreadAboveMedianP999': (all_total['p999'] - all_total['p50']) if all_total else None,
+            'sendPeakTrailingSecond': peak_trailing(every, 1.0), 'sendPeakCalendarSecond': peak_calendar_second(every),
+            'arrivalPeakTrailingSecond': peak_trailing(arrivals, 1.0), 'arrivalPeakCalendarSecond': peak_calendar_second(arrivals),
+            'aboveCeilingAtMock': sum(causes.values()), 'aboveCeilingBy': dict(causes), 'ceiling': ceiling}
+
+
+def permit_stats(admissions):
+    """The run's create permits (publish admissions): how each ended, and how long the seal and the send took against
+    the permit's lifetime. A permit that died unused is one that expired still reserved (before the seal) or was
+    sealed and then blocked (after it). Rows are those of admissions.jsonl."""
+    rows = [r for r in admissions if len(r) > 8 and r[8]]
+    if not rows:
+        return None
+    states = Counter()
+    for r in rows:
+        sealed = r[1] is not None
+        key = r[5] if r[5] in ('observed', 'sent', 'uncertain', 'reserved', 'sealed') else (
+            'blocked after the seal' if sealed else 'blocked before the seal')
+        states[key] += 1
+    return {'permits': len(rows), 'used': states['observed'], 'diedBeforeSeal': states['reserved'],
+            'diedAfterSeal': states['blocked after the seal'] + states['sealed'],
+            'stoppedBeforeSeal': states['blocked before the seal'], 'leftOpen': states['sent'] + states['uncertain'],
+            'byState': dict(states),
+            'lifetime': _spread([r[4] - r[0] for r in rows if r[4] is not None]),
+            'sealLatency': _spread([r[1] - r[0] for r in rows if r[1] is not None]),
+            'consumeLatency': _spread([r[2] - r[1] for r in rows if r[1] is not None and r[2] is not None])}
+
+
+def hot_channel(posts, window, due):
+    """The largest workspace's creates while it still had due posts, against the physical one create per second per
+    channel (the mock's bucket is five per five seconds). Rates: from T to its last create (to the end of the log if
+    some were never sent), and between its first and last create; its creates per minute after T."""
+    by_index = defaultdict(list)
+    for p in posts.values():
+        by_index[p['index']].append(p)
+    if not by_index:
+        return None
+    index = max(by_index, key=lambda i: len(by_index[i]))
+    hot = by_index[index]
+    if len(hot) < 50:
+        return None
+    created = sorted(p['createdAt'] for p in hot if p['createdAt'] is not None)
+    all_sent = len(created) == len(hot)
+    end = created[-1] if all_sent else (max(r['processed'] for r in window) if window else due)
+    seconds = max(1.0, end - due)
+    steady = ((len(created) - 1) / (created[-1] - created[0])) if len(created) > 1 and created[-1] > created[0] else None
+    per_minute = Counter(int((t - due) // 60) for t in created)
+    return {'workspace': index, 'posts': len(hot), 'sent': len(created), 'notSent': len(hot) - len(created),
+            'firstCreateAfterDue': (created[0] - due) if created else None,
+            'lastCreateAfterDue': (created[-1] - due) if created else None,
+            'createsPerSecondWhileDue': len(created) / seconds, 'shareOfOnePerSecond': len(created) / seconds,
+            'steadyCreatesPerSecond': steady, 'windowSeconds': seconds, 'allSent': all_sent,
+            'postsPerMinute': {str(k): v for k, v in sorted(per_minute.items())}}
+
+
 def grant_custody(ledger):
     """What the mock saw of the person's grant check: the real path asks GET /oauth2/@me once per sent post."""
     row = next((r for r in ledger['rows'] if (r['route'], r['credential']) == ('GET /oauth2/@me', 'user')), None)
@@ -336,6 +524,9 @@ def analyse(run_dir):
                 invocations.append(load_json(os.path.join(folder, name)))
             except ValueError:
                 invocations.append({'path': name, 'exception': 'unreadable result'})
+    summary_path = os.path.join(run_dir, 'invocations-summary.json')
+    if not invocations and os.path.exists(summary_path):
+        invocations = load_json(summary_path)  # the results without their log lines, kept as an artifact
     events = load_jsonl(os.path.join(run_dir, 'invocations.jsonl'))
     spawned = [e for e in events if e.get('event') == 'spawned']
     samples = load_jsonl(os.path.join(run_dir, 'samples.jsonl'))
@@ -395,6 +586,25 @@ def analyse(run_dir):
     ledger = request_ledger(window, posts)
     custody = grant_custody(ledger)
     paced = pacing(window, posts, T)
+    admissions = load_jsonl(os.path.join(run_dir, 'admissions.jsonl'))
+    witness = witness_age(window, posts)
+    jitter = wire_jitter(window, admissions)
+    permits = permit_stats(admissions)
+    hot = hot_channel(posts, window, T) if config.get('hotPosts') else None
+    channel_items = max((r.get('items') or 0 for r in window), default=0) or None
+    refreshes = sum(1 for r in window if r.get('route') == 'POST /oauth2/token')
+    # Traffic from invocations that are not lane shards: from the source tag the invocation wrapper puts on every request
+    # (visible in a downloaded artifact), else from the per-invocation results when they are present.
+    tagged = [r for r in window if r.get('src')]
+    if tagged:
+        by_source = Counter('lane' if r['src'].startswith('lane') else r['src'] for r in tagged)
+        non_lane = {'requests': sum(n for k, n in by_source.items() if k != 'lane'), 'bySource': dict(by_source),
+                    'untagged': len(window) - len(tagged)}
+    elif invocations:
+        non_lane = sum(int(i.get('discordRequests') or 0) for i in invocations
+                       if not i.get('path', '').startswith('/api/cron/discord-worker/'))
+    else:
+        non_lane = None
     per_minute = Counter(int((p['createdAt'] - T) // 60) for p in posts.values() if p['createdAt'] is not None)
 
     # Normal load (S0): shares sent within 2, 5 and 15 minutes of each post's own due time.
@@ -423,10 +633,12 @@ def analyse(run_dir):
             completions.append(max(times) - T if all(t is not None for t in times) else math.inf)
         hot_lateness = [(p['createdAt'] - p['due']) if p['createdAt'] is not None else math.inf for p in hot_posts]
         small_done_by = max(completions) if completions else None
+        small_lateness = [(p['createdAt'] - p['due']) if p['createdAt'] is not None else math.inf
+                          for index, items in by_workspace.items() if index != hot_index and len(items) <= 5 for p in items]
         fairness = {'hotWorkspace': hot_index, 'hotPosts': len(hot_posts), 'hotSent': len(hot_created),
                     'hotLastCreateAfterT': (max(hot_created) - T) if hot_created else None,
                     'hotLateness': describe(hot_lateness), 'smallWorkspaces': len(completions),
-                    'smallCompletionAfterT': describe(completions),
+                    'smallCompletionAfterT': describe(completions), 'smallLateness': describe(small_lateness),
                     'smallAllDoneWhileHotActive': bool(small_done_by is not None and math.isfinite(small_done_by)
                                                        and (not math.isfinite(hot_last) or T + small_done_by < hot_last))}
 
@@ -452,6 +664,24 @@ def analyse(run_dir):
     killed = [e for e in events if e.get('event') == 'killed']
     handler_seconds = [i['handlerEndedAt'] - i['handlerStartedAt'] for i in lane
                        if i.get('handlerStartedAt') and i.get('handlerEndedAt')]
+    waited = Counter()
+    for item in lane:
+        for key, value in (((item.get('body') or {}).get('waitedSeconds')) or {}).items():
+            if isinstance(value, (int, float)):
+                waited[key] += value
+    step_timing = None
+    if lane_counters.get('steps') and handler_seconds:
+        steps = lane_counters['steps']
+        totals = extra.get('statementTotals')
+        latency = (config.get('settings') or {}).get('db_latency_ms')
+        busy = max(0.0, sum(handler_seconds) - waited['rate'] - waited['idle'])
+        server_ms = 1000 * totals['execSeconds'] / steps if totals else None
+        trip_ms = (totals['calls'] * latency / steps) if totals and latency is not None else None
+        step_timing = {'steps': steps, 'loopSeconds': sum(handler_seconds), 'waitedRateSeconds': waited['rate'],
+                       'waitedIdleSeconds': waited['idle'], 'busySecondsPerStep': busy / steps,
+                       'statementsPerStep': (totals['calls'] / steps) if totals else None, 'serverMsPerStep': server_ms,
+                       'dbLatencyMs': latency, 'roundTripMsPerStep': trip_ms,
+                       'otherMsPerStep': (1000 * busy / steps - server_ms - trip_ms) if server_ms is not None and trip_ms is not None else None}
     start_delay = [i['handlerStartedAt'] - i['scheduledAt'] for i in invocations
                    if i.get('handlerStartedAt') and i.get('scheduledAt')]
     blocked = sum(i.get('blockedEgressCount', 0) for i in invocations)
@@ -539,8 +769,10 @@ def analyse(run_dir):
                     'busiest60sPerSecond': busiest_window([r['processed'] for r in window], 60.0) / 60.0,
                     'busiest300sPerSecond': busiest_window([r['processed'] for r in window], 300.0) / 300.0,
                     'coordinatorAdmissions': extra.get('admissionWindow')},
-        'ledger': ledger, 'grantCustody': custody, 'pacing': paced,
-        'invocationResultsPresent': os.path.isdir(folder),
+        'ledger': ledger, 'grantCustody': custody, 'pacing': paced, 'witnessAge': witness, 'wireJitter': jitter,
+        'permits': permits, 'stepTiming': step_timing, 'hotChannel': hot, 'largestChannelList': channel_items,
+        'tokenRefreshRequests': refreshes, 'nonLaneDiscordRequests': non_lane,
+        'invocationResultsPresent': os.path.isdir(folder) or bool(invocations),
         'requests': {'total': len(window), 'perVerifiedPost': requests_per_verified, 'byRoute': dict(routes),
                      'byStatus': dict(statuses), 'byCredential': dict(credentials), 'injected': dict(injected),
                      'global429': counters.get('global429'), 'route429': counters.get('route429'),
@@ -566,6 +798,7 @@ def analyse(run_dir):
         'cronGap': gap, 'database': database, 'errors': dict(errors), 'machineLoad1Max': load,
         'mockCpuSeconds': config.get('mockCpuSeconds'),
     }
+    result['launchGates'] = launch_gates(result)
     result['_posts'] = posts
     result['_states'] = final_states.get('byPost', {})
     result['_window'] = window
@@ -737,10 +970,16 @@ def expectations(result, config, standard):
         kills = result.get('kills') or []
         done = [k for k in kills if k.get('kind') in ('random', 'at_create')]
         planned = len(config['settings'].get('kills') or []) + int(config['settings'].get('kill_at_create') or 0)
+        planned_random = len(config['settings'].get('kills') or [])
+        planned_at_create = int(config['settings'].get('kill_at_create') or 0)
         _line(rows, 'fcrash_kills', 'The planned SIGKILLs were delivered', len(done) >= planned,
-              '%d delivered (%d random, %d during a create), %d missed' % (
-                  len(done), sum(1 for k in done if k['kind'] == 'random'), sum(1 for k in done if k['kind'] == 'at_create'),
-                  sum(1 for k in kills if k.get('kind') in ('at_create_missed', 'random_missed'))), '%d' % planned)
+              'planned %d (%d random, %d during a create); delivered %d (%d random, %d during a create); missed %d (%d random, %d during a create)' % (
+                  planned, planned_random, planned_at_create, len(done), sum(1 for k in done if k['kind'] == 'random'),
+                  sum(1 for k in done if k['kind'] == 'at_create'),
+                  sum(1 for k in kills if k.get('kind') in ('at_create_missed', 'random_missed')),
+                  sum(1 for k in kills if k.get('kind') == 'random_missed'),
+                  sum(1 for k in kills if k.get('kind') == 'at_create_missed')),
+              'delivered = planned, missed 0')
         verified_or_uncertain = sum(1 for p in posts if states.get(p) in ('verified', 'uncertain'))
         uncertain = sum(1 for p in posts if states.get(p) == 'uncertain')
         _line(rows, 'fcrash_outcome', 'Every post verified, or uncertain only where a kill hit a sealed send',
@@ -832,6 +1071,235 @@ def _minutes(value):
     return _fmt(value / 60 if isinstance(value, (int, float)) else None, 'min')
 
 
+def _ms(value):
+    return 'n/a' if value is None else '%.1f ms' % (1000 * value)
+
+
+def _ms_list(spread, keys=('p50', 'p90', 'p99', 'p999', 'max')):
+    return ' / '.join(_ms(spread.get(k)) for k in keys) if spread else 'n/a'
+
+
+def _count(value):
+    return 'n/a' if value is None else '{:,}'.format(int(value))
+
+
+def _open_text(rows):
+    parts = []
+    for r in rows:
+        what = '%s %s%s' % (r['state'], 'create' if r['publish'] else 'read',
+                            '' if r.get('unexpired') is None else (' unexpired' if r['unexpired'] else ' expired'))
+        old = r.get('olderThan60Seconds')
+        parts.append('%s %s: %d (oldest %s s%s)' % (r.get('kind') or '?', what, r['count'], _fmt(r.get('oldestAgeSeconds')),
+                                                    (', %d older than 60 s' % old) if old else ''))
+    return '; '.join(parts) or 'none'
+
+
+def _unanswered(rows):
+    """The open admissions that count against a window today: sent and uncertain ones (an answer may never come) and
+    reserved or sealed ones whose permit has not expired."""
+    return [r for r in rows or () if r['state'] in ('sent', 'uncertain') or (r['state'] in ('reserved', 'sealed') and r.get('unexpired'))]
+
+
+def launch_gates(result):
+    """Gates that are reported, never raised: they sit beside the scenario's expected behaviour and do not change its
+    tally. Each says PASS, FAIL or NOT MEASURED in its own row."""
+    d = result.get('database') or {}
+    rows = []
+    opened = d.get('openAdmissions')
+    if opened is None:
+        _line(rows, 'open_admissions', 'Admissions left without an observed answer at the end of the run', None,
+              'not collected by this harness version', '0')
+    else:
+        held = _unanswered(opened)
+        _line(rows, 'open_admissions', 'Admissions left without an observed answer at the end of the run (by state)',
+              not held, ('%d: %s' % (sum(r['count'] for r in held), _open_text(held))) if held else 'none', '0')
+    probes = d.get('budgetProbes')
+    good = [p for p in probes or [] if not p.get('error') and p.get('admitted') is not None]
+    if not good:
+        _line(rows, 'budget_restored', 'The application budget is whole again once unanswered requests have aged out', None,
+              'no probe ran (%s)' % (('probe failed: ' + str(probes[-1].get('error'))[:200]) if probes else
+                                     'no delayed probe in this scenario, or the tree has no coordinator'), 'full capacity')
+    else:
+        last = good[-1]
+        capacity = last.get('capacity')
+        waited = last.get('waited') or 0
+        text = '; '.join('after %s s: %s of %s admitted%s' % (_fmt(p.get('waited')), p.get('admitted'), p.get('capacity'),
+                                                               ' (window rolled during the probe)' if p.get('windowRolled') else '')
+                         for p in good)
+        name = ('The application budget is whole again once unanswered requests have aged out (probe %s s after the end)' % _fmt(waited)
+                if waited >= 60 else 'The application budget right after the run (no delayed probe in this scenario)')
+        _line(rows, 'budget_restored', name, last.get('admitted') == capacity if capacity else None, text,
+              '%s of %s' % (capacity, capacity))
+    permits = result.get('permits')
+    if permits is None:
+        _line(rows, 'permits_unused', 'Create permits that died unused', None, 'no create permit in the admissions export', '0')
+    else:
+        retries = d.get('jobRetries') or {}
+        dead = permits['diedBeforeSeal'] + permits['diedAfterSeal']
+        _line(rows, 'permits_unused', 'Create permits that died unused (expired before the seal, or sealed and then blocked)',
+              dead == 0, '%d of %d permits: %d before the seal, %d after it; ratePermitRetries %s (largest in one job %s)' % (
+                  dead, permits['permits'], permits['diedBeforeSeal'], permits['diedAfterSeal'],
+                  retries.get('ratePermitRetries'), retries.get('ratePermitRetriesMaxPerJob')), '0')
+    return rows
+
+
+def evidence_lines(result):
+    """Wire timing, witness age, permits, per-step database time, the hot workspace, identities and other traffic."""
+    d = result.get('database') or {}
+    lines = ['## Wire timing, witness age, permits and the database per step', '']
+    j = result.get('wireJitter')
+    if j:
+        t = j['admissionToArrival']
+        lines.append(
+            '- **Admission-to-wire spread** (%s of %s sent admissions paired with their arrival at the mock; %s admissions '
+            'without an arrival, %s arrivals without an admission). Admission (`sent_at`, database clock) to arrival at the '
+            'mock, p50 / p90 / p99 / p99.9 / max: %s (n = %s%s). **p99.9 %s; spread above the median at p99.9 %s** (a guard has '
+            'to cover the spread, not the delay itself: inference). Creates %s, reads %s (same percentiles).' % (
+                _count(j['paired']), _count(j['admissionsSent']), _count(j['admissionsWithoutArrival']),
+                _count(j['arrivalsWithoutAdmission']), _ms_list(t), _count(t['n']),
+                '; fewer than 1,000, so p99.9 is the maximum' if t['n'] < 1000 else '', _ms(t['p999']),
+                _ms(j['spreadAboveMedianP999']), _ms_list(j['creates']), _ms_list(j['reads'])))
+        if j.get('admissionToCall'):
+            lines.append(
+                '  - Split where the call was stamped: admission to the HTTP call (inside the application) %s; call to arrival '
+                '(loopback, and the mock\'s accept and thread start on the same loaded machine) %s. In production the second '
+                'part is real network time, which this run does not model.' % (_ms_list(j['admissionToCall']),
+                                                                              _ms_list(j['callToArrival'])))
+        by = j['aboveCeilingBy']
+        lines.append(
+            '- **Requests the mock counted above %d in their trailing second: %s**, by cause: the coordinator had already sent '
+            'more than %d in the trailing second of the request\'s send time %s; wire jitter (%d or fewer sent, more arrived in '
+            'the trailing second of the arrival) %s; the mock\'s processing order only (%d or fewer arrived; the mock counts '
+            'up to half a latency after arrival) %s; request not paired %s. Most requests in any trailing second: by send time '
+            '%s, by arrival %s, as the mock counted %s; in any calendar second: by send time %s, by arrival %s.' % (
+                j['ceiling'], _count(j['aboveCeilingAtMock']), j['ceiling'], _count(by.get('coordinator', 0)), j['ceiling'],
+                _count(by.get('wire', 0)), j['ceiling'], _count(by.get('mock', 0)), _count(by.get('unpaired', 0)),
+                j['sendPeakTrailingSecond'], j['arrivalPeakTrailingSecond'],
+                (result.get('ceiling') or {}).get('peakTrailingSecondAll'), j['sendPeakCalendarSecond'],
+                j['arrivalPeakCalendarSecond']))
+    else:
+        lines.append('- Admission-to-wire spread: not measurable in this directory (needs admissions.jsonl and a mock that '
+                     'records path digests, harness commit with the wire timing).')
+    w = result.get('witnessAge')
+    if w:
+        lines.append('- **Witness age at the create** (%d creates; %d with no witness found; the grant check was the oldest '
+                     'witness for %d): oldest witness request of the create\'s pass to the create reaching the mock, p50 / p90 / '
+                     'p99 / max: %s; newest (the channel list): %s.' % (
+                         w['creates'], w['withoutWitness'], w['oldestFromGrantCheck'],
+                         _ms_list(w['oldest'], ('p50', 'p90', 'p99', 'max')), _ms_list(w['newest'], ('p50', 'p90', 'p99', 'max'))))
+    else:
+        lines.append('- Witness age: no create with an attributed witness pass in the mock log.')
+    pm = result.get('permits')
+    if pm:
+        retries = d.get('jobRetries') or {}
+        lines.append('- **Create permits** (%d): used %d; died before the seal (expired while reserved) %d; died after the seal '
+                     '(sealed, then blocked or never used) %d; stopped before the seal (blocked, never sealed) %d; left open '
+                     '(sent or uncertain) %d. Counters in the jobs: ratePermitRetries %s (largest in one job %s), '
+                     'rateReadRetries %s, unsentFailures %s. Permit lifetime min / p50 / max %s / %s / %s; seal after '
+                     'reservation p50 / p99 / max %s; send after seal p50 / p99 / max %s.' % (
+                         pm['permits'], pm['used'], pm['diedBeforeSeal'], pm['diedAfterSeal'], pm['stoppedBeforeSeal'],
+                         pm['leftOpen'], retries.get('ratePermitRetries'), retries.get('ratePermitRetriesMaxPerJob'),
+                         retries.get('rateReadRetries'), retries.get('unsentFailures'),
+                         *(_ms((pm['lifetime'] or {}).get(k)) for k in ('min', 'p50', 'max')),
+                         _ms_list(pm['sealLatency'], ('p50', 'p99', 'max')), _ms_list(pm['consumeLatency'], ('p50', 'p99', 'max'))))
+    st = result.get('stepTiming')
+    if st:
+        lines.append(
+            '- **Per lane step** (%s steps over %s loop-seconds, of which %s s waiting for the budget and %s s idle): busy time '
+            '%s per step. Database (every statement after seeding, the minute worker\'s included): %s statements per step, '
+            'each a round trip; server execution %s per step; emulated network %s per step (%s statements x %s ms); the '
+            'remaining %s per step is Python, the HTTP call to the mock, lock and pool waits (inference).' % (
+                _count(st['steps']), _count(st['loopSeconds']), _count(st['waitedRateSeconds']), _count(st['waitedIdleSeconds']),
+                _ms(st['busySecondsPerStep']), _fmt(st['statementsPerStep']), _ms(None if st['serverMsPerStep'] is None else st['serverMsPerStep'] / 1000),
+                _ms(None if st['roundTripMsPerStep'] is None else st['roundTripMsPerStep'] / 1000), _fmt(st['statementsPerStep']),
+                _fmt(st['dbLatencyMs']),
+                _ms(None if st['otherMsPerStep'] is None else st['otherMsPerStep'] / 1000)))
+    heavy = d.get('heaviestStatements')
+    if heavy:
+        total = (d.get('statementTotals') or {}).get('execSeconds') or sum(h['totalSeconds'] for h in heavy) or 1.0
+        lines.append('- Heaviest statements by total server time (share of all): ' + '; '.join(
+            '`%s` %s s (%.0f%%), %s calls, mean %.1f ms, max %.1f ms' % (' '.join(h['query'].split())[:70].replace('|', '/'),
+                                                                          _fmt(h['totalSeconds']), 100 * h['totalSeconds'] / total,
+                                                                          h['calls'], h['meanMs'], h['maxMs']) for h in heavy[:5]) + '.')
+    hot, seeded, ended = result.get('hotChannel'), d.get('documentAtSeed'), d.get('largestDocument')
+    if hot:
+        writes = d.get('workspaceWrites') or []
+        lines.append(
+            '- **Hot workspace (index %s, %d posts)** - document as seeded: %s; at the end of the run: %s. A transaction on '
+            'it rewrites the whole document, so one step costs at least one read-modify-write. The application\'s '
+            'UPDATE of a workspace document, over the run: %s.' % (
+                hot['workspace'], hot['posts'], _document_text(seeded), _document_text(ended),
+                '; '.join('mean %.1f ms, max %.1f ms over %s calls' % (w_['meanMs'], w_['maxMs'], w_['calls']) for w_ in writes[:1])
+                or 'not collected'))
+        lines.append(
+            '- **Hot workspace\'s create rate while it had due posts (REPORTED, proposed measure; the proposed target of at least '
+            '0.8 per second is not applied here):** %s creates per second from T to its %s (%.0f%% of the physical one per '
+            'second per channel); steady rate between its first and last create %s per second; %d of %d sent, %d never sent; '
+            'first create %s after T, last %s. Posts per minute after T: %s.' % (
+                _fmt(hot['createsPerSecondWhileDue']),
+                'last create' if hot['allSent'] else 'end of the run (not all were sent)', 100 * hot['shareOfOnePerSecond'],
+                _fmt(hot['steadyCreatesPerSecond']), hot['sent'], hot['posts'], hot['notSent'],
+                _minutes(hot['firstCreateAfterDue']), _minutes(hot['lastCreateAfterDue']),
+                ', '.join('%s: %d' % item for item in hot['postsPerMinute'].items()) or 'none'))
+    elif seeded or (ended and ended.get('jobs', 0) >= 50):
+        lines.append('- Largest workspace document: as seeded %s; at the end %s.' % (_document_text(seeded), _document_text(ended)))
+    else:
+        lines.append('- Largest workspace document at the end: %s.' % _document_text(ended))
+    expiry = d.get('identityExpiryAtDue')
+    shortest = d.get('identityShortestHours')
+    lines.append('- **Identity tokens at T** (time left until the person\'s Discord token expires): %s; the shortest %s hours. '
+                 'Token refreshes at the mock during the run (`POST /oauth2/token`): %s. The harness gives every identity a '
+                 '7-day token, so none expires during a run; a refresh storm is not modelled. Largest channel list answered: %s '
+                 '(the mock serves one text channel per server).' % (
+                     json.dumps(expiry, sort_keys=True) if expiry is not None else 'not collected',
+                     _fmt(shortest), result.get('tokenRefreshRequests'), result.get('largestChannelList')))
+    nl = result.get('nonLaneDiscordRequests')
+    if isinstance(nl, dict):
+        lines.append('- **Discord requests from invocations other than the lane shards** (the minute worker and others), as '
+                     'tagged by the invocation wrapper: %d of %d tagged requests; by source %s; untagged requests %d.' % (
+                         nl['requests'], sum(nl['bySource'].values()), json.dumps(nl['bySource'], sort_keys=True), nl['untagged']))
+    elif nl is not None:
+        lines.append('- **Discord requests from invocations other than the lane shards:** %d (from the invocation results).' % nl)
+    else:
+        lines.append('- Discord requests from invocations other than the lane shards: not visible in this directory.')
+    opened = d.get('openAdmissions')
+    if opened is not None:
+        unused = sum(r['count'] for r in opened if r['state'] in ('reserved', 'sealed') and not r.get('unexpired'))
+        lines.append('- **Admissions left without an observed answer at the end of the run (sent or uncertain, or a permit still '
+                     'alive):** %s. A tree without an age bound counts every one of them against every window, for good. '
+                     'Permits that expired unused, reserved or sealed, sent nothing and are counted with the create permits '
+                     'above: %d.' % (_open_text(_unanswered(opened)), unused))
+    after = d.get('openAdmissionsAfterWait')
+    if after is not None:
+        lines.append('- Still without an answer after the wait below: %s.' % _open_text(_unanswered(after)))
+    probes = d.get('budgetProbes')
+    if probes:
+        parts = []
+        for probe in probes:
+            if probe.get('error'):
+                parts.append('probe failed: %s' % str(probe['error'])[:200])
+            else:
+                parts.append('after %s s: %s of %s admitted%s (refused by %s)' % (
+                    _fmt(probe.get('waited')), probe.get('admitted'), probe.get('capacity'),
+                    ', window rolled during the probe' if probe.get('windowRolled') else '',
+                    (probe.get('refused') or {}).get('scope')))
+        lines.append("- **Application budget after the run** (a fresh window, probed with synthetic reads through the tree's "
+                     'own coordinator, nothing sent anywhere): ' + '; '.join(parts) + '.')
+    lines.append('')
+    return lines
+
+
+def _document_text(doc):
+    if not doc:
+        return 'n/a'
+    if doc.get('error'):
+        return 'error: %s' % str(doc['error'])[:120]
+    timings = doc.get('readModifyWriteSeconds') or []
+    return '%d jobs, %s bytes of JSON text (%s stored), one read-modify-write %s s (%s)' % (
+        doc['jobs'], _count(doc['textBytes']), _count(doc['storedBytes']),
+        ' / '.join(str(t) for t in timings), doc.get('note', 'timed, rolled back'))
+
+
 def receipt(result, verdicts, config, differences, expectations=()):
     lines = []
     counted = Counter(v['verdict'] for v in verdicts)
@@ -885,6 +1353,15 @@ def receipt(result, verdicts, config, differences, expectations=()):
         lines.append('|---|---|---|---|')
         for e in expectations:
             lines.append('| %s | %s | %s | **%s** |' % (e['name'], e['expected'], e['measured'], e['verdict']))
+        lines.append('')
+    gates = result.get('launchGates')
+    if gates:
+        lines.append('## Launch gates (reported: they do not change the verdicts above)')
+        lines.append('')
+        lines.append('| Gate | Expected | Measured | Verdict |')
+        lines.append('|---|---|---|---|')
+        for g in gates:
+            lines.append('| %s | %s | %s | **%s** |' % (g['name'], g['expected'], g['measured'], g['verdict']))
         lines.append('')
     late, sent_only = result['lateness']['allPostsUnsentInfinite'], result['lateness']['sentOnly']
     lines.append('## Lateness, drain, outcomes')
@@ -945,6 +1422,12 @@ def receipt(result, verdicts, config, differences, expectations=()):
                          *(_minutes(f['hotLateness'][k]) for k in ('median', 'p95', 'max')), f['smallWorkspaces'],
                          *(_minutes(f['smallCompletionAfterT'][k]) for k in ('median', 'p95', 'max')),
                          f['smallAllDoneWhileHotActive']))
+        sl = f.get('smallLateness')
+        if sl:
+            lines.append('')
+            lines.append('Lateness of the small workspaces\' posts alone (REPORTED; the proposed scope of the lateness lines '
+                         'for a scenario with a hot workspace): %d posts, median %s, p95 %s, max %s.' % (
+                             sl['count'], *(_minutes(sl[k]) for k in ('median', 'p95', 'max'))))
         lines.append('')
     r, c = result['requests'], result['ceiling']
     lines.append('## Requests at the mock')
@@ -1052,6 +1535,7 @@ def receipt(result, verdicts, config, differences, expectations=()):
                          split['repeatedPassesForSentPosts'], split['forPostsNeverSent'], split['unattributed'],
                          ', '.join('%s pass(es): %d posts' % item for item in passes.items()) or 'none'))
         lines.append('')
+    lines.extend(evidence_lines(result))
     d = result['database']
     lines.append('## Database')
     lines.append('')
