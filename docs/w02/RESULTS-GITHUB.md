@@ -583,13 +583,36 @@ ten round trips for each coordinator transaction: begin, settings, route map, se
 - **Wire jitter and witness age rose.** `sent_at` to arrival p50 76 ms (51), p99.9 444 ms (286), max 546 ms (364), spread above the median at p99.9 368 ms (234); the oldest witness read is 2.72 s old at the create (2.34),
   against the 1.3 to 2.3 s of the limiter's simulation. Each booked read waits about 0.17 s and a pass has five of them, plus the create permit's wait (302 ms p50). The guard held better, not worse: 11 of 30,080 windows at the ceiling
   (0.037%, 1028a 0.129%), because booked slots are 45.8 ms apart by construction; the delay difference p99.9 is 143 ms and the maximum 206 ms against a slack of 100 ms.
-- **The duty cycle did not rise**: 0.78 (0.80). The lane is active from second 6 to second 51 of each minute: a cold start of about 6 s on a loaded runner, then a 50 s budget. The 56 s cell is the lever.
+- **The duty cycle did not rise on its own**: 0.78 (0.80). The lane is active from second 6 to second 51 of each minute: a cold start of about 6 s on a loaded runner, then a 50 s budget. A 56 s budget (S1-lane56, below) lifts it to 0.89 and the median lateness to 14.51 minutes, at the price of a wider wire tail on this runner.
 - **Read-backs** (above).
 - **The booked horizon is shallow** and the requests above 25 at the mock are 7: five are the mock's own processing order, two wire jitter, none the coordinator.
 - **Hosted runs that lost data**: Fdb once (above).
 
 ### The 56-second lane loop (S1-lane56)
 
-The 56-second cell (S1-lane56, run 40705094663, tree 02fd679b, harness 3bbc344c) was still running when this section was written; its numbers are added below when it lands.
+Same tree (`02fd679b`), same runner type, one run each: `POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS` 50 (the S1 above) and 56 (run 40705094663, harness `3bbc344c`).
+
+| | S1, 50 s | **S1-lane56, 56 s** |
+|---|---|---|
+| Lateness median / p95 / max (min), limits 12 / 25 / 40 | 15.66 / 30.55 / 32.37 | 14.51 / 28.16 / 29.68 |
+| Drain, T to the last verified (min) | 36.76 | 33.80 |
+| Posts a minute on the plateau (minutes 3 to 5) | 159, 160, 159 | 173, 171, 173 |
+| Plateau duty cycle | 0.78 | 0.89 |
+| Active-window rate (requests a second) | 20.7 | 19.8 |
+| Requests per created post on the plateau; per verified post | 6.16; 7.18 | 6.15; 7.16 |
+| Implied median from duty x rate x requests per post (min) | 16.00 | 14.66 |
+| Busiest 10 s / 60 s / 300 s (requests a second) | 22.0 / 16.7 / 16.5 | 22.1 / 18.1 / 17.8 |
+| Reservation lock statements a created post, exclusive / shared (mean time) | 8.85 / 5.78 (34.7 / 15.1 ms) | 8.89 / 5.76 (36.2 / 15.5 ms) |
+| Peak by the coordinator's wire time (`sent_at`), trailing / calendar second | 25 / 25 | 25 / 25 |
+| Requests above 25 in a trailing second at the mock (REPORTED, owner reply 16) | 7 (peak 26): wire jitter 2, mock order 5, coordinator 0 | 11 (peak 28): wire jitter 9, mock order 2, coordinator 0 |
+| Wire jitter, `sent_at` to arrival, p50 / p99 / p99.9 / max (ms) | 76 / 236 / 444 / 546 | 74 / 443 / 535 / 651 |
+| Guard sizing, windows at the ceiling | 30080 windows, 11 violations (0.037%) | 29046 windows, 20 violations (0.069%) |
+| Witness age at the create, p50 / p90 / max (s) | 2.72 / 3.02 / 4.33 | 2.74 / 3.77 / 5.72 |
+| `bookedWaits`, `bookedSeconds` | 26829, 4504 s | 26118, 4711 s |
+| Mean lane handler seconds a loop | 48.0 | 52.9 |
+| Peak 1-minute load average of the runner (4 vCPUs) | 6.9 | 7.3 |
+| Permits died unused | 0 | 0 |
+
+Reading (inference). The lever does what the arithmetic said and little more: **the duty cycle rises from 0.78 to 0.89 (the lane is active from second 6 to 51 of each minute at 50 s and from second 5 to 58 at 56 s), the posts a minute from 159 to 173, and the median lateness falls from 15.66 to 14.51 minutes (p95 30.55 to 28.16, maximum 32.37 to 29.68)**. The requests per post (6.16 and 6.15) and the lock statements per post do not move; the active-window rate falls from 20.7 to 19.8 a second because twelve busier loops share four vCPUs (peak load average 7.3 against 6.9). One run each: the spread between 1023b and 1023d on the same code was 3.4 minutes in the median, so 1.2 minutes between two single runs is inside it and cannot be read alone; the duty cycle (0.78 to 0.82 in the earlier rounds) and the posts a minute moved by 14% and 9%, which is more than that spread explains and is what the arithmetic predicts. The cost shows in the tail of the wire: p99 443 ms against 236, p99.9 535 against 444, maximum 651 against 546, because the runner is more saturated; 20 of 29046 windows at the ceiling were violated against 11 (0.069% against 0.037%) with the 0.1 s guard, and the oldest witness read at the create reached 3.77 s at p90 and 5.72 s at the maximum. Requests above 25 at the mock: 11 against 7, none stamped above 25 by the coordinator (peak 25 trailing second in both).
 
 <!-- /booking-1028c -->

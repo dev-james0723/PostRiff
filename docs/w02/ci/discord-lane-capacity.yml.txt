@@ -41,7 +41,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          [[ "$REF_NAME" =~ ^claude/discord-capacity-run-(smoke|s0|s1|s2|faults|release|lockbench|baseline|s1levers|s2sizes|devset|s0100|fdb|fcrash|f429|s1lane56)-[a-z0-9]{1,12}$ ]] || { echo 'unexpected branch name'; exit 1; }
+          [[ "$REF_NAME" =~ ^claude/discord-capacity-run-(smoke|s0|s1|s2|faults|release|lockbench|baseline|s1levers|s2sizes|devset|s0100|fdb|fcrash|f429|s1lane56|sens)-[a-z0-9]{1,12}$ ]] || { echo 'unexpected branch name'; exit 1; }
           branch_profile="${BASH_REMATCH[1]}"
           age=$(( $(date +%s) - $(git -C request log -1 --format=%ct) ))
           { [ "$age" -ge -60 ] && [ "$age" -le 43200 ]; } || { echo "the request commit is not from the last twelve hours (age ${age}s); push a new request"; exit 1; }
@@ -74,6 +74,7 @@ jobs:
             fcrash) scenarios='Fcrash' ;;
             f429) scenarios='F429' ;;
             s1lane56) scenarios='S1-lane56' ;;
+            sens) scenarios='S1 S1-24' ;;
           esac
           matrix="$(python3 -I -c 'import json,sys; print(json.dumps([{"scenario": s, "pool": int(p)} for s in sys.argv[1].split() for p in sys.argv[2].split(",")]))' "$scenarios" "$pools")"
           # The harness commit must be on the harness branch: the run uses the harness as it was pushed, unchanged.

@@ -84,6 +84,11 @@ SCENARIOS = {
     # S1 with one lever moved at a time; judged against section 4 as S1 is. No code or policy change: the loop budget
     # is the existing POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS (the lane clamps it at 90), warm is how the
     # invocation is started.
+    # The sensitivity cell of the scope-B review: 24 loops against the database round trip (profile sens, with S1 for 12).
+    'S1-24': dict(shards=24, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
+                  description='S1 with 24 lane shards (/api/cron/discord-worker/0 to 23) instead of 12: the sensitivity cell for '
+                              'a database round trip of 5 and 10 ms (profile sens, request with --latency). The reviewed shard '
+                              'count stays 12; the lane accepts up to 32.'),
     'S1-lane56': dict(lane_max_seconds=56, judge_as='S1', expect=('standard', 'isolation', 'clean_workers'),
                       description='S1 with each lane loop budgeted 56 s instead of 50 (POSTRIFF_DISCORD_PARALLEL_WORKER_'
                                   'MAX_SECONDS=56, a Production variable that needs its own approval but may be measured): '

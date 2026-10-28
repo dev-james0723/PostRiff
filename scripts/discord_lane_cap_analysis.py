@@ -11,6 +11,7 @@ on their own.
 import json
 import math
 import os
+import re
 from collections import Counter, defaultdict
 
 CREATE = 'POST /channels/{id}/messages'
@@ -564,6 +565,7 @@ def attempt_statistics(attempts, created_posts=None, restart_gap=3.0):
 
     A read step is a run of attempts at the same route by the same cron process and workspace: refusals until an admission
     (or the last refusal, when the provider gives up and the lane releases the post), restarted after `restart_gap` seconds."""
+    attempts = [r for r in attempts or [] if r[2] in ('read', 'reserve', 'consume')]  # the calls after a request are in coordinator_failures
     if not attempts:
         return None
     groups = defaultdict(list)
@@ -666,6 +668,122 @@ def attempt_lines(stats):
     return lines
 
 
+LOCK_TIMEOUT, STATEMENT_TIMEOUT, DEADLOCK = '55P03', '57014', '40P01'
+RESERVE_OPS = ('read', 'reserve')
+
+
+def coordinator_failures(rows, stopped=None, due=None, creates_per_minute=None):
+    """Every coordinator failure of the run, counted: the database-latency cliff of the scope-B review (a lock timeout becomes
+    RateCoordinatorUnavailable, the lane releases the post for 300 s, and one failed observe() sets rate_coordinator_degraded
+    in that process for good). `rows` is the whole attempt log, calls and events: calls are [time, seconds, operation, method,
+    route, credential, workspace, outcome A / R / E, quoted wait, scope, cause, permit, source, ...] where an error (E) holds the
+    error class in `scope` and the class and SQLSTATE of the failure the coordinator hid in `cause`; events are rows with
+    operation `event`: ['release', reason, seconds released for, rate scope, rate cause] and ['degraded', where, ..., the failed
+    call before it]. Always returns a summary (zeros are the answer of a clean run); None only without any row."""
+    if not rows:
+        return None
+    calls = [r for r in rows if r[2] != 'event']
+    events = [r for r in rows if r[2] == 'event']
+    by_op = {}
+    for op in ('read', 'reserve', 'consume', 'observe', 'note_failure', 'abandon'):
+        mine = [r for r in calls if r[2] == op]
+        errors = [r for r in mine if r[7] == 'E']
+        by_op[op] = {'calls': len(mine), 'errors': len(errors),
+                     'unavailable': sum(1 for r in errors if r[9] == 'RateCoordinatorUnavailable'),
+                     'lockTimeouts': sum(1 for r in errors if LOCK_TIMEOUT in str(r[10])),
+                     'statementTimeouts': sum(1 for r in errors if STATEMENT_TIMEOUT in str(r[10])),
+                     'deadlocks': sum(1 for r in errors if DEADLOCK in str(r[10])),
+                     'otherErrors': sum(1 for r in errors if not any(code in str(r[10]) for code in (LOCK_TIMEOUT, STATEMENT_TIMEOUT, DEADLOCK))),
+                     'seconds': _spread([r[1] for r in mine])}
+    errors = [r for r in calls if r[7] == 'E']
+    reserve = [by_op[op] for op in RESERVE_OPS]
+    totals = {'errors': len(errors), 'unavailable': sum(1 for r in errors if r[9] == 'RateCoordinatorUnavailable'),
+              'lockTimeoutsInReserve': sum(b['lockTimeouts'] for b in reserve),
+              'lockTimeoutsInConsume': by_op['consume']['lockTimeouts'],
+              'lockTimeoutsInObserve': by_op['observe']['lockTimeouts'] + by_op['note_failure']['lockTimeouts'] + by_op['abandon']['lockTimeouts'],
+              'causes': dict(Counter('%s %s' % (r[2], r[10]) for r in errors).most_common())}
+    releases = [r for r in events if r[3] == 'release']
+    unavailable_wait = [r for r in releases if isinstance(r[8], (int, float)) and abs(r[8] - 300.0) < 1.0]
+    quoted = [r for r in releases if isinstance(r[8], (int, float)) and abs(r[8] - 300.0) >= 1.0]
+    degraded = [r for r in events if r[3] == 'degraded']
+    summary = {'byOperation': by_op, 'totals': totals,
+               'releases': {'total': len(releases), 'about300Seconds': len(unavailable_wait), 'quotedWait': len(quoted),
+                            'noWaitGiven': len(releases) - len(unavailable_wait) - len(quoted),
+                            'byReasonAndCause': dict(Counter('%s / %s / %s' % (r[4], r[9], r[10]) for r in releases).most_common()),
+                            'quotedWaitSeconds': _spread([r[8] for r in quoted])},
+               'degraded': {'processes': len({r[12] for r in degraded}), 'events': len(degraded),
+                            'firstAfterDue': (min(r[0] for r in degraded) - due) if degraded and due else None,
+                            'lastAfterDue': (max(r[0] for r in degraded) - due) if degraded and due else None,
+                            'where': dict(Counter(re.sub(r':[0-9]+', '', r[4]) for r in degraded).most_common(6)),
+                            'afterFailedCall': dict(Counter('%s %s' % (r[9], r[10]) for r in degraded).most_common(6))},
+               'laneStopped': {k: v for k, v in (stopped or {}).items() if k in ('coordinator_degraded', 'coordinator_unavailable')},
+               'createsPerMinute': None}
+    if creates_per_minute:
+        counts = [v for k, v in sorted(((int(k), v) for k, v in creates_per_minute.items())) if v >= 1]
+        full = [v for v in counts if v >= 0.2 * max(counts)]
+        summary['createsPerMinute'] = {'minutes': len(counts), 'median': statistics_median(full), 'min': min(full), 'max': max(counts),
+                                       'best5': max((sum(counts[i:i + 5]) / 5 for i in range(max(1, len(counts) - 4))), default=None)}
+    return summary
+
+
+def statistics_median(values):
+    ordered = sorted(values)
+    n = len(ordered)
+    return None if not n else (ordered[n // 2] if n % 2 else (ordered[n // 2 - 1] + ordered[n // 2]) / 2)
+
+
+def coordinator_failure_lines(summary):
+    """Markdown lines for the receipt: the counts the scope-B review asked for, printed even when they are zero."""
+    if not summary:
+        return ['## Coordinator failures (the database-latency cliff)', '',
+                'No attempt log in this directory (a harness before the attempt log, or the wrapper could not be installed): '
+                'lock timeouts, RateCoordinatorUnavailable errors, 300 s releases and the degraded flag are NOT MEASURED.', '']
+    t, r, d = summary['totals'], summary['releases'], summary['degraded']
+    o = summary['byOperation']
+    lines = ['## Coordinator failures (the database-latency cliff)', '']
+    lines.append('Counted from the attempt log (every coordinator call of every process, including the observation after each answer and the '
+                 'releases of posts; zeros are the answer of a clean run). A lock timeout is SQLSTATE 55P03 (the coordinator sets a 2 s '
+                 '`lock_timeout`), a statement timeout 57014, a deadlock 40P01.')
+    lines.append('')
+    lines.append('| Operation | Calls | Errors | RateCoordinatorUnavailable | Lock timeouts | Statement timeouts | Deadlocks | Other | Call took p50 / p99 / max (ms) |')
+    lines.append('|---|---|---|---|---|---|---|---|---|')
+    names = {'read': 'reserve_read (a read)', 'reserve': 'reserve (a create permit)', 'consume': 'consume', 'observe': 'observe (the answer)',
+             'note_failure': 'note_transport_failure', 'abandon': 'abandon_unsent'}
+    for op in ('read', 'reserve', 'consume', 'observe', 'note_failure', 'abandon'):
+        b = o[op]
+        s = b.get('seconds') or {}
+        lines.append('| %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (
+            names[op], _count(b['calls']), _count(b['errors']), _count(b['unavailable']), _count(b['lockTimeouts']),
+            _count(b['statementTimeouts']), _count(b['deadlocks']), _count(b['otherErrors']), _ms_list(s, ('p50', 'p99', 'max'))))
+    lines.append('')
+    lines.append('- **Lock timeouts: %s in reserve (reads and create permits), %s in consume (the create leaving), %s in observe (the answer recorded, '
+                 'and the notes of a request that failed or was dropped).** RateCoordinatorUnavailable errors in all: %s of %s errors.' % (
+                     _count(t['lockTimeoutsInReserve']), _count(t['lockTimeoutsInConsume']), _count(t['lockTimeoutsInObserve']),
+                     _count(t['unavailable']), _count(t['errors'])))
+    by_cause = r['byReasonAndCause']
+    lines.append('- **Releases of a post** (the worker gives it back unsent): %s; about 300 s (what a coordinator that is unavailable releases for; a '
+                 'quote of exactly 300 s would count too): **%s**; with a quoted wait: %s%s; without a wait given: %s. By reason / rate scope / rate cause: %s.' % (
+                     _count(r['total']), _count(r['about300Seconds']), _count(r['quotedWait']),
+                     (' (p50 / p90 / max %s s)' % ' / '.join(_fmt((r.get('quotedWaitSeconds') or {}).get(k)) for k in ('p50', 'p90', 'max'))) if r['quotedWait'] else '',
+                     _count(r['noWaitGiven']), json.dumps(by_cause) if by_cause else 'none'))
+    if d['events']:
+        lines.append('- **`rate_coordinator_degraded` was set in %d process(es) (%d events)**, first %s after T, last %s after T; set from %s, right after the failed call %s. '
+                     'In a process where it is set every later request is refused before transport; the lane there stops as `coordinator_degraded`.' % (
+                         d['processes'], d['events'], _minutes(d['firstAfterDue']), _minutes(d['lastAfterDue']),
+                         json.dumps(d['where']), json.dumps(d['afterFailedCall'])))
+    else:
+        lines.append('- **`rate_coordinator_degraded` was never set** in any process of the run.')
+    stopped = summary['laneStopped']
+    lines.append('- Lane invocations that stopped as `coordinator_degraded`: %s; as `coordinator_unavailable`: %s.' % (
+        _count(stopped.get('coordinator_degraded', 0)), _count(stopped.get('coordinator_unavailable', 0))))
+    c = summary.get('createsPerMinute')
+    if c:
+        lines.append('- **Posts created a minute** (not only lateness): median %s over the %d minutes that count (at least a fifth of the busiest), '
+                     'least %s, most %s, best five minutes in a row %s a minute.' % (_fmt(c['median']), c['minutes'], _fmt(c['min']), _fmt(c['max']), _fmt(c['best5'])))
+    lines.append('')
+    return lines
+
+
 def _samples_of(values):
     return _spread([v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)])
 
@@ -723,6 +841,9 @@ def health_summary(samples):
         policyRemainingRatio=_samples_of([policy(s).get('remainingRatio') for s in busy]),
         policyResetSeconds=_samples_of([policy(s).get('resetSeconds') for s in busy]),
         policyRemainingZeroReadings=sum(1 for s in busy if policy(s).get('remaining') == 0),
+        policyRemainingZeroShallowHorizon=sum(1 for s in busy if policy(s).get('remaining') == 0 and ahead
+                                              and isinstance(booking(s).get('horizonSeconds'), (int, float))
+                                              and booking(s)['horizonSeconds'] < 0.5 * ahead),
         policyHoldOrEmbargo=sum(1 for s in usable if policy(s).get('hold') or policy(s).get('blocked') or policy(s).get('circuit')),
         responses429=_samples_of([traffic(s).get('responses429') for s in busy]),
         lastReading={k: v for k, v in (usable[-1].get('coordinator') or {}).items() if k in ('booking', 'traffic')})
@@ -834,15 +955,16 @@ def booking_lines(result):
                 h['bookingReadings'], sp('bookedReads60s', digits=0), sp('bookedReadWaitSeconds60s', digits=1),
                 sp('meanBookedReadWaitSeconds60s', digits=3), sp('maxBookedReadWaitSeconds60s', digits=3)))
         lines.append(
-            '- **Application row, `coordinator.guards.policy`, under booking** (limit %s): `remaining` %s, `remainingRatio` %s, '
-            '`resetSeconds` %s; `remaining` was 0 in %s of the %s busy readings. **With booking `remaining` is the number of slots '
-            'bookings may still fill and `resetSeconds` when a booking is possible again, so a busy lane keeps it high and it reaches '
-            '0 only when the booked horizon is full and callers are refused again: it no longer reads "the window is nearly spent"** '
-            '(rate_limits.py, OPEN-QUESTIONS Q19). `coordinator.traffic.admissions60s` %s (a minute at the 22.7 a second the guard '
-            'allows is 1,362; the most a saturated lane sends is 21.8 a second = 1,308); holds, embargoes or open circuits on the '
-            'policy row in %s readings; 429 responses in the last minute %s. Reading took %s ms (server), %s s (process, cold).' % (
+            '- **Application row, `coordinator.guards.policy`** (limit %s): `remaining` %s, `remainingRatio` %s, `resetSeconds` %s. Its '
+            'meaning changed with booking (and was changed again by the limiter), so it is printed next to the horizon to be checked '
+            'against it: `remaining` was 0 in %s of the %s busy readings, and in %s of those the booked horizon was under half of '
+            '`bookAheadSeconds` (a 0 with a shallow horizon is not a refusal in sight; the meaning per head is in docs/w02/CAPACITY-RUN.md). '
+            '`coordinator.traffic.admissions60s` %s (a minute at the 22.7 a second the guard allows is 1,362; the most a saturated lane '
+            'sends is 21.8 a second = 1,308); holds, embargoes or open circuits on the policy row in %s readings; 429 responses in the '
+            'last minute %s. Reading took %s ms (server), %s s (process, cold).' % (
                 _fmt(h.get('policyLimit')), sp('policyRemaining', digits=0), sp('policyRemainingRatio', digits=2),
                 sp('policyResetSeconds', digits=1), h['policyRemainingZeroReadings'], h['busyReadings'],
+                h['policyRemainingZeroShallowHorizon'],
                 sp('admissions60s', digits=0), h['policyHoldOrEmbargo'], sp('responses429', digits=0),
                 ' / '.join(_fmt((h.get('elapsedMs') or {}).get(k)) for k in ('p50', 'max')),
                 ' / '.join(_fmt((h.get('wallSeconds') or {}).get(k)) for k in ('p50', 'max'))))
@@ -1073,7 +1195,8 @@ def analyse(run_dir):
     permits = permit_stats(admissions)
     passes_summary = preflight_passes(window, admissions)
     created_count = sum(1 for p in posts.values() if p['createdAt'] is not None)
-    attempts_summary = attempt_statistics(load_jsonl(os.path.join(run_dir, 'attempts.jsonl')), created_count)
+    attempt_rows = load_jsonl(os.path.join(run_dir, 'attempts.jsonl'))
+    attempts_summary = attempt_statistics(attempt_rows, created_count)
     health = health_summary(load_jsonl(os.path.join(run_dir, 'health-samples.jsonl')))
     hot = hot_channel(posts, window, T) if config.get('hotPosts') else None
     channel_items = max((r.get('items') or 0 for r in window), default=0) or None
@@ -1259,6 +1382,7 @@ def analyse(run_dir):
         'ledger': ledger, 'grantCustody': custody, 'pacing': paced, 'witnessAge': witness, 'wireJitter': jitter,
         'permits': permits, 'preflightPasses': passes_summary, 'attempts': attempts_summary,
         'booking': booking_summary(dict(lane_counters), created_count, admissions, attempts_summary, health),
+        'coordinatorFailures': coordinator_failures(attempt_rows, dict(stopped), T, {str(k): v for k, v in per_minute.items()}),
         'health': health, 'stepTiming': step_timing, 'hotChannel': hot, 'largestChannelList': channel_items,
         'tokenRefreshRequests': refreshes, 'nonLaneDiscordRequests': non_lane,
         'invocationResultsPresent': os.path.isdir(folder) or bool(invocations),
@@ -2101,6 +2225,7 @@ def receipt(result, verdicts, config, differences, expectations=()):
     lines.extend(evidence_lines(result))
     lines.extend(attempt_lines(result.get('attempts')))
     lines.extend(booking_lines(result))
+    lines.extend(coordinator_failure_lines(result.get('coordinatorFailures')))
     d = result['database']
     lines.append('## Database')
     lines.append('')

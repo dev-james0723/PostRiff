@@ -441,8 +441,16 @@ class AttemptLog(unittest.TestCase):
                 self.retry_after_seconds, self.rate_scope_kind, self.rate_cause = seconds, scope, cause
 
         class Permit:
+            method = 'GET'
+
             def __init__(self, ident, identity):
                 self.id, self.identity = ident, identity
+
+        class LockNotAvailable(Exception):
+            sqlstate = '55P03'
+
+        class Unavailable(Exception):
+            pass
 
         class Identity:
             kind = 'bot'
@@ -482,13 +490,39 @@ class AttemptLog(unittest.TestCase):
                     raise RateDelayed(0.05, scope='permit', cause='permit_expired')
                 return None
 
+            def observe(self, permit, response, *, transport_failure=False):
+                if response.get('status') == 'lock':
+                    raise Unavailable() from LockNotAvailable('canceling statement due to lock timeout')
+                return {'retryAfterSeconds': 0}
+
+            def note_transport_failure(self, permit):
+                return None
+
         module = types.ModuleType('postriff_phase2.discord.rate_limits')
         module.RateDelayed, module.SharedPostgresBudget = RateDelayed, SharedPostgresBudget
         package, discord = types.ModuleType('postriff_phase2'), types.ModuleType('postriff_phase2.discord')
         discord.rate_limits, package.discord = module, discord
-        saved = {name: sys.modules.get(name) for name in ('postriff_phase2', 'postriff_phase2.discord', 'postriff_phase2.discord.rate_limits')}
-        sys.modules.update({'postriff_phase2': package, 'postriff_phase2.discord': discord, 'postriff_phase2.discord.rate_limits': module})
+        names = ['postriff_phase2', 'postriff_phase2.discord', 'postriff_phase2.discord.rate_limits']
+        mounted = {'postriff_phase2': package, 'postriff_phase2.discord': discord, 'postriff_phase2.discord.rate_limits': module}
+        if getattr(self, 'with_hooks', False):
+            class PostgresWorker:
+                def release_discord_unsent(self, claimed, *, reason='shutdown', retry_after_seconds=None, rate_cause=None, rate_scope=None):
+                    return claimed != 'not mine'
+
+            class DiscordProvider:
+                def __init__(self):
+                    self.rate_coordinator_degraded = False
+
+            worker, connectors = types.ModuleType('postriff_phase2.hosted_worker'), types.ModuleType('postriff_phase2.social_connectors')
+            worker.PostgresWorker, connectors.DiscordProvider = PostgresWorker, DiscordProvider
+            package.hosted_worker, package.social_connectors = worker, connectors
+            mounted.update({'postriff_phase2.hosted_worker': worker, 'postriff_phase2.social_connectors': connectors})
+            names += ['postriff_phase2.hosted_worker', 'postriff_phase2.social_connectors']
+            self.hook_classes = (PostgresWorker, DiscordProvider)
+        saved = {name: sys.modules.get(name) for name in names}
+        sys.modules.update(mounted)
         self.addCleanup(lambda: [sys.modules.pop(n, None) if v is None else sys.modules.__setitem__(n, v) for n, v in saved.items()])
+        self.fake_errors = (Unavailable, LockNotAvailable)
         return SharedPostgresBudget, RateDelayed, Permit, Identity
 
     def test_the_wrapper_logs_every_attempt_and_changes_nothing(self):
@@ -597,11 +631,77 @@ class AttemptLog(unittest.TestCase):
             budget().reserve_read('GET', '/guilds/1392000000000000007', identity=identity())
         handle.flush()
         row = json.loads(path.read_text().splitlines()[0])
-        self.assertEqual((row[7], row[8], row[9], row[10]), ('E', None, None, 'LockNotAvailable:55P03'))
+        self.assertEqual((row[7], row[8], row[9], row[10]), ('E', None, 'Unavailable', 'LockNotAvailable:55P03'))
         stats = analysis.attempt_statistics([row], created_posts=1)
         self.assertEqual(stats['errors'], 1)
         self.assertEqual(stats['errorsByCause'], {'read LockNotAvailable:55P03': 1})
         self.assertIn('LockNotAvailable:55P03', '\n'.join(analysis.attempt_lines(stats)))
+
+    def test_the_answer_recorded_is_timed_and_a_lock_timeout_in_it_is_logged_with_its_route(self):
+        import discord_lane_cap_invoke as invoke
+        budget, delayed, permit, identity = self.fake_coordinator()
+        path = Path(tempfile.mkdtemp(prefix='cap-attempts-')) / 'a.jsonl'
+        self.addCleanup(shutil.rmtree, path.parent, True)
+        handle = invoke.instrument_coordinator(str(path), 'lane2')
+        self.addCleanup(handle.close)
+        coordinator = budget()
+        got = coordinator.reserve_read('GET', '/guilds/1392000000000000007/channels', identity=identity())
+        self.assertEqual(invoke.CURRENT['permit'], 'permit-read')
+        invoke.CURRENT['permit'] = None  # the request left: the transport shim stamped it and cleared the permit
+        self.assertEqual(coordinator.observe(got, {'status': 200}), {'retryAfterSeconds': 0})
+        self.assertEqual(invoke.CURRENT['permit'], None, 'an observation after the request must not stamp the next one')
+        with self.assertRaises(self.fake_errors[0]):
+            coordinator.observe(got, {'status': 'lock'})
+        coordinator.note_transport_failure(got)
+        handle.flush()
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        self.assertEqual([(r[2], r[7]) for r in rows], [('read', 'A'), ('observe', 'A'), ('observe', 'E'), ('note_failure', 'A')])
+        self.assertEqual(rows[1][4], '/guilds/{id}/channels', 'the observation names the route of its permit')
+        self.assertEqual((rows[2][9], rows[2][10], rows[2][11]), ('Unavailable', 'LockNotAvailable:55P03', 'permit-read'),
+                         'the failed observation names its permit')
+        summary = analysis.coordinator_failures(rows, {}, 0.0, {})
+        self.assertEqual(summary['byOperation']['observe']['lockTimeouts'], 1)
+        self.assertEqual(summary['totals']['lockTimeoutsInObserve'], 1)
+        self.assertEqual(summary['totals']['lockTimeoutsInReserve'], 0)
+        self.assertEqual(analysis.attempt_statistics(rows)['attempts'], 1, 'the reservation table counts reads, reserves and consumes only')
+
+    def test_a_release_and_the_moment_the_provider_is_degraded_are_logged_as_events(self):
+        import discord_lane_cap_invoke as invoke
+        self.with_hooks = True
+        budget, delayed, permit, identity = self.fake_coordinator()
+        worker_class, provider_class = self.hook_classes
+        path = Path(tempfile.mkdtemp(prefix='cap-attempts-')) / 'a.jsonl'
+        self.addCleanup(shutil.rmtree, path.parent, True)
+        handle = invoke.instrument_coordinator(str(path), 'lane5')
+        self.addCleanup(handle.close)
+        provider = provider_class()
+        self.assertFalse(provider.rate_coordinator_degraded)
+        coordinator = budget()
+        got = coordinator.reserve_read('GET', '/guilds/1392000000000000007', identity=identity())
+        with self.assertRaises(self.fake_errors[0]):
+            coordinator.observe(got, {'status': 'lock'})
+        provider.rate_coordinator_degraded = True  # what the provider does when an observation failed
+        provider.rate_coordinator_degraded = True  # set again: not a second event
+        self.assertTrue(provider.rate_coordinator_degraded)
+        self.assertTrue(worker_class().release_discord_unsent({}, reason='rate_delayed', retry_after_seconds=300, rate_cause=None, rate_scope=None))
+        self.assertFalse(worker_class().release_discord_unsent('not mine', reason='rate_delayed', retry_after_seconds=2.5))
+        self.assertTrue(worker_class().release_discord_unsent({}, reason='rate_delayed', retry_after_seconds=1.25, rate_cause='rate_budget',
+                                                              rate_scope='application'))
+        handle.flush()
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        events = [r for r in rows if r[2] == 'event']
+        self.assertEqual([(r[3], r[8]) for r in events if r[3] == 'release'], [('release', 300.0), ('release', 1.25)],
+                         'a release that did not happen (not the owner) is not an event')
+        degraded = [r for r in events if r[3] == 'degraded']
+        self.assertEqual(len(degraded), 1)
+        self.assertIn('after observe', degraded[0][4])
+        self.assertEqual((degraded[0][9], degraded[0][10]), ('Unavailable', 'LockNotAvailable:55P03'), 'the failed call just before it')
+        summary = analysis.coordinator_failures(rows, {'coordinator_degraded': 3}, rows[0][0] - 60.0, {'0': 140, '1': 150, '2': 20})
+        self.assertEqual((summary['releases']['total'], summary['releases']['about300Seconds'], summary['releases']['quotedWait']), (2, 1, 1))
+        self.assertEqual((summary['degraded']['processes'], summary['degraded']['events']), (1, 1))
+        self.assertGreater(summary['degraded']['firstAfterDue'], 59.0)
+        self.assertEqual(summary['laneStopped'], {'coordinator_degraded': 3})
+        self.assertEqual(summary['createsPerMinute']['median'], 145.0)
 
     def test_a_tree_without_booking_is_logged_as_before(self):
         import discord_lane_cap_invoke as invoke
@@ -717,6 +817,35 @@ class SeedingRetries(unittest.TestCase):
         with self.assertRaises(unavailable):
             fake.provider._discord_http('POST', '/channels/1393000000000000001/messages')
         self.assertEqual(len(calls), 1)
+
+
+class CoordinatorFailureReceipt(unittest.TestCase):
+    def test_a_clean_run_prints_its_zeros_and_a_missing_log_says_not_measured(self):
+        call = [100.0, 0.05, 'read', 'GET', '/guilds/{id}', 'bot', 1, 'A', None, None, None, 'p1', 'lane1', 0.0, 0.0, None]
+        summary = analysis.coordinator_failures([call], {'idle': 12}, 90.0, {'0': 150})
+        text = '\n'.join(analysis.coordinator_failure_lines(summary))
+        for expected in ('Lock timeouts: 0 in reserve', '0 in consume', '0 in observe', '300 s', 'was never set', 'coordinator_degraded`: 0', 'Posts created a minute'):
+            self.assertIn(expected, text)
+        self.assertIn('NOT MEASURED', '\n'.join(analysis.coordinator_failure_lines(analysis.coordinator_failures([], {}, 0.0, {}))))
+
+    def test_the_cliff_is_counted_by_operation_and_cause(self):
+        def error(op, cause, outer='RateCoordinatorUnavailable', t=100.0, source='lane1'):
+            return [t, 2.0, op, 'GET', '/guilds/{id}', 'bot', 1, 'E', None, outer, cause, None, source, 0.0, 0.0, None]
+        rows = ([error('read', 'LockNotAvailable:55P03')] * 3 + [error('reserve', 'LockNotAvailable:55P03')] * 2
+                + [error('observe', 'LockNotAvailable:55P03')] * 4 + [error('consume', 'QueryCanceled:57014')]
+                + [error('abandon', 'OperationalError:08006')]
+                + [[200.0, 0.0, 'event', 'release', 'rate_rate', None, None, 'V', 300.0, None, None, None, 'lane1', 0.0, 0.0, None]] * 5)
+        summary = analysis.coordinator_failures(rows, {'coordinator_degraded': 2}, 0.0, {'0': 10})
+        totals = summary['totals']
+        self.assertEqual((totals['lockTimeoutsInReserve'], totals['lockTimeoutsInConsume'], totals['lockTimeoutsInObserve']), (5, 0, 4))
+        self.assertEqual(totals['unavailable'], 11)
+        self.assertEqual(summary['byOperation']['consume']['statementTimeouts'], 1)
+        self.assertEqual(summary['byOperation']['abandon']['otherErrors'], 1)
+        self.assertEqual(summary['releases']['about300Seconds'], 5)
+        text = '\n'.join(analysis.coordinator_failure_lines(summary))
+        self.assertIn('Lock timeouts: 5 in reserve', text)
+        self.assertIn('4 in observe', text)
+        self.assertIn('**5**', text, 'the 300 s releases are bold')
 
 
 class SchemaSet(unittest.TestCase):
@@ -839,7 +968,7 @@ class BookingReceipts(unittest.TestCase):
         lines = '\n'.join(analysis.booking_lines({'booking': summary}))
         for expected in ('bookedWaits 120', 'bookedSeconds 36.0', '2 of 3 admitted reads', 'coordinator.booking', 'horizonSeconds',
                          'bookedReads60s', 'meanBookedReadWaitSeconds60s', 'maxBookedReadWaitSeconds60s',
-                         'the number of slots bookings may still fill', 'coordinator.guards.policy'):
+                         'a 0 with a shallow horizon', 'coordinator.guards.policy'):
             self.assertIn(expected, lines)
         self.assertIsNone(analysis.booking_summary({}, 0, [], None, None), 'a tree with no booking shows none')
 

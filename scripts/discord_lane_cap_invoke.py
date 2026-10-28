@@ -121,16 +121,18 @@ GUILD0, CHANNEL0 = 1392000000000000000, 1393000000000000000  # the mock world's 
 
 
 def instrument_coordinator(path, source):
-    """Record every reservation attempt of the shared request coordinator in this process, and change nothing.
+    """Record every call of the shared request coordinator in this process, and change nothing.
 
-    reserve_read (a witness read, the grant check, the bot identity), reserve (the create permit) and consume (the create
-    leaving for the wire) are wrapped: each call is logged as one JSON array [time, seconds the call took, operation, method,
-    route with ids masked, credential kind, workspace index where the path names a server or channel, outcome (A admitted,
-    R refused with a wait, E error), the wait the coordinator quoted, its scope, its cause, the permit id when admitted,
-    the cron source of this process, seconds booked, seconds slept, book-ahead room the caller allowed]. For an error that is
-    not a refusal with a wait (outcome E) the cause column holds the class and SQLSTATE of the failure the coordinator hid.
-    A refused reservation leaves no row in the database, so this log is the only record of the wait it was quoted. The
-    wrapped methods return and raise exactly what the originals do.
+    reserve_read (a witness read, the grant check, the bot identity), reserve (the create permit), consume (the create
+    leaving for the wire) and, after the request, observe (the answer recorded), note_transport_failure and
+    abandon_unsent_read are wrapped: each call is logged as one JSON array [time, seconds the call took, operation (read,
+    reserve, consume, observe, note_failure, abandon), method, route with ids masked, credential kind, workspace index where
+    the path names a server or channel, outcome (A admitted, R refused with a wait, E error), the wait the coordinator quoted,
+    its scope, its cause, the permit id when admitted, the cron source of this process, seconds booked, seconds slept, book-ahead
+    room the caller allowed]. For an error that is not a refusal with a wait (outcome E) the scope column holds the class of the
+    error (RateCoordinatorUnavailable) and the cause column the class and SQLSTATE of the failure the coordinator hid
+    (LockNotAvailable:55P03 is a lock timeout). A refused reservation leaves no row in the database, so this log is the only
+    record of the wait it was quoted. The wrapped methods return and raise exactly what the originals do.
 
     Booking (rate_limits.booking(), the lane's own): a reserve or reserve_read that finds the application window full may
     book the next free slot and SLEEP INSIDE THE CALL until it comes, up to a second, and then return the permit. So an
@@ -138,12 +140,19 @@ def instrument_coordinator(path, source):
     seconds the coordinator booked for this call (the difference of its own booking_stats(), 0 when it did not book), the
     seconds the call actually spent in the wait for the slot and the gate after it (a wrapper around _wait_for_slot, 0 when
     that does not exist in the tree), and the room the caller allowed (`book_ahead`, None when it did not pass one, as
-    outside booking()). A tree without booking leaves all three at 0, 0, None. Older logs have the first 13 columns only."""
+    outside booking()). A tree without booking leaves all three at 0, 0, None. Older logs have the first 13 columns only.
+
+    Events go in the same file as rows with operation `event` and outcome V: a release of a post (the worker's
+    release_discord_unsent: the reason, the seconds it was released for, the rate scope and cause; a coordinator that is
+    unavailable releases for 300 s) and the moment `rate_coordinator_degraded` is set on the Discord provider of this process
+    (after that every request of the process is refused before transport), with the coordinator call that failed just before."""
     import threading
     from postriff_phase2.discord import rate_limits as limits
     handle = open(path, 'a', buffering=1)
     cls = limits.SharedPostgresBudget
     waited = threading.local()  # seconds this thread spent in _wait_for_slot since the wrapped call began
+    last_failed = threading.local()  # the coordinator call that failed last on this thread: (operation, outer class, cause)
+    routes = {}  # permit id -> (method, target): an observation names its permit only
 
     def workspace(target):
         match = re.match(r'/(guilds|channels)/([0-9]{5,25})', target)
@@ -167,19 +176,29 @@ def instrument_coordinator(path, source):
         (`raise ... from None`); the context is still on the exception. Its class and SQLSTATE go in the cause column."""
         if error is None or isinstance(error, limits.RateDelayed):
             return None
-        inner = getattr(error, '__context__', None)
+        inner = getattr(error, '__context__', None) or getattr(error, '__cause__', None)
         if inner is None:
             return type(error).__name__
         return '%s:%s' % (type(inner).__name__, getattr(inner, 'sqlstate', None) or getattr(getattr(inner, 'diag', None), 'sqlstate', None) or '')
 
     def emit(operation, method, target, identity, started, took, outcome, error=None, permit=None, booked=0.0, slept=0.0,
              room=None):
+        failed = outcome == 'E'
         row = [round(started, 4), round(took, 4), operation, method, re.sub(r'/[0-9]{5,25}', '/{id}', target.split('?')[0]),
                getattr(identity, 'kind', None), workspace(target), outcome,
                round(error.retry_after_seconds, 4) if isinstance(error, limits.RateDelayed) else None,
-               getattr(error, 'rate_scope_kind', None), getattr(error, 'rate_cause', None) or hidden_cause(error),
+               getattr(error, 'rate_scope_kind', None) or (type(error).__name__ if failed else None),
+               getattr(error, 'rate_cause', None) or hidden_cause(error),
                getattr(permit, 'id', None), source, round(booked, 4), round(slept, 4),
                round(float(room), 3) if isinstance(room, (int, float)) else None]
+        handle.write(json.dumps(row, separators=(',', ':')) + '\n')
+        if failed:
+            last_failed.value = (operation, row[9], row[10])
+
+    def emit_event(kind, detail, retry_after=None, scope=None, cause=None):
+        row = [round(time.time(), 4), 0.0, 'event', kind, str(detail)[:160], None, None, 'V',
+               round(float(retry_after), 3) if isinstance(retry_after, (int, float)) else None, scope, cause, None, source,
+               0.0, 0.0, None]
         handle.write(json.dumps(row, separators=(',', ':')) + '\n')
 
     if hasattr(cls, '_wait_for_slot'):
@@ -224,13 +243,74 @@ def instrument_coordinator(path, source):
             permit = permit_arg if consuming else result
             emit(operation, method, target, identity, started, time.monotonic() - began, 'A', None, permit,
                  booked_by_this_call(), getattr(waited, 'seconds', 0.0), room)
+            if getattr(permit, 'id', None) and len(routes) < 4096:
+                routes[permit.id] = (method, target)
             if operation != 'reserve':  # a create permit is stamped when it is consumed, just before the POST
                 CURRENT['permit'] = getattr(permit, 'id', None)  # the slot has come: the next request is this admission's
+            return result
+        setattr(cls, name, wrapper)
+
+    def wrap_after(name, operation):
+        """A call made after the request left (the permit is its first argument): timed and logged, never stamping a permit."""
+        original = getattr(cls, name)
+
+        @functools.wraps(original)
+        def wrapper(self, *args, **kwargs):
+            started, began = time.time(), time.monotonic()
+            permit = args[0] if args else kwargs.get('permit')
+            method, target = routes.get(getattr(permit, 'id', None), (getattr(permit, 'method', '?'), ''))
+            identity = getattr(permit, 'identity', None)
+            try:
+                result = original(self, *args, **kwargs)
+            except BaseException as error:
+                emit(operation, method, target, identity, started, time.monotonic() - began,
+                     'R' if isinstance(error, limits.RateDelayed) else 'E', error, permit)
+                raise
+            emit(operation, method, target, identity, started, time.monotonic() - began, 'A', None, permit)
             return result
         setattr(cls, name, wrapper)
     for name, operation in (('reserve_read', 'read'), ('reserve', 'reserve'), ('consume', 'consume')):
         if hasattr(cls, name):
             wrap(name, operation)
+    for name, operation in (('observe', 'observe'), ('note_transport_failure', 'note_failure'),
+                            ('abandon_unsent_read', 'abandon'), ('abandon_unsent_nickname', 'abandon')):
+        if hasattr(cls, name):
+            wrap_after(name, operation)
+
+    # Events. Each hook is evidence, not part of the system under test: if the tree has no such place, it is left out.
+    try:
+        from postriff_phase2 import hosted_worker
+        worker_class = hosted_worker.PostgresWorker
+        original_release = worker_class.release_discord_unsent
+
+        @functools.wraps(original_release)
+        def release(self, claimed, *args, **kwargs):
+            result = original_release(self, claimed, *args, **kwargs)
+            if result:
+                emit_event('release', kwargs.get('reason', 'shutdown'), kwargs.get('retry_after_seconds'),
+                           kwargs.get('rate_scope'), kwargs.get('rate_cause'))
+            return result
+        worker_class.release_discord_unsent = release
+    except (ImportError, AttributeError):
+        pass
+    try:
+        from postriff_phase2 import social_connectors
+        provider_class = social_connectors.DiscordProvider
+        if 'rate_coordinator_degraded' not in provider_class.__dict__:
+            def degraded_get(self):
+                return self.__dict__.get('_cap_degraded', False)
+
+            def degraded_set(self, value):
+                was = self.__dict__.get('_cap_degraded', False)
+                self.__dict__['_cap_degraded'] = bool(value)
+                if value and not was:
+                    frame = sys._getframe(1)
+                    failed = getattr(last_failed, 'value', None)
+                    emit_event('degraded', '%s:%d after %s' % (frame.f_code.co_name, frame.f_lineno, failed[0] if failed else 'no failed call'),
+                               None, failed[1] if failed else None, failed[2] if failed else None)
+            provider_class.rate_coordinator_degraded = property(degraded_get, degraded_set)
+    except (ImportError, AttributeError):
+        pass
     return handle
 
 

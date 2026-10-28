@@ -204,11 +204,26 @@ no real secret.
   process at a low priority, not counted among the invocations) every `health_period_seconds` (60; 0 turns it off) and once after
   the run, and keeps the reduced readings in `health-samples.jsonl`. The receipt prints, over the busy readings, `coordinator.booking`
   (`bookAheadSeconds`, `aheadNow`, `horizonSeconds`, `bookedReads60s`, `bookedReadWaitSeconds60s`, `meanBookedReadWaitSeconds60s`,
-  `maxBookedReadWaitSeconds60s`), the application row `coordinator.guards.policy` and `coordinator.traffic.admissions60s`. **With
-  booking the application row means something else**: `remaining` is the number of slots bookings may still fill (the cap less the
-  held and less the slot kept for callers that cannot wait) and `resetSeconds` when a booking is possible again, so a busy lane
-  keeps it high and it falls to 0 only when the booked horizon is full and callers are refused again; it is no longer "the window
-  is nearly spent". A tree before the route answers 404; the receipt says so and shows no booking reading.
+  `maxBookedReadWaitSeconds60s`), the application row `coordinator.guards.policy` and `coordinator.traffic.admissions60s`. **The
+  application row means something else once the lane books, and the meaning depends on the head.** At 02fd679b `remaining` counted
+  the free slots among the wires at or before now: 0 whenever the last 1.1 s held 24 sent wires, which a saturated lane does all
+  the time (21 of the 35 busy readings of S1 1028c, with the booked horizon never above 0.225 of 1.0 s), so it did not read "the
+  horizon is full". From 40db2440 it is the room the booked horizon still has, 0 exactly when a booking of the whole horizon would
+  be refused. The receipt prints `remaining` next to `horizonSeconds` and counts the readings where `remaining` is 0 while the
+  horizon is under half of `bookAheadSeconds`, so a head's meaning can be checked from its own readings. A tree before the route
+  answers 404; the receipt says so and shows no booking reading.
+- **Coordinator failures (the database-latency cliff of the scope-B review).** Printed for every run, zeros included. The invocation
+  wrapper logs, besides the reservation calls, `observe` (the answer recorded), `note_transport_failure` and `abandon_unsent_read`,
+  and two kinds of event in the same file (operation `event`): a **release** of a post (the worker's `release_discord_unsent`: the
+  reason, the seconds it was released for, the rate scope and cause; a coordinator that is unavailable releases for 300 s) and the
+  moment `rate_coordinator_degraded` is set on a process's Discord provider (after which every request of that process is refused
+  before transport), with the coordinator call that failed just before it. An error row holds the error class (scope column) and
+  the class and SQLSTATE of the failure the coordinator hid (cause column). The receipt counts, by operation: calls, errors,
+  RateCoordinatorUnavailable, **lock timeouts (55P03) in reserve, in consume and in observe**, statement timeouts (57014), deadlocks
+  (40P01); the releases (about 300 s, quoted, none given) by reason and cause; whether and when the degraded flag was set, in how
+  many processes, and the lane invocations that stopped as `coordinator_degraded`; and the posts created a minute (median of the
+  full minutes, least, most, best five in a row), not only lateness. Profile `sens` (S1 with 12 loops and S1-24 with 24) is the
+  request for the database round trip sensitivity: one request for each `--latency` (5 and 10).
 - **Lock statements.** The coordinator's `_locked` statement counted from `pg_stat_statements`: the exclusive form (`FOR UPDATE`:
   one per reservation attempt, and per observation that cannot share the lock), the shared form (`FOR SHARE` guards: a GET
   observation that can share), and the seeding statement, with calls per created post, mean and maximum time (a wait for the row
@@ -246,6 +261,7 @@ mode. It uses no secret and no environment, has a read-only token, fetches exact
 | `devset` | the development measurement set: S1, S0-100, Fdb, Fcrash, F429, one runner each, all at once |
 | `s0100`, `fdb`, `fcrash`, `f429` | one scenario of the development set alone, to run it again after a failure or a change (the branch name is `claude/discord-capacity-run-<profile>-<suffix>` as for every profile) |
 | `s1lane56` | S1 with each lane loop budgeted 56 s (`POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS=56`) instead of 50: the duty-cycle lever alone, to read next to the S1 of the same tree |
+| `sens` | S1 (12 loops) and S1-24 (24 loops) in one request, for the database round trip sensitivity of the scope-B review: send one request for each `--latency` (5 and 10 ms; 2 ms is the harness default) and read the receipt's "Coordinator failures" section |
 | `faults` | F429, F5xx, Fcrash, Fdb, Fexpiry, Fstall, Fflip, Nmisroute, Ndup, Nceiling |
 | `release` | every scenario, baseline included |
 | `baseline` | the frozen minute worker on the request's baseline SHA (default RC1) |
@@ -257,7 +273,7 @@ PostgreSQL's log and PgBouncer's log. The per-run environment files are never up
 
 `python3 docs/w02/ci/run_tests.py` runs the workflow's own blocks against local git repositories. It covers request
 validation, exact-SHA fetches, the request script, action-validator and shellcheck. With `POSTRIFF_PG_BIN` set it
-adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (119 checks).
+adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (123 checks).
 
 ## The official run on Depot
 

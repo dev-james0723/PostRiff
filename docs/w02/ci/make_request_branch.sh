@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build one capacity-run request branch: an orphan commit holding only the workflow, capacity/REQUEST.json and a
 # vercel.json that keeps Git deployments off. Nothing in it is secret; the run uses synthetic data only.
-# usage: make_request_branch.sh <smoke|s0|s1|s2|faults|release|lockbench|baseline|s1levers|s2sizes|devset|s0100|fdb|fcrash|f429|s1lane56> <suffix> <tree sha> <harness sha> [options] [--push]
+# usage: make_request_branch.sh <smoke|s0|s1|s2|faults|release|lockbench|baseline|s1levers|s2sizes|devset|s0100|fdb|fcrash|f429|s1lane56|sens> <suffix> <tree sha> <harness sha> [options] [--push]
 #   (lockbench: only the shared request coordinator under K processes; --pools gives the pool size, --latency is unused)
 #   (baseline: the frozen minute worker on the --baseline tree, default RC1, for its posts per minute)
 #   (s1levers: S1 as control, then S1 with the lane loop budget at 58 s and 70 s, and S1 with warm invocations)
@@ -9,12 +9,13 @@
 #   (devset: the development measurement set, S1, S0-100, Fdb, Fcrash and F429, on separate runners at once)
 #   (s0100, fdb, fcrash, f429: one scenario of the devset alone, to run it again after a failure or a change)
 #   (s1lane56: S1 with each lane loop budgeted 56 s instead of 50, the duty-cycle lever alone; compare with the S1 of the same tree)
+#   (sens: S1 with 12 lane loops and S1-24 with 24, for the database round trip sensitivity: one request for each --latency, e.g. 5 and 10)
 #   --pools 20          one to four pool sizes of 15 to 120, comma separated (default 20)
 #   --latency 2         database round trip in ms, 0 to 99.9 (default 2)
 #   --baseline <sha>    frozen tree for the baseline scenario (default RC1 2a5a523d...)
 # Without --push nothing leaves this machine; the commit and branch name are printed.
 set -euo pipefail
-profile="${1:?profile: smoke, s0, s1, s2, faults, release, lockbench, baseline, s1levers, s2sizes, devset, s0100, fdb, fcrash, f429 or s1lane56}"
+profile="${1:?profile: smoke, s0, s1, s2, faults, release, lockbench, baseline, s1levers, s2sizes, devset, s0100, fdb, fcrash, f429, s1lane56 or sens}"
 suffix="${2:?a short lower-case suffix}"
 sha="${3:?the 40 hex SHA of the tree under test}"
 harness="${4:?the 40 hex SHA of the harness commit (branch claude/discord-w02-capacity-20261023)}"
@@ -32,7 +33,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option: $1"; exit 2 ;;
   esac
 done
-[[ "$profile" =~ ^(smoke|s0|s1|s2|faults|release|lockbench|baseline|s1levers|s2sizes|devset|s0100|fdb|fcrash|f429|s1lane56)$ ]] || { echo 'profile must be smoke, s0, s1, s2, faults, release, lockbench, baseline, s1levers, s2sizes, devset, s0100, fdb, fcrash, f429 or s1lane56'; exit 2; }
+[[ "$profile" =~ ^(smoke|s0|s1|s2|faults|release|lockbench|baseline|s1levers|s2sizes|devset|s0100|fdb|fcrash|f429|s1lane56|sens)$ ]] || { echo 'profile must be smoke, s0, s1, s2, faults, release, lockbench, baseline, s1levers, s2sizes, devset, s0100, fdb, fcrash, f429, s1lane56 or sens'; exit 2; }
 [[ "$suffix" =~ ^[a-z0-9]{1,12}$ ]] || { echo 'suffix must be 1 to 12 lower-case letters or digits'; exit 2; }
 for value in "$sha" "$harness" "$baseline"; do
   [[ "$value" =~ ^[0-9a-f]{40}$ ]] || { echo 'every SHA must be 40 lower-case hex characters'; exit 2; }
