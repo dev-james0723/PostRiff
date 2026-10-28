@@ -268,3 +268,26 @@ FAILED (failures=2)
 
 Unmutated: the test passes.
 
+### 5.2 N-10: migration 141's function settings and ACL (mutations N7a, N7b)
+
+N7a drops `SET search_path = ''` from the SECURITY DEFINER function; N7b drops its `REVOKE ALL ... FROM PUBLIC, anon, authenticated, service_role`. Neither was caught before. Two new checks: `RunbookStatements.test_migration_141_pins_the_functions_search_path_and_who_may_execute_it` (the file, no database) and catalog assertions in `test_m9_the_monitoring_function_reads_the_snapshot_and_nothing_else` (after applying 141 twice: `prosecdef`, `proconfig = ['search_path=""']`, and the non-superuser roles with EXECUTE are exactly the owner and the reader). Each mutation, applied to this worktree and then restored:
+
+```
+== N7a
+FAIL: test_migration_141_pins_the_functions_search_path_and_who_may_execute_it
+AssertionError: "CREATE OR REPLACE FUNCTION public.pr_discord_ops_snapshot() RETURNS jsonb\nLANGUAGE sql SECURITY DEFINER SET search_path = '' AS $snapshot$" not found in "-- 141: a read-only Discord 
+FAIL: test_m9_the_monitoring_function_reads_the_snapshot_and_nothing_else
+AssertionError: Tuples differ: (True, None) != (True, ['search_path=""'])
+Ran 2 tests in 11.283s
+FAILED (failures=2)
+== N7b
+FAIL: test_migration_141_pins_the_functions_search_path_and_who_may_execute_it
+AssertionError: 'REVOKE ALL ON FUNCTION public.pr_discord_ops_snapshot() FROM PUBLIC, anon, authenticated, service_role;' not found in "-- 141: a read-only Discord operations snapshot for a dedicated 
+FAIL: test_m9_the_monitoring_function_reads_the_snapshot_and_nothing_else
+AssertionError: Lists differ: ['anon', 'authenticated', 'pg_checkpoint', [370 chars]ole'] != ['rafii_discord_ops_projection', 'rafii_discord_ops_reader']
+Ran 2 tests in 12.530s
+FAILED (failures=2)
+```
+
+Unmutated: both pass.
+

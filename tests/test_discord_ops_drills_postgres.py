@@ -37,6 +37,17 @@ class RunbookStatements(unittest.TestCase):
         body = migration.split('$snapshot$\n', 1)[1].split('\n$snapshot$', 1)[0]
         self.assertEqual(' '.join(body.split()), ' '.join(twin.strip().rstrip(';').split()))
 
+    def test_migration_141_pins_the_functions_search_path_and_who_may_execute_it(self):
+        """Second review N-10 (mutations N7a, N7b): a SECURITY DEFINER function without its empty search_path, or left
+        executable by PUBLIC (and so by Supabase's anon, authenticated and service_role), passed every test."""
+        migration = (drills.ROOT / 'migrations/postriff/141_discord_ops_snapshot_reader.sql').read_text()
+        self.assertIn("CREATE OR REPLACE FUNCTION public.pr_discord_ops_snapshot() RETURNS jsonb\n"
+                      "LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $snapshot$", migration)
+        self.assertIn('REVOKE ALL ON FUNCTION public.pr_discord_ops_snapshot() FROM PUBLIC, anon, authenticated, service_role;',
+                      migration)
+        self.assertEqual(re.findall(r'GRANT EXECUTE ON FUNCTION public\.pr_discord_ops_snapshot\(\) TO ([^;]+);', migration),
+                         ['rafii_discord_ops_reader'])
+
     def test_the_on_call_automatic_hold_runs_the_runbooks_own_statements(self):
         from rafii_control.oncall import autohold
         self.assertEqual(autohold.HOLD_ON, autohold.runbook_block('HOLD_ON'))
@@ -123,6 +134,15 @@ class IsolatedDrills(unittest.TestCase):
                 mine, theirs = mine[key], theirs[key]
             self.assertEqual(mine, theirs, path)
         self.assertEqual((snapshot['kind'], snapshot['version'], snapshot['source']), ('rafii.discord.ops.health', 1, 'sql'))
+        # Second review N-10: the catalog, not the file: definer rights, the empty search_path, and who may execute it
+        # (superusers bypass privileges and are left out; the owner keeps EXECUTE).
+        definer, settings = lab.sql("SELECT prosecdef, proconfig FROM pg_proc "
+                                    "WHERE oid = 'public.pr_discord_ops_snapshot()'::regprocedure")[0]
+        self.assertEqual((definer, settings), (True, ['search_path=""']))
+        executors = sorted(name for (name,) in lab.sql(
+            "SELECT rolname FROM pg_roles WHERE NOT rolsuper "
+            "AND has_function_privilege(oid, 'public.pr_discord_ops_snapshot()'::regprocedure, 'EXECUTE')"))
+        self.assertEqual(executors, ['rafii_discord_ops_projection', 'rafii_discord_ops_reader'])
         roles = dict(lab.sql("SELECT rolname, rolbypassrls OR rolsuper OR rolcanlogin FROM pg_roles "
                              "WHERE rolname IN ('rafii_discord_ops_projection', 'rafii_discord_ops_reader')"))
         self.assertEqual(roles, {'rafii_discord_ops_projection': False, 'rafii_discord_ops_reader': False})
