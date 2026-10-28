@@ -63,6 +63,8 @@ Numbers that follow from the code today: six requests per post; the policy ceili
 
 ### 4A. Normal-load service level (draft, for the owner to adopt or change)
 
+> **Adopted by the owner on 2026-10-28 (reply 17, D-3 as recommended): the promised normal load is 100 posts a minute across all customers** (the S0-100 scenario passes; 250 a minute stays a measured capacity figure, not a promise). The 5,000-post spike standard of section 4 is unchanged.
+
 The benchmark above is a release test for an extreme spike. What customers are promised is the normal-load service level, measured over posts due in minutes when at most 250 Discord posts were due across all customers (about 4 a second, the rate the reviewed 25-requests-a-second ceiling can sustain at six requests per post):
 
 | Measure | Target |
