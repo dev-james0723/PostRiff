@@ -204,6 +204,15 @@ between an automation decision and its queue commit makes the commit ask for a n
 `LaneAndWorkerOnPostgres::test_a_bot_post_approved_under_one_nickname_is_held_when_the_server_nickname_changed` and
 `::test_a_frozen_bot_nickname_adds_no_request_to_a_bot_post`.
 
+The observation has two writers that can race, and one fence: a member verification reads Discord outside any transaction and then
+commits the nickname it saw; a nickname save or a claim that commits in between is newer. The verification's "unchanged since the
+read" fence now includes `discordBotNickname`, `discordSenderEdit`, `discordSenderName` and `discordSenderRevision`, so such a
+verification fails closed (`verification_unavailable`, no freshness extended) instead of putting the previous nickname back, which
+the next review would have frozen and the dispatch then held on (delta review SNR2-6;
+`test_discord_sender_name_claims.py::NicknameObservation::test_a_verification_that_read_discord_before_a_sender_change_cannot_commit_over_it`).
+The freeze needs a prior observation at all (installing the bot records none); that is documented for the page in the contract
+(delta review SNR2-5).
+
 ## 6. Concurrency
 
 | Case | Control | Proof |
@@ -227,10 +236,11 @@ reserved word after folding.
 
 | Threat | Control | Test |
 | --- | --- | --- |
-| `discord`, `clyde` (Discord's own rule for webhook names) in any case, for webhook AND bot names | refused | `test_discord_sender_name_rules.py::Refused` |
+| `discord`, `clyde` (Discord's own rule for webhook usernames) in any case, in WEBHOOK names. Discord restricts usernames, not server nicknames, so a bot nickname may carry them (delta review SNR2-9) | refused for webhooks, accepted for bot nicknames | `test_discord_sender_name_rules.py::Refused`, `::Accepted` |
 | homoglyphs: Cyrillic or Greek look-alikes, full-width letters, accents, separators, leetspeak (`d1scord`, `d i s c o r d`) | the reserved-word comparison folds NFKD, strips marks, maps a compact confusables set, drops separators and tries both `1` readings | `::Refused` |
-| `everyone`, `here` as the whole name | refused | `::Refused` |
-| impersonating the product (`rafii`, `postriff` anywhere) | refused. This is a policy choice, one tuple (`_RESERVED_PARTS`), easy to change | `::Refused` |
+| `everyone`, `here` as the whole name (Discord's reserved usernames: webhook names only) | refused for webhooks | `::Refused`, `::Accepted` |
+| impersonating the product (`rafii`, `postriff` anywhere), in both kinds | refused. This is a policy choice, two tuples (`_RESERVED_PARTS` for webhooks, `_BOT_RESERVED_PARTS` for nicknames), easy to change | `::Refused` |
+| an unpaired surrogate in a name (a JSON body can carry one) | refused as `control_or_format`; the length is counted without encoding, so it never reaches an encoder (delta review SNR2-1) | `::Refused`, `test_discord_sender_name_routes.py::Bodies` |
 | impersonating another customer | not preventable and not attempted: names are self-asserted, exactly as with any Discord webhook, and a name is only ever shown in the customer's own channel. A uniqueness check would itself leak other customers' names, so none is made | n/a (accepted) |
 | mention syntax (`@everyone`, `<@id>`, `<@&id>`, `<#id>`), markdown links, URLs | the characters are refused, and independently every execute carries `allowed_mentions: {parse: []}`; Discord does not render markdown or links in an author line. A name cannot ping | `::test_a_name_cannot_ping_or_link`, `test_discord_sender_name_wire.py::test_content_that_mentions_everyone_still_cannot_ping` |
 | control, format, bidi override, zero-width, tag characters | refused | `::Refused` |
