@@ -1,5 +1,7 @@
 # OWNER DECISIONS PENDING (living document; none of them blocks today's engineering)
 
+> **Status 2026-10-28 14:17Z:** owner reply 16 ("I approve all", see `AUTHORIZATION-RECORD.md`) settled D-12, D-2 option (1), D-16, D-4 (300 approved Discord posts per workspace per hour), D-14 (1 h and 48 h) and D-1 / D-11 (defaults). Production operations are NOT covered and still need item-by-item approval. Still open: D-3, D-5, D-6 (H-07 people), D-7, D-8, D-9, D-10.
+
 Kept by the Release Captain. Written 2026-10-23 about 07:30Z, after owner reply 15. Nothing here is a request for approval of a Production operation (those are in `APPROVAL-PACKET-3-DRAFT.md`, not yet submitted). These are choices only the owner can make. Each says what I would choose, the strongest argument against it, the biggest risk, what would change my mind, and whether it can be undone. The release state is **NO-GO** until gates G1 to G7 all have evidence.
 
 Labels: [Certain] measured or read exactly; [Likely] strong inference; [Guessing] needs a fact I do not have.

@@ -1,5 +1,7 @@
 # Owner brief, 2026-10-28 (one page; the long version is `OWNER-DECISIONS-PENDING.md`)
 
+> **Answered 14:17Z on 2026-10-28 by reply 16 ("I approve all"):** items 1 to 4 below are decided as recommended; production operations, the on-call details (item 5) and the last items (6) are not covered. See `AUTHORIZATION-RECORD.md`.
+
 Release state: **NO-GO** (gates G1 to G7 are not all green). Nothing in Production has been built, promoted, changed or messaged. `rafii.io` still points to `dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg`. Engineering continues; every Production operation still needs your explicit approval (Packet 3, not yet submitted).
 
 ## What happened since 2026-10-23
