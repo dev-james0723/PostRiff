@@ -7,7 +7,7 @@
 Pure: no network, database or clock of its own except the optional `now` (epoch seconds) used to see whether the
 snapshot itself is stale, and the optional previous report (persistence and deltas). Rules are data-driven by
 docs/ops/discord-alert-thresholds.json. Six classes: BACKLOG, DELIVERY, RATE_LIMIT, SILENT_HALT, CROSS_TENANT and
-CONFIG; 40 alert ids. Severity is 'page', 'warn' or 'info' (the meaning for the person holding the pager is in the
+CONFIG; 47 alert ids. Severity is 'page', 'warn' or 'info' (the meaning for the person holding the pager is in the
 thresholds file and docs/ops/PHONE-RUNBOOK.md). The absence of the signal is an alarm: a missing, failed or malformed
 snapshot (wrong kind, version or source, or a required section missing) is SILENT_HALT_HEALTH_UNANSWERED, and every
 section the payload could not read (one entry of errors[]) is SILENT_HALT_SECTION for that section: a warning the first

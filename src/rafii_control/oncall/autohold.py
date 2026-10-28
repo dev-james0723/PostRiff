@@ -22,10 +22,12 @@ from pathlib import Path
 
 RUNBOOK = Path(__file__).resolve().parents[3] / 'docs' / 'ops' / 'PHONE-RUNBOOK.md'
 HOLD_ON = "UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy' RETURNING kind, manual_hold;"
-HOLD_READBACK = """SELECT count(*) AS policy_rows,
-       count(*) FILTER (WHERE manual_hold) AS held,
+HOLD_READBACK = """SELECT count(*) FILTER (WHERE scope_key LIKE '00:%') AS policy_rows,
+       count(*) FILTER (WHERE scope_key LIKE '00:%' AND manual_hold) AS held,
        (SELECT round(extract(epoch FROM now() - reserved_at)) FROM public.pr_discord_request_admissions
-         ORDER BY request_seq DESC LIMIT 1) AS seconds_since_last_request
+         ORDER BY request_seq DESC LIMIT 1) AS seconds_since_last_request,
+       count(*) FILTER (WHERE scope_key LIKE '01:%') AS bearer_rows,
+       count(*) FILTER (WHERE scope_key LIKE '01:%' AND manual_hold) AS bearer_held
 FROM public.pr_discord_rate_state WHERE kind = 'policy';"""
 
 

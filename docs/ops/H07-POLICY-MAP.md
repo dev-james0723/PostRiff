@@ -38,7 +38,7 @@ The owner adopted the on-call policy in reply 15 (`AUTHORIZATION-RECORD.md`) **a
 
 | # | Need | What exists (file:line) | Status |
 |---|---|---|---|
-| 18 | The Discord alerts (42 rule ids, `scripts/discord_ops_check.py`) feed the pipeline | Not connected. `rafii_control.founder_incidents.detector` has a CHECK of four values (`migrations/postriff/055_rafii_control_founder_contact.sql:63`), so a new detector needs an additive migration. | MISSING |
+| 18 | The Discord alerts (47 rule ids, `scripts/discord_ops_check.py`) feed the pipeline | Not connected. `rafii_control.founder_incidents.detector` has a CHECK of four values (`migrations/postriff/055_rafii_control_founder_contact.sql:63`), so a new detector needs an additive migration. | MISSING |
 | 19 | The absence of alerts is detected | `founder-watchdog.yml` runs every 10 minutes (`:11`) and fails when the founder cron heartbeat is older than 600 s (`founder_sources.py:177`, `:185-206`, `:247-277`). It needs the repository secret `RAFII_WATCHDOG_DSN`. It notifies only through GitHub (e-mail or app; no call). | PARTIAL |
 
 ## 5. Paths that can silence a P0 at night today
@@ -55,7 +55,7 @@ All of these are default settings or a person's own settings, so they need no fa
 
 The engine on this branch (`src/rafii_control/oncall/`) routes P0 around 1 to 5 by design: its own timers, a roster, no quiet hours for P0, and per-person, per-step idempotency. Items 6 and 7 are the owner's settings.
 
-## 6. The 42 alert rules as P0, P1 and P2 (a proposal the owner edits)
+## 6. The 47 alert rules as P0, P1 and P2 (a proposal the owner edits)
 
 P0 means "wake someone at 3 a.m.": it is dangerous to continue, or every customer is affected now. P1 is handled in duty hours and acknowledged within 15 minutes. P2 is e-mail and the dashboard. The machine-readable copy is `docs/ops/h07-oncall-policy.json` (`priorities`). The first matching row wins; anything not listed falls back to: page is P1, warn is P2.
 
@@ -81,6 +81,11 @@ P0 means "wake someone at 3 a.m.": it is dangerous to continue, or every custome
 | RATE_429 | P2 | P1 | coordinator should prevent |
 | RATE_APP_BUDGET_SPENT | P2 | | expected in a declared burst |
 | RATE_ROUTE_CIRCUITS | P2 | | Discord server errors, or 403 refusals (limiter head), on routes |
+| RATE_BEARER_BUDGET_SPENT | P2 | | the person's own OAuth calls spent their budget; those calls wait |
+| RATE_BOOKING_FULL | P2 | | the booked horizon is full: callers that cannot wait are refused |
+| RATE_COORDINATOR_DEGRADED | P1 | | a process stopped using the coordinator for 45 s after it failed to record an outcome |
+| RATE_COORDINATOR_BUSY | P1 | | the coordinator's database was repeatedly too slow to admit (lock or statement contention) |
+| COORD_LOCK_BOUND | P2 (severity info) | | an estimate: at the measured round trip the row lock, not the budget, caps admissions |
 | RATE_RETENTION_BEHIND | P2 | | the coordinator's settled rows are not being purged; housekeeping, no customer effect |
 | SILENT_HALT_NO_PROGRESS | P2 (only under a hold) | **P0** | nothing sends; approvals lapse after an hour |
 | SILENT_HALT_NO_SHARDS | | **P0** | shard crons do not run |

@@ -160,7 +160,7 @@ Seen afterwards on the limiter's head: `c6843f89` ("the read-back of a created p
     [{'state': 'verified', 'checks': 1, 'nextIn': (due)}, {'state': 'verified', 'checks': 1, 'nextIn': 4.8}, {'state': 'provider_accepted', 'checks': 0, 'nextIn': 0.9}, {'state': 'scheduled', 'checks': 0, 'nextIn': (due)}] POSTs 3 duplicates 0
 ```
 
-There the created post keeps its checks and waits 300 s per claim, and it is not parked when the coordinator returns. This branch keeps the hazard **open** in the runbook and the evidence until the Release Captain confirms the fix has landed where the serving build comes from.
+There the created post keeps its checks and waits 300 s per claim, and it is not parked when the coordinator returns. On 2026-10-28 (round 3) the Release Captain confirmed the fix and this branch merged the limiter's `0cb19962`, which contains it: the same probe on the merged branch shows the same (the created post `provider_accepted`, 0 checks, 300 s per claim; after the coordinator returns it is on its way to `verified`, 0.9 s away). N-1 is **fixed**; a build without the fix (RC1) still parks.
 
 ## 3. The reviewer's vacuous mutants re-run on this branch
 
