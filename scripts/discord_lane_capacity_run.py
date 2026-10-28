@@ -73,8 +73,11 @@ BASE = dict(workspaces=2000, posts=5000, hot_posts=0, per_minute=0, minutes=0, d
             budget_probe_delay_seconds=90, health_period_seconds=60, bearer_capacity=None,
             # The application's own connection pool (POSTRIFF_DB_POOL_ENABLED and its two limits, hosted_app.pool_settings): off in
             # production as far as is known. relay_connect_rtts: with `--pooler pgbouncer` the relay adds the round trips of a TLS and
-            # SCRAM connect to every new client connection (0 = none: a new connection then costs the startup exchange alone, one round trip).
-            db_pool=False, db_pool_max_connections=None, db_pool_max_waiting=None, relay_connect_rtts=0.0, expect=())
+            # SCRAM connect to every new client connection. Production opens a connection for every transaction through Supavisor with
+            # TCP, TLS and SCRAM (about 4 to 5 round trips, 25 connections a post at the head), so 4 is the default for every cell that is
+            # evidence; 0 gives the startup exchange alone, one round trip: what every hosted run up to 0cb19962's first batch (harness
+            # b91083b5) had, kept there as the reference. The scenarios S1-conn and S1-conn-pool name it (4.0) for that batch.
+            db_pool=False, db_pool_max_connections=None, db_pool_max_waiting=None, relay_connect_rtts=4.0, expect=())
 
 SCENARIOS = {
     'smoke': dict(workspaces=10, posts=30, cron_period=20, lane_max_seconds=15, shards=4, lead_seconds=10,
@@ -1576,19 +1579,7 @@ def machine_line(result, config):
             'Vercel runs each invocation on its own instance. CPU contention here can only slow the lane.' % (where, load))
 
 
-def connection_cost_text(config):
-    """What a new database connection costs in this run, said as it is. The harness's own pooler emulates `db_connect_rtts` round trips
-    (TLS and SCRAM) for every new client connection; the relay in front of a real PgBouncer (the hosted runs) does not read that setting:
-    a new connection there costs the startup exchange, one round trip, plus `relay_connect_rtts` when the scenario asks for them. Receipts
-    before this text said '4 round trips per new connection' for the hosted runs too, which was not what the relay did."""
-    s = config['settings']
-    if str(config.get('pooler') or '').startswith('PgBouncer'):
-        extra = float(s.get('relay_connect_rtts') or 0)
-        if extra:
-            return 'one round trip per new connection (the startup exchange) and %g more for TLS and SCRAM (relay_connect_rtts)' % extra
-        return ('one round trip per new connection (the startup exchange) and none for TLS and SCRAM: the relay in front of PgBouncer '
-                'does not read db_connect_rtts, which only the harness\'s own pooler applies')
-    return '%d round trips per new connection' % s['db_connect_rtts']
+connection_cost_text = analysis.connection_cost_text  # one text for the header and for the differences, kept in the analysis
 
 
 def differences(result, config):
@@ -1610,8 +1601,11 @@ def differences(result, config):
         'Data: synthetic workspaces made by the application\'s own connect, review and approval code; one text '
         'channel per server; no media; no other provider\'s jobs compete in the minute worker; workspace documents '
         'are smaller than long-lived production ones.',
-        'Rate policy: app_capacity %d per %s-second fixed window (%s); production policy uses the same tool and '
+        'Rate policy: application budget %d per %s-second exact sliding window%s (%s); production policy uses the same tool and '
         'defaults.' % (config['ratePolicy']['app_capacity'], config['ratePolicy']['app_window_seconds'],
+                       (' and a bearer budget of %d per %s-second window for the person\'s own bearer calls' % (
+                           config['ratePolicy']['bearer_capacity'], config['ratePolicy'].get('bearer_window_seconds', 1)))
+                       if config['ratePolicy'].get('bearer_capacity') else '',
                        'INFORMATION ONLY, not a reviewed setting' if config.get('informationOnly') else 'the reviewed value'),
     ]
     if config.get('sourceDirty'):

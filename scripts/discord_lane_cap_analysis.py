@@ -2176,6 +2176,39 @@ def _document_text(doc):
         ' / '.join(str(t) for t in timings), doc.get('note', 'timed, rolled back'))
 
 
+def connection_cost_text(config):
+    """What a new database connection costs in this run, said as it is. The harness's own pooler emulates `db_connect_rtts` round trips
+    (TLS and SCRAM) for every new client connection; the relay in front of a real PgBouncer (the hosted runs) did not read that setting
+    before the scenario setting `relay_connect_rtts` existed: a new connection there cost the startup exchange, one round trip. Receipts
+    of the hosted runs 1028c to 1028e printed '4 round trips per new connection', which was not what the relay did."""
+    s = config.get('settings') or {}
+    if str(config.get('pooler') or '').startswith('PgBouncer'):
+        extra = float(s.get('relay_connect_rtts') or 0)
+        if extra:
+            return 'one round trip per new connection (the startup exchange) and %g more for TLS and SCRAM (relay_connect_rtts)' % extra
+        return ('one round trip per new connection (the startup exchange) and none for TLS and SCRAM: the relay in front of PgBouncer '
+                'did not read db_connect_rtts, which only the harness\'s own pooler applies')
+    return '%s round trips per new connection' % s.get('db_connect_rtts')
+
+
+def cell_settings_line(config):
+    """The settings that decide what this cell measures, in one paragraph at the top of the receipt: loops, loop budget, round trip,
+    what a new connection costs, whether the application's own connection pool is on, the pool of the pooler, the rate policy."""
+    s = config.get('settings') or {}
+    policy = config.get('ratePolicy') or {}
+    loops = sum(1 for route in config.get('routes') or [] if str(route).startswith('/api/cron/discord-worker/'))
+    pool = ('on (POSTRIFF_DB_POOL_ENABLED=true; %s connections and %s waiting for each process)' % (
+        s.get('db_pool_max_connections') or 20, s.get('db_pool_max_waiting') or 64)) if s.get('db_pool') else \
+        'off (a new connection for every transaction, the production factory without POSTRIFF_DB_POOL_ENABLED)'
+    budgets = 'application %s a second' % _fmt(policy.get('app_capacity'))
+    if policy.get('bearer_capacity'):
+        budgets += ' and bearer %s a second' % _fmt(policy.get('bearer_capacity'))
+    return ('**Settings of this cell:** %s lane loops, each budgeted %s s; database round trip %s ms; connection set-up: %s; the application\'s own '
+            'connection pool: %s; pooler pool %s; rate policy: %s; mock Discord latency %s ms; invocations %s.' % (
+                loops, _fmt(s.get('lane_max_seconds')), _fmt(s.get('db_latency_ms')), connection_cost_text(config), pool,
+                s.get('max_db_connections'), budgets, s.get('mock_latency'), s.get('invocation_mode')))
+
+
 def receipt(result, verdicts, config, differences, expectations=()):
     lines = []
     counted = Counter(v['verdict'] for v in verdicts)
@@ -2194,6 +2227,9 @@ def receipt(result, verdicts, config, differences, expectations=()):
     lines.append('')
     if config.get('description'):
         lines.append('Scenario: ' + config['description'])
+        lines.append('')
+    if config.get('settings'):
+        lines.append(cell_settings_line(config))
         lines.append('')
     if result.get('informationOnly'):
         lines.append('**INFORMATION ONLY: this run used a setting that is not reviewed (for example a rate policy above '

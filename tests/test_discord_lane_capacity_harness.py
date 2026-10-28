@@ -1278,7 +1278,10 @@ class ProfilesAndSettings(unittest.TestCase):
         self.assertTrue(all(cell['judge_as'] == 'S1' for cell in cells.values()))
         self.assertEqual([(cells[n]['relay_connect_rtts'], cells[n]['db_pool'], cells[n]['lane_max_seconds'], cells[n]['shards'])
                           for n in ('S1-lane56', 'S1-conn', 'S1-conn-pool')],
-                         [(0.0, False, 56, None), (4.0, False, 56, None), (4.0, True, 56, None)])
+                         [(4.0, False, 56, None), (4.0, False, 56, None), (4.0, True, 56, None)],
+                         'every cell has the connect cost of a TLS and SCRAM pooler by default; the pool is the only difference of the pair')
+        self.assertEqual(runner.settings_for('S1-lane56', {'relay_connect_rtts': 0.0})['relay_connect_rtts'], 0.0,
+                         'one round trip per connection, the reference of the first batch, is a setting away')
 
     def test_the_pool_variables_reach_the_lane_processes_and_never_the_seeder(self):
         import discord_lane_capacity_run as runner
@@ -1330,11 +1333,23 @@ class ProfilesAndSettings(unittest.TestCase):
                   'settings': {'db_connect_rtts': 4, 'relay_connect_rtts': 0.0}}
         text = runner.connection_cost_text(hosted)
         self.assertIn('one round trip per new connection', text)
-        self.assertIn('does not read db_connect_rtts', text, 'the hosted relay never applied the 4 round trips older receipts printed')
+        self.assertIn('did not read db_connect_rtts', text, 'the hosted relay never applied the 4 round trips older receipts printed')
         hosted['settings']['relay_connect_rtts'] = 4.0
         self.assertIn('4 more for TLS and SCRAM', runner.connection_cost_text(hosted))
         local = {'pooler': 'harness transaction pooler (pool 20, 2.0 ms per round trip)', 'settings': {'db_connect_rtts': 4}}
         self.assertEqual(runner.connection_cost_text(local), '4 round trips per new connection')
+        # The header of the receipt carries the setting, so that two cells are read for what differs between them.
+        config = {'pooler': hosted['pooler'], 'routes': ['/api/cron/worker'] + ['/api/cron/discord-worker/%d' % n for n in range(16)],
+                  'ratePolicy': {'app_capacity': 25, 'bearer_capacity': 10},
+                  'settings': {'lane_max_seconds': 56, 'db_latency_ms': 5.0, 'relay_connect_rtts': 4.0, 'db_pool': True, 'max_db_connections': 20,
+                               'mock_latency': 'uniform:50:150', 'invocation_mode': 'cold', 'db_connect_rtts': 4}}
+        line = analysis.cell_settings_line(config)
+        for expected in ('16 lane loops', 'budgeted 56 s', 'round trip 5.000 ms', 'and 4 more for TLS and SCRAM', 'connection pool: on',
+                         '20 connections and 64 waiting', 'application 25 a second and bearer 10 a second'):
+            self.assertIn(expected, line)
+        config['settings'].update(db_pool=False, relay_connect_rtts=0.0)
+        self.assertIn('pool: off', analysis.cell_settings_line(config))
+        self.assertIn('did not read db_connect_rtts', analysis.cell_settings_line(config))
 
     def test_the_relay_delays_a_new_connection_by_the_asked_round_trips(self):
         import socket

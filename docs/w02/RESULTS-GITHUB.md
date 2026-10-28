@@ -448,7 +448,12 @@ S1, S0-100, Fdb, Fcrash, F429), `claude/discord-capacity-run-fdb-1028d` (run 407
 two things this run found (the read-back of an ordinary post was not booked: `72ab8886`; migration 142's rollback file broke
 `postriff_migrate`: `8c1841bd`); **the next S1 is to be taken on its final head**.
 
-**What this harness assumes, plainly.** The 2 ms database round trip (a relay in front of PgBouncer adds it to every statement), the
+**What this harness assumes, plainly.** The 2 ms database round trip (a relay in front of PgBouncer adds it to every statement, and one
+round trip to every new connection: the startup exchange. **Correction:** the receipts of 1028c to 1028e printed "with 4 round trips per
+new connection", which was wrong for these hosted runs: `db_connect_rtts` is read by the harness's own pooler only (the sandbox runs of
+RESULTS-SANDBOX.md), and the relay in front of PgBouncer applied none of it, so a connection cost 2 ms here, not about 10. The lines are
+corrected in the regenerated local copies of the receipts and in every receipt from the harness commit after `b91083b5`; the figures of this
+section stand, they were measured with one round trip per connection), the
 50 to 150 ms Discord latency (uniform, mean 100 ms), one 4-vCPU GitHub-hosted runner that also runs PostgreSQL, PgBouncer, the relay,
 the mock Discord and all twelve loops, and cold Python processes started every minute, are assumptions of the harness, not measurements
 of Vercel, Supabase or Discord. The runner is close to CPU-saturated while the lane is active (load average up to 6.9 on 4 vCPUs). The
