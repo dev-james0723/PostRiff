@@ -114,21 +114,51 @@ read-backs waiting. An exact split over every workspace, and the same split in t
 projection), needs two columns in the projection (a new migration, not made). Without one, the oldest due `next_at` among
 workspaces with `last_claimed_at = 0` is an exact create lag for workspaces the lane never served.
 
-**Q16. Admissions are never purged.** Every request writes one row to `pr_discord_request_admissions` (the permit, then its
-outcome) and nothing deletes it. Measured on PostgreSQL 16 with the real coordinator (1,500 reads): 2.6 KB of heap per
-admission (the insert and the observation's update each leave a version until vacuum) plus its indexes, 1.5 KB when the routes
-are learned and 3.9 KB when every request is a new resource (the GIN index on `scope_keys` holds a key per cold route): 3.7 to
-6.5 KB. At the reviewed 25 a second that is 2.16 million rows and 8 to 14 GB a day (250 to 440 GB over the policy's 31 days);
-at one a second 86,400 rows and 0.32 to 0.56 GB a day. The coordinator needs a read's row only until it is answered and its
-slot has freed (the window and 0.1 s, or 30 s more if it was never answered); the ops snapshot reads the newest 2,048; a
-publication's row is the audit trail. The service role may SELECT, INSERT and UPDATE these tables, not DELETE (migrations 124
-and 125). The application's connection is not that role if the preview preflight (`deployment.py`: user `postgres`, or
-`postgres.<project>` through the pooler) also holds in production, and the table owner needs no grant. Not checked (no
-Production access): `SELECT current_user, has_table_privilege(current_user,'public.pr_discord_request_admissions','DELETE')`
-from the application's own session. Options: a periodic delete, in small batches, of rows that are `NOT is_publish`, `observed`
-or `blocked` and older than an hour (at 25 a second the table then stays near 90,000 rows, 0.3 to 0.6 GB); daily partitions
-dropped after two days (a migration); or a ring of the last 25 wire times in the application row, which puts a write on the
-hottest row at every consume and loses the per-request record. Nothing is built; a grant would be a migration.
+**Q16. Retention of the coordinator's admissions (built, e6aa7db8; migration 142 written, not applied).** Every request writes one
+row to `pr_discord_request_admissions` (the permit, then its outcome) and nothing deleted any. First measured on PostgreSQL 16 with
+the real coordinator (1,500 reads, before any vacuum): 3.7 to 6.5 KB a request with its indexes. Vacuumed, the sizes are smaller
+(the rows built as the real code builds them, indexes included): a read 2.4 KB (1.0 heap, 1.4 indexes), a publication 3.4 KB (1.6
+and 1.7). At the sustained 22.7 requests a second that is 1.96 million rows and about 5 GB a day, 150 GB over the policy's 31 days;
+at the nominal 25, 2.16 million and 5.5 GB (the unvacuumed figures would say 8 to 14 GB). The coordinator needs a read's row only
+until it is answered and its slot has freed (the window and 0.1 s, or 30 s more if it was never answered); the ops snapshot reads
+the newest 20,000; a publication's row is the audit trail for a day.
+
+Built: `SharedPostgresBudget.purge_settled()` deletes, a bounded batch at a time, what the coordinator can no longer count and
+nothing else. Reads (`NOT is_publish`) that are `observed` or `blocked` and were reserved more than an hour ago, publications the
+same after a day, and nothing that settled in the last ten minutes (a late reconciliation of an old row finds it again). Never an
+unresolved row (`reserved`, `sealed`, `sent`, `uncertain`: the evidence a person reviews, an expired unused permit included),
+never a scope row (windows, embargoes, circuits, holds), never another application's. 2,000 rows a statement, oldest first, `FOR
+UPDATE SKIP LOCKED`, three rounds a call, one purger at a time (a transaction-level advisory lock; the others return `busy`),
+`lock_timeout` 1 s, `statement_timeout` 5 s, one short transaction a round; it never takes the application row's lock or a scope
+lock, so a reservation never waits for it and it never delays one; idempotent; it never raises: the outcome says `ok`, `busy`,
+`denied`, `timeout` or `error` with the exception class only. Its cutoff is `now()`, not `clock_timestamp()` (a volatile function
+cannot bound an index scan: a call with nothing to do walked every young row, 66 ms at 50,000, instead of none). The lane asks once
+its loop is over, when the invocation had work, at most once a minute in a process, no flag (`discord.lane.retention` at INFO when
+it deleted, at WARNING when it could not; counts, status and class only); an idle shard still opens one connection for one
+statement and purges nothing. The health payload's `coordinator.retention` shows `retentionSeconds`, the two oldest settled ages
+(far past the retention, three times, means the purge is not running or cannot delete), row estimates, `rowsDeletedTotal` and the
+last vacuum.
+
+Sizes with retention (measured; rows updated when they settle and deleted when they age out, with vacuums as autovacuum would):
+4.4 to 8.6 KB for each live read and 5.6 to 12.8 KB for each live publication, the dead versions that updates and deletes leave
+until vacuum included (the low end with frequent vacuums, the high end with one every three batches of a fifth of the table). The table then
+holds the last hour of reads and the last day of publications. At 100 posts a minute (6 reads and a publication a post) that is
+36,000 reads and 144,000 publications, 1.0 to 2.2 GB; at the ceiling of 22.7 a second (3.2 posts) 70,000 and 280,000, 1.9 to 4.2
+GB; four fifths of it is the publications, so `PURGE_PUBLICATION_SECONDS` is the knob (a further day costs 0.8 to 1.8 GB at 100
+posts a minute). One million synthetic rows (84 percent reads, 14 percent publications, half of each past its retention, 2 percent
+unresolved; 2,468 MB with indexes): a call, three rounds of 2,000 reads, takes 0.21 s (71 ms a round) against the 5 s statement
+timeout; the other 646,000 eligible rows go in 16.2 s (about 40,000 a second); a call with nothing to do 27 ms (a connection and two
+index probes); 200,000 rows, the test default, 0.28 to 0.32 s and 15 to 24 ms. The partial index of migration 142
+(`pr_discord_admission_purge`, settled rows only) costs 32 bytes a row and is what the purge walks; without it the purge scans.
+
+Not checked (no Production access): the privilege. The service role may SELECT, INSERT and UPDATE these tables, not DELETE
+(migrations 124 and 125), and the application's connection is not that role if the preview preflight (`deployment.py`: user
+`postgres`, or `postgres.<project>` through the pooler) also holds in production; the table owner needs no grant. Run
+`SELECT current_user, has_table_privilege(current_user,'public.pr_discord_request_admissions','DELETE')` from the application's own
+session. Without DELETE the purge reports `denied` (a WARNING a minute) and deletes nothing, the table grows as before and
+`oldestSettledReadAgeSeconds` keeps rising; the owner's fix is `GRANT DELETE ON public.pr_discord_request_admissions TO
+service_role` (its policy already allows every command) or the owner role. Apply migration 142 first when the table is small (a
+plain CREATE INDEX takes a SHARE lock for the build); on a large table use the CONCURRENTLY form in its header.
 
 **Q17. A hold and a read-back (built, 1fe434c7).** A read admitted under a hold (the operator's, a held credential or a held
 route) used to raise `RateCoordinatorUnavailable`, which the read-back of a created post (`hosted_social`, the `except

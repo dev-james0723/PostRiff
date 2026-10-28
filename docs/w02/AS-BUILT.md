@@ -765,6 +765,44 @@ reservation still ends the invocation inside budget plus one step, `outlook`); `
 (12 and 16 loops at a full window: about one pass a post, nothing posted twice; an approval ending inside a pass; a loop killed
 inside a booked sleep; no sleep between the seal and the consume; a pause during booked waits).
 
+## Retention of the coordinator's admissions
+
+`pr_discord_request_admissions` got a row per request and nothing deleted any. `SharedPostgresBudget.purge_settled()` (limiter
+branch, e6aa7db8; sizes, timings and the privilege question are in OPEN-QUESTIONS Q16) deletes what the coordinator can no longer
+count and nothing else:
+
+- **What goes.** Reads (`NOT is_publish`) in state `observed` or `blocked` reserved more than `PURGE_READ_SECONDS` (3,600) ago;
+  publications the same after `PURGE_PUBLICATION_SECONDS` (86,400); a row that settled in the last `PURGE_SETTLE_GRACE_SECONDS`
+  (600) stays whatever its age. The coordinator counts a row for one span after its wire time (1.1 s) and an unanswered one for
+  the horizon (31 s); the health payload's windows are at most 15 minutes and a sender-name claim ends 15 minutes after its permit;
+  nothing reads a created post's row again after its approval's hour, and a day lets a person read yesterday's incident.
+- **What never goes.** An unresolved row (`reserved`, `sealed`, `sent`, `uncertain`), an expired unused permit included: it is the
+  evidence a person reviews. Any scope row (windows, embargoes, circuits, holds). Another application's admissions.
+- **How.** 2,000 rows a statement, oldest first, `FOR UPDATE SKIP LOCKED`, `PURGE_ROUNDS` (3) a call, one short transaction a round
+  with `lock_timeout` 1 s and `statement_timeout` 5 s, one purger at a time (a transaction-level advisory lock; the others get
+  `busy`). It never takes the application row's lock or a scope lock: a reservation never waits for it and it never delays one
+  [tested on PostgreSQL: a purge in flight blocks no reservation; live reservations keep the ceiling at the mock while it runs
+  flat out]. Idempotent. It never raises: the outcome is `status` (`ok`, `busy`, `denied` for a role without DELETE, `timeout`,
+  `error` with the exception class only), `reads`, `publications`, `rounds` and `more`. The cutoff is `now()`: a volatile function
+  cannot bound an index scan.
+- **Where it runs.** `lane.purge_admissions`, after the loop of an invocation that had work (not an idle shard), at most once a
+  minute in a process (`PURGE_PERIOD_SECONDS`), no flag. One INFO line `discord.lane.retention` when it deleted something, one
+  WARNING when it could not (`denied`, `timeout`, `error`), counts and the status only. It cannot stop a post: a failure is
+  swallowed.
+- **Migration 142** (written, not applied, with its rollback): `pr_discord_admission_purge (is_publish, reserved_at) WHERE state IN
+  ('observed','blocked')`, 32 bytes a row, the index the purge walks. Without it the purge works and scans.
+- **Health payload.** `coordinator.retention`: `status`, `retentionSeconds` (`reads`, `publications`), `oldestSettledReadAgeSeconds`,
+  `oldestSettledPublicationAgeSeconds` (three times the retention means the purge is not running or cannot delete),
+  `liveRowsEstimate`, `deadRowsEstimate`, `rowsDeletedTotal`, `lastVacuumAgeSeconds`; read from the partial index and the table's
+  statistics, no scan.
+- **Privilege.** DELETE is not granted to `service_role` (migrations 124 and 125) and is not checked against Production: until the
+  owner confirms or grants it the purge reports `denied` and the table grows as before.
+- **Evidence.** `tests/test_discord_rate_retention.py` (offline: the statements, failures as outcomes, once a minute, the index and
+  its rollback) and `tests/test_discord_rate_retention_postgres.py` (exactly what is deleted and what never is, bounded oldest-first
+  batches, eight concurrent callers delete each row once, nothing the coordinator counts is lost, a role without DELETE, the lane
+  purges once and an idle shard does not, the health payload, and `POSTRIFF_RETENTION_ROWS=1000000` for the timing: a call 0.21 s,
+  the rest of 646,000 eligible rows 16.2 s, nothing to do 27 ms).
+
 ## Not done
 
 Phase 1b (scheduled-time jitter) is not started. Not run: the owner's Depot capacity run, any hosted build, the
