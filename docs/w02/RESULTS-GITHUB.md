@@ -452,7 +452,7 @@ two things this run found (the read-back of an ordinary post was not booked: `72
 round trip to every new connection: the startup exchange. **Correction:** the receipts of 1028c to 1028e printed "with 4 round trips per
 new connection", which was wrong for these hosted runs: `db_connect_rtts` is read by the harness's own pooler only (the sandbox runs of
 RESULTS-SANDBOX.md), and the relay in front of PgBouncer applied none of it, so a connection cost 2 ms here, not about 10. The lines are
-corrected in the regenerated local copies of the receipts and in every receipt from the harness commit after `b91083b5`; the figures of this
+corrected in the regenerated local copies of the receipts and in every receipt from harness `b91083b5` on; the figures of this
 section stand, they were measured with one round trip per connection), the
 50 to 150 ms Discord latency (uniform, mean 100 ms), one 4-vCPU GitHub-hosted runner that also runs PostgreSQL, PgBouncer, the relay,
 the mock Discord and all twelve loops, and cold Python processes started every minute, are assumptions of the harness, not measurements
@@ -624,3 +624,74 @@ Same tree (`02fd679b`), same runner type, one run each: `POSTRIFF_DISCORD_PARALL
 Reading (inference). The lever does what the arithmetic said and little more: **the duty cycle rises from 0.78 to 0.89 (the lane is active from second 6 to 51 of each minute at 50 s and from second 5 to 58 at 56 s), the posts a minute from 159 to 173, and the median lateness falls from 15.66 to 14.51 minutes (p95 30.55 to 28.16, maximum 32.37 to 29.68)**. The requests per post (6.16 and 6.15) and the lock statements per post do not move; the active-window rate falls from 20.7 to 19.8 a second because twelve busier loops share four vCPUs (peak load average 7.3 against 6.9). One run each: the spread between 1023b and 1023d on the same code was 3.4 minutes in the median, so 1.2 minutes between two single runs is inside it and cannot be read alone; the duty cycle (0.78 to 0.82 in the earlier rounds) and the posts a minute moved by 14% and 9%, which is more than that spread explains and is what the arithmetic predicts. The cost shows in the tail of the wire: p99 443 ms against 236, p99.9 535 against 444, maximum 651 against 546, because the runner is more saturated; 20 of 29046 windows at the ceiling were violated against 11 (0.069% against 0.037%) with the 0.1 s guard, and the oldest witness read at the create reached 3.77 s at p90 and 5.72 s at the maximum. Requests above 25 at the mock: 11 against 7, none stamped above 25 by the coordinator (peak 25 trailing second in both).
 
 <!-- /booking-1028c -->
+
+<!-- cap-0cb19962 -->
+
+## The limiter head `0cb19962`: development measurement, 13 cells in one table
+
+**A development measurement, not G5 evidence.** Tree `0cb19962635044a978bd9cd42d6c3757ece840c8`, harness `b91083b5d42ef367ada5a024c4244b7e78c1549a`, one
+ubuntu-24.04 4-vCPU runner for each cell, PgBouncer pool 20 (Fdb 6), mock Discord on 127.0.0.1, synthetic data. Eight runs, all `success`; request branches
+`claude/discord-capacity-run-<name>` (head, run id): `s1lane56-g2` (812d3922, 40727523462), `s0100-g2` (c7b09726, 40727644652), `f429-g2` (bee98a3c,
+40727668286), `fcrash-g2` (bd07f34f, 40727655656), `fdb-g2` (48a8210c, 40727662149), `sens-g5` (dd29b852, 40727532119: S1-lane56, S1-16, S1-24 at 5 ms),
+`sens-g10` (b2ccccbb, 40727539117: the same at 10 ms), `pool-g5` (0270cffc, 40727546751: S1-conn, S1-conn-pool). Local copies of the receipts:
+`/tmp/claude-0/-home-user-PostRiff/3cb76cca-883c-52d5-850d-5dab5e917b4a/scratchpad/cap-0cb/<cell>/`.
+
+Settings: loop budget 56 s in every S1 cell, 50 s in S0-100, F429, Fcrash and Fdb; 12 loops unless the row says otherwise; database round trip 2 ms unless the
+row says 5, 8 (Fdb: 6-connection pool) or 10 ms; these and the 50 to 150 ms Discord latency are assumptions of the harness. A new connection costs one round
+trip (`relay_connect_rtts` 0) except in the last two rows, which add 4 to both arms (`relay_connect_rtts` 4); only the pooled arm sets
+`POSTRIFF_DB_POOL_ENABLED=true` (code defaults: 20 connections, 64 waiting). The plain 12-loop rows are the one-round-trip reference.
+
+| Cell (run) | Sent / verified | Lateness min: median / p95 / max | Posts a minute (median) | Req/s: plateau / busiest 5 min | Stamped peak: app (<=25) / bearer (<=10) | Arrivals above 25 (peak) / above 10 bearer (peak) | Dup: nonce / post | Lock timeouts: reserve / consume / observe | coordinator_busy / horizonRefusals | 300 s releases / degrade timed / permanent | Bearer: per post / peak 60 s / `remaining` p50 | Connections opened / peak | Statements a request | Cell expectations |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| S1-lane56, 12 loops, 2 ms (s1lane56-g2) | 5000 / 5000 | 12.5 / 24.6 / 26.2 | 199.5 | 22.9 / 20.6 | 24 / 9 | 11 (28) / 1 (11) | 0 / 0 | 0 / 0 / 0 | 0 / 0 | 0 / 0 / 0 | 1.00 / 203 / 8 | 145317 / 15 | 42.7 | 4 PASS |
+| S0-100, 12 loops, 2 ms, lane 50 s (s0100-g2) | 2000 / 2000 | 0.2 / 0.4 / 0.6 | 99.5 | 25.8 / 12.3 | 24 / 9 | 5 (26) / 3 (11) | 0 / 0 | 0 / 0 / 0 | 0 / 0 | 0 / 0 / 0 | 1.00 / 100 / 8 | 71489 / 16 | 46.4 | 4 PASS |
+| F429, 12 loops, 2 ms, lane 50 s (f429-g2) | 992 / 992 | 2.8 / 5.3 / inf | 183.0 | 24.3 / 18.7 | 24 / 9 | 0 (25) / 0 (9) | 0 / 0 | 0 / 0 / 0 | 0 / 0 | 4 / 0 / 0 | 1.03 / 192 / 8 | 30010 / 15 | 43.4 | 8 PASS |
+| Fcrash, 12 loops, 2 ms, lane 50 s, 10 kills (fcrash-g2) | 4999 / 4995 | 12.9 / 25.3 / inf | 193 | 24.6 / 20.3 | 24 / 9 | 8 (27) / 5 (11) | 0 / 0 | 0 / 0 / 0 | 0 / 0 | 0 / 0 / 0 | 1.00 / 203 / 8 | 152546 / 22 | 43.5 | 6 PASS |
+| Fdb, 12 loops, 8 ms, pool 6, lane 50 s (fdb-g2) | 1500 / 1500 | 9.2 / 18.8 / 22.8 | 82.5 | 11.5 / 9.1 | 19 / 9 | 0 (20) / 0 (10) | 0 / 0 | 104 / 0 / 89 | 105 / 2 | 8 / 6 / 0 | 1.04 / 95 / 8 | 44689 / 17 | 42.2 | 5 PASS |
+| S1-lane56, 12 loops, 5 ms (sens-g5) | 5000 / 5000 | 17.3 / 34.2 / 36.3 | 145.0 | 16.8 / 15.0 | 24 / 9 | 0 (24) / 0 (10) | 0 / 0 | 0 / 0 / 0 | 0 / 0 | 0 / 0 / 0 | 1.00 / 149 / 8 | 140319 / 18 | 41.9 | 4 PASS |
+| S1-16, 16 loops, 5 ms (sens-g5) | 5000 / 5000 | 15.2 / 30.3 / 32.3 | 164.5 | 18.9 / 17.4 | 24 / 9 | 0 (25) / 6 (11) | 0 / 0 | 0 / 0 / 0 | 0 / 0 | 0 / 0 / 0 | 1.00 / 170 / 8 | 141244 / 23 | 41.9 | 4 PASS |
+| S1-24, 24 loops, 5 ms (sens-g5) | 5000 / 5000 | 15.4 / 30.3 / 32.0 | 162.5 | 19.6 / 17.5 | 24 / 9 | 10 (27) / 31 (12) | 0 / 0 | 0 / 0 / 0 | 0 / 21 | 0 / 0 / 0 | 1.00 / 169 / 8 | 148394 / 35 | 42.2 | 4 PASS |
+| S1-lane56, 12 loops, 10 ms (sens-g10) | 5000 / 5000 | 24.6 / 48.3 / 51.4 | 100.5 | 11.4 / 11.0 | 18 / 9 | 0 (18) / 0 (10) | 0 / 0 | 0 / 0 / 0 | 0 / 0 | 0 / 0 / 0 | 1.00 / 110 / 8 | 142295 / 21 | 41.8 | 4 PASS |
+| S1-16, 16 loops, 10 ms (sens-g10) | 5000 / 5000 | 25.7 / 50.8 / 54.3 | 96.0 | 11.4 / 10.7 | 20 / 9 | 0 (20) / 0 (10) | 0 / 0 | 0 / 0 / 0 | 0 / 0 | 0 / 0 / 0 | 1.00 / 104 / 8 | 144398 / 30 | 41.6 | 4 PASS |
+| S1-24, 24 loops, 10 ms (sens-g10) | 4749 / 4749 | 30.6 / inf / inf | 82.0 | 10.9 / 9.3 | 21 / 9 | 0 (21) / 14 (12) | 0 / 0 | 46 / 0 / 80 | 46 / 1 | 0 / 1 / 0 | 1.01 / 87 / 8 | 144290 / 40 | 41.2 | 4 PASS |
+| S1-conn, 12 loops, 5 ms, +4 connect RTT, unpooled (pool-g5) | 5000 / 5000 | 15.6 / 30.5 / 32.4 | 159 | 18.0 / 17.1 | 24 / 9 | 0 (24) / 0 (10) | 0 / 0 | 0 / 0 / 0 | 0 / 0 | 0 / 0 / 0 | 1.00 / 167 / 8 | 139842 / 18 | 42.0 | 4 PASS |
+| S1-conn-pool, 12 loops, 5 ms, +4 connect RTT, pooled (pool-g5) | 5000 / 5000 | 16.5 / 32.4 / 34.4 | 152 | 17.5 / 16.0 | 24 / 9 | 0 (24) / 0 (10) | 0 / 0 | 0 / 0 / 0 | 0 / 0 | 0 / 0 / 0 | 1.00 / 161 / 8 | 1707 / 39 | 57.5 | 4 PASS |
+
+Requests a second: plateau active-window rate / busiest 300 s. Stamped: the coordinator's `sent_at` in a trailing second; arrivals: the mock's own count
+(REPORTED, D-16). Bearer: credential kind `user`, its own row, 10 a second.
+
+- **D-16.** Stamped peaks are 24 or less (limit 25) and 9 (limit 10) in all 13 cells. No arrival above a ceiling is attributed to the coordinator: wire
+  jitter and the mock's order, plus 6 bearer arrivals in S1-24 at 10 ms that could not be paired with an admission.
+- **Standard** (unchanged). `policy_ceiling` counts all credentials together and fails in 8 cells (the bearer budget comes on top of the application's 25 a
+  second; S1-lane56 at 2 ms: 13,946 requests above 25); S1-lane56 at 2 ms also fails `lateness_median` (12.5 against 12; p95 24.6, max 26.2 pass); lateness
+  fails in every 5 and 10 ms cell; `db_peak` (limit 70 percent of the pool) fails at 16 loops (85 and 90 percent), 24 loops (125, 140) and in the pooled arm
+  (90); S1-24 at 10 ms also `held_or_lost` (251 posts held to the 60-minute approval expiry, none sent late) and `statement_timeouts` (4).
+- **Other gates that failed.** `permits_unused`: F429 1 of 1001 (sealed, then blocked by the consume hold gate), Fcrash 1 of 5000. `open_admissions`: Fcrash 8
+  (the 10 kills), Fdb 6 (bearer `sent` reads), S1-24 at 10 ms 1.
+- **16 loops at 5 ms:** +12.5 percent requests a second on the plateau (18.9 against 16.8), +16 percent on the busiest 300 s, +13 percent posts a minute, with 0
+  lock timeouts, `coordinator_busy`, `horizonRefusals` and duplicates: just under 15 percent, and inside the spread between cells (the 12-loop pool-pair arm,
+  which has 4 more connect round trips, ran 7 percent faster than the plain 12-loop cell; against it 16 loops are +5 percent). At 10 ms no gain. 24 loops
+  saturate the runner (load 12.3 and 19.7) and exceed the pool of 20 (demand 25 and 28). Mean exclusive-lock statement, 12 / 16 / 24 loops: 126 / 221 / 388 ms
+  at 5 ms, 239 / 422 / 706 ms at 10 ms.
+- **Pool pair:** the pooled arm opened 99 percent fewer connections (1,707 against 139,842) and did not raise requests a second (17.5 against 18.0) or
+  posts a minute (152 against 159); statements a request +37 percent (the pool's reset statements), peak client connections 18 to 39, pool demand 90 percent.
+
+**Correction owed (`db_connect_rtts`).** The receipts of 1028c to 1028e (head `02fd679b`) printed "with 4 round trips per new connection". For hosted runs that
+was wrong: `db_connect_rtts` is read only by the harness's own pooler (the sandbox runs); the relay in front of PgBouncer charged one round trip per new
+connection and nothing for TLS and SCRAM. Every receipt from harness `b91083b5` on says so (all of this batch), the `02fd679b` section above carries the
+correction, and its figures stand. Harness `945e4cfc` makes `relay_connect_rtts` 4 the default for later cells and prints it in the receipt header.
+
+**`docs/w02/LOOPS.md` against these receipts** (it rests on `02fd679b` numbers; differences under 10 percent are not findings: the two 12-loop 5 ms cells differ by 7 percent).
+- *Supported:* about 42 to 46 statements a request (41.2 to 46.4 in the 12 unpooled cells; LOOPS 44.6); 0 duplicates; Fdb 11.5 requests a second against the
+  11.3 of pool over hold; busy answers are waits, not 300 s releases (Fdb: 105 busy delays against 8 releases of about 300 s); 16 loops inside the booking horizon (0 refusals), 24 not quite (21),
+  a pool of 20 too small for 24 (demand 25 and 28; LOOPS 26 to 30); 12 loops at 10 ms 11.4 requests a second (LOOPS with its connection term 11.3).
+- *Not supported:* the gain of 16 over 12 loops, +17 / +23 / +29 percent at 2 / 5 / 10 ms (measured +12.5 at 5 ms, none at 10 ms, 2 ms not run); 24 loops 22.7
+  requests a second at 5 ms (19.6) and "14 to 17" at 10 ms (10.9, with lock timeouts and 251 posts held); 16 loops at 10 ms 16.3 (11.4); the knee at 16 loops for
+  2 and 10 ms and 20 to 24 for 5 ms (about 16 at 5 ms, 12 or fewer at 10 ms); "3.5 new connections a request" (3.9 to 4.1 in every S1 cell, 28 to 30 a post); the
+  correction by 4 connect round trips (the hosted relay did not apply them, and the cell that does, S1-conn, was not slower: 18.0 against 16.8, so the sign of that term
+  is not resolved; the measured cycle grows by about 68 ms per millisecond of round trip at 12 loops, against 45, or 59 with the term); 12 loops at 5 ms 15.0
+  (16.8 on the plateau, 15.0 on the busiest 300 s); its 2 ms row (18.6 requests a second, 14.5 min) is the `02fd679b` cell, this head gives 22.9 and 12.5; rank 1's
+  bar (15 percent or more with pooled connections under 70 percent of the pool): +12.5 / +16 percent at 85 percent; rank 4's "removes 3.5 connection set-ups a
+  request": it removed them (-99 percent) and gained no requests a second.
+
+<!-- /cap-0cb19962 -->
