@@ -224,6 +224,20 @@ class LaneWorker(PostgresWorker):
                 except Exception:
                     raise error from None  # it could not be set aside: the failure stays what it was
 
+    def renew_discord_lease(self, claimed):
+        """F5: the renewal after the preflight stays; there is no second one after the intent is sealed.
+
+        _seal_discord_dispatch has just extended the lease to LEASE_SECONDS under the workspace lock, and consume()'s
+        live guard (_authorize_discord_rate_send) rechecks the lease, cancellation, approval, role and grant under that
+        lock, later than a second renewal could. The second renewal was one more whole-document transaction on the
+        seal-to-consume path, where 83 percent of the permit expiries of the 5,000-post run happened. A lease or
+        approval lost after the seal is caught by that guard instead: the permit is not consumed, no POST starts, the
+        sealed intent stays, and the post ends uncertain (this method used to return False and end the step). Only
+        once the guard exists: a sealed post without it (rate limits off, which the lane never runs with) renews."""
+        if claimed.get('discordIntent') is not None and callable((claimed.get('discordDispatch') or {}).get('rateAuthorize')):
+            return True
+        return super().renew_discord_lease(claimed)
+
     def _discord_rate_released(self, state, job, claimed, now, *, scope, cause):
         """F2: a post released unsent because of the shared budget keeps its place in the queue.
 

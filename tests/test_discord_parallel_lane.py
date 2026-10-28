@@ -1217,5 +1217,31 @@ class PositionKept(unittest.TestCase):
         self.assertNotIn('discordPositionRestores', job)
 
 
+class NoSecondRenewal(unittest.TestCase):
+    """F5: the lane worker skips the renewal after the seal, only once the consume guard exists. The behaviour on real
+    PostgreSQL (section o) and the frozen minute worker are proven there; here the gate."""
+    def worker(self, cls):
+        def no_connection():
+            raise AssertionError('a renewal opened a connection')
+        base = PostgresWorker(no_connection, SimpleNamespace(providers={}), worker_id='fake', discord_workers=True)
+        return lane.LaneWorker(base, 0) if cls == 'lane' else base
+
+    def claimed(self, *, sealed, guard):
+        job = {'manifest': {'platform': 'Discord'}, hosted_worker.discord_worker.KEY: {'version': 1}}
+        value = {'workspaceId': WORKSPACE, 'job': job, 'reconciliation': False}
+        if sealed:
+            value.update(discordIntent={'id': 'intent'}, discordDispatch={'rateAuthorize': (lambda cursor: 1.0) if guard else None})
+        return value
+
+    def test_the_lane_worker_does_not_renew_a_sealed_post_whose_create_has_the_live_guard(self):
+        self.assertTrue(self.worker('lane').renew_discord_lease(self.claimed(sealed=True, guard=True)))
+
+    def test_it_renews_before_the_seal_and_without_the_guard_and_the_base_worker_always_does(self):
+        for name, cls, sealed, guard in (('before the seal', 'lane', False, False), ('sealed, no guard', 'lane', True, False),
+                                         ('base worker, sealed with the guard', 'base', True, True)):
+            with self.subTest(name), self.assertRaisesRegex(AssertionError, 'a renewal opened a connection'):
+                self.worker(cls).renew_discord_lease(self.claimed(sealed=sealed, guard=guard))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1642,6 +1642,65 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         for post, claimed_so_far in early:
             self.assertNotEqual(claims[claimed_so_far][1], post, 'the retry waits behind the other workspaces')
 
+    # (o) no second lease renewal after the seal (F5) --------------------------------------------------------------
+
+    RENEWED = 'Hosted worker renewed the same Discord fence'
+
+    def change_between_seal_and_create(self, change):
+        """One post, one loop. `change(job)` is applied to the stored post after its intent was sealed and just before
+        its create permit is consumed, the window the second lease renewal used to cover. Returns the post, the lane
+        results and the states of the request admissions."""
+        tenant = F.Tenant(0)
+        worker = self.start([tenant], 1)
+        real = SharedPostgresBudget.consume
+
+        def consume(limiter, permit, method, path, *, binding=None, intent_id=None, authorize=None):
+            self.corrupt(tenant.id, change)
+            return real(limiter, permit, method, path, binding=binding, intent_id=intent_id, authorize=authorize)
+        with patch.object(SharedPostgresBudget, 'consume', consume):
+            results = self.drain(worker, 1, seconds=30)
+        (job,) = F.jobs(self.cluster).values()
+        with self.cluster.connect(autocommit=True) as db:
+            admissions = [state for (state,) in db.execute('SELECT state FROM public.pr_discord_request_admissions WHERE is_publish')]
+        return job, results, admissions
+
+    def assert_sealed_unsent_and_renewed_once(self, job, admissions):
+        self.assertEqual(self.wire.requests(method='POST'), [], 'no POST started')
+        self.assertEqual(len(job['discordDispatchIntents']), 1, 'the sealed intent is kept')
+        self.assertEqual(admissions, ['sealed'], 'the permit was never consumed')
+        self.assertEqual(sum(event['message'] == self.RENEWED for event in job['events']), 1,
+                         'renewed once, after the preflight; not again after the seal')
+        self.assertEqual(job['state'], 'uncertain')
+
+    def test_a_withdrawal_after_the_seal_is_caught_by_the_consume_guard_not_a_second_renewal(self):
+        job, results, admissions = self.change_between_seal_and_create(lambda job: job.__setitem__('cancelRequested', True))
+        self.assert_sealed_unsent_and_renewed_once(job, admissions)
+        first = next(event for event in job['events'] if event['state'] == 'uncertain')
+        self.assertEqual(first['message'], 'Discord delivery is uncertain. Reconcile before any further publication.',
+                         'the guard refused the create; before, the renewal ended the step "authority changed during renewal"')
+        self.assertEqual(sum(r['counters']['uncertainCreates'] for r in results), 1)
+        self.assertEqual(sum(r['counters']['leaseLost'] for r in results), 0)
+
+    def test_a_lease_lost_after_the_seal_ends_uncertain_without_a_post_and_keeps_the_intent(self):
+        job, results, admissions = self.change_between_seal_and_create(lambda job: job.__setitem__('leaseUntil', time.time() - 5))
+        self.assert_sealed_unsent_and_renewed_once(job, admissions)
+        first = next(event for event in job['events'] if event['state'] == 'uncertain')
+        self.assertEqual(first['message'], 'Expired Discord intent requires reconciliation; never repost',
+                         'the guard refused the create; the expiry recovery of the next claim records it')
+        self.assertEqual(sum(r['counters']['uncertainCreates'] for r in results), 1, 'the guard refusal is counted')
+        self.assertEqual(self.wire.duplicates(), 0)
+
+    def test_the_minute_workers_step_still_renews_after_the_seal(self):
+        # F5 is the lane worker's alone: the base worker (the minute cron's frozen path) renews twice, as before.
+        tenant = F.Tenant(0)
+        worker = self.start([tenant], 1)
+        with F.no_billing():
+            while worker.step(discord_only=True):
+                pass
+        (job,) = F.jobs(self.cluster).values()
+        self.assertEqual(sum(event['message'] == self.RENEWED for event in job['events']), 2)
+        self.assertEqual(len(self.wire.creates[F.nonce(job)]), 1, 'created once; its read-back is not due yet')
+
 
 if __name__ == '__main__':
     unittest.main()

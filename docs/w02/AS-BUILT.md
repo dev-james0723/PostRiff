@@ -16,9 +16,9 @@ read from the code.
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
-| `tests/test_discord_parallel_lane.py` (new) | 84 offline tests (run under the synthetic fence). |
+| `tests/test_discord_parallel_lane.py` (new) | 86 offline tests (run under the synthetic fence). |
 | `tests/test_discord_worker_lifecycle.py` | Its in-memory database double answers the lane's projection due probe. |
-| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 55 real-PostgreSQL tests and their fixture; skipped under the fence. |
+| `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 58 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
 | `docs/w02/*` (new) | This file, the corrected plan, open questions, monitors, simulation results. |
 
@@ -127,7 +127,8 @@ time [simulated]. It adds a new path that can multiply invocations, which the co
      jitter) before claiming, or ends the loop if it outlasts the budget (`rate_wait`);
    - one existing Discord-only step (`PostgresWorker.step(discord_only=True)`): claim one job from the least recently
      served due workspace (`FOR UPDATE ... SKIP LOCKED`, at most one live Discord lease per workspace), the permission
-     preflight, lease renewal, the create permit, the sealed intent, the create, the fenced completion; or a read-back;
+     preflight, lease renewal (once; the seal extends the lease itself, "The lease after the seal"), the create permit,
+     the sealed intent, the create, the fenced completion; or a read-back;
    - if nothing could be claimed: sleep until the soonest due work if it is within 10 seconds (a read-back is due five
      seconds after its create), back off briefly if work is overdue but held by another loop, and stop (`idle`) after six
      misses or when nothing is due soon.
@@ -191,6 +192,7 @@ leaves Discord to the lane, and only its own loops stop.
 | One database connection per loop at a time | sequential transactions, none held across HTTP | `test_each_loop_holds_one_database_connection_at_a_time` |
 | The last step ends inside the function limit | admission deadline, budget capped at 90 s (a larger setting is clamped) | offline `test_no_budget_can_outlast_the_function_limit_with_one_step_in_flight`, `test_a_budget_above_ninety_seconds_is_clamped_to_ninety`, `test_a_configured_120_seconds_runs_for_90`, `test_no_step_starts_after_the_budget_...` |
 | One malformed job document stops only its own workspace | the lane's claim pins a failure of reading a document on the workspace being read and sets it aside for 300 s (its rotation cursor dated ahead), then goes on | `test_a_job_document_the_claim_cannot_read_stops_only_its_own_workspace`, `test_a_workspace_set_aside_is_skipped_until_its_window_ends_and_a_repaired_document_is_claimed_again`, `test_the_malformed_shapes_the_claim_already_handles_never_reach_the_guard`, `test_a_failure_in_every_workspace_is_the_claim_code_not_a_document_and_still_raises`; offline `Quarantine` |
+| A lease or approval lost after the seal never lets the create out | the consume guard rechecks lease, cancellation, approval, role and grant under the workspace lock; the lane no longer renews a second time | `test_a_withdrawal_after_the_seal_is_caught_by_the_consume_guard_not_a_second_renewal`, `test_a_lease_lost_after_the_seal_ends_uncertain_without_a_post_and_keeps_the_intent`, the seal and consume crash tests; the minute worker's step still renews twice: `test_the_minute_workers_step_still_renews_after_the_seal`; offline `NoSecondRenewal` |
 | A release the shared budget caused does not cost the tenant its turn, and no tenant gets more work for it | the post's `lastDispatchedAt` and the workspace cursor are put back, the retry is due at once, at most 3 times per post, system-wide causes only | `test_a_post_the_shared_budget_released_is_claimed_again_before_anything_else`, `test_permit_expiries_do_not_change_the_rotation_or_any_workspaces_share_of_the_work`, `test_the_position_is_kept_three_times_for_one_post_and_then_the_penalty_applies`; a tenant's own resource keeps the penalty: `test_a_release_caused_by_one_tenants_resource_keeps_its_penalty`, `test_a_transient_preflight_failure_keeps_its_penalty`; controls: `test_control_the_old_penalty_...`, `test_control_without_the_restore_...`; offline `PositionKept` |
 | Flag off, or on with the lane unable to run, is the frozen behaviour | flag read as the exact string; one readiness test (`lane.blocker`) for the tick (its static part) and the lane (the full rule); equivalence with `2a5a523d` | offline `FlagOffIsTheFrozenBase`, `LaneReadiness`, `ExistingTick` |
 
@@ -307,6 +309,27 @@ Why this is fair [reasoned; the rotation and shares measured in `test_permit_exp
    round-robin order and every workspace's number of posts as without the expiries.
 3. Only ordering metadata changes. `lastDispatchedAt` orders a workspace's jobs at claim; the cursor orders workspaces and feeds
    the projection. No approval, lease, intent, permit or check changes.
+
+## The lease after the seal
+
+The step renewed the lease a second time after the intent was sealed and before the create: one more whole-document
+transaction on the seal-to-consume path, where 83 percent of the permit expiries of the 5,000-post run happened
+[independent review of the capacity receipt]. The lane's worker no longer does (`LaneWorker.renew_discord_lease`); the
+renewal after the preflight stays, and the base worker, so the minute cron's frozen path, renews twice as before.
+It added no authorization: the seal has just extended the lease to 45 s under the workspace lock, and consume()'s live
+guard (`_authorize_discord_rate_send`) rechecks the lease, cancellation, approval, role and grant under that lock, later
+than a renewal could. The skip applies only once that guard is attached to the sealed post (without it, with rate limits off,
+which the lane never runs with, the renewal stays).
+
+Consequence [measured on PostgreSQL]: a withdrawal, cancellation or approval change after the seal is refused by the consume
+guard instead of by the renewal. The permit is not consumed (the admission stays `sealed`), no POST starts, the sealed
+intent stays for manual reconciliation, and the post ends `uncertain` with the completion's "Discord delivery is uncertain.
+Reconcile before any further publication." (before: "Discord authority changed during renewal; no new dispatch is
+permitted"). A lease lost after the seal is refused by the same guard; the completion cannot write a lease that is no longer
+ours, so the next claim's expiry recovery records `uncertain` ("Expired Discord intent requires reconciliation; never
+repost"), as it did after the renewal's early return. The intent is kept either way and nothing is posted twice. One
+counter moves: a lease lost between the seal and the create is no longer counted in `leaseLost`; it shows as `uncertain`
+and `uncertainCreates`.
 
 ## Fail-safe behaviour
 
