@@ -1008,16 +1008,38 @@ class Outlook(unittest.TestCase):
         expected = limiter._keys(identity, 'r' * 64, 'm' * 64, 'b' * 64)
         return sorted(key for key in expected if expected[key][0] in ('policy', 'global', 'credential', 'invalid'))
 
+    def bearer(self):
+        return self.provider.rate_limiter.bearer_key
+
     def row(self, key, kind, hold=False, remaining=10, reset=None, blocked=None, circuit=None):
         return (self.now, key, kind, hold, remaining, reset, blocked, circuit)
 
-    def test_it_reads_the_four_application_wide_rows_without_locking(self):
+    def test_it_reads_the_four_application_wide_rows_and_the_bearer_budget_s_without_locking(self):
         self.assertEqual(lane.outlook(self.worker), (None, 0.0))
         (sql, params), = self.statements
         self.assertNotIn('FOR UPDATE', sql.upper())
         self.assertNotIn('FOR SHARE', sql.upper())
         self.assertTrue(sql.lstrip().upper().startswith('WITH OBSERVED'))
+        self.assertIsNotNone(self.bearer(), 'the reviewed policy carries a bearer budget')
+        self.assertEqual(params, (sorted(self.keys() + [self.bearer()]),))
+
+    def test_without_a_bearer_budget_it_reads_the_four(self):
+        self.provider.rate_limiter = SharedPostgresBudget(self.factory, APP, policy=json.dumps(
+            POLICY_TOOL.build(self.now - 100, days=1, bearer_capacity=None, bearer_window_seconds=None)))
+        self.assertIsNone(self.bearer())
+        self.assertEqual(lane.outlook(self.worker), (None, 0.0))
+        (sql, params), = self.statements
         self.assertEqual(params, (self.keys(),))
+
+    def test_a_spent_bearer_budget_is_a_wait_and_a_hold_on_it_is_the_operator_hold(self):
+        # Every step opens with the grant check, a bearer call: a loop that claimed while the bearer horizon is full would
+        # have its post released at the first request.
+        self.rows = [self.row(self.keys()[0], 'policy', remaining=10), self.row(self.bearer(), 'policy', remaining=0, reset=self.now + .4)]
+        self.assertAlmostEqual(lane.outlook(self.worker)[1], .4, places=5)
+        self.rows = [self.row(self.bearer(), 'policy', remaining=3, reset=self.now)]
+        self.assertEqual(lane.outlook(self.worker), (None, 0.0))
+        self.rows = [self.row(self.bearer(), 'policy', hold=True)]
+        self.assertEqual(lane.outlook(self.worker), ('operator_hold', 0.0))
 
     def test_a_hold_on_the_policy_row_is_the_operator_hold_and_any_other_hold_also_stops(self):
         for index, kind in enumerate(('policy', 'global', 'credential', 'invalid')):

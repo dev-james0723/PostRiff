@@ -5,6 +5,7 @@ real SQL/locks. No credentials, real provider, sockets or capacity claims.
 """
 import copy
 import json
+import math
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,7 @@ from postriff_phase2.discord.rate_limits import (
     RateCoordinatorUnavailable, route_identity, seconds, retry_hint,
     classify_response, publish_binding, _digest, observation_remaining,
 )
+from postriff_phase2.providers import ProviderResponseLimit
 from postriff_phase2.social_connectors import DiscordProvider
 
 APP='123456789012345678'
@@ -79,11 +81,11 @@ class MemoryLedger:
             row=self.maps.get(tuple(params))
             self.result=[tuple(row)] if row is not None else []
         elif sql.startswith('WITH scope_seed('):
-            ordered=[];self.rowcount=0
+            ordered=[];self.rowcount=0;self.result=[]
             for index in range(0,len(params),7):
                 key,kind,cap,left,window,revision,_expires=params[index:index+7];ordered.append(key)
                 if key not in self.states:
-                    self.rowcount+=1
+                    self.rowcount+=1;self.result.append((key,))   # RETURNING scope_key: the rows this insert created
                     self.states[key]=dict(kind=kind,cap=cap,left=left,window=window,reset=self.now,
                         blocked=None,circuit=None,streak=0,hold=False,seq=0,policy=revision,policyExpires=_expires,learned=False,freshAfter=None)
             self.scope_calls.append(('seed',tuple(ordered)))
@@ -99,46 +101,66 @@ class MemoryLedger:
             elif self.lock_fault=='duplicate':self.result=[self.result[0]]+self.result[:-1]
             elif self.lock_fault=='reordered':self.result.reverse()
         elif sql.startswith('WITH scope_store('):
+            inserted = 'INSERT INTO public.pr_discord_request_admissions' in sql   # the reservation's one write statement
+            store, admission = (params[:-24], params[-24:]) if inserted else (params, ())
             ordered=[];self.result=[]
-            for index in range(0,len(params),14):
-                cap,left,window,reset,blocked,circuit,streak,hold,seq,revision,_expiry,learned,fresh_after,key=params[index:index+14]
+            for index in range(0,len(store),14):
+                cap,left,window,reset,blocked,circuit,streak,hold,seq,revision,_expiry,learned,fresh_after,key=store[index:index+14]
                 ordered.append(key)
                 if key in self.states:
                     self.states[key].update(cap=cap,left=left,window=window,reset=reset,blocked=blocked,
                         circuit=circuit,streak=streak,hold=hold,seq=seq,policy=revision,policyExpires=_expiry,learned=learned,freshAfter=fresh_after)
                     self.result.append((key,))
             self.scope_calls.append(('store',tuple(ordered)));self.rowcount=len(self.result)
-            if self.store_fault=='count':self.rowcount-=1
+            if self.store_fault=='count':
+                self.rowcount-=1
+                if inserted:self.result=self.result[:-1]
             elif self.store_fault=='key':self.result[0]=('99:'+'0'*64,)
             elif self.store_fault=='duplicate':self.result=[self.result[0]]+self.result[:-1]
+            if inserted:   # the statement answers with the keys it wrote, array_agg(scope_key ORDER BY scope_key)
+                written=sorted(key for key, in self.result)
+                self.admit(sql,admission)
+                if self.rowcount == 1:self.result=[(written,)]
         elif sql.startswith('WITH locked_pending AS MATERIALIZED'):
-            key,now=params
-            self.result=[(sum(key in r['keys'] and (r['state'] in ('sent','uncertain') or
+            bounded='coalesce(sent_at,reserved_at)' in sql
+            key,since,now=params if bounded else (params[0],None,params[1])
+            self.result=[(sum(key in r['keys'] and (r['state'] in ('sent','uncertain') and (not bounded or self.unobserved_at(r)>since) or
                 r['state'] in ('reserved','sealed') and r['expires']>now) for r in self.admissions.values()),)]
+        elif sql.startswith('SELECT count(*) FROM public.pr_discord_request_admissions WHERE scope_keys @>'):
+            key,now,fresh_after=params   # _window_unused: usable permits, or requests sent since a learned window was refilled
+            self.result=[(sum(key in r['keys'] and (r['state'] in ('reserved','sealed') and r['expires']>now or
+                (r.get('sent') is not None and r['sent']>=fresh_after)) for r in self.admissions.values()),)]
         elif sql.startswith('WITH locked_alias AS MATERIALIZED'):
-            pid,alias,auth,route,major,_alias,now=params
+            bounded='coalesce(sent_at,reserved_at)' in sql
+            pid,alias,auth,route,major,*rest=params
+            since,_alias,now=rest if bounded else (None,*rest)
             pending=[r for r in self.admissions.values() if r['id']!=pid and
                 (alias in r['keys'] or (r['auth'],r['route'],r['major'])==(auth,route,major)) and
-                (r['state'] in ('sent','uncertain') or r['state'] in ('reserved','sealed') and r['expires']>now)]
+                (r['state'] in ('sent','uncertain') and (not bounded or self.unobserved_at(r)>since) or
+                 r['state'] in ('reserved','sealed') and r['expires']>now)]
             self.result=[(len(pending),sum(alias not in r['keys'] for r in pending))]
+        elif sql.startswith('WITH tick AS MATERIALIZED'):
+            # the clock (or the instant a reservation names) and the application window's inputs there (_window_state)
+            explicit = 'to_timestamp(%s::double precision) AS at' in sql
+            at, (key, scan, _key, span, band, horizon, _span, _unused_span) = (params[0], params[1:]) if explicit else (None, params)
+            moment = at if explicit else self.workspace.now if self.workspace else self.now
+            # which admissions this window counts: all, or (a separate bearer budget) those of the user-bearer kind or the others
+            klass = 'bearer' if "AND credential_kind='user'" in sql else 'bot' if "AND credential_kind<>'user'" in sql else None
+            held, occupied, unused = self.window_inputs(moment, key, span, band, horizon, scan, klass)
+            self.result = [(moment, held, occupied, unused)]
         elif sql.startswith('WITH reservation_clock AS MATERIALIZED'):
-            self.now+=self.insert_delay
-            moment=self.workspace.now if self.workspace else self.now
-            if params[-1]<=moment:
-                self.rowcount=0;return
-            self.serial+=1
-            names=('id','application','auth','credential','kind','method','path','route','major','bucket','keys',
-                'publish','binding','workspace','publication','manifest','authorization','approval','worker','lease','channel','expires')
-            row=dict(zip(names,params[:-1]));row.update(seq=self.serial,state='sent' if ',state,sent_at)' in sql else 'reserved',intent=None,reserved=moment)
-            if row['publish'] and any(r['binding']==row['binding'] for r in self.admissions.values()):
-                raise ValueError('Duplicate synthetic binding')
-            self.admissions[row['id']]=row
-        elif sql.startswith('SELECT request_seq,application_key'):
+            self.result=[];self.admit(sql,params)
+        elif sql.startswith('SELECT request_seq,application_key') or sql.startswith('WITH adm AS MATERIALIZED'):
             self.now+=self.admission_lock_delay
             if self.workspace:self.workspace.now+=self.admission_lock_delay
             r=self.admissions.get(params[0])
             if r:self.result=[tuple(r[k] for k in ('seq','application','auth','credential','kind','method','path',
                 'route','major','bucket','keys','binding','state','intent','expires','reserved'))]
+            if r and sql.startswith('WITH adm AS MATERIALIZED'):   # the clock, read after the row lock (_admission, clock=True)
+                self.result=[self.result[0]+(self.workspace.now if self.workspace else self.now,)]
+        elif sql.startswith('SELECT method,is_publish,credential_kind'):   # reconcile_nickname_by_id: the row by id and application
+            r=self.admissions.get(params[0])
+            self.result=[(r['method'],r['publish'],r['kind'],r['binding'],r['intent'],r['route'],r['path'],r['state'],r['expires'],r['reserved'])] if r and r['application']==params[1] else []
         elif sql.startswith('SELECT route_key,major_key'):
             r=self.admissions.get(params[0]);self.result=[(r['route'],r['major'])] if r else []
         elif sql.startswith('SELECT scope_keys'):
@@ -146,6 +168,9 @@ class MemoryLedger:
         elif sql.startswith('UPDATE public.pr_discord_route_buckets'):
             bucket,seq,auth,route,major=params;self.maps[(auth,route,major)]=[bucket,seq]
         elif 'SET bucket_key=' in sql:
+            if sql.startswith('WITH routed AS'):   # the mapping row and the admissions that join the alias, in one statement
+                bucket,seq,auth,route,major,*params=params
+                self.maps[(auth,route,major)]=[bucket,seq]
             bucket,key,auth,route,major,_key=params
             for r in self.admissions.values():
                 if (r['auth'],r['route'],r['major'])==(auth,route,major) and r['state'] in ('reserved','sealed','sent','uncertain') and key not in r['keys']:
@@ -156,7 +181,33 @@ class MemoryLedger:
             if self.rowcount:r.update(state='sealed',intent=intent)
         elif "SET state='sent'" in sql:
             pid,expected=params;r=self.admissions[pid];self.rowcount=int(r['state']==expected)
-            if self.rowcount:r['state']='sent'
+            if self.rowcount:r.update(state='sent',sent=self.workspace.now if self.workspace else self.now)
+        elif sql.startswith('SELECT coalesce(bool_or(r.manual_hold)'):   # consume: is any scope of the permit held, embargoed or open (_stopped)
+            moment=self.workspace.now if self.workspace else self.now
+            scopes=[self.states[k] for k in params[0] if k in self.states and (
+                self.states[k]['hold'] or (self.states[k]['blocked'] or 0)>moment or (self.states[k]['circuit'] or 0)>moment)]
+            until=max([max(x['blocked'] or 0,x['circuit'] or 0) for x in scopes]+[0]) or None
+            self.result=[(any(x['hold'] for x in scopes),until,moment)]
+        elif sql.startswith('SELECT a.sent_at IS NULL,'):   # _blocked_unsent_wait: unsent, and when the embargoes on its scopes end
+            r=self.admissions[params[0]]
+            until=max([max(self.states[k]['blocked'] or 0,self.states[k]['circuit'] or 0) for k in r['keys'] if k in self.states]+[0]) or None
+            self.result=[(r.get('sent') is None,until)]
+        elif sql.startswith('SELECT sent_at IS NULL AND sealed_at IS NOT NULL AND is_publish'):   # confirm_blocked_publish
+            r=self.admissions[params[0]]
+            self.result=[(r.get('sent') is None and r['intent'] is not None and bool(r['publish']),)]
+        elif sql.startswith("UPDATE public.pr_discord_request_admissions SET outcome_at=clock_timestamp(),state='blocked'"):   # consume: closed unsent
+            pid,expected=params;r=self.admissions[pid];self.rowcount=int(r['state']==expected and r.get('sent') is None)
+            if self.rowcount:r['state']='blocked'
+        elif sql.startswith("UPDATE public.pr_discord_request_admissions a SET state='blocked'"):   # the gate before a booked read is sent
+            r=self.admissions[params[0]];moment=self.workspace.now if self.workspace else self.now
+            scopes=[self.states[k] for k in r['keys'] if k in self.states]
+            stopped=r['state']=='sent' and not r['publish'] and r['method']=='GET' and any(
+                x['hold'] or (x['blocked'] or 0)>moment or (x['circuit'] or 0)>moment for x in scopes)
+            self.rowcount=int(stopped);self.result=[]
+            if stopped:
+                r['state']='blocked'
+                until=max([max(x['blocked'] or 0,x['circuit'] or 0) for x in scopes]+[0]) or None
+                self.result=[(any(x['hold'] for x in scopes),until,moment)]
         elif "SET state='blocked',outcome_at=clock_timestamp() WHERE id=" in sql:
             method = 'PATCH' if "method='PATCH'" in sql else 'GET'
             r=self.admissions[params[0]];self.rowcount=int(r['state']=='sent' and r['method']==method and not r['publish']
@@ -173,6 +224,37 @@ class MemoryLedger:
             self.rowcount=int(r['state'] in ('reserved','sent','uncertain') and not r['publish'] and r['method']=='PATCH' and r['route']==route)
             if self.rowcount:r.update(state='observed',status=None,scope='unknown')
         else:raise AssertionError('Unrecognized synthetic SQL contract: '+sql[:110])
+    def admit(self,sql,params):
+        """INSERT INTO the admissions ... FROM reservation_clock WHERE expiry>clock (_insert_parts); rowcount 0 if expired."""
+        self.now+=self.insert_delay
+        moment=self.workspace.now if self.workspace else self.now
+        if params[-1]<=moment:
+            self.rowcount=0;self.result=[];return
+        self.rowcount=1
+        self.serial+=1
+        names=('id','application','auth','credential','kind','method','path','route','major','bucket','keys',
+            'publish','binding','workspace','publication','manifest','authorization','approval','worker','lease','channel','expires')
+        wire=max(moment,params[22])   # greatest(at, the booked wire time): an unbooked admission names epoch 0
+        read=',state,sent_at)' in sql
+        row=dict(zip(names,params[:22]));row.update(seq=self.serial,state='sent' if read else 'reserved',intent=None,
+            reserved=moment if read else wire,sent=wire if read else None)
+        if row['publish'] and any(r['binding']==row['binding'] for r in self.admissions.values()):
+            raise ValueError('Duplicate synthetic binding')
+        self.admissions[row['id']]=row
+    def window_inputs(self,at,key,span,band,horizon,scan,klass=None):
+        """(held, occupied wire times, the wire times of permits still to be used) for an application at `at`, as _window_state states them.
+        `klass` 'bearer' or 'bot' counts only the user-bearer admissions or only the others (the scan is of the newest `scan` of all)."""
+        def member(r):return klass is None or (r['kind']=='user')==(klass=='bearer')
+        held=sum(r['application']==key and member(r) and self.wire_time(r)<=at-span and (
+            r['state'] in ('reserved','sealed') and r['expires']>at or
+            r['state'] in ('sent','uncertain') and r['expires']>at-band and self.wire_time(r)>at-horizon)
+            for r in self.admissions.values())
+        newest=sorted((r for r in self.admissions.values() if r['application']==key),key=lambda r:-r['seq'])[:scan]
+        return (held,[self.wire_time(r) for r in newest if self.wire_time(r)>at-span and member(r)],
+                [self.wire_time(r) for r in newest if self.wire_time(r)>at-span and member(r) and r['state'] in ('reserved','sealed') and r['expires']>at])
+    @staticmethod
+    def wire_time(row):return row['sent'] if row.get('sent') is not None else row['reserved']  # coalesce(sent_at,reserved_at)
+    unobserved_at=wire_time
     def fetchone(self):return self.result.pop(0) if self.result else None
     def fetchall(self):result,self.result=self.result,[];return result
 
@@ -477,11 +559,10 @@ class AliasLearningRegression(unittest.TestCase):
         self.db.insert_delay=0
         self.assertIsInstance(self.s.reserve('GET',self.path,identity=self.identity),Permit)
 
-    def test_short_positive_window_is_usable_but_consume_never_extends_expiry(self):
+    def test_short_positive_deadline_is_usable_but_consume_never_extends_expiry(self):
         self.send()
-        deadline=self.db.now+.01
-        self.db.states[self.alias()]['reset']=deadline
-        permit=self.s.reserve('GET',self.path,identity=self.identity)
+        deadline=self.db.now+.01   # the caller's own deadline (a create's lease or approval): no route window ends a permit
+        permit=self.s.reserve('GET',self.path,identity=self.identity,valid_until=deadline)
         self.assertAlmostEqual(permit.expires_at,deadline,places=6)
         self.assertLess(permit.expires_at-self.db.now,.025)
         self.db.now=deadline
@@ -489,12 +570,11 @@ class AliasLearningRegression(unittest.TestCase):
         self.assertEqual(self.db.admissions[permit.id]['state'],'reserved')
         self.assertEqual(self.db.admissions[permit.id]['expires'],permit.expires_at)
 
-    def test_short_window_that_expires_during_insert_rolls_back_exactly(self):
+    def test_short_deadline_that_expires_during_insert_rolls_back_exactly(self):
         self.send()
-        self.db.states[self.alias()]['reset']=self.db.now+.01
         before=copy.deepcopy((self.db.states,self.db.maps,self.db.admissions))
         self.db.insert_delay=.02
-        with self.assertRaises(RateDelayed) as caught:self.s.reserve('GET',self.path,identity=self.identity)
+        with self.assertRaises(RateDelayed) as caught:self.s.reserve('GET',self.path,identity=self.identity,valid_until=self.db.now+.01)
         self.assertEqual(caught.exception.rate_cause,'permit_expired')
         self.assertEqual((self.db.states,self.db.maps,self.db.admissions),before)
 
@@ -620,7 +700,7 @@ class RateLimits(unittest.TestCase):
         permit=self.s.reserve_read('GET',self.path,identity=self.identity)
         with self.assertRaises(RateCoordinatorUnavailable):self.s.consume(permit,'GET',self.path)
         self.s.note_transport_failure(permit);self.db.now+=3
-        with self.assertRaises(RateDelayed):self.s.reserve_read('GET','/channels/'+A,identity=self.identity)
+        self.assertIsInstance(self.s.reserve_read('GET','/channels/'+A,identity=self.identity),Permit)   # a failed read is not held
 
     def test_atomic_read_late_insert_rolls_back_all_debits_before_transport(self):
         self.db.insert_delay=2
@@ -652,11 +732,22 @@ class RateLimits(unittest.TestCase):
         with self.assertRaises((RateDelayed,RateCoordinatorUnavailable)):self.s.consume(second,'GET',other_path)
         with self.assertRaises(RateDelayed):self.reserve('/guilds/333333333333333333')
 
-    def test_ambiguous_cold_probe_keeps_its_major_blocked(self):
-        first=self.reserve();self.s.consume(first,'GET',self.path)
+    def test_ambiguous_cold_probe_of_a_write_keeps_its_major_blocked(self):
+        post='/channels/'+A+'/messages'
+        first=self.s.reserve('POST',post,identity=self.identity);self.s.consume(first,'POST',post)
         self.s.note_transport_failure(first);self.db.now+=3
+        self.assertEqual(self.db.admissions[first.id]['state'],'uncertain')
         with self.assertRaises(RateDelayed):self.reserve('/channels/'+A)
         self.assertIsInstance(self.reserve('/channels/'+B+'/messages/'+A),Permit)
+
+    def test_a_failed_cold_probe_read_frees_its_major_after_one_window(self):
+        first=self.reserve();self.s.consume(first,'GET',self.path)
+        self.s.note_transport_failure(first)
+        self.assertEqual(self.db.admissions[first.id]['state'],'observed','a read is resolved at once: nothing of it is still on its way')
+        self.assertEqual(self.db.admissions[first.id]['status'],503)
+        with self.assertRaises(RateDelayed):self.reserve('/channels/'+A)   # its probe window is not over yet
+        self.db.now+=3
+        self.assertIsInstance(self.reserve('/channels/'+A),Permit)
 
     def test_route_aliases_share_budget_and_major_resources_stay_separate(self):
         other='/channels/'+A+'/messages'
@@ -692,13 +783,57 @@ class RateLimits(unittest.TestCase):
         with self.assertRaises(RateDelayed) as caught:self.reserve()
         self.assertGreaterEqual(caught.exception.retry_after_seconds,20)
         self.assertNotIn(_digest('older'),[r[0] for r in self.db.maps.values()])
-    def test_ambiguous_timeout_keeps_spent_slot_and_never_calls_post_twice(self):
-        self.learn();self.db.now+=1.1
-        p=self.reserve();self.s.consume(p,'GET',self.path);self.s.note_transport_failure(p)
+    def test_ambiguous_timeout_of_a_write_keeps_its_spent_slot_across_windows(self):
+        post='/channels/'+A+'/messages'
+        def write():return self.s.reserve('POST',post,identity=self.identity)
+        learner=write();self.s.consume(learner,'POST',post)
+        self.s.observe(learner,{'status':200,'headers':{'X-RateLimit-Bucket':'learned-post','X-RateLimit-Limit':'3',
+            'X-RateLimit-Remaining':'2','X-RateLimit-Reset-After':'1'}});self.db.now+=1.1
+        p=write();self.s.consume(p,'POST',post);self.s.note_transport_failure(p)
         self.assertEqual(self.db.admissions[p.id]['state'],'uncertain')
         self.db.now+=1.1
-        self.reserve();self.reserve()
-        with self.assertRaises(RateDelayed):self.reserve()
+        write();write()
+        with self.assertRaises(RateDelayed):write()
+
+    def test_an_answer_refused_for_its_size_is_an_observed_outcome_not_a_lost_request(self):
+        """The transport raises after the answer arrived (a body over its cap). The status and headers it saw are what the
+        coordinator records, so the route learns from them and no slot stays held; the error still reaches the caller."""
+        big={'X-RateLimit-Bucket':'big-answers','X-RateLimit-Limit':'5','X-RateLimit-Remaining':'4','X-RateLimit-Reset-After':'5'}
+        def oversize(method,url,**kwargs):
+            raise ProviderResponseLimit(200,big)
+        self.p.transport=oversize
+        for number in range(8):
+            with self.assertRaises(AlphaError) as caught:self.p._bot('GET','/guilds/%s'%(A[:-1]+str(number)))
+            self.assertEqual((caught.exception.status,str(caught.exception)),(502,'Provider response limit exceeded.'))
+        self.assertEqual({row['state'] for row in self.db.admissions.values()},{'observed'})
+        self.assertEqual({row['status'] for row in self.db.admissions.values()},{200})
+        learned=[row for row in self.db.states.values() if row['kind']=='route' and row['learned']]
+        self.assertTrue(learned,'the headers of the refused answer taught the route')
+        self.assertTrue(all(row['streak']==0 and not row['circuit'] for row in learned),'a size refusal is not an outage')
+
+    def test_a_transport_failure_resolves_a_read_at_once_and_leaves_a_write_uncertain_and_not_reusable(self):
+        def unreachable(method,url,**kwargs):
+            raise AlphaError('The provider is temporarily unreachable.',503)
+        self.p.transport=unreachable
+        with self.assertRaises(AlphaError):self.p._bot('GET','/guilds/'+A)
+        with self.assertRaises(AlphaError):
+            self.p._discord_http('POST','/oauth2/token',credential_kind='oauth',headers={'Authorization':'Basic synthetic'},form={'grant_type':'authorization_code'})
+        read,write=sorted(self.db.admissions.values(),key=lambda row:row['seq'])
+        self.assertEqual((read['method'],read['state'],read['status']),('GET','observed',503))
+        self.assertEqual((write['method'],write['state'],write['status']),('POST','uncertain',503))
+        permit=Permit(write['id'],self.s.application_key,'POST',write['path'],RequestIdentity.make(APP,'oauth','synthetic-secret'),None,write['expires'])
+        with self.assertRaises(RateCoordinatorUnavailable):self.s.consume(permit,'POST','/oauth2/token')   # a sent permit is never sent again
+
+    def test_a_timed_out_read_is_not_pending_but_a_timed_out_write_is(self):
+        self.learn();self.db.now+=1.1
+        read=self.reserve();self.s.consume(read,'GET',self.path);self.s.note_transport_failure(read)
+        post='/channels/'+B+'/messages'
+        write=self.s.reserve('POST',post,identity=self.identity);self.s.consume(write,'POST',post);self.s.note_transport_failure(write)
+        self.assertEqual([self.db.admissions[p.id]['state'] for p in (read,write)],['observed','uncertain'])
+        self.assertEqual(self.db.admissions[read.id]['status'],503)
+        pending=lambda permit:self.s._pending(self.db,next(k for k in self.db.admissions[permit.id]['keys'] if k.startswith('50:')),self.db.now,since=self.db.now-31)  # noqa: E731
+        self.assertEqual((pending(read),pending(write)),(0,1))
+
     def test_bot401_circuit_is_shared_user401_does_not_disable_bot(self):
         self.send({'status':401,'headers':{}})
         replica=SharedPostgresBudget(self.db.connection,APP,policy=self.policy)

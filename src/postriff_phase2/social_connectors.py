@@ -332,8 +332,51 @@ class DiscordProvider(OAuthProvider):
         self.message_content_evidence_raw = None
         self.rate_policy_raw = None
         self.rate_limiter = None
+        self._degraded_until = 0.0
         self.rate_coordinator_degraded = False
         self._bot_identity_cache = None
+
+    # How long this process stops asking the coordinator after the coordinator failed to record something it had to (below).
+    DEGRADED_SECONDS = 45.0
+
+    @property
+    def rate_coordinator_degraded(self):
+        """Whether this process may not use the coordinator now: for good when it was set (OAuthService does so when the reviewed
+        policy does not parse: a configuration to restore), for DEGRADED_SECONDS when the coordinator failed to record an outcome
+        at run time (_coordinator_failed). It used to be for the life of the process, so one lock timeout in an observation
+        (2 s under contention) disabled Discord in that process until it restarted (the independent review's G2E-B-09)."""
+        return self._degraded_for_good or time.monotonic() < self._degraded_until
+
+    @rate_coordinator_degraded.setter
+    def rate_coordinator_degraded(self, value):
+        self._degraded_for_good = bool(value)
+        if not value:
+            self._degraded_until = 0.0
+
+    def _coordinator_failed(self):
+        """This process stops asking the coordinator for DEGRADED_SECONDS. Entering that rest leaves one WARNING line, whatever kind
+        of process it is (the lane, the minute cron or the web, which have no other report of it): the event, the kind of process
+        and the CLASS of the failure being handled, never its message, a request, an identifier or a number from the database."""
+        entering = not self.rate_coordinator_degraded
+        self._degraded_until = time.monotonic() + self.DEGRADED_SECONDS
+        if entering:
+            import logging
+            import sys
+            from .discord.rate_limits import current_process_kind
+            caught = sys.exc_info()[1]
+            logging.getLogger('postriff.request').warning(json.dumps({
+                'event': 'discord.coordinator.degraded', 'processKind': current_process_kind(),
+                'reason': type(caught).__name__ if caught is not None else 'unknown', 'restSeconds': self.DEGRADED_SECONDS}))
+
+    @staticmethod
+    def _recorded(call):
+        """A write to the coordinator after a request was sent: once more if its own lock or statement timed out. That failure is
+        a rollback (nothing was recorded), so asking again cannot record twice; any other failure is not asked again."""
+        from .discord.rate_limits import RateCoordinatorBusy
+        try:
+            return call()
+        except RateCoordinatorBusy:
+            return call()
 
     @property
     def server_schedule(self):
@@ -372,6 +415,17 @@ class DiscordProvider(OAuthProvider):
         credential = self.bot_token if kind == 'bot' else bearer if kind in ('user', 'webhook') else self.client_secret
         return RequestIdentity.make(self.client_id, kind, credential, user_id)
 
+    @staticmethod
+    def _book_ahead(room=None):
+        """The book_ahead keyword for a coordinator call: what the calling context may be booked (rate_limits.booking; none
+        outside it), within `room` seconds when the call has a wait budget. Empty when it is not to be booked, so a coordinator
+        that cannot book is called exactly as before."""
+        from .discord.rate_limits import current_book_ahead
+        book = current_book_ahead()
+        if room is not None:
+            book = min(book, room)
+        return {'book_ahead': book} if book >= .005 else {}
+
     def admit_bot_request(self, method, path, *, binding=None, valid_until=None):
         """Reserve one atomic global/route slot before an irreversible publication intent."""
         from .discord.rate_limits import RateCoordinatorUnavailable
@@ -380,7 +434,7 @@ class DiscordProvider(OAuthProvider):
         if self.rate_coordinator_degraded or self.rate_limiter is None:
             raise RateCoordinatorUnavailable()
         return self.rate_limiter.reserve(method, path, identity=self._rate_identity('bot'),
-                                         binding=binding, valid_until=valid_until)
+                                         binding=binding, valid_until=valid_until, **self._book_ahead())
 
     def _bot(self, method, path, **kwargs):
         extra = kwargs.pop('headers',{})
@@ -390,7 +444,9 @@ class DiscordProvider(OAuthProvider):
         return self._discord_http(method, path, headers=headers, credential_kind='bot', **kwargs)
 
     def _discord_http(self, method, path, *, credential_kind, bearer=None, user_id=None, **kwargs):
-        from .discord.rate_limits import Permit, RateDelayed, RateCoordinatorUnavailable, UnconsumedPublishPermit, ReadAdmissionDelayed
+        from .discord.rate_limits import (Permit, RateDelayed, RateCoordinatorUnavailable, UnconsumedPublishPermit,
+                                          ReadAdmissionDelayed)
+        from .providers import ProviderResponseLimit
         read_authorize = kwargs.pop('read_authorize', None)
         write_authorize = kwargs.pop('write_authorize', None)
         write_admitted = kwargs.pop('write_admitted', None)
@@ -430,7 +486,10 @@ class DiscordProvider(OAuthProvider):
                 try:
                     direct_read = method == 'GET' and rate_permit is None and binding is None
                     if direct_read:
-                        permit = self.rate_limiter.reserve_read(method, path, identity=self._rate_identity(credential_kind,bearer,user_id))
+                        # Inside rate_limits.booking() (the lane) a full window books this read a slot instead of refusing it,
+                        # for what is left of the wait this call allows itself; anywhere else the answer is immediate.
+                        permit = self.rate_limiter.reserve_read(method, path, identity=self._rate_identity(credential_kind,bearer,user_id),
+                                                                **self._book_ahead(wait_deadline - time.monotonic()))
                     else:
                         permit = rate_permit if isinstance(rate_permit, Permit) else (
                             self.rate_limiter.reserve(method, path, identity=self._rate_identity(credential_kind,bearer,user_id))
@@ -467,9 +526,9 @@ class DiscordProvider(OAuthProvider):
             except Exception:
                 if self.rate_v1_enabled:
                     try:
-                        self.rate_limiter.abandon_unsent_read(permit)
+                        self._recorded(lambda: self.rate_limiter.abandon_unsent_read(permit))
                     except Exception:
-                        self.rate_coordinator_degraded = True
+                        self._coordinator_failed()
                 raise
         if write_authorize is not None:
             try:
@@ -478,7 +537,7 @@ class DiscordProvider(OAuthProvider):
             except Exception:
                 if self.rate_v1_enabled:
                     try:
-                        self.rate_limiter.abandon_unsent_nickname(permit)
+                        self._recorded(lambda: self.rate_limiter.abandon_unsent_nickname(permit))
                     except Exception:
                         # Nothing was sent, so no provider-side effect is unknown: at worst one reserved slot lingers
                         # until it expires or the coordinator resolves it. That must not stop publishing for the whole
@@ -487,18 +546,24 @@ class DiscordProvider(OAuthProvider):
                 raise
         try:
             response = self.transport(method, self.API + path, **kwargs)
-        except Exception:
+        except Exception as error:
             if self.rate_v1_enabled:
                 try:
-                    self.rate_limiter.note_transport_failure(permit)
+                    if isinstance(error, ProviderResponseLimit):
+                        # Discord answered and the answer was refused for its size: the outcome is known, the request is
+                        # not lost. (Recorded as lost it would hold a slot of the shared budget; a guild owner could
+                        # make a read of a large server do that on demand.)
+                        self._recorded(lambda: self.rate_limiter.observe(permit, error.response))
+                    else:
+                        self._recorded(lambda: self.rate_limiter.note_transport_failure(permit))
                 except Exception:
-                    self.rate_coordinator_degraded = True
+                    self._coordinator_failed()
             raise
         if self.rate_v1_enabled:
             try:
-                observation = self.rate_limiter.observe(permit, response)
+                observation = self._recorded(lambda: self.rate_limiter.observe(permit, response))
             except Exception:
-                self.rate_coordinator_degraded = True
+                self._coordinator_failed()
                 # A POST may already have been accepted. Preserve the provider
                 # message ID/receipt instead of hiding it behind a ledger error.
                 if method not in ('POST', 'PUT', 'PATCH', 'DELETE'):

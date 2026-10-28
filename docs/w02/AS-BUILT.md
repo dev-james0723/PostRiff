@@ -12,6 +12,7 @@ read from the code.
 | `src/postriff_phase2/discord/lane.py` (new) | The lane: flag and budget parsing, shard parsing, the readiness test (`blocker`), one bounded loop per invocation, the pre-claim coordinator read, the bounded wait for a refused create permit, per-invocation counters and the log line; the minute cron's lag warning (`warn_if_lagging`); the health status (`status`); the worker's guard for a document it cannot read (`LaneWorker.claim`). |
 | `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` when the lane is on and the static part of `lane.blocker()` says it can run (the minute cron then does not claim Discord), and whenever Discord is paused (`lane.paused()`, with the lane off or on but unable to run), and with the lane on adds the health status (`discordLaneStatus`) and logs the lag warning from its own report and, when the lane owns Discord, the projection; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below), with one deliberate exception: a paused Discord is a wait, not a hold, and the tick leaves it alone ("A paused Discord is a wait"). After review: the seal path and the unsent-permit recovery also release a permit an embargo or hold blocked before it was used ("A permit an embargo blocks before it is used"); the three releases for a rate wait call a hook that does nothing here and that the lane's worker uses to keep a post's place ("A release the shared budget caused keeps its place"). |
 | `src/postriff_phase2/discord/rate_limits.py`, `src/postriff_phase2/social_connectors.py` | After review, at the coordinator's request: `seal()` and `consume()` refuse a reserved or sealed permit that an embargo or hold blocked, before any transport, as `permit_blocked` (with the embargo's remaining time), `confirm_blocked_publish()` proves such an intent unsent from its admission row, and the sender turns that refusal into the same pre-transport signal as an expired unconsumed permit ("A permit an embargo blocks before it is used", below). |
+| `rate_limits.py`, `social_connectors.py`, `hosted_social.py`, `discord/lane.py`, `discord/ops.py` (limiter branch, after the first hosted measurement) | Booking: the lane's preflight reads, create permit and read-back are given the next exact slot of a full application window and wait for it inside the coordinator, instead of being refused and asking again; two lane counters and a health section show it ("Booking", below; Q19). |
 | `src/postriff_phase2/hosted_app.py` | Route `GET /api/cron/discord-worker/<shard>`: cron secret checked before the runtime starts (as the YouTube lanes); flag read per request; the request log files it under `cron`. |
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. A `discord-worker-protocol` check fails when any Discord feature flag is on (authorization v2, connections v2, rate limits, webhook, user install, engagement, the lane) and `POSTRIFF_DISCORD_WORKER_V1_ENABLED` is not 1 or true ("The worker flag and migration 128"). |
@@ -135,15 +136,19 @@ time [simulated]. It adds a new path that can multiply invocations, which the co
      misses or when nothing is due soon.
 5. One log line, `discord.lane.completed`: shard, `stoppedBy`, elapsed seconds and counts only (claimed, posted,
    verified, held, uncertain, rateDelayed, leaseLost, recoveries, retries, deadLetters, claimMisses, rejected, notSent,
-   uncertainCreates, rateWaits, idleWaits, permitWaits, quarantined, positionsKept). No workspace, job, channel, content or lease owner id. An
+   uncertainCreates, rateWaits, idleWaits, permitWaits, quarantined, positionsKept, bookedWaits, bookedSeconds, horizonRefusals,
+   coordinatorBusy). No workspace, job, channel, content or lease owner id. An
    exception is logged with its class name only and re-raised, so the request returns 500 with its failure site.
 
-The one behavioural addition inside a step: when the create permit is refused because the application window is spent,
-the lane's worker waits for the next window (at most one second, the same bound reads already have) instead of releasing
-the job. Without it, at a saturated budget each refused create re-spends its four preflight reads and almost nothing is
-created [measured: with the wait off, see CAPACITY-SIMULATION.md]. It waits before any intent is sealed, the job keeps its
-live lease, and the step rechecks every fence afterwards. Any other refusal (an embargo, a channel window, a passed lease
-or approval deadline) releases the job as before.
+The behavioural addition inside a step has two layers. First, booking ("Booking", below): the preflight's reads, the create
+permit and the read-back are asked for inside `rate_limits.booking()`, so where the application window is full each is given
+the next exact slot, at most one second ahead, and waits for it inside the coordinator. Second, the older bounded wait stays
+for what a booking cannot cover (the booked horizon full, or a permit that lapsed while it was being stored): when the create
+permit is refused because the application window is spent, the lane's worker waits for the next window (at most one second,
+the same bound reads already have) instead of releasing the job. Without any wait, at a saturated budget each refused create
+re-spends its four preflight reads and almost nothing is created [measured: with the wait off, see CAPACITY-SIMULATION.md].
+Both happen before any intent is sealed, the job keeps its live lease, and the step rechecks every fence afterwards. Any other
+refusal (an embargo, a channel window, a passed lease or approval deadline) releases the job as before.
 
 The existing minute cron, with the flag on and the lane able to run, runs every other provider exactly as before and
 does not claim Discord (`exclude_discord`). "Able to run" is the static part of `lane.blocker()`
@@ -229,7 +234,9 @@ but is a separate setting.
 ## A permit an embargo blocks before it is used
 
 An embargo or hold that the coordinator observes after a create's intent was sealed blocks that unused permit
-(`observe()`: every reserved or sealed admission in the blocked scope becomes `blocked`). The post used to end
+(`observe()`: every reserved or sealed admission in the blocked scope becomes `blocked`; and, since G2E-B-16, `consume()` looks
+itself at the holds, embargoes and circuits of the permit's scopes before it marks the admission sent: "Consume looks too", in
+Booking, below). The post used to end
 `uncertain` though nothing was sent, waiting for manual reconciliation: one global 429 could strand about one post
 per running loop. The invariant now: a sealed intent is retried only when `consume()` itself refuses its permit in the
 same call, before any transport, and the worker then proves from the admission row, under its lock in the workspace
@@ -372,6 +379,28 @@ too: neither the lane nor the minute tick claims the read-back of an already cre
 (a read-back that meets a disabled execution is completed `uncertain`: "The original Discord application is unavailable.
 Keep the receipt for manual review.") can only be reached by a scoped claim; the read-back is made after the pause.
 
+## A read-back waits for the coordinator
+
+A post that Discord already accepted keeps its receipt and waits for a read-back that confirms it. That read has to be admitted
+by the shared request coordinator like every other, so with a coordinator that cannot admit anything (none attached, degraded,
+its policy ended, its database down) it was refused before it was built. `reconcile_discord` took that refusal for an answer it
+could not read: the post became `uncertain`, the claim kept the check it had spent, and after the fifth claim the post was
+parked for 86,400 s ("Manual provider review required"), still parked when the coordinator came back [the ops review's N-1,
+reproduced by its probe `exp_runbook2.py e5`: checks 7, next attempt in 86,399.9 s]. The runbook's second lever, a build without a
+usable coordinator, therefore did strand created posts, though it said it stranded nothing.
+
+Now `RateCoordinatorUnavailable` raised anywhere in the lookup is a wait for that exact lookup, as a read refused by a hold is
+(Q17): the post stays `provider_accepted` with its receipt, the result is the existing deferral (`discordReadDeferred`,
+`discordReadAdmissionDenied`), the worker refunds the check, and the next attempt is `COORDINATOR_WAIT_SECONDS` (300) away, for
+as long as it lasts; the first attempt after the coordinator is back confirms the post. Only the coordinator is a wait: a lookup
+that fails for any other reason (a connection that changed, a mismatch, a missing field) is `uncertain` as before. Everything that
+creates stays fail-closed and is not touched: the preflight and the permit still raise `RateCoordinatorUnavailable`, nothing
+leaves, no read reaches Discord, and a post not yet created is released for five minutes. A person's own requests are unchanged
+(a 503 "Connecting to Discord is paused for a moment"): only the read-back of an existing receipt changed. The wait is one event
+per claim (`discordReadDeferrals` counts them), about 288 a day per waiting post; the claims come from the minute tick, which keeps
+the frozen path in this state because `lane.paused()` is false (it asks the provider's flags, and this state leaves them on).
+Whether the tick should treat "no usable coordinator" as a pause, so that nothing is claimed at all, is Q20.
+
 ## The worker flag and migration 128
 
 Migration 128's guard trigger (installed in production) refuses the claim of a Discord post by a worker that does not use
@@ -405,7 +434,8 @@ quoted texts are the events and next actions the existing worker writes.
 |---|---|---|---|---|
 | Flag off, or the lease protocol off | frozen path: claims Discord as before W-02. With the worker flag off AND migration 128 installed (as in production) a due Discord post is refused by the database guard and the claim aborts for every provider ("The worker flag and migration 128"); the preflight now fails such a build | answer `{"enabled": false}` without starting the runtime | sent as before when the worker flag is on; with it off and migration 128 installed not sent, and the claim aborts | `status.blocker` `disabled`; the preflight's `discord-worker-protocol` |
 | Lane budget misconfigured | frozen path, sends as before | 503 `discord_lane_configuration`, nothing claimed | sent as before | shard 503s; `blocker` `configuration` |
-| Rate limits off; or rate limits on with no coordinator (no policy, or one that does not parse: `runtime_from_environment` then builds no coordinator and turns Discord authorization off) | frozen path; Discord authorization is off, so Discord is paused: the tick claims no Discord post and touches nothing (before K1: held, destination set to `verification_required`) [measured on PostgreSQL for both] | stop at once, `coordinator_unavailable`, nothing claimed | later than scheduled (the post is not touched while Discord is paused), sent after the repair if still inside its approval; held, never sent late, if its approval has ended by then; no destination is touched | the preflight fails; WARNING shard lines; `blocker` `coordinator_unavailable` |
+| Rate limits off (`POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED` unset) | frozen path; `runtime_from_environment` then turns Discord authorization off, so Discord is paused: the tick claims no Discord post and touches nothing (before K1: held, destination set to `verification_required`) [measured on PostgreSQL] | stop at once, `coordinator_unavailable`, nothing claimed | later than scheduled (the post is not touched while Discord is paused), sent after the repair if still inside its approval; held, never sent late, if its approval has ended by then; no destination is touched | the preflight fails; WARNING shard lines; `blocker` `coordinator_unavailable` |
+| Rate limits on but no usable coordinator: no reviewed policy (`rate_policy_raw` unset: an inert coordinator whose policy is None), or one that does not parse (`OAuthService` leaves no limiter and marks it degraded, `oauth.py`). The runbook's second lever, a build without a usable coordinator | frozen path, and it does claim: authorization stays ON here, so `lane.paused()` is false and K1 does not apply (an earlier version of this table, and the lane suite's "no coordinator" case, took this state for a pause; only `runtime_from_environment`'s own failure turns authorization off). A post not yet created is released unsent for five minutes ("Proven unsent Discord operation released: rate_delayed"; held once that passes its approval), a created post's read-back waits five minutes with its check refunded and its receipt kept ("A read-back waits for the coordinator"); before that fix the first claim made it `uncertain`, each claim spent a check and the fifth parked it for a day, for good (the ops review's N-1) [measured on PostgreSQL, `test_discord_readback_coordinator_postgres.py`] | stop at once, `coordinator_unavailable`, nothing claimed | later than scheduled; sent after the repair if still inside its approval, else held, never sent late; a created post is confirmed by its read-back after the repair; nothing is posted twice | the preflight fails; WARNING shard lines; `blocker` `coordinator_unavailable`; events "Discord message receipt retained; request coordination is unavailable for the exact read-back" |
 | Discord paused: execution disabled (the kill switch `POSTRIFF_OAUTH_DISCORD_DISABLED`, or a provider flag not set), or authorization off | the minute tick claims no Discord post (nothing is touched); a step that still meets the pause releases the post unsent for a minute (never held, destination untouched) | every loop stops before any claim, `discord_paused` (WARNING line) | waits; sent after the pause if still inside its approval; held (never sent late) once the wait passes its approval; no customer has to authorize again [measured on PostgreSQL: 4 workspaces, 8 posts: before, 4 of 4 destinations demoted and 8 of 8 posts held] | `discord_paused` lines; the ops health payload's `executionEnabled`, `authorizationV2`, `killSwitch` |
 | Policy expired or not yet valid (a well-formed policy outside its validity) | frozen path: each claimed post is released for five minutes, and held once that wait passes its approval | stop at once, `coordinator_unavailable` | later than scheduled ("Await Discord shared rate budget; no POST occurred and this approval remains frozen"), or held ("Discord rate wait outlasts approval; review the frozen destination and approve again") | WARNING shard lines; `blocker` `coordinator_unavailable`; `policyDaysLeft` at or below 0 |
 | Coordinator degraded in one process | leaves Discord to the lane | that process's loops stop, `coordinator_degraded`; other processes' loops send | sent by the healthy loops | WARNING lines from that process; its `blocker` `coordinator_degraded` |
@@ -416,7 +446,9 @@ quoted texts are the events and next actions the existing worker writes.
 | Embargo, circuit, spent window or invalid-request budget | leaves Discord to the lane | sleep it out, or stop with `rate_wait` | later than scheduled; a post whose permit was reserved or sealed when the embargo is observed is released unsent and sent once after it [measured on PostgreSQL: three loops, a global 429, both cases] | M4; `rate_wait` lines |
 
 Recovery, measured on real PostgreSQL (`test_discord_parallel_lane_postgres.py`, section (i)): with rate limits off,
-an expired policy or no coordinator the shards claim nothing and the minute cron does what the rows above say; once the
+an expired policy or no coordinator (that suite sets it with authorization off, the paused case; the state `OAuthService`
+leaves, authorization on, is `test_discord_readback_coordinator_postgres.py`) the shards claim nothing and the minute cron
+does what the rows above say; once the
 configuration is repaired, the lane creates every post still inside its approval exactly once and never sends a held
 one (with rate limits off, or with no coordinator, the posts waited unsent: those inside their approval are created
 once after the repair, the others were held, as with an expired policy). A gap of minutes without shard crons logs
@@ -470,14 +502,18 @@ which carries no status.
 | A loop crashes after sealing or after the create left | never re-posted; the job is 'uncertain' for manual reconciliation; the request's admission keeps a slot until reviewed, and if it was the first request on that route, later posts to that channel wait until review (Q3) |
 | Operator hold set | every loop stops before its next claim; a post whose permit the hold blocked before it was used is released unsent (Q4); queued posts wait |
 | Global 429 or circuit | loops sleep until it ends; the post whose read was refused waits and is sent later; a 429 on a create holds that post for review (existing rule) |
-| Budget exhausted | creates wait for the next window (bounded); reads wait as before |
+| An embargo, circuit or hold begins while a read waits for its booked slot | a read that slept 25 ms or more is looked at once more just before it is sent; if any scope it was admitted under is now held, embargoed or in circuit it is closed `blocked`, not sent (its slot stays spent), and the post waits as for the same refusal at admission (a hold: five minutes, as in Q17). A booked create's permit is blocked by the existing rule and refused at seal or consume before any transport |
+| A loop dies inside a booked wait | nothing was sent: a booked read is stored `sent` but had not left, so it is never sent, keeps its slot until its scope's window plus 30 s (31 s on the application row) and then stops counting; a booked create's permit expires unused (5 s) and the post is released when its lease expires and sent once later. A loop is in one booked wait at a time: at most one slot per shard, 12 of 25 for at most 31 s if every shard dies at once |
+| Budget exhausted | the lane's reads and creates are booked the next exact slot, at most one second ahead, and wait for it inside the coordinator; beyond that horizon they wait for the next window (bounded) as before; web requests are refused as before ("Booking") |
 | Approval expires in the queue | held for a fresh approval when next claimed (monitor M7) |
-| Coordinator observation fails in a process | that process's provider refuses every later request; its loops stop with `coordinator_degraded`; its minute cron still leaves Discord to the lane (it could not send either); loops in other processes continue |
+| Coordinator observation fails in a process | an observation (or the retirement of a request that was not sent) whose own lock or statement timed out is a rollback and is asked once more; a failure that remains makes that process's provider refuse every request for 45 seconds (`DEGRADED_SECONDS`), not for good, and leaves one WARNING line, `discord.coordinator.degraded`, when the rest begins (not again while it goes on): `processKind` (`lane`, `cron`, `web`, from the request's path; `other` outside a request), `reason` (the class the coordinator raised: `RateCoordinatorBusy` for a lock or statement timeout, `RateCoordinatorUnavailable` for anything else) and `restSeconds`, never a message, request or identifier. Its loops stop with `coordinator_degraded` for that time and the next invocation, or the same process after the rest, asks again; its minute cron still leaves Discord to the lane (it could not send either); loops in other processes continue. A flag set at setup (the reviewed policy does not parse) is for good until the runtime attaches a coordinator |
+| The database does not give a reservation its lock in 2 s, or does not finish its statement in 5 s | nothing was admitted and nothing sent: a `RateDelayed` of 1.5 s, cause `coordinator_busy`, scope `application` (it was a `RateCoordinatorUnavailable`, which a worker turns into a release of 300 s); the lane waits for it as for a spent window and keeps the post's place; a read through the provider is released after 1.5 s with nothing sent. The same timeout in an observation, a seal or a consume is a failure of the coordinator (`RateCoordinatorBusy`, a `RateCoordinatorUnavailable`), as before [measured on PostgreSQL: `test_discord_coordinator_busy_postgres.py`] |
 | Database unavailable | the loop's exception is logged and the request returns 500; leases expire and are recovered |
 | Flag on, projection missing | `schema`, nothing claimed (migration 126 is applied in production); the minute cron cannot see it without a query, so it still leaves Discord to the lane and `discord.lane.lagging` fires after five minutes |
 | Flag on, shard crons not reaching the lane (not registered, a 401, a 404, Deployment Protection, a platform skip; a `CRON_SECRET` under 16 characters fails the minute cron's own route too) | no `discord.lane.completed` lines; the minute cron (the lane able to run) leaves Discord alone, so posts wait; `discord.lane.lagging` fires after five minutes; after an hour their approvals lapse and they are held when next claimed |
 | Flag on, rate limits off, no coordinator, policy expired or not yet valid, or a bad lane budget | the lane cannot run anywhere: every loop stops at once with the reason (a bad budget answers 503 `discord_lane_configuration`), and the minute cron keeps the frozen Discord path |
 | A job document the claim cannot read (a null where a list belongs) | that workspace is set aside for 300 s, counted (`quarantined`) and logged once; every other workspace is claimed as usual; a third such failure in one claim is raised |
+| A route answers with a bucket id outside Discord's alphabet (`[A-Za-z0-9_-]{1,128}`: a test double's template, an intermediary rewriting headers), or with rate-limit numbers that cannot be read | that one route of that one server is held (`manual_hold`, kind `route`): nothing is sent to it, its posts stay `scheduled` ("Await Discord shared rate budget; no POST occurred") and are claimed again every five minutes, every other server is untouched, the health payload counts it under `coordinator.kinds.route.holds`; only an operator lifts it ("Releasing a held route", below). Proven by `tests/test_discord_route_429_postgres.py` (the capacity harness's F429 sent `injected-guilds-{id}`; the same 429 with a well-formed bucket delays the post two seconds and it is verified) |
 | Build-level kill switch (`POSTRIFF_OAUTH_DISCORD_DISABLED`) | unchanged: a claimed post is held, as today |
 
 ## Turning it off
@@ -493,12 +529,32 @@ which carries no status.
   deployment. The minute cron then claims Discord again exactly as before, and the shard routes answer
   `{"enabled": false}` without starting the runtime.
 
+## Releasing a held route
+
+The coordinator holds a route (not the application) when Discord, or something between us and Discord, answers it with a
+bucket id outside `[A-Za-z0-9_-]{1,128}` or with rate-limit numbers it cannot read. This is a reviewed fail-closed rule: a
+header it cannot trust is not learned, and the route waits for a person. Only that route of that server is affected. To see
+whether any are held, and to lift them (statements for the operator, read the first before running the second; they never
+touch the application-wide row of the kill switch, which is `kind = 'policy'`):
+
+```sql
+SELECT kind, count(*) AS held, round(min(extract(epoch FROM now() - updated_at))) AS seconds_since_change
+FROM public.pr_discord_rate_state WHERE manual_hold GROUP BY kind;
+UPDATE public.pr_discord_rate_state SET manual_hold = false WHERE manual_hold AND kind = 'route';
+```
+
+Run the second statement only after the cause is understood (a bad intermediary or a test double is the usual one; if the
+cause persists the next answer holds the route again). Posts of that server go out on their next claim, at most five
+minutes later. The hold of the shared bot credential after a 401 (`kind = 'credential'`) and the kill switch (`kind =
+'policy'`) are separate decisions and are not lifted by this.
+
 ## What to monitor
 
 The `discord.lane.completed` log lines (12 a minute; sum `posted`, `verified`, `held`, `uncertain`, `rateDelayed`,
 `leaseLost` per minute; any `stoppedBy` other than `idle`, `time_budget` or `rate_wait`), and `docs/w02/monitoring.sql`:
 M1 oldest due lag, M2 leases expired but still owned, M3 busiest second, M4 rate waits, M5 unanswered admissions (Q3),
-M6 holds on the four rows, M7 posts held for an expired approval. The launch monitors Q1 to Q13 still apply.
+M6 holds on the application-wide rows (the four, and the bearer budget's), M7 posts held for an expired approval. The launch monitors Q1 to Q13 still apply. The lane's
+`bookedWaits`, `bookedSeconds`, `horizonRefusals` and `coordinatorBusy` and the health payload's `coordinator.booking` show the booking ("Booking", below).
 The lines' `held` (like the minute cron's `discordWorker.counters.held`) misses a post held by a rate-wait release,
 one whose wait outlasts its approval: `discord_worker.release_unsent` sets the state before the event that counts it
 (unchanged worker code, the same in `2a5a523d`) [measured: 3 such holds counted 0]. M7's `held_total` and
@@ -559,19 +615,84 @@ platform before any claim is made to customers.
   `_invalidate_owned`'s filter (which also leaves out jobs bound to another deployment), so it can still hold a
   scheduled, approved or claimed Discord job whose approval, channel or entitlement changed (it never claims or
   sends one). The same in `2a5a523d`; W-02 changes nothing about it [reasoned].
-- A degraded coordinator stays degraded for the life of its process (the flag is cleared only when the runtime
-  attaches the coordinator) [reasoned]. If every process that runs lane loops is degraded, every loop stops and every
-  minute cron still leaves Discord to the lane, so due posts wait unsent. Nothing could be sent in that state either
-  way; the signals are the shard lines (`coordinator_degraded`, at WARNING) and, after five minutes, the lag warning
-  with `laneOwnsDiscord` true, which does not name the cause.
-- A learned route can close until the policy expires. When its window ends, the next reservation refills it and
-  sets its reset to the policy's expiry until a response from the new window gives the real one (`_roll`). If the
-  permits reserved after that refill all expire unused (a slow step, a released job), no request leaves, no response
-  comes back, and the route stays at nothing left: every later request on it is refused with a wait of the policy's
-  remaining life, so every later post to that channel is held ("Discord rate wait outlasts approval"), nothing
-  sent [measured: reproduced deterministically with the coordinator alone, a refused read waits 86,336 s on the
-  one-day test policy; seen under heavy CPU contention in the many-loops, cron-gap and fairness tests, where six to
-  ten posts on such channels ended held]. Coordinator code; left to the coordinator's reviewer.
+- **What the independent review of the coordinator (scope B, at 02fd679b) left as limits, no code.** (G2E-B-03) A minute worker
+  built without the worker flag, with migration 128 installed, aborts every Discord claim with a `CheckViolation` ("Discord requires
+  the current fenced worker protocol before dispatch."): the posts stay scheduled and nothing is sent, not "held". The reactive guard
+  is not built; the preflight `scripts/check_postriff_hosted_preflight.py validate_discord_worker_protocol` refuses such a build
+  before it is promoted (K2). (G2E-B-10) A person's cancel, hold or revoke that lands in the window between the seal of a post's intent
+  and its POST leaves the post `uncertain` (the intent is kept; the POST may or may not have been sent) and a re-approval is
+  refused with a 409 until a person reconciles it. That is the worker's rule and the coordinator does not change it. The
+  coordinator's own hold (the runbook's UPDATE) is another matter: `consume()` looks at it just before the permit is marked sent
+  (G2E-B-16, "Consume looks too"), so what is left of it is the few milliseconds between that look and the wire. (G2E-B-14) `route_identity` accepts a path
+  with an embedded newline and maps it to the normal template (40 of 200,000 mutated paths in the review's fuzz); the hostile
+  string never reaches Discord as it is, and the route key is the template's. (G2E-B-15) A single 401 on the bot token holds the
+  credential row (by design: the fingerprint stays blocked), and the runbook's hold UPDATE changes nothing while the application
+  row does not exist yet: the runbook's fallback INSERT (`HOLD_INSERT`, docs/ops/PHONE-RUNBOOK.md) creates it held. (LANE-3) A
+  workspace with thousands of queued Discord posts makes the create-to-consume chain long (about 1.9 ms per queued post, 28
+  statements, three connections): 300 posts take about 0.6 s against the 5-second permit; the per-workspace ceiling of 300 due
+  Discord posts (the owner's D-4, on the G2a branch) is what closes it. (D-16) The guard reads "25 a second" as the coordinator's
+  own admission line: never more than 25 wire stamps in any sliding second, exact and pinned; what arrives at Discord is reported
+  (the probe's peak and the share of arrivals above 25), not failed, and stays far under Discord's real 50.
+- A coordinator that failed to record an outcome rests for 45 seconds in that process and then asks again; one set at setup
+  because the reviewed policy does not parse stays degraded until the runtime attaches a coordinator (a configuration to
+  restore). If every process that runs lane loops is degraded, every loop stops and every minute cron still leaves Discord to the
+  lane, so due posts wait unsent. Nothing could be sent in that state either way; the signals are the shard lines
+  (`coordinator_degraded`, at WARNING) and, after five minutes, the lag warning with `laneOwnsDiscord` true, which does not name
+  the cause. (Before: for the life of the process, so one lock timeout in an observation under 24 loops and 20 ms of statement
+  latency disabled Discord there until a restart: the independent review's G2E-B-09, second half.)
+- A learned route used to close until the policy expired when the permits reserved after its refill all expired unused.
+  Resolved on the limiter branch: such a route is probed again at once (`_window_unused`), and one whose requests were
+  sent but never answered waits at most a window plus the margin; see "The shared request coordinator after the limiter
+  work" below.
+
+## The shared request coordinator after the limiter work
+
+`rate_limits.py` (`SharedPostgresBudget`) changed on the limiter branch; the lane is unchanged. What a reader of this
+document should know:
+
+- **The 25 per second is exact and counts wire times** (the bot's class: with the bearer budget, "The bearer budget", below, it
+  counts every credential but the person's own bearer). The application row admits when the admissions occupying a slot
+  plus those held are fewer than the cap. An admission occupies a slot from its wire time (`sent_at`: a read when it is
+  admitted, a create when its permit is consumed; else its reservation) for one span, the window plus
+  `SLOT_GUARD_SECONDS` (0.05 s since the owner's D-16; it was 0.1 s). A permit not used yet, and a request sent but never
+  answered, keep a slot as well (`held`). So no closed second of wire times holds more than the cap: that is the guarantee,
+  exact and pinned. Arrivals at Discord stay within it while the admission-to-wire spread is at most 50 ms, and are reported
+  (the probe's peak and share of arrivals above 25), not a failure, when it is more; the cost is 23.8 of 25 a second at the
+  ceiling and nothing below it (22.7 with 0.1 s). The capacity harness reports the real spread (wire jitter p99.9): the guard
+  is the one constant to set from it. With booking a
+  wire time may also lie up to one second ahead of the database clock (a booked slot); the rule, `_fits`, is the same.
+- **A permit lives `permit_ttl_seconds`** (5 in the reviewed policy), the lease and the approval, not its window: a
+  window that ends while a permit is unused refills its row counting the permit as pending, and the application window
+  holds a slot for it until it is used or expires. Before, 11.5% of create preflights of a 5,000-post run were repeated
+  because the permit died before it could be sealed.
+- **Nothing stays unresolved for ever.** A read whose transport failed is resolved at once (observed 503); an answer that
+  arrived and was refused for its size (`ProviderResponseLimit`) is recorded with its real status and headers; a request
+  whose outcome is unknown (a write, a lost process, an observation that timed out) keeps its slot for its scope's window
+  plus 30 s (`UNOBSERVED_MARGIN_SECONDS`, the transport's 20 s timeout and allowance) and then stops counting; the row
+  stays `sent` or `uncertain` for an operator and for the claim paths that retire it. A guild owner can no longer take
+  the shared budget to zero with an oversized channel list.
+- **Refusals.** 401 holds the credential; 403 (and a 404 on a webhook) opens the route's circuit for 30 s, doubling per
+  consecutive refusal up to 16 minutes; a 404 on anything else opens none; 429 embargoes the scope Discord names; three
+  5xx or transport failures open the 30 s circuit.
+- **The lock.** A reservation sends, after the statement that takes the locks, a reading of the clock and the window, one
+  statement that writes the scopes and the admission, and the commit; an observation sends six (was nine). The reading
+  cannot be part of the lock statement: in READ COMMITTED a statement that waited for a lock keeps its start-of-statement
+  snapshot and would not see the admission the previous holder committed meanwhile.
+- **A policy renewal can only tighten.** `_roll` keeps the stored cap and window of the policy, invalid-request and
+  discovery rows as the minimum cap and the maximum window of every policy whose expiry has not passed (the stored expiry is
+  the latest of them). A renewal with a higher `app_capacity` therefore changes nothing until the stored expiry is past. A
+  deliberate raise is an operator act: apply the new policy, then UPDATE the application row's `limit_count` (an UPDATE
+  the service role may make; the stored cap is the ceiling in force and a reservation under the renewed revision does not
+  reconsider it); the policy tool also refuses an `app_capacity` above half the bot limit and must be changed (reviewed)
+  first. It cannot happen by accident, and a later, tighter policy still tightens a raised cap.
+- **The sender-name write.** `PATCH /guilds/{id}/members/@me` is admitted only while `POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED`
+  is exactly `true`, read at call time: turning the flag off refuses new admissions at once, and an admission that already
+  exists is retired by `abandon_unsent_nickname`, `reconcile_nickname` or `reconcile_nickname_by_id`, each silent for one
+  that is settled (`observed`, `blocked`), however young. The by-id reconciler needs no token (a rotated token cannot strand
+  an admission); it accepts only this application's bot, unbound, non-publish PATCH of the nickname route and the exact guild
+  path, and only once the admission is 120 s old and its permit has expired. Such rows keep counting against the ceiling for
+  their span (no refund) and carry no status code (`NULL`, scope `unknown`); the age bound changes no row, so the claim path
+  can still retire an orphan after it.
 
 - A route whose first (cold) probe never got an answer refuses every later request with the probe window (about a second),
   so the approved posts to that channel churn (claim, three admitted reads, release) until their approval ends [independent
@@ -580,10 +701,279 @@ platform before any claim is made to customers.
   that wait; offline `PositionKept`, penalty cases); this refusal has no end to wait for. The cause is the coordinator's
   (the unanswered admission keeps its slot, Q3); left to the coordinator's reviewer.
 
+## Booking
+
+*Why.* The first hosted measurement of the lane (5,000 posts, 12 shards, 25 a second) took a median of 19.8 minutes against a
+plan of 12, with 8.95 requests and 18.6 reservation lock statements a post and 4,714 posts released after a refused read. A
+full window refused a read with the time until a slot freed; every refused read slept that quote and asked again, about half
+of the 12 shards woke for the same freed slot, one won, and a read that lost three times (1 s) released its whole post and
+threw away the one to five preflight reads it had already made. Booking gives a caller that finds the window full a place in
+line instead (Q19 has the models and the measurements).
+
+*Who books.* Only the four calls the lane makes for a post, on the lane's own thread: `PacedSocial` wraps
+`prepare_discord_dispatch` (the identity, server, two membership and channel reads), `reserve_discord_send` (the create
+permit, a bot's or a webhook's), and the read-back in both ways the worker reaches it, `reconcile_discord` (a reply's) and
+`reconcile` (every other post's: `HostedSocial.reconcile` calls its own `reconcile_discord`, so wrapping only that one left the
+ordinary read-back unbooked, as the first hosted run measured: 1,559 read-backs, none booked, 36 percent refused; fixed after
+02fd679b) in `rate_limits.booking(BOOK_AHEAD_SECONDS, tally)`, a context variable. `DiscordProvider._book_ahead(room)` hands its seconds (never more than `BOOK_AHEAD_SECONDS`, 1.0, and not
+more than a read's own remaining wait; nothing under 5 ms) to `reserve_read` / `reserve` as `book_ahead`, and passes no
+keyword at all outside the context. A direct provider call, another thread, the minute worker (it shares a warm instance's
+provider and never sees the context), and every web request except four (below) get the immediate answer or refusal they always
+got: the server list, installation checks, webhook set-up, the message-content check, reply reads, the sender-name routes and
+the other single reads. The four that make several reads in a row book too, as "Web calls that read several times" says.
+
+*The rule.* A booking caller is admitted at once when one more wire time now is exact in every window that holds it. If not,
+`_booking_slot` gives the earliest instant at or after now, and not before any wire time already stored, at which it is exact
+in every window of one span (the window plus the guard) that holds it; a permit not used yet counts in every window for a
+booking (it may be used at any later time), so it is taken out of the wires and out of the free slots. The caller is refused,
+as an immediate caller would be, with the wait until a booking is possible, if the slot is more than its book-ahead away, if
+no slot is free for bookings, if a create's permit (`permit_ttl_seconds`, 5) would not live `BOOK_MIN_LIFE_SECONDS` (0.5 s)
+after its slot, or if the slot plus the permit's life would pass the caller's deadline (the lease, the approval, the
+policy's end). Otherwise the admission is stored with the slot as its wire time (a read: `sent`, `sent_at` = slot; a create:
+`reserved`, `reserved_at` = slot, living `permit_ttl_seconds` from there), its scopes are debited as for any admission (the
+same statements under the lock: the lock, the reading, one write, the commit), and `reserve` / `reserve_read` return when the
+slot has come. The sleep is after the commit with no lock held, in slices of at most 0.1 s, counted on the process's
+monotonic clock from the moment the database clock was read (a send is never early by the reservation's own duration), and a
+create's sleep also ends at its deadline if that comes first (the permit is left to expire, `permit_expired`). There is no
+sleep in `seal` or `consume` (F5), and `consume` refuses a booked permit before its slot (`permit_early`).
+
+*Exactness.* Unchanged: at every instant at most `cap` wire times lie in any half-open span, so no closed second of wire times
+holds more than `cap`; only a wire time may now lie ahead of the clock. Bookings fill all but `IMMEDIATE_RESERVE` (1) slots,
+so a web request that does not book, which cannot wait, always finds one (4 percent of the ceiling at saturation). A wire time further ahead
+than the book-ahead plus 50 ms (the database clock stepped back) is waited out as before: every wire counts and the quote is
+the wait.
+
+*What the application row stores.* The same whoever wrote it, as of the last admission (a refused call writes nothing).
+`remaining` is the room the booked horizon still has: `cap` less the held, less `IMMEDIATE_RESERVE`, less the permits still to be
+used (each counts in every window, as for a booking), less the other wire times that still hold their slot when the horizon
+ends, one book-ahead after the write; never below 0. It is 0 exactly when a booking of the whole horizon would be refused, and
+`reset_at` is then the instant from which one would not be (the wire time whose leaving makes room, less the book-ahead); while
+there is room `reset_at` is the write's own time, nothing to wait for. `lane.outlook`, which waits while `remaining` is 0 and
+`reset` lies ahead, is unchanged and now waits only while the booked horizon is full. For a monitor this changes the meaning: a
+busy lane keeps the window full of wire times, and an earlier version, which counted only those up to now, read 0 in 21 of 35
+busy health readings of the first hosted run with the horizon never full. The twelve loops hold at most twelve bookings at once
+of the 24 the horizon takes, so a lane that fills the budget reads about 11 [from the count], and 0 means callers are being
+refused; a stored 0 whose reset has passed is old. The signals that callers are being refused are `remaining` 0 with `reset` ahead
+(as of the last admission), `coordinator.booking.horizonSeconds` near `bookAheadSeconds` in the payload, and, in the process that
+was refused, `booking_stats()['horizonRefusals']` (a count; not exported to the payload or the lane line). With
+`BOOK_AHEAD_SECONDS` 0 the row is what it has always been.
+
+*The gate.* A booked read that slept at least 25 ms (`BOOK_GATE_MIN_SECONDS`) is looked at once more just before it is sent:
+one short statement of its own, with no application or scope lock, closes it `blocked` if any scope it was admitted under now
+has a manual hold, an embargo or an open circuit, and the caller is told as at admission (a hold: `RateDelayed(300,
+cause='hold', scope='embargo')`; an embargo: what is left of it). Its slot stays spent. What can still reach Discord after an
+embargo begins is what could before: whatever lies between this look (for a wait under 25 ms, the commit) and the wire. A
+booked create's permit has the same look at `consume()`, whether it was booked or not (below).
+
+*Consume looks too.* `consume()` used to read no hold, embargo or circuit: the rule for unused permits lived in `observe()`, which
+blocks every reserved or sealed admission of a scope it sees embargoed, so a hold set by the runbook's UPDATE after a permit was
+reserved stopped it only if some other answer happened to be observed before it was consumed, and a permit lives up to
+`permit_ttl_seconds` (5 s) and a booked create's wait adds up to one second (the independent review's G2E-B-16). Now, just before
+it would mark the admission sent, `consume()` asks in one statement without a lock whether any scope the admission was made under
+has a manual hold, an embargo or an open circuit (`_stopped`; a read of the state rows, so it joins no deadlock and delays no
+reservation). If so the admission is closed `blocked` in that transaction, which commits, and the caller is refused after the
+commit: a publish permit with `permit_blocked` and what is left of the embargo (0.05 s for a hold), the signal "A permit an embargo
+blocks before it is used" already turns into a release, with `confirm_blocked_publish` proving the intent unsent from the
+admission row; a permit without a binding with `hold` (300 s) or `embargo`. A hold that ends afterwards does not revive the permit.
+What it cannot do is what nothing can: a hold committed after this look and before the wire (the time between the statement and the
+transport, a few milliseconds) and a cancel, hold or revoke in the workspace between the seal and the POST (the next paragraph's
+limit, G2E-B-10). One more statement in the consume transaction, which holds only the admission's row lock.
+
+*A process that dies in the wait* is in the failure table: nothing is sent, at most one slot per shard is held, for at most 31
+seconds.
+
+*The lane.* The counters `bookedWaits` and `bookedSeconds` (in `lane.COUNTERS`; summed in the invocation result and the
+`discord.lane.completed` line) count the lane's own bookings. Two more are what an alert reads: `horizonRefusals`, the calls the
+lane made that the booked horizon refused (it was full: callers are being refused again; the process total is
+`booking_stats()['horizonRefusals']`), and `coordinatorBusy`, the reservations the database could not take in time and the lane was
+told to ask again for (`RateDelayed`, cause `coordinator_busy`, 1.5 s: the lock or statement timeout of NEW-1). Each counts an event,
+not a post: a busy reservation that the lane waited out and then made still counts, which `rateDelayed` (posts released for a rate
+reason) does not. Both come through the tally of `booking()`, so they are this lane's own; the web and the minute cron have them in
+their process only (`booking_stats()`). Nothing else changes: the loop budget (a step's seven requests
+may each wait one second, so a step may take seven seconds longer; `STEP_RESERVE_SECONDS` 160 holds it, 147 of 160), the
+lease and its renewal, F2 (a post refused beyond the horizon keeps its place), the pause and K1, the quarantine, the frozen
+path, the shard count (12).
+
+*Health payload.* `coordinator.booking`: `status`, `bookAheadSeconds`, `aheadNow` (admissions whose wire time is still ahead),
+`horizonSeconds` (how far ahead the latest lies; close to `bookAheadSeconds` means the horizon is full and callers are being
+refused again), `bookedReads60s`, `bookedReadWaitSeconds60s`, `meanBookedReadWaitSeconds60s`, `maxBookedReadWaitSeconds60s`.
+Reads only: a create's booked wait is not recorded (`aheadNow` counts creates).
+
+*Limits.* A horizon of one second holds about (`cap` - 1) / 1.05 bookers (1.1 with the guard of 0.1 s that preceded D-16), one for
+each loop in a booked wait: about 22 at the reviewed 25, comfortably 12 loops, 24 at the edge. A caller beyond the horizon is refused and asks again, and a pass refused
+part-way is released with its reads wasted: with 12 loops booking makes more posts than polling from a budget of 12 a second up
+(34 to 66 percent more) and fewer below 10 (at a budget of 8, 12.5 posts a minute against 33), with few loops the same edge (3
+loops at a budget of 4 finished 4 of 12 posts in 295 s); the ceiling stays exact throughout (Q19 has the numbers). The policy tool
+warns (`lane_booking`) under 1.5 a second for each shard, 18. The evidence behind a create grows older: its
+permission reads come first in a pass and each may now wait up to a second [simulated: median 1.3 to 2.3 s at 12 loops, 2.2
+to 5.7 s at 24; no bound in the code]; what the send rests on besides them (approval, lease, fences) is rechecked at the seal
+and consume as before. A gated or abandoned booked read still spent its slot.
+
+*Off.* The lane's flag returns Discord to the minute worker, which never books; a build with `BOOK_AHEAD_SECONDS = 0` in
+`rate_limits.py` (pinned by `ShippedConstants`) restores the old coordinator behaviour for every caller.
+
+*Evidence.* `tests/test_discord_rate_booking.py` (36 offline: the arithmetic, the stored row, the web reserve, booked permits,
+the deadline, the gate, a crash in the wait, the constants, the statement shape, and 32 randomized lives of 300 steps checked
+against a brute-force count of every closed second, which also catches the permit mutation); `tests/test_discord_rate_booking_postgres.py`
+(24 threads on PostgreSQL keep the ceiling with far fewer lock statements; creates are not starved when reads are booked too;
+the gate against a 429, a hold and a circuit; a dying process; `consume` before the slot; a web caller; the health payload);
+`tests/test_discord_lane_booking.py` (the four places and no others, the counters, a coordinator that blocks a second per
+reservation still ends the invocation inside budget plus one step, `outlook`); `tests/test_discord_lane_booking_postgres.py`
+(12 and 16 loops at a full window: about one pass a post, nothing posted twice; an approval ending inside a pass; a loop killed
+inside a booked sleep; no sleep between the seal and the consume; a pause during booked waits).
+
+## Web calls that read several times
+
+*Why.* While the lane saturates the application window, a web request has the one slot kept for callers that cannot wait
+(`IMMEDIATE_RESERVE`, 1 of 25) and the slack the twelve loops leave (about 3 a second), and nothing else. A call that reads four to
+six times in a row needs all of its reads inside the second `_discord_http` allows itself (a refused read is asked again only while
+the quote fits in that second), so once the web asks for more than the slack it is refused after the first read or two and the
+person sees "Discord is waiting for shared request capacity". The independent review measured it: 5-read calls from three threads
+completed 4 to 10 percent of the time at reserve 1 and 65 at reserve 3, and 33 percent for one call a second. Measured here with the
+real `DiscordProvider.destinations` against the mock: 25 to 28 percent for three threads asking back to back. A reserve that could
+carry five reads would cost the lane 4 percent of the ceiling a slot, and still would not let a call wait.
+
+*What.* `rate_limits.web_reads()` (`web_booked(call, ...)` is the same around one call): inside it a caller that is not booking is
+booked like the lane. Where the window is full each read is given the earliest exact slot up to one second ahead and waits for it
+after the commit with no lock held; a read the horizon cannot take is refused with the wait, as before. A caller that is already
+booking (the lane) keeps its own horizon and tally. `hosted_app.py` runs four calls inside it: `GET .../destinations` (the channel
+list), `POST .../destination` (choosing a channel, which reads the list again), `POST .../verify` (the re-check) and `POST
+.../oauth/complete` (the last step of a connection, which lists the channels). Everything else stays immediate: a single read (the
+server list, creator info, the start of a connection, the sender-name routes, webhook set-up, the message-content check, reply
+reads), the minute worker and every write. `BOOK_AHEAD_SECONDS = 0` turns all booking off, this included.
+
+*Measured* (twelve booking loops, the real `destinations` (four reads) against the mock, cap 25; two 20-second runs of each; the
+busiest closed second of the stamps was 24 or 25 in every phase, so the ceiling was exact; the lane alone made 3.2 creates and 18.1
+reads a second; `test_discord_web_booking_postgres.py` prints the same lines):
+
+| web demand | calls completed, immediate | booked | seconds a call, p50, immediate | booked | lane creates a second, immediate | booked | lane reads a second, immediate | booked |
+|---|---|---|---|---|---|---|---|---|
+| 1 thread, 0.3 s between calls | 92, 92% | 90, 80% | 1.5 | 2.1 to 2.2 | 2.95, 3.02 | 3.01, 2.96 | 16.9, 16.8 | 16.9, 17.0 |
+| 2 threads, 0.3 s between calls | 45, 57% | 83, 88% | 2.5, 1.9 | 2.3, 2.4 | 3.02, 2.85 | 2.75, 2.61 | 16.9, 16.5 | 15.8, 15.8 |
+| 3 threads, back to back | 28, 25% | 89, 89% | 2.0, 2.2 | 2.5 (p90 3.1, longest 3.7) | 2.87, 2.79 | 2.56, 2.55 | 16.2, 15.8 | 14.2, 14.3 |
+
+Booking helps once the web asks for more than the slack: at light demand a call completes either way and booking only adds the wait
+for a slot (0.7 s); at two threads it moves completion from about half to 85 percent and at three from a quarter to 89, in about
+2.5 s. The lane pays what the web uses: at three threads the web made 5.1 reads a second (23 percent of the window; 3.6 immediate,
+most of them spent on calls that were then refused) and the lane's creates fell 21 percent against running alone, 10 against the
+immediate web, and its reads 21 and 11 percent.
+
+*The bound.* G2a puts a throttle in front of any request to Discord: a member 30 calls a minute, a workspace 120, and a
+connection's channel list and re-check answer are reused for 45 seconds (10 while the connection is unhealthy). With that throttle in
+the tree, `OneWorkspacesFlood` runs twelve threads from one workspace against limits scaled to 10 and 20 calls, so that a few seconds
+reach them: 20 calls passed and 4,321 attempts were refused by the throttle before any request to Discord; the 20 calls made 89 reads
+(4.5 a call) in two waves, 5.4 a second over the 16 seconds and about a third of the window while they ran, and waited 6.6 s each
+(p50); the lane lost 26 percent of its reads and 15 percent of its creates over the 16 seconds, no create expired, and the ceiling held. At the production numbers one workspace
+can ask for at most 120 calls a minute, about 540 reads, 40 percent of the window at the extreme, and only with more than 20
+connections that stay unhealthy (a healthy connection is read once in 45 seconds: 30 connections give 3 reads a second, 13 percent).
+There is no global throttle, so several workspaces add up. A flood by an authenticated customer therefore slows the lane by at most
+its throttle share and cannot stop it (the lane's bookings take their turn like any other), and `bookedReads60s` and the wait
+counters of the payload show it; before this change the same customer could only take the slack. That is the price of a channel list
+that completes. [measured on a shared box at load 6 to 9; the shape, not the third digit]
+
+*If isolation is worth more.* Revert the four `web_booked` calls and set `IMMEDIATE_RESERVE` to 2: the lane's bookable rate falls from
+(25 - 1) / 1.05 = 22.9 to (25 - 2) / 1.05 = 21.9 a second (1.0, 4.4 percent; nearly nothing while twelve loops bind at 21.8), the
+guaranteed web rate doubles, and a call of four reads still cannot wait (the review: 30 percent of heavy 5-read calls at 2, 65 at 3).
+
+*Evidence.* `tests/test_discord_web_booking.py` (12 offline: the context and its restoring, the lane's horizon and tally kept, other
+threads, the provider's `book_ahead` only inside it and only for reads, the four routes through the real handler book and the
+others do not, nothing left booked after a failure); `tests/test_discord_web_booking_postgres.py` (the phases above with
+assertions: the ceiling over every admission of both, booked calls complete in seconds, the lane is not starved; and, where the
+G2a throttle is merged, the one-workspace flood, skipped until then and run on a scratch merge of this branch with G2a's 217a2c8f).
+
+## The bearer budget
+
+*What and why.* The written budget was 25 requests a second across every credential. Of the 7 requests a post costs, 6 use the bot
+token and 1, the grant check `GET /oauth2/@me`, the person's own OAuth bearer, which does not touch the bot's global limit. The owner
+(reply 16, AUTHORIZATION-RECORD.md) redefined the budget: bot-token requests at most 25 a second, the person's bearer calls
+budgeted separately (D-2 option 1). Q21 has the call sites, the size, the model and the monitors' names.
+
+*The policy.* `SafetyPolicy` carries `bearer_capacity` and `bearer_window_seconds`, both or neither; the reviewed policy is 10 a
+second in a 1-second window (`scripts/discord_rate_policy.py` generates it, refuses more than 10 a second as a FAIL because a
+raise needs a review, warns when the two budgets together pass 80 percent of the bot limit or when the bearer budget is smaller
+than the lane needs). A policy without the pair parses and behaves exactly as before: the bearer calls stay in the application
+budget. That is also the way back: `generate --no-bearer`, applied with a new deployment like every policy.
+
+*Who is charged where.* `rate_limits.BEARER_KIND` (`user`: a request authorized with the person's own bearer) is charged to the
+bearer row, scope key `01:`; its kind is `policy`, which the table already allows, so there is no migration. Every other credential
+(`bot`, `oauth`: the client secret's token calls, `webhook`) is charged to the application row, `00:`. Each window counts only its
+own class's admissions (`_window_state(klass)`): one statement takes the newest admissions of both classes, so it stays bounded
+whatever the history, and picks the class's from them. The `held` count (permits not used yet, requests never answered) is per
+class too. Everything else is the code of the application window, unchanged and run with the row's own cap and window: the exact
+sliding rule, the guard, booking and its horizon, the slot kept for a caller that cannot wait, the quotes, the published
+`remaining` and `reset`, the policy renewal that can only tighten.
+
+*The hold, locks and the rest of the scope.* A bearer request locks the application row too (the keys sort `00:` before `01:`, the
+global lock order) but is only looked at there: its hold and embargo apply, it is neither refused by the row's count nor debited.
+So the runbook's stop, `UPDATE public.pr_discord_rate_state SET manual_hold = true WHERE kind = 'policy'`, sets both rows and stops both
+classes; a hold on the application row alone stops both; a hold on the bearer row alone (`... WHERE scope_key = '01:' || ...`) stops
+only the bearer calls. An observation locks the same rows. The invalid-request budget (`20:`), the route and resource rows and a
+credential's rows are shared as before: a 401, 403 or 429 counts against the egress address's invalid budget whichever class made
+the request.
+
+*What the application row now means.* `remaining`, `reset`, `lane.outlook` and `admissions60s` are the bot class's. The lane's
+outlook reads the bearer row too and waits while its horizon is full (every step opens with the grant check). The bearer row is
+seeded by the first bearer request under a policy that carries the budget; a bot request does not seed or touch it.
+
+*Health payload and SQL twin.* `config.policy.bearerCapacity` and `bearerWindowSeconds` (null without a bearer budget);
+`coordinator.guards.bearer` (only with one; the fields of `guards.policy`); `coordinator.traffic.admissions60s` counts the
+other credentials alone while a bearer budget exists and `bearerAdmissions60s` the bearer's. `docs/ops/discord-ops-snapshot.sql`
+says the same, the bearer row told by its scope key (a real-PostgreSQL test compares them). `monitoring.sql` M3 and M6 give each class.
+
+*Evidence.* `tests/test_discord_rate_bearer.py` (offline): a bearer request is charged to its row and only looks at the other; a full
+class leaves the other whole and each quotes its own window; both classes saturated at once give each exactly its cap (18 and 12 in
+six seconds at caps 3 and 2); the hold; booking and the reserve per class; a policy without the pair is what it was; every call
+site through the real helpers; and, in `test_discord_rate_booking.py`, randomized lives with two classes (the ceiling per class over
+its own wire times, each quote the brute force's on the class's window, each row what a booking of its class would find).
+`tests/test_discord_rate_bearer_postgres.py` (real PostgreSQL): thirty-six threads on both classes at once, polling and booking, with
+the busiest closed second per class on the database clock at its own cap and each class getting most of its own rate; the
+runbook's hold; the stored rows; the health payload and its SQL twin. The F429, B4 and N-1 tests are unchanged.
+
+## Retention of the coordinator's admissions
+
+`pr_discord_request_admissions` got a row per request and nothing deleted any. `SharedPostgresBudget.purge_settled()` (limiter
+branch, e6aa7db8; sizes, timings and the privilege question are in OPEN-QUESTIONS Q16) deletes what the coordinator can no longer
+count and nothing else:
+
+- **What goes.** Reads (`NOT is_publish`) in state `observed` or `blocked` reserved more than `PURGE_READ_SECONDS` (3,600) ago;
+  publications the same after `PURGE_PUBLICATION_SECONDS` (172,800, two days: the owner's approved window); a row that settled in
+  the last `PURGE_SETTLE_GRACE_SECONDS` (600) stays whatever its age. The coordinator counts a row for one span after its wire time
+  (1.05 s) and an unanswered one for the horizon (31 s); the health payload's windows are at most 15 minutes and a sender-name claim
+  ends 15 minutes after its permit; nothing reads a created post's row again after its approval's hour, and two days let a person
+  read the incident of the day before yesterday.
+- **What never goes.** An unresolved row (`reserved`, `sealed`, `sent`, `uncertain`), an expired unused permit included: it is the
+  evidence a person reviews. Any scope row (windows, embargoes, circuits, holds). Another application's admissions.
+- **How.** 2,000 rows a statement, oldest first, `FOR UPDATE SKIP LOCKED`, `PURGE_ROUNDS` (3) a call, one short transaction a round
+  with `lock_timeout` 1 s and `statement_timeout` 5 s, one purger at a time (a transaction-level advisory lock; the others get
+  `busy`). It never takes the application row's lock or a scope lock: a reservation never waits for it and it never delays one
+  [tested on PostgreSQL: a purge in flight blocks no reservation; live reservations keep the ceiling at the mock while it runs
+  flat out]. Idempotent. It never raises: the outcome is `status` (`ok`, `busy`, `denied` for a role without DELETE, `timeout`,
+  `error` with the exception class only), `reads`, `publications`, `rounds` and `more`. The cutoff is `now()`: a volatile function
+  cannot bound an index scan.
+- **Where it runs.** `lane.purge_admissions`, after the loop of an invocation that had work (not an idle shard), at most once a
+  minute in a process (`PURGE_PERIOD_SECONDS`), no flag. One INFO line `discord.lane.retention` when it deleted something, one
+  WARNING when it could not (`denied`, `timeout`, `error`), counts and the status only. It cannot stop a post: a failure is
+  swallowed.
+- **Migration 142** (written, not applied; its rollback is `migrations/postriff/rollback/142_discord_admission_retention_index.sql`,
+  outside the numbered sequence because `scripts/postriff_migrate.py` takes every `[0-9][0-9][0-9]_*.sql` of the folder as a migration):
+  `pr_discord_admission_purge (is_publish, reserved_at) WHERE state IN
+  ('observed','blocked')`, 32 bytes a row, the index the purge walks. Without it the purge works and scans.
+- **Health payload.** `coordinator.retention`: `status`, `retentionSeconds` (`reads`, `publications`), `oldestSettledReadAgeSeconds`,
+  `oldestSettledPublicationAgeSeconds` (three times the retention means the purge is not running or cannot delete),
+  `liveRowsEstimate`, `deadRowsEstimate`, `rowsDeletedTotal`, `lastVacuumAgeSeconds`; read from the partial index and the table's
+  statistics, no scan.
+- **Privilege.** DELETE is not granted to `service_role` (migrations 124 and 125) and is not checked against Production: until the
+  owner confirms or grants it the purge reports `denied` and the table grows as before.
+- **Evidence.** `tests/test_discord_rate_retention.py` (offline: the statements, failures as outcomes, once a minute, the index and
+  its rollback) and `tests/test_discord_rate_retention_postgres.py` (exactly what is deleted and what never is, bounded oldest-first
+  batches, eight concurrent callers delete each row once, nothing the coordinator counts is lost, a role without DELETE, the lane
+  purges once and an idle shard does not, the health payload, and `POSTRIFF_RETENTION_ROWS=1000000` for the timing: a call 0.21 s,
+  the rest of 646,000 eligible rows 16.2 s, nothing to do 27 ms).
+
 ## Not done
 
 Phase 1b (scheduled-time jitter) is not started. Not run: the owner's Depot capacity run, any hosted build, the
-exact-SHA CI workflow on this branch. An independent review's findings are addressed (the readiness test, the lag
+exact-SHA CI workflow on this branch, the hosted-runner measurement after booking (the capacity harness's). An independent review's findings are addressed (the readiness test, the lag
 warning, the invalid-budget wait, the 90-second cap, the preflight check); that fix set has not been reviewed again.
 Not changed on purpose: requests per post, the coordinator's handling of unanswered admissions, the hold's effect on
 sealed permits, the step order (Q2 to Q4, Q12).

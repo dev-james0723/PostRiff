@@ -305,13 +305,15 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         straddle two and count six slots)."""
         tenants = [F.Tenant(0)]
         self.wire = F.MockDiscord(tenants)
-        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=3, app_window_seconds=3)
+        # A permit lives its permit lifetime, not its window (it used to end with the window): 1.5 s here, so the three
+        # permits of a dead loop are free again once the window's span (3.1 s) has also passed.
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=3, app_window_seconds=3, permit_ttl_seconds=1.5)
         return 3
 
     def test_permits_of_a_dead_loop_that_were_never_used_free_their_slots(self):
         window = self.three_per_window()
         self.assertEqual(self.admissions('reserve', 4), 3)  # a dead loop's three permits fill the window
-        time.sleep(window + .2)  # they were never consumed, so the next window does not count them
+        time.sleep(window + .2)  # they were never consumed and expired, and their span is over: they count no more
         self.assertEqual(self.admissions('reserve', 4, offset=10), 3)
 
     def test_a_read_whose_process_died_after_admission_keeps_its_slot_until_reviewed(self):
@@ -886,8 +888,11 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         released = [sent for times in self.released_creates().values() for sent in times]
         self.assertEqual(len(released), sum(len(times) for times in self.wire.creates.values()))
         self.assertTrue(0 < len(released) < len(tenants), 'the policy expired mid-run')
-        self.assertLessEqual(max(end for ends in self.permit_ends.values() for end in ends), expires + 1e-6,
-                             'no permit outlived the policy')
+        # A permit lives its own lifetime (5 s), and one a loop reserved under the long policy just before the swap may
+        # outlast the short policy's end by up to that; consume() refuses it once the policy in force has ended, which
+        # the next assertion shows from the other side: no create was released after the expiry.
+        self.assertLessEqual(max(end for ends in self.permit_ends.values() for end in ends), expires + 5.0 + 1e-6,
+                             'no permit outlived the policy by more than one permit lifetime')
         self.assertLess(max(released), expires + self.RELEASE_SLACK, 'no create was released after the expiry')
         # Renewal (a new deployment with a renewed policy): the lane resumes.
         provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP,

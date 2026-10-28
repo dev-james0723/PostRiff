@@ -631,6 +631,10 @@ class HostedApplication:
         device_binding = device_trust.bind(environ)
         # RAP-016/076: the sign-in details a first sighting may record (RAFII_SIGN_IN_DETAILS; nothing while off).
         details_binding = account_protection.bind_request(environ)
+        # What kind of process this request is (the lane, the minute cron, the web), for the one line a failure of the request
+        # coordinator leaves when a process stops asking it (DiscordProvider._coordinator_failed). Nothing but the kind is kept.
+        from .discord.rate_limits import bind_process_kind, process_kind_of, release_process_kind
+        kind_binding = bind_process_kind(process_kind_of(environ.get('PATH_INFO', '/')))
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -667,6 +671,7 @@ class HostedApplication:
             _REQUEST_LABEL.reset(label_binding)
             device_trust.reset(device_binding)
             account_protection.reset_request(details_binding)
+            release_process_kind(kind_binding)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -1231,6 +1236,10 @@ class HostedApplication:
                     return self._json(start_response, 200, operations[parts[6]](parts[2], token, parts[4], self._body(environ)))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
+                # The four calls below make several reads of Discord in a row (a server's channel list, a re-check, the last step of
+                # a connection). Booked, they wait their turn behind the lane's saturation instead of being refused after the first
+                # read or two (rate_limits.web_reads). Calls that make one read stay immediate.
+                from .discord.rate_limits import web_booked
                 if len(parts) == 6 and parts[5] == 'discord-sender-name':
                     discord = oauth.discord_connections
                     if method == 'GET':
@@ -1250,17 +1259,17 @@ class HostedApplication:
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "complete" and method == "POST":
                     body = self._body(environ)
                     extra = {"iss": body["iss"]} if body.get("iss") is not None else {}
-                    return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
+                    return self._json(start_response, 200, web_booked(oauth.complete, parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
                 if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
                     board_id = self._query_str(environ, 'boardId')
-                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4], board_id=board_id))
+                    return self._json(start_response, 200, web_booked(oauth.destinations, parts[2], token, parts[4], board_id=board_id))
                 if len(parts) == 7 and parts[5] == 'destinations' and method == 'DELETE':
                     return self._json(start_response, 200, oauth.remove_discord_destination(parts[2], token, parts[4], parts[6]))
                 if len(parts) == 6 and parts[5] == "creator-info" and method == "GET":
                     return self._json(start_response, 200, oauth.creator_info(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "destination" and method == "POST":
                     body = self._body(environ)
-                    return self._json(start_response, 200, oauth.choose_destination(parts[2], token, parts[4], body.get("destinationId")))
+                    return self._json(start_response, 200, web_booked(oauth.choose_destination, parts[2], token, parts[4], body.get("destinationId")))
                 if len(parts) == 6 and parts[5] == 'posts' and method == 'POST':
                     return self._json(start_response, 200, oauth.history.preview(parts[2], token, parts[4], self._body(environ)))
                 if len(parts) == 7 and parts[5:] == ['posts', 'import'] and method == 'POST':
@@ -1278,7 +1287,7 @@ class HostedApplication:
                     return self._json(start_response, 200, oauth.refresh_pinterest_authorization(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
-                    return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))
+                    return self._json(start_response, 200, web_booked(oauth.verify, parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "insights-canary" and method == "POST":
                     probe = getattr(service, "metric_probe", None)
                     if probe is None:

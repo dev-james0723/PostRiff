@@ -27,7 +27,7 @@ import uuid
 
 from postriff_alpha.domain import AlphaError
 from . import worker as discord_worker
-from .rate_limits import RateDelayed
+from .rate_limits import BOOK_AHEAD_SECONDS, RateDelayed, booking
 from ..hosted_worker import PostgresWorker
 
 ENV_ENABLED = 'POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED'
@@ -44,6 +44,9 @@ MAX_SHARDS = 32
 # reserve. The budget starts when the route runs, so a cold start's imports before it get their own allowance. The
 # margin is room, not a bound: the default database factory (hosted_app.postgres_factory) opens a connection per
 # transaction with an 8-second connect timeout and sets no statement_timeout, so nothing caps a step's database time.
+# Booking adds to that worst case: each of those seven requests may first wait up to BOOK_AHEAD_SECONDS (one second) for its
+# slot inside the coordinator's reserve, so a step is seven seconds longer at most (147 of the 160 seconds; at the 90-second
+# maximum budget 23 seconds of margin remain). The budget is read before each step only, as before.
 FUNCTION_SECONDS = 300
 STEP_RESERVE_SECONDS = 160
 COLD_START_SECONDS = 20
@@ -77,7 +80,8 @@ MAX_QUARANTINES_PER_CLAIM = 2
 MAX_POSITION_RESTORES = 3
 SHAPE_ERRORS = (AttributeError, IndexError, KeyError, TypeError, ValueError)
 _SHARD = re.compile(r'^(0|[1-9][0-9]?)$')
-_GUARDS = ('00:', '10:', '11:', '20:')  # application policy, bot global, bot credential, invalid-request budget
+# application policy, the bearer budget (when the policy has one), bot global, bot credential, invalid-request budget
+_GUARDS = ('00:', '01:', '10:', '11:', '20:')
 _OUTLOOK = '''WITH observed AS (SELECT extract(epoch from clock_timestamp())::double precision AS at)
     SELECT observed.at,r.scope_key,r.kind,r.manual_hold,r.remaining,extract(epoch from r.reset_at)::double precision,
         extract(epoch from r.blocked_until)::double precision,extract(epoch from r.circuit_until)::double precision
@@ -92,9 +96,15 @@ _CLAIMABLE = '''SELECT extract(epoch from clock_timestamp())::double precision,m
     WHERE next_at IS NOT NULL AND last_claimed_at<=extract(epoch from clock_timestamp())::double precision'''
 COUNTERS = ('steps', 'claimed', 'posted', 'verified', 'held', 'uncertain', 'rateDelayed', 'leaseLost', 'recoveries',
             'retries', 'deadLetters', 'claimMisses', 'rejected', 'notSent', 'uncertainCreates', 'rateWaits', 'idleWaits',
-            'permitWaits', 'quarantined', 'positionsKept')
+            'permitWaits', 'quarantined', 'positionsKept', 'bookedWaits', 'bookedSeconds', 'horizonRefusals', 'coordinatorBusy')
 _QUARANTINED = [0]  # workspaces this process has set aside since it started; a count, never an identifier
 _QUARANTINE_LOCK = threading.Lock()
+# Retention of the coordinator's admissions (rate_limits.SharedPostgresBudget.purge_settled): an invocation that had work
+# asks for it once its loop is over, at most once a minute per process. No flag: it deletes only rows nothing counts any
+# more, there is nothing to do when none are old enough, and it never stops a lane (see purge_admissions).
+PURGE_PERIOD_SECONDS = 60.0
+_PURGED_AT = [None]  # this process's monotonic clock at its last attempt
+_PURGE_GATE = threading.Lock()
 
 
 def quarantined():
@@ -144,19 +154,44 @@ class PacedSocial:
     wait in-process up to one second for the next window; this gives the create permit the same bounded wait. It
     happens before any intent is sealed, the job keeps its live lease, and the step rechecks every fence after it.
     Longer waits (an embargo, a learned channel window) are refused as before and the job is released unsent.
+
+    It is also where the lane asks to be booked (rate_limits.booking): the preflight reads, the create permit and the read-back
+    run inside it, so a full application window gives each of them the next exact slot (at most BOOK_AHEAD_SECONDS ahead,
+    slept inside the coordinator's reserve, never between the seal and the consume) instead of a refusal to poll for. The
+    read-back is wrapped twice because the worker reaches it two ways: `reconcile_discord` for a reply and `reconcile` for every
+    other post, and HostedSocial.reconcile calls ITS OWN reconcile_discord, so wrapping only the second left every ordinary
+    post's read-back unbooked (found on the first hosted run: 1,559 read-backs, none booked, 36 percent refused). Only these
+    four calls, and only on this thread: a direct provider call, another thread, the minute worker and a web request never see
+    it. The waits above stay for what a booking cannot cover (a full horizon, an embargo).
     """
     def __init__(self, social, *, wait_seconds=1.0, sleep=time.sleep, monotonic=time.monotonic):
         self._social, self._wait, self._sleep, self._monotonic = social, wait_seconds, sleep, monotonic
         self.permit_waits = 0
+        # this lane's own bookings, the calls the booked horizon refused and the reservations the database could not take in time
+        # (rate_limits.booking(tally=...)): the last two are what an alert on a full horizon and on a slow lock reads
+        self.booked = {'bookings': 0, 'bookedWaitSeconds': 0.0, 'horizonRefusals': 0, 'coordinatorBusy': 0}
 
     def __getattr__(self, name):
         return getattr(self._social, name)
+
+    def prepare_discord_dispatch(self, manifest, **kwargs):
+        with booking(BOOK_AHEAD_SECONDS, self.booked):
+            return self._social.prepare_discord_dispatch(manifest, **kwargs)
+
+    def reconcile_discord(self, manifest, job, **kwargs):
+        with booking(BOOK_AHEAD_SECONDS, self.booked):
+            return self._social.reconcile_discord(manifest, job, **kwargs)
+
+    def reconcile(self, manifest, job):
+        with booking(BOOK_AHEAD_SECONDS, self.booked):
+            return self._social.reconcile(manifest, job)
 
     def reserve_discord_send(self, manifest, **kwargs):
         deadline = self._monotonic() + self._wait
         while True:
             try:
-                return self._social.reserve_discord_send(manifest, **kwargs)
+                with booking(BOOK_AHEAD_SECONDS, self.booked):
+                    return self._social.reserve_discord_send(manifest, **kwargs)
             except RateDelayed as error:
                 pause = error.retry_after_seconds + random.uniform(.005, .03)
                 # Only a spent application window, or a permit that lapsed at that window's end while it was being
@@ -322,6 +357,40 @@ class LaneWorker(PostgresWorker):
                 self.lane_counts[{'accepted': 'posted', 'rejected': 'rejected',
                                   'not_sent': 'notSent'}.get(evidence, 'uncertainCreates')] += 1
         return super().complete(claimed, result)
+
+
+def purge_admissions(lane, *, monotonic=time.monotonic):
+    """Ask the coordinator to delete the admissions past their retention, at most once a minute in this process.
+
+    Returns the coordinator's outcome, or None when it was not asked (too soon, or the lane has no coordinator). It never
+    raises: retention must not stop a post. It logs counts only, as one INFO line when it deleted something and one WARNING
+    when it could not (a role without DELETE, a timeout): `status` and the exception class, no database message, no identifier.
+    The shards of one minute may each ask; one purger runs at a time and the others find `busy` (an advisory lock)."""
+    limiter = getattr(_discord(lane.social), 'rate_limiter', None)
+    purge = getattr(limiter, 'purge_settled', None)
+    if not callable(purge):
+        return None
+    with _PURGE_GATE:
+        now = monotonic()
+        if _PURGED_AT[0] is not None and 0 <= now - _PURGED_AT[0] < PURGE_PERIOD_SECONDS:
+            return None
+        _PURGED_AT[0] = now
+    try:
+        outcome = purge()
+        deleted = outcome['reads'] + outcome['publications']
+        if outcome['status'] not in ('ok', 'busy'):
+            level = logging.WARNING
+        elif deleted:
+            level = logging.INFO
+        else:
+            return outcome
+        logging.getLogger('postriff.request').log(level, json.dumps({
+            'event': 'discord.lane.retention', 'status': outcome['status'], 'reads': outcome['reads'],
+            'publications': outcome['publications'], 'rounds': outcome['rounds'], 'more': outcome['more'],
+            **({'error': outcome['error']} if 'error' in outcome else {})}))
+        return outcome
+    except Exception:
+        return None
 
 
 def _discord(social):
@@ -491,6 +560,9 @@ def outlook(lane):
     marker = '0' * 64
     keys = sorted(key for key in provider.rate_limiter._keys(provider._rate_identity('bot'), marker, marker, marker)
                   if key[:3] in _GUARDS)
+    bearer = getattr(provider.rate_limiter, 'bearer_key', None)   # the person's own bearer calls' budget: the grant check opens every step
+    if bearer:
+        keys = sorted(keys + [bearer])
     with lane.connection_factory() as db, db.cursor() as cur:
         cur.execute(_OUTLOOK, (keys,))
         rows = cur.fetchall()
@@ -613,6 +685,8 @@ def run(worker, number, values=None, *, started=None, request_id=None, sleep=tim
             counts['idleWaits'] += 1
             waited['idle'] += pause
             sleep(pause)
+        if ready is True:
+            purge_admissions(lane, monotonic=monotonic)
     except BaseException as caught:
         stopped, error = 'error', type(caught).__name__
         raise
@@ -621,7 +695,9 @@ def run(worker, number, values=None, *, started=None, request_id=None, sleep=tim
         counts.update(claimed=stats['claims'], held=stats['held'], uncertain=stats['uncertain'],
                       rateDelayed=stats['rateDelays'], leaseLost=stats['leaseLost'], recoveries=stats['recoveries'],
                       retries=stats['retries'], deadLetters=stats['deadLetters'], claimMisses=stats['claimMisses'],
-                      permitWaits=lane.social.permit_waits, quarantined=stats['quarantined'], **lane.lane_counts)
+                      permitWaits=lane.social.permit_waits, quarantined=stats['quarantined'], **lane.lane_counts,
+                      bookedWaits=lane.social.booked['bookings'], bookedSeconds=round(lane.social.booked['bookedWaitSeconds'], 3),
+                      horizonRefusals=lane.social.booked['horizonRefusals'], coordinatorBusy=lane.social.booked['coordinatorBusy'])
         result = {'version': 1, 'lane': 'discord', 'enabled': True, 'shard': number, 'stoppedBy': stopped,
                   'elapsedSeconds': round(monotonic() - started, 3), 'processed': counts['claimed'],
                   'budget': {'maxSeconds': seconds, 'maxSteps': max_steps}, 'counters': counts,
