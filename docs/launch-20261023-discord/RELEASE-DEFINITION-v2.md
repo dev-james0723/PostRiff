@@ -10,6 +10,8 @@ Dark builds and tester sessions remain as **verification steps** on the way, nev
 
 ## 2. Gates before the full opening (each needs evidence in the ledger)
 
+> **Amendment by owner reply 19 (2026-10-28 17:08Z).** G5 for the launch is the normal-load standard (100 posts a minute) plus a documented burst limit (a sudden 5,000-post burst is late by about 30 to 60 minutes, nothing lost or duplicated) plus the 300-per-hour workspace ceiling; the 5,000-in-one-minute standard in section 4 is not claimed for the launch. G6 for the launch is the minimal H-07: the owner is the only Primary, alerts reach the owner through a scheduled GitHub Actions health check, one real test alert is the receipt, nights are uncovered and written down; M-03 still needs the Supabase backups sentence.
+
 | Gate | Evidence | Who | State |
 |---|---|---|---|
 | G1 Final release SHA frozen, exact-SHA CI green on every workflow | `RC-RECEIPT.md` | agent | RC1 `2a5a523d` done; the final SHA is RC2 (RC1 plus W-02) if capacity needs it, see G5 |

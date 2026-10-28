@@ -409,3 +409,21 @@ Context: the owner had asked, verbatim: "所以你仲需要做啲咩工作？幾
 4. **Plan and estimate:** `LEAN-PLAN-20261028.md`.
 
 **Carried out from this reply:** the limiter, capacity and Q-05 agents were told to wrap up within the hour (limiter: finish the web multi-read item and a small observability commit, then one short report; capacity: collect the running hosted cells into one table, no new runs; Q-05: stop and report what is done); the safety-net check-in was rewritten for the lean plan.
+
+
+## Reply 19, received 2026-10-28 about 17:08Z (answer to D-18 and D-19, plus a question about a bot-free route)
+
+Context: after owner reply 18 the agent asked for one word each on D-18 and D-19 and offered "reply 'you decide' and I take my recommendation". The owner wrote, verbatim:
+
+> 突然一次湧入 5,000 則貼文（很少見）時，會慢約 30–60 分鐘才送完，但不會丟失。先這樣開放。
+> 	•	出事時通知你本人。
+>
+> Agree
+>
+> 還有就是，除了這個機械人的模式，有沒有辦法用 OAuth 的形式去直接 skip 機械人，不一定用機械人去控制 user 的 Discord，只是用 user 的賬號？可不可以？有沒有一個這樣的 way 呢？之前我好像和你討論過這個問題。
+
+**Reading, by the agent (stated back to the owner in the same turn so that it can be corrected):**
+
+1. **D-18 is decided: AGREED as recommended.** The launch capacity standard is the normal-load standard (100 posts a minute; hosted S0-100 passes at 0.29 / 0.53 / 0.67 minutes) plus a documented burst limit (a sudden 5,000-post burst is late by about 30 to 60 minutes and nothing is lost or duplicated) plus the 300-per-hour workspace ceiling that is built. The 5,000-in-one-minute standard (median 12 / p95 25 / max 40 minutes) is NOT claimed for the launch; it can be re-raised with real traffic. G5 in `RELEASE-DEFINITION-v2.md` is amended accordingly (this is the owner's own gate, relaxed by the owner).
+2. **D-19 is decided: AGREED as recommended.** The owner is the only Primary on-call. Alerts reach the owner's phone through a scheduled GitHub Actions health check (a failed run notifies by e-mail and in the GitHub mobile app); one real test alert delivered to the owner is the receipt; nights are uncovered and written down; the on-call engine (migrations 140 and 141) is not applied. A scheduled workflow only runs from the default branch (`consumer-saas`), so one small workflow file has to reach that branch: the agent prepares it as a small separate pull request that the owner merges (the agent does not merge it; no exact authority was given) and tells the owner the few clicks (merge, add the secrets, switch on GitHub mobile notifications) when the dark build exists.
+3. **The OAuth question is a question, not an authorization.** Answer given in the same turn: there is no official way to act as the user's own Discord account (no OAuth scope posts as a user; automating a user account is a self-bot and breaks Discord's rules); the only bot-free route is the OAuth incoming webhook (`webhook.incoming`), which is already built, OFF at launch, never run against real Discord, posts under a webhook identity and not as the person; the same answer as owner reply 2 (2026-10-22). Recommendation: launch with the bot route now and run the webhook route as a second step after the opening; making it the launch route would add about 2 to 4 days and risk. No scope change was made.

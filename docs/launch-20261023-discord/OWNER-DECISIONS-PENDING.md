@@ -150,7 +150,7 @@ Labels: [Certain] measured or read exactly; [Likely] strong inference; [Guessing
 - **Needed by:** the final-head measurement and the staging run; you will be asked then, with numbers.
 
 
-## D-18. Capacity gate for the launch (G5): keep the 5,000-in-one-minute standard, or launch on the normal-load standard (drafted 2026-10-28 16:56Z, after reply 18)
+## D-18. Capacity gate for the launch (G5): keep the 5,000-in-one-minute standard, or launch on the normal-load standard (drafted 2026-10-28 16:56Z, after reply 18; **DECIDED 17:08Z by reply 19: AGREED, launch on the normal-load standard plus the documented burst limit**)
 
 - **Fact [Certain: measured].** Normal load (S0-100, 100 posts a minute) passes on the hosted runner with lateness 0.29 / 0.53 / 0.67 minutes. The stress standard (5,000 posts due in one minute: median 12, p95 25, max 40 minutes) is at 14.5 / 28.2 / 29.7 minutes on the best development run, and whether it can be met depends on a database round trip nobody has measured (the lock caps the lane at 26 / 14 / 8 requests a second at 2 / 5 / 10 ms; D-17). Every further step towards it costs days and credits.
 - **I would choose:** launch on the normal-load standard plus a documented burst limit (a 5,000-post burst is late by about 30 to 60 minutes, nothing is lost or duplicated), the 300-per-hour workspace ceiling that is built, and the kill switch; read the real round trip from the health probe on the dark build; raise the standard again with real traffic.
@@ -158,7 +158,7 @@ Labels: [Certain] measured or read exactly; [Likely] strong inference; [Guessing
 - **Biggest risk:** the real round trip is worse than about 2.4 ms and a burst takes longer than estimated. **What would change my mind:** the health probe on the dark build shows a round trip above about 4 ms and you expect a large customer in the first days.
 - **Reversible:** yes (it is a statement of what is promised and a later engineering choice).
 
-## D-19. H-07 for the launch: the full on-call pipeline, or the minimal version (drafted 2026-10-28 16:56Z, after reply 18)
+## D-19. H-07 for the launch: the full on-call pipeline, or the minimal version (drafted 2026-10-28 16:56Z, after reply 18; **DECIDED 17:08Z by reply 19: AGREED, the owner is the only Primary, alerts to the owner**)
 
 - **I would choose:** the owner is the only Primary; a scheduled GitHub Actions health check runs the existing ops check against the health route every 5 minutes (best effort) and a failed run notifies the owner by e-mail and in the GitHub mobile app; one real test alert delivered to the owner's phone is the receipt; nights are uncovered and written down; the full engine (migrations 140 and 141) is not applied now.
 - **Strongest argument against:** an incident at night is seen in the morning. **Answer:** the kill switch, the 300-per-hour ceiling and the fail-closed holds bound the harm; this can be upgraded when a second person exists.
