@@ -148,3 +148,12 @@ SELECT count(*) FILTER (WHERE s.wire > o.at) AS admissions_ahead_now,
                   AND s.reserved_at > o.at - interval '60 seconds'), 0)::numeric, 3) AS booked_read_wait_seconds_60s
 FROM sample s CROSS JOIN observed o
 GROUP BY o.at;
+
+-- M9. The database round trip (Release Captain, round 3; the G5 evidence). Not measurable from here: a statement in the SQL
+-- editor runs inside the database. The protected health route measures it from its own function, through a new connection
+-- to the application's POSTRIFF_DATABASE_URL (the pooler): GET /api/ops/discord/health -> coordinator.roundTrip
+-- {connectMs, selectP50Ms, selectMaxMs, commitMs} of five SELECT 1 and one COMMIT. The coordinator's row lock lets about
+-- 1000 / (17 + 10.8 x selectP50Ms) admissions a second through (OPEN-QUESTIONS Q22; the 17 ms is a test-box figure), and
+-- the alert COORD_LOCK_BOUND (informational, P2) says when that is below what the budget lets the lanes book. The first
+-- read on the staged dark build is the real number.
+SELECT 'coordinator.roundTrip is read from GET /api/ops/discord/health, not from SQL' AS round_trip;

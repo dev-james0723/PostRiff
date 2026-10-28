@@ -851,5 +851,126 @@ class LaterBranches(unittest.TestCase):
         self.assertIsNone(found(with_fleet([line], self.retention()), 'RATE_RETENTION_BEHIND'))
 
 
+class FinalCoordinator(unittest.TestCase):
+    """The coordinator as merged at 0cb19962 (the Release Captain's round 3): bookings leave a reserve to callers that cannot
+    wait, a bearer budget beside the bot's, the booked horizon, a busy database as a short wait, a 45 s degrade."""
+
+    def test_the_budget_divides_by_what_bookings_can_take(self):
+        # guard 0.05 s, reserve 1: (25 - 1) x 60 / 1.05 = 1371.4 a minute bookable (steady 25 x 60 / 1.05 = 1428.6)
+        bookable = 24 * 60 / 1.05
+        for admitted, expected in ((math.ceil(0.95 * bookable) - 1, None), (math.ceil(0.95 * bookable), 'warn')):
+            with self.subTest(admitted=admitted):
+                snapshot = with_(('coordinator', 'traffic', 'admissions60s'), admitted)
+                snapshot['config']['policy'].update(slotGuardSeconds=0.05, immediateReserve=1)
+                self.assertEqual(found(snapshot, 'RATE_APP_BUDGET_SPENT'), expected)
+        snapshot = with_(('coordinator', 'traffic', 'admissions60s'), 1400)
+        snapshot['config']['policy'].update(slotGuardSeconds=0.05, immediateReserve=1)
+        evidence = [a for a in alerts(snapshot) if a['id'] == 'RATE_APP_BUDGET_SPENT'][0]['evidence']
+        self.assertEqual((evidence['achievable60s'], evidence['bookable60s'], evidence['immediateReserve']), (1428.6, 1371.4, 1))
+
+    def test_the_reserve_never_takes_the_last_slot(self):
+        # _booking_slot keeps min(reserve, cap - 1): a cap of 1 books its one slot; a cap of 2 with a reserve of 3 books 1
+        for cap, reserve, admitted, expected in ((1, 1, 55, 'warn'), (1, 1, 54, None), (2, 3, 55, 'warn'), (2, 3, 54, None)):
+            with self.subTest(cap=cap, reserve=reserve, admitted=admitted):
+                snapshot = with_(('coordinator', 'traffic', 'admissions60s'), admitted)
+                snapshot['config']['policy'].update(appCapacity=cap, slotGuardSeconds=0.05, immediateReserve=reserve)
+                self.assertEqual(found(snapshot, 'RATE_APP_BUDGET_SPENT'), expected)
+
+    def test_the_bearer_budget_is_read_against_its_own_cap(self):
+        def bearer(admitted, **policy):
+            snapshot = with_(('coordinator', 'traffic', 'bearerAdmissions60s'), admitted)
+            snapshot['config']['policy'].update(policy)
+            return snapshot
+        # 10 a second over 1 s, guard 0.05, reserve 1: (10 - 1) x 60 / 1.05 = 514.3 a minute bookable; 95% is 488.6
+        self.assertEqual(found(bearer(489, bearerCapacity=10, bearerWindowSeconds=1, slotGuardSeconds=0.05, immediateReserve=1),
+                               'RATE_BEARER_BUDGET_SPENT'), 'warn')
+        self.assertIsNone(found(bearer(488, bearerCapacity=10, bearerWindowSeconds=1, slotGuardSeconds=0.05, immediateReserve=1),
+                                'RATE_BEARER_BUDGET_SPENT'))
+        self.assertEqual(found(bearer(570, bearerCapacity=10, bearerWindowSeconds=1), 'RATE_BEARER_BUDGET_SPENT'), 'warn')
+        self.assertIsNone(found(bearer(512, bearerCapacity=10, bearerWindowSeconds=1, slotGuardSeconds=0.05),
+                                'RATE_BEARER_BUDGET_SPENT'), 'no reserve: 95% of 571.4 is 542.9')
+        self.assertIsNone(found(bearer(570, bearerCapacity=None, bearerWindowSeconds=None), 'RATE_BEARER_BUDGET_SPENT'),
+                          'no bearer budget, no bearer alert')
+        self.assertIsNone(found(bearer(570, bearerCapacity=10, bearerWindowSeconds=1), 'RATE_APP_BUDGET_SPENT'),
+                          'the bearer class is not the bot class')
+
+    def test_a_bearer_embargo_is_reported_with_the_others(self):
+        snapshot = healthy()
+        snapshot['coordinator']['guards']['bearer'] = dict(snapshot['coordinator']['guards']['policy'], blocked=True,
+                                                           embargoSeconds=40.0)
+        alert = [a for a in alerts(snapshot) if a['id'] == 'RATE_EMBARGO'][0]
+        self.assertIn('bearer', alert['evidence']['kinds'])
+
+    def booking(self, horizon, ahead=1.0, **guard):
+        snapshot = healthy()
+        snapshot['coordinator']['booking'] = {'status': 'observed', 'bookAheadSeconds': ahead, 'aheadNow': 11,
+                                              'horizonSeconds': horizon, 'bookedReads60s': 40, 'bookedReadWaitSeconds60s': 18.0,
+                                              'meanBookedReadWaitSeconds60s': 0.45, 'maxBookedReadWaitSeconds60s': 0.9}
+        snapshot['coordinator']['guards']['policy'].update(guard)
+        return snapshot
+
+    def test_a_full_booked_horizon_means_callers_are_refused(self):
+        self.assertEqual(found(self.booking(0.96), 'RATE_BOOKING_FULL'), 'warn')
+        self.assertIsNone(found(self.booking(0.5), 'RATE_BOOKING_FULL'))
+        self.assertIsNone(found(self.booking(0.0, ahead=0.0), 'RATE_BOOKING_FULL'), 'booking off: no horizon')
+
+    def test_remaining_zero_alone_is_not_an_alert(self):
+        # The first hosted run read remaining 0 in 21 of 35 busy readings with the horizon never full.
+        quiet = self.booking(0.5, remaining=0, remainingRatio=0.0)
+        self.assertEqual({a['id'] for a in alerts(quiet) if a['severity'] in ('warn', 'page')}, set())
+
+    def test_a_degraded_coordinator_in_a_lane_process_is_its_own_alert(self):
+        line = json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'coordinator_degraded', 'counters': {}})
+        raised = {a['id']: a['severity'] for a in alerts(with_fleet([line]))}
+        self.assertEqual(raised.get('RATE_COORDINATOR_DEGRADED'), 'warn')
+        self.assertNotIn('SILENT_HALT_LANE_STOPS', raised, 'reported once, by its own rule')
+
+    def test_repeated_coordinator_busy_delays_in_five_minutes(self):
+        def lines(*busy):
+            return [json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'idle', 'counters': {'coordinatorBusy': n}})
+                    for n in busy]
+        fleet = check.parse_logs(lines(4, 6), 600)
+        self.assertEqual(fleet['laneCounters']['coordinatorBusy'], 10)
+        self.assertIsNone(found(with_fleet(lines(9, 10), window=600), 'RATE_COORDINATOR_BUSY'), '19 in 10 minutes: 9.5 in 5')
+        self.assertEqual(found(with_fleet(lines(10, 10), window=600), 'RATE_COORDINATOR_BUSY'), 'warn')
+        self.assertEqual(found(with_fleet(lines(10), window=300), 'RATE_COORDINATOR_BUSY'), 'warn')
+
+
+class LockBound(unittest.TestCase):
+    """The captain's round 3: the coordinator's row lock caps admissions at about 1000 / (17 + 10.8 x round trip) a second
+    (the limiter's Q22). Below what the budget lets the lanes book, the lock and not the budget is the ceiling."""
+
+    def snapshot(self, p50, **section):
+        snapshot = healthy()
+        snapshot['config']['policy'].update(slotGuardSeconds=0.05, immediateReserve=1)      # 24 / 1.05 = 22.86 a second
+        snapshot['coordinator']['roundTrip'] = {'status': 'observed', 'statements': 5, 'connectMs': 40.0, 'selectP50Ms': p50,
+                                                'selectMaxMs': p50 * 2, 'commitMs': p50, 'lockBoundFixedMs': 17.0,
+                                                'lockBoundRoundTrips': 10.8, 'path': 'new_connection', **section}
+        return snapshot
+
+    def test_the_lock_bound_from_the_measured_round_trip(self):
+        self.assertIsNone(found(self.snapshot(2.3), 'COORD_LOCK_BOUND'), '1000 / (17 + 24.8) = 23.9 a second')
+        alert = [a for a in alerts(self.snapshot(2.5)) if a['id'] == 'COORD_LOCK_BOUND'][0]    # 1000 / 44 = 22.7
+        self.assertEqual(alert['severity'], 'info')
+        self.assertEqual((alert['evidence']['lockBoundPerSecond'], alert['evidence']['bookablePerSecond']), (22.7, 22.9))
+        self.assertIn('test-box figure', alert['message'])
+        self.assertIn('estimate', alert['message'])
+        self.assertEqual(found(self.snapshot(20.0), 'COORD_LOCK_BOUND'), 'info', '1000 / 233 = 4.3 a second')
+
+    def test_the_constants_come_from_the_build(self):
+        self.assertIsNone(found(self.snapshot(2.5, lockBoundFixedMs=10.0), 'COORD_LOCK_BOUND'), '1000 / 37 = 27.0 a second')
+
+    def test_nothing_measured_nothing_said(self):
+        self.assertIsNone(found(self.snapshot(2.5, status='unavailable'), 'COORD_LOCK_BOUND'))
+        twin = healthy()
+        twin['coordinator']['roundTrip'] = {'status': 'not_measured', 'source': 'sql'}
+        self.assertIsNone(found(twin, 'COORD_LOCK_BOUND'))
+
+    def test_a_round_trip_that_could_not_be_measured_does_not_blind_the_evaluator(self):
+        snapshot = self.snapshot(2.0, status='unavailable')
+        snapshot['errors'] = [{'section': 'roundTrip', 'error': 'OperationalError'}]
+        self.assertNotIn('SILENT_HALT_SECTION', {a['id'] for a in alerts(snapshot)})
+
+
 if __name__ == '__main__':
     unittest.main()

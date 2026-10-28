@@ -97,7 +97,9 @@ class FakeDatabase:
                              ('platform', 'FROM public.pr_operational_snapshots'), ('requests', 'FROM public.pr_request_metrics')):
             if marker in sql and name in self.fail:
                 raise RuntimeError('synthetic failure')
-        if sql.startswith('SELECT set_config'):
+        if sql == 'SELECT 1':
+            self.result = [(1,)]
+        elif sql.startswith('SELECT set_config'):
             self.result = [('2000ms', '500ms', NOW)]
         elif 'pr_discord_worker_projection' in sql:
             self.result = [(2, 1, 3, 420.5, NOW - 30)]
@@ -130,6 +132,9 @@ class FakeDatabase:
 
     def fetchone(self):
         return self.result[0]
+
+    def commit(self):
+        self.statements.append('COMMIT')
 
     def fetchall(self):
         return list(self.result)
@@ -220,7 +225,7 @@ class Payload(unittest.TestCase):
     def test_the_payload_carries_counts_ages_booleans_and_codes_only(self):
         payload, _ = self.snapshot()
         allowed_text = {'rafii.discord.ops.health', 'health_route', 'observed', 'open', 'closed', 'list', 'instance',
-                        'production', 'attention', 'ok', 'no_coordinator', 'w02-health', 'not_installed'}
+                        'production', 'attention', 'ok', 'no_coordinator', 'w02-health', 'not_installed', 'worker_factory'}
         for path, value in leaves(payload):
             with self.subTest(path='.'.join(map(str, path))):
                 if isinstance(value, str):
@@ -379,6 +384,55 @@ class SlotGuard(unittest.TestCase):
         adapter = provider()
         payload = ops.snapshot(worker_for(adapter, FakeDatabase(adapter)), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
         self.assertEqual(payload['config']['holdReadWaitSeconds'], getattr(rate_limits, 'HOLD_WAIT_SECONDS', None))
+
+    def test_the_payload_reports_the_reserve_bookings_leave(self):
+        """The budget alert divides by what bookings can take, (cap - reserve) / (window + guard): the reserve comes from the
+        serving coordinator (SharedPostgresBudget.IMMEDIATE_RESERVE while it books, 0 when BOOK_AHEAD_SECONDS is 0)."""
+        adapter = provider()
+        payload = ops.snapshot(worker_for(adapter, FakeDatabase(adapter)), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
+        limiter = adapter.rate_limiter
+        books = (getattr(limiter, 'BOOK_AHEAD_SECONDS', 0) or 0) > 0
+        self.assertEqual(payload['config']['policy']['immediateReserve'],
+                         getattr(limiter, 'IMMEDIATE_RESERVE', None) if books else 0)
+
+
+class RoundTrip(unittest.TestCase):
+    """The captain's round 3: the first Production health read prints the database round trip from the function, through the
+    coordinator's own connection path, so the lock bound of the limiter's Q22 can be judged on the real number (G5)."""
+
+    def test_five_selects_and_a_commit_through_a_new_connection_with_a_fake_clock(self):
+        adapter = provider()
+        ticks = iter([10.0, 10.030] + [t for i in range(5) for t in (11 + i, 11 + i + (0.002, 0.004, 0.003, 0.009, 0.001)[i])]
+                     + [20.0, 20.005, 20.010])
+        database = FakeDatabase(adapter)
+        section = ops.read_round_trip(database, lambda: next(ticks), NOW)
+        self.assertEqual(section, {'status': 'observed', 'sampledAt': NOW, 'statements': 5, 'connectMs': 30.0,
+                                   'selectP50Ms': 3.0, 'selectMaxMs': 9.0, 'commitMs': 5.0, 'elapsedMs': 10010.0,
+                                   'lockBoundFixedMs': ops.LOCK_BOUND_FIXED_MS, 'lockBoundRoundTrips': ops.LOCK_BOUND_ROUND_TRIPS})
+        self.assertEqual([sql for sql in database.statements if sql in ('SELECT 1', 'COMMIT')], ['SELECT 1'] * 5 + ['COMMIT'])
+        self.assertTrue(all(sql in ('SELECT 1', 'COMMIT') or sql.startswith("SELECT set_config('statement_timeout'")
+                            for sql in database.statements), database.statements)
+
+    def test_a_failure_is_an_unavailable_section_never_a_failed_snapshot(self):
+        adapter = provider()
+        section = ops.read_round_trip(FakeDatabase(adapter, raise_on_connect=True), lambda: 0.0, NOW)
+        self.assertEqual(section, {'status': 'unavailable', 'error': 'OSError'})
+        self.assertEqual(ops.read_round_trip(None, lambda: 0.0, NOW), {'status': 'unavailable', 'error': 'RuntimeError'})
+
+    def test_the_payload_opens_a_new_connection_to_the_applications_own_url(self):
+        adapter = provider()
+        pooled, worker_db = FakeDatabase(adapter), FakeDatabase(adapter)
+        url = 'postgresql://pooler.example.invalid:6543/postgres'      # no credentials: never a secret in a test
+        with patch('postriff_phase2.hosted_app.postgres_factory', return_value=pooled) as opener:
+            payload = ops.snapshot(worker_for(adapter, worker_db), {'POSTRIFF_DATABASE_URL': url}, clock=lambda: NOW,
+                                   monotonic=lambda: 0.0)
+        opener.assert_called_once_with(url, pooled=False)
+        section = payload['coordinator']['roundTrip']
+        self.assertEqual((section['status'], section['statements'], section['path']), ('observed', 5, 'new_connection'))
+        self.assertEqual(pooled.statements.count('SELECT 1'), 5)
+        self.assertNotIn('SELECT 1', worker_db.statements)
+        without = ops.snapshot(worker_for(adapter, worker_db), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
+        self.assertEqual(without['coordinator']['roundTrip']['path'], 'worker_factory')
 
 
 class ProbeProducer(unittest.TestCase):

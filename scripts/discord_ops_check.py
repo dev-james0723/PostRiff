@@ -43,12 +43,16 @@ DEFAULT_THRESHOLDS = ROOT / 'docs' / 'ops' / 'discord-alert-thresholds.json'
 SEVERITIES = ('page', 'warn', 'info')
 CLASSES = ('BACKLOG', 'DELIVERY', 'RATE_LIMIT', 'SILENT_HALT', 'CROSS_TENANT', 'CONFIG')
 PHASES = ('pre_open', 'canary', 'open')
-GUARD_KINDS = ('policy', 'global', 'credential', 'invalid')
+GUARD_KINDS = ('policy', 'bearer', 'global', 'credential', 'invalid')   # 'bearer': the person's own calls' budget (D-2 option 1)
 # discord_paused (W-02 090c7ce6): the provider's execution or authorization is off, so a loop claims nothing; a pause is
 # reported by the backlog and halt rules (never as an abnormal stop), and they never page for it.
 QUIET_STOPS = ('idle', 'time_budget', 'step_budget', 'rate_wait', 'operator_hold', 'discord_paused')
 LANE_COUNTERS = ('claimed', 'posted', 'verified', 'held', 'uncertain', 'deadLetters', 'rateDelayed', 'leaseLost',
-                 'quarantined', 'positionsKept')
+                 'quarantined', 'positionsKept', 'coordinatorBusy')
+# Sections whose failure blinds no rule that pages (the round trip is a measurement for COORD_LOCK_BOUND, an estimate).
+INFORMATIONAL_SECTIONS = ('roundTrip',)
+# Stops that a rule of their own reports (RATE_COORDINATOR_DEGRADED), so SILENT_HALT_LANE_STOPS does not count them twice.
+OWN_RULE_STOPS = ('coordinator_degraded',)
 RETENTION_FAILURES = ('denied', 'timeout', 'error')
 DENIAL_EVENT = 'security.cross_tenant_denied'
 KIND = 'rafii.discord.ops.health'
@@ -75,6 +79,14 @@ def _section(snapshot, name):
 def _alert(rule, cls, severity, message, **evidence):
     return {'id': rule, 'class': cls, 'severity': severity, 'message': message,
             'evidence': {key: value for key, value in evidence.items() if value is not None}}
+
+
+def bookable_per_minute(capacity, window, guard, reserve):
+    """What bookings can take in a minute: the coordinator leaves min(reserve, cap - 1) slots of every window to callers
+    that cannot wait (SharedPostgresBudget._booking_slot, IMMEDIATE_RESERVE while it books), so the lanes, which book, get
+    (cap - that) of each window. With no reserve (a build that does not book, or a snapshot without it) the steady ceiling."""
+    kept = min(reserve, capacity - 1) if reserve and capacity > 1 else 0
+    return achievable_per_minute(capacity, window, guard) * (capacity - kept) / capacity
 
 
 def achievable_per_minute(capacity, window, guard):
@@ -267,19 +279,37 @@ def rate_limit(snapshot, t, out):
         # The process view knows the reviewed policy; the SQL twin reads the same numbers from the policy row.
         capacity = _number(policy.get('appCapacity')) or _number(row.get('limit'))
         window = _number(policy.get('appWindowSeconds')) or _number(row.get('windowSeconds'))
-        admitted = _number(traffic.get('admissions60s'))
+        admitted = _number(traffic.get('admissions60s'))     # the bot's class alone while a bearer budget exists
         guard = _number(policy.get('slotGuardSeconds'))
+        reserve = _number(policy.get('immediateReserve'))
         if capacity and window and admitted is not None:
             achievable = achievable_per_minute(capacity, window, guard)
-            saturation = admitted / achievable
+            # The lanes book (rate_limits.booking): a window keeps IMMEDIATE_RESERVE slots for callers that cannot wait, so
+            # bookings take at most (cap - reserve) a window. Spent is measured against that, read from the build; without
+            # it (the SQL twin, a build that does not book) the steady ceiling.
+            bookable = bookable_per_minute(capacity, window, guard, reserve)
+            saturation = admitted / bookable
             if saturation >= t['saturation_warn']:
                 out.append(_alert('RATE_APP_BUDGET_SPENT', 'RATE_LIMIT', 'warn',
                                   'The application request budget was spent for the whole last minute (%d admissions of '
-                                  'the %.0f the coordinator can grant in a minute; nominal %d). Expected during a declared '
-                                  'burst; otherwise something is sending more than it should.'
-                                  % (admitted, achievable, capacity * 60 / window),
-                                  admissions60s=admitted, achievable60s=round(achievable, 1), saturation=round(saturation, 3),
-                                  slotGuardSeconds=guard, guard='build' if guard is not None else 'assumed_largest'))
+                                  'the %.0f the lanes can book in a minute, %.0f with the reserve for callers that cannot '
+                                  'wait; nominal %d). Expected during a declared burst; otherwise something is sending more '
+                                  'than it should.' % (admitted, bookable, achievable, capacity * 60 / window),
+                                  admissions60s=admitted, achievable60s=round(achievable, 1), bookable60s=round(bookable, 1),
+                                  immediateReserve=reserve, saturation=round(saturation, 3), slotGuardSeconds=guard,
+                                  guard='build' if guard is not None else 'assumed_largest'))
+        bearer_cap, bearer_window = _number(policy.get('bearerCapacity')), _number(policy.get('bearerWindowSeconds'))
+        bearer = _number(traffic.get('bearerAdmissions60s'))
+        if bearer_cap and bearer_window and bearer is not None:
+            # The bearer class is the same exact sliding window, with the same guard and reserve (rate_limits._window_state,
+            # _booking_slot): 10 a second over 1 s is 571.4 a minute at a 0.05 s guard, not 600, which only 99.7% could reach.
+            ceiling = bookable_per_minute(bearer_cap, bearer_window, guard, reserve)
+            if bearer / ceiling >= t['saturation_warn']:
+                out.append(_alert('RATE_BEARER_BUDGET_SPENT', 'RATE_LIMIT', 'warn',
+                                  'The bearer budget (the person\'s own OAuth calls: grant checks, profile and server reads) '
+                                  'was spent for the whole last minute (%d of %d). Those calls wait; the bot\'s budget is '
+                                  'separate.' % (bearer, ceiling), bearerAdmissions60s=bearer, ceiling60s=round(ceiling, 1),
+                                  saturation=round(bearer / ceiling, 3)))
         invalid = int(traffic.get('invalid10m') or 0)
         if invalid > t['invalid_10m_page']:
             out.append(_alert('RATE_INVALID_REQUESTS', 'RATE_LIMIT', 'page',
@@ -335,6 +365,8 @@ def rate_limit(snapshot, t, out):
                               % transient,
                               transientCircuits=transient))
     retention(snapshot, t, out)
+    booking_and_busy(snapshot, t, out)
+    lock_bound(snapshot, t, out)
     if config and config.get('rateLimitsV1'):
         policy = config.get('policy') or {}
         days = _number(policy.get('daysLeft'))
@@ -361,6 +393,72 @@ def malformed(snapshot):
     missing = [name for name in REQUIRED[source]
                if not isinstance(snapshot.get(name), list if name == 'errors' else dict)]
     return 'missing:' + ','.join(missing) if missing else None
+
+
+def lock_bound(snapshot, t, out):
+    """COORD_LOCK_BOUND (informational, P2): the coordinator's row lock caps admissions at about 1000 / (fixed + round trips x
+    p50) a second (the limiter's analysis, docs/w02/OPEN-QUESTIONS.md Q22; the build carries both constants). Below what the
+    budget lets the lanes book, the lock and not the budget is the ceiling. The health route measures the p50 round trip
+    (coordinator.roundTrip); the SQL twin cannot."""
+    coordinator = _section(snapshot, 'coordinator') or {}
+    trip = coordinator.get('roundTrip') if isinstance(coordinator.get('roundTrip'), dict) else {}
+    p50 = _number(trip.get('selectP50Ms'))
+    fixed = _number(trip.get('lockBoundFixedMs'))
+    trips = _number(trip.get('lockBoundRoundTrips'))
+    if trip.get('status') != 'observed' or p50 is None or fixed is None or not trips:
+        return
+    config = snapshot.get('config') if isinstance(snapshot.get('config'), dict) else {}
+    policy = config.get('policy') or {}
+    row = (coordinator.get('guards') or {}).get('policy') or {}
+    capacity = _number(policy.get('appCapacity')) or _number(row.get('limit'))
+    window = _number(policy.get('appWindowSeconds')) or _number(row.get('windowSeconds'))
+    if not capacity or not window:
+        return
+    bookable = bookable_per_minute(capacity, window, _number(policy.get('slotGuardSeconds')),
+                                   _number(policy.get('immediateReserve'))) / 60.0
+    rate = 1000.0 / (fixed + trips * p50)
+    if rate < bookable:
+        out.append(_alert('COORD_LOCK_BOUND', 'RATE_LIMIT', 'info',
+                          'An estimate: at the measured p50 round trip of %.1f ms the coordinator\'s row lock lets about %.1f '
+                          'admissions a second through (1000 / (%.0f + %.1f x %.1f)), below the %.1f a second the budget lets '
+                          'the lanes book, so the lock, not the budget, is the ceiling. The fixed %.0f ms is a test-box figure '
+                          '(docs/w02/OPEN-QUESTIONS.md Q22), so read this as an estimate; the first read on the staged dark '
+                          'build is the real round trip (G5).' % (p50, rate, fixed, trips, p50, bookable, fixed),
+                          selectP50Ms=p50, lockBoundPerSecond=round(rate, 1), bookablePerSecond=round(bookable, 1),
+                          lockBoundFixedMs=fixed, lockBoundRoundTrips=trips, connectMs=trip.get('connectMs')))
+
+
+def booking_and_busy(snapshot, t, out):
+    """The final coordinator (limiter 0cb19962): the booked horizon, a database too slow to admit (coordinator_busy) and the
+    45 s degrade of a process. Not `remaining` alone: it is 0 whenever the last 1.1 s holds 24 sent wires, which the first
+    hosted run read in 21 of 35 busy readings with the horizon never full."""
+    coordinator = _section(snapshot, 'coordinator') or {}
+    booking = coordinator.get('booking') if isinstance(coordinator.get('booking'), dict) else {}
+    ahead, horizon = _number(booking.get('bookAheadSeconds')), _number(booking.get('horizonSeconds'))
+    if booking.get('status') == 'observed' and ahead and horizon is not None and horizon >= t['booking_full_ratio'] * ahead:
+        out.append(_alert('RATE_BOOKING_FULL', 'RATE_LIMIT', 'warn',
+                          'The booked horizon is full (%.2f s of %.2f s): callers that cannot wait, such as web requests, are '
+                          'refused, and lanes wait a whole horizon. Expected at the peak of a declared burst; otherwise more '
+                          'is being sent than the budget takes.' % (horizon, ahead),
+                          horizonSeconds=horizon, bookAheadSeconds=ahead, aheadNow=booking.get('aheadNow')))
+    fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else {}
+    window = _number(fleet.get('windowSeconds'))
+    degraded = int((fleet.get('laneStops') or {}).get('coordinator_degraded') or 0)
+    if degraded:
+        out.append(_alert('RATE_COORDINATOR_DEGRADED', 'RATE_LIMIT', 'warn',
+                          '%d lane runs stopped because their process had stopped using the coordinator: it failed to record '
+                          'an outcome, and the process waits 45 s before asking again (a setting that does not parse keeps it '
+                          'stopped for good). Find why the coordinator could not write (database load, locks).' % degraded,
+                          laneStops=degraded))
+    busy = (fleet.get('laneCounters') or {}).get('coordinatorBusy')
+    if busy and window:
+        per_5m = busy * 300.0 / window
+        if per_5m >= t['coordinator_busy_5m_warn']:
+            out.append(_alert('RATE_COORDINATOR_BUSY', 'RATE_LIMIT', 'warn',
+                              'The coordinator\'s database was too slow to admit %d times in %d s (%.1f in five minutes): '
+                              'each caller waited 1.5 s and nothing was sent. Repeated, it means lock or statement '
+                              'contention in the coordinator (database load).' % (busy, window, per_5m),
+                              coordinatorBusy=int(busy), windowSeconds=window, per5Minutes=round(per_5m, 1)))
 
 
 def retention(snapshot, t, out):
@@ -410,7 +508,7 @@ def silent_halt(snapshot, t, out, now=None, previous=None):
                           'halt until shown otherwise.' % wrong, reason='malformed', detail=wrong))
     for entry in snapshot.get('errors') if isinstance(snapshot.get('errors'), list) else []:
         name = entry.get('section') if isinstance(entry, dict) else None
-        if not isinstance(name, str) or name == 'database' or not name.isidentifier():
+        if not isinstance(name, str) or name == 'database' or not name.isidentifier() or name in INFORMATIONAL_SECTIONS:
             continue
         persistent = ('SILENT_HALT_SECTION', name) in (previous or {})
         alert = _alert('SILENT_HALT_SECTION', 'SILENT_HALT', 'page' if persistent else 'warn',
@@ -492,7 +590,8 @@ def silent_halt(snapshot, t, out, now=None, previous=None):
             out.append(_alert('SILENT_HALT_NO_SHARDS', 'SILENT_HALT', 'page',
                               'The lane flag is on and no shard invocation was logged in %d s: the shard crons do not '
                               'reach the function.' % window, windowSeconds=window))
-        abnormal = {k: v for k, v in (fleet.get('laneStops') or {}).items() if k not in QUIET_STOPS and v}
+        abnormal = {k: v for k, v in (fleet.get('laneStops') or {}).items()
+                    if k not in QUIET_STOPS and k not in OWN_RULE_STOPS and v}
         if abnormal:
             out.append(_alert('SILENT_HALT_LANE_STOPS', 'SILENT_HALT', 'warn',
                               'Shard invocations stopped for %s.' % ', '.join(sorted(abnormal)), stops=abnormal))

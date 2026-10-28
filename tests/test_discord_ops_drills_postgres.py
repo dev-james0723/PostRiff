@@ -127,6 +127,13 @@ class IsolatedDrills(unittest.TestCase):
                 with self.subTest(table=table), self.assertRaises(drills.psycopg_errors().InsufficientPrivilege):
                     with db.transaction():
                         db.execute('SELECT 1 FROM public.%s LIMIT 1' % table)
+        # The round trip is the route's own measurement (the captain's round 3, G5): the twin says it cannot measure it, the
+        # route measures it through a connection of its own on this disposable cluster.
+        self.assertEqual(snapshot['coordinator']['roundTrip'], {'status': 'not_measured', 'source': 'sql'})
+        route, _ = lab.look()
+        trip = route['coordinator']['roundTrip']
+        self.assertEqual((trip['status'], trip['statements']), ('observed', 5), trip)
+        self.assertTrue(0 <= trip['selectP50Ms'] <= trip['selectMaxMs'] and trip['connectMs'] >= 0, trip)
         for path in (('queue', 'dueWorkspaces'), ('deliveries', 'accepted'), ('deliveries', 'creates'), ('unresolved', 'uncertainPublishes'),
                      ('coordinator', 'guards', 'policy', 'hold'), ('servers', 'used')):
             mine, theirs = snapshot, twin

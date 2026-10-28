@@ -151,6 +151,14 @@ def config_section(provider, now, values):
     # alert divides by what can be admitted, and reading the constant here means a later change moves the alert with it.
     guard = getattr(limiter, 'SLOT_GUARD_SECONDS', None) if limiter is not None else None
     out['policy']['slotGuardSeconds'] = float(guard) if discord_worker.finite(guard) else None
+    # The slots of each window that bookings leave to callers that cannot wait (SharedPostgresBudget.IMMEDIATE_RESERVE while
+    # the coordinator books, BOOK_AHEAD_SECONDS above 0; 0 otherwise): the lanes, which book, can take (cap - reserve) a window.
+    if limiter is not None:
+        book = getattr(limiter, 'BOOK_AHEAD_SECONDS', 0)
+        reserve = getattr(limiter, 'IMMEDIATE_RESERVE', 0)
+        books = discord_worker.finite(book) and book > 0
+        out['policy']['bookAheadSeconds'] = float(book) if discord_worker.finite(book) else None
+        out['policy']['immediateReserve'] = int(reserve) if books and discord_worker.finite(reserve) else 0
     # What a read refused by a hold is told to wait (rate_limits.HOLD_WAIT_SECONDS, the limiter's B4), or null on a build
     # without it, where a created post's read-back fails under the hold and is parked: the hold alert says which.
     wait = getattr(rate_limits, 'HOLD_WAIT_SECONDS', None)
@@ -482,6 +490,60 @@ def _savepoint(cur, errors, name, read, now, context):
         return None
 
 
+# The coordinator's row lock bounds every admitter at about 1000 / (LOCK_BOUND_FIXED_MS + LOCK_BOUND_ROUND_TRIPS x round trip)
+# admissions a second: an admission holds the application row's lock for 10.8 database round trips plus a fixed 17 ms, the fixed
+# part measured on a loaded test box (the limiter's analysis, docs/w02/OPEN-QUESTIONS.md Q22, limiter c400cb9c). Nobody has
+# measured the round trip from a Vercel function to the Supabase pooler: read_round_trip does, and COORD_LOCK_BOUND reads it.
+LOCK_BOUND_FIXED_MS = 17.0
+LOCK_BOUND_ROUND_TRIPS = 10.8
+ROUND_TRIP_STATEMENTS = 5
+
+
+def read_round_trip(factory, timer, now):
+    """The database round trip from this function through `factory` (the coordinator's own connection path, the pooler URL the
+    application uses): milliseconds to open a new connection (TLS included), five sequential SELECT 1 (p50 and max) and one
+    COMMIT. Read-only, no table, no write, no lock, each statement under a 1 s timeout. A failure is this section's
+    'unavailable', never the snapshot's. The first read on the staged dark build is the real number (the G5 evidence)."""
+    def ms(seconds):
+        return round(seconds * 1000.0, 2)
+    try:
+        if factory is None:
+            raise RuntimeError('no connection factory')
+        started = timer()
+        with factory() as db:
+            opened = timer()
+            with db.cursor() as cur:
+                cur.execute("SELECT set_config('statement_timeout', '1000ms', true)")
+                cur.fetchone()
+                times = []
+                for _ in range(ROUND_TRIP_STATEMENTS):
+                    before = timer()
+                    cur.execute('SELECT 1')
+                    cur.fetchone()
+                    times.append(timer() - before)
+            before = timer()
+            db.commit()
+            commit = timer() - before
+        times.sort()
+        return {'status': 'observed', 'sampledAt': round(now, 3), 'statements': len(times), 'connectMs': ms(opened - started),
+                'selectP50Ms': ms(times[len(times) // 2]), 'selectMaxMs': ms(times[-1]), 'commitMs': ms(commit),
+                'elapsedMs': ms(timer() - started), 'lockBoundFixedMs': LOCK_BOUND_FIXED_MS,
+                'lockBoundRoundTrips': LOCK_BOUND_ROUND_TRIPS}
+    except Exception as error:
+        return {'status': 'unavailable', 'error': type(error).__name__}
+
+
+def round_trip_factory(values, fallback):
+    """A NEW connection to the application's own database URL (POSTRIFF_DATABASE_URL, the pooler the coordinator's row lock is
+    reached through), with the application's own options (hosted_app.postgres_factory, unpooled), so connectMs includes the
+    connection setup and TLS; without the URL (tests, a local build) the worker's factory."""
+    dsn = values.get('POSTRIFF_DATABASE_URL') if hasattr(values, 'get') else None
+    if dsn:
+        from ..hosted_app import postgres_factory
+        return postgres_factory(dsn, pooled=False), 'new_connection'
+    return fallback, 'worker_factory'
+
+
 def _unavailable(name, errors):
     error = next((e['error'] for e in errors if e['section'] in (name, 'database')), None)
     return {'status': 'unavailable', **({'error': error} if error else {})}
@@ -530,6 +592,14 @@ def snapshot(worker, values=None, *, clock=time.time, monotonic=time.monotonic):
     coordinator['traffic'] = ledger[1] if ledger else {'status': 'unavailable'}
     coordinator['retention'] = found.get('retention') or _unavailable('retention', errors)
     coordinator['booking'] = found.get('booking') or _unavailable('booking', errors)
+    round_trip_db, path = round_trip_factory(values, factory)
+    if any(e['section'] == 'database' for e in errors):     # no second wait for a database that did not answer
+        coordinator['roundTrip'] = dict(_unavailable('roundTrip', errors), path=path)
+    else:
+        round_trip = read_round_trip(round_trip_db, monotonic, now)
+        coordinator['roundTrip'] = dict(round_trip, path=path)
+        if round_trip['status'] != 'observed':
+            errors.append({'section': 'roundTrip', 'error': round_trip.get('error')})
     result['coordinator'] = coordinator
     config['servers'] = found.get('servers') or _unavailable('servers', errors)
     result['platform'] = found.get('platform') or _unavailable('platform', errors)

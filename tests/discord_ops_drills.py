@@ -377,50 +377,69 @@ def d3_rate_limit(lab):
     _, alerts = lab.look()
     d.expect('policy alert cleared after renewal (a new build with a new policy)', 'RATE_POLICY' not in severities(alerts),
              severities(alerts))
-    # (d) the application budget spent for a whole minute: 2 requests a second, asked for continuously for 62 s by three
-    # loops, as several senders would: one loop alone leaves each slot idle for its own round trips (the observation, a
-    # slow machine), which is not a spent budget and made the injection fall short under load
-    lab.fresh(capacity=2)
-    limiter, identity = lab.provider().rate_limiter, lab.provider()._rate_identity('bot')
+    # (d) the application budget and the bearer budget spent for a whole minute (2 a second each, 62 s of continuous demand).
+    # The loops book their reads as the lanes do (rate_limits.booking: a full window books the read a slot up to
+    # BOOK_AHEAD_SECONDS ahead instead of refusing it), so the budget is spent exactly at what bookings can take,
+    # (cap - reserve) a window at the build's guard, with no polling gaps on a loaded machine. Three loops use the bot; two use
+    # a person's own bearer, which a policy with a bearer budget charges to a class of its own (the owner's D-2 option 1).
+    lab.fresh(capacity=2, bearer_capacity=2)
+    provider = lab.provider()
+    limiter, ahead = provider.rate_limiter, float(getattr(provider.rate_limiter, 'BOOK_AHEAD_SECONDS', 0.0))
+    bot = provider._rate_identity('bot')
+    person = provider._rate_identity('user', bearer='drill-' + secrets.token_hex(12))   # synthetic, made for this run
     tally, lock, until = Counter(), threading.Lock(), time.monotonic() + 62
 
-    def demand(loop):
+    def demand(loop, identity, name):
         number = 0
         while time.monotonic() < until:
             number += 1
             try:
-                permit = limiter.reserve_read('GET', '/guilds/%d' % (7100000 + 100000 * loop + number), identity=identity)
+                permit = limiter.reserve_read('GET', '/guilds/%d' % (7100000 + 100000 * loop + number), identity=identity,
+                                              **({'book_ahead': ahead} if ahead else {}))
             except RateDelayed as error:
                 with lock:
-                    tally['refused'] += 1
+                    tally[name + 'Refused'] += 1
                 time.sleep(min(error.retry_after_seconds, 0.25))
                 continue
             limiter.observe(permit, {'status': 200, 'headers': {}, 'body': {}})
             with lock:
-                tally['admitted'] += 1
-    loops = [threading.Thread(target=demand, args=(loop,), daemon=True) for loop in range(3)]
+                tally[name] += 1
+    loops = ([threading.Thread(target=demand, args=(loop, bot, 'bot'), daemon=True) for loop in range(3)]
+             + [threading.Thread(target=demand, args=(3 + loop, person, 'bearer'), daemon=True) for loop in range(2)])
     for loop in loops:
         loop.start()
     for loop in loops:
         loop.join(90)
     snapshot, alerts = lab.look()
+    policy, traffic = snapshot['config']['policy'], snapshot['coordinator']['traffic']
     spent = next((alert['evidence'] for alert in alerts if alert['id'] == 'RATE_APP_BUDGET_SPENT'), {})
-    # The ceiling is what the coordinator can grant (each admission holds its slot for the window plus the guard),
-    # not the nominal 120 a minute; the guard comes from the build (config.policy.slotGuardSeconds).
-    guard = snapshot['config']['policy'].get('slotGuardSeconds')
-    ceiling = check.achievable_per_minute(2, 1, guard)
-    admissions = snapshot['coordinator']['traffic']['admissions60s']
-    d.step('injected: 62 s of demand above a 2-per-second budget', alerts, admitted=tally['admitted'], refused=tally['refused'],
-           admissions60s=admissions, slotGuardSeconds=guard, achievable60s=round(ceiling, 1),
-           saturation=spent.get('saturation'), guard=spent.get('guard'))
-    d.expect('the injection spent the budget: admissions of the last minute at least 95%% of the %.1f the coordinator can '
-             'grant' % ceiling, admissions >= THRESHOLDS['rate_limit']['saturation_warn'] * ceiling, admissions)
+    # What can be spent is read from the build: the guard (config.policy.slotGuardSeconds) and the reserve bookings leave
+    # (config.policy.immediateReserve), for each class against its own cap; never the nominal 120 a minute.
+    guard, reserve = policy.get('slotGuardSeconds'), policy.get('immediateReserve')
+    bot_ceiling = check.bookable_per_minute(2, 1, guard, reserve)
+    bearer_ceiling = check.bookable_per_minute(policy.get('bearerCapacity') or 0, policy.get('bearerWindowSeconds') or 1,
+                                               guard, reserve) if policy.get('bearerCapacity') else None
+    admissions, bearer = traffic['admissions60s'], traffic.get('bearerAdmissions60s')
+    d.step('injected: 62 s of demand above a 2-per-second budget, bot and bearer', alerts, admitted=tally['bot'],
+           refused=tally['botRefused'], bearerAdmitted=tally['bearer'], bearerRefused=tally['bearerRefused'],
+           admissions60s=admissions, bearerAdmissions60s=bearer, slotGuardSeconds=guard, immediateReserve=reserve,
+           bookAheadSeconds=ahead, bookable60s=round(bot_ceiling, 1),
+           bearerBookable60s=round(bearer_ceiling, 1) if bearer_ceiling else None, saturation=spent.get('saturation'),
+           bearerGuard=bool((snapshot['coordinator'].get('guards') or {}).get('bearer')))
+    share = THRESHOLDS['rate_limit']['saturation_warn']
+    d.expect('the injection spent the bot budget: admissions of the last minute at least 95%% of the %.1f bookings can take'
+             % bot_ceiling, admissions >= share * bot_ceiling, admissions)
     d.fires(alerts, 'RATE_APP_BUDGET_SPENT', 'warn', 'budget spent for the last minute')
+    d.expect('the classes are counted apart: admissions60s is the bot alone and bearerAdmissions60s the person\'s calls',
+             bearer is not None and admissions <= tally['bot'] and 0 < bearer <= tally['bearer'], [admissions, bearer])
+    d.expect('the injection spent the bearer budget: at least 95%% of its %s' % (round(bearer_ceiling, 1) if bearer_ceiling else None),
+             bearer_ceiling is not None and bearer is not None and bearer >= share * bearer_ceiling, bearer)
+    d.fires(alerts, 'RATE_BEARER_BUDGET_SPENT', 'warn', 'bearer budget spent for the last minute')
     lab.shift_ledger(120)
     d.record['simulated'].append('the quiet minute after the demand: ledger moved 2 minutes into the past')
     _, alerts = lab.look()
-    d.expect('budget alert cleared after a quiet minute', 'RATE_APP_BUDGET_SPENT' not in severities(alerts),
-             severities(alerts))
+    d.expect('budget alerts cleared after a quiet minute',
+             not {'RATE_APP_BUDGET_SPENT', 'RATE_BEARER_BUDGET_SPENT'} & set(severities(alerts)), severities(alerts))
     d.record['references'].append('loops sleep out an embargo or a spent budget instead of claiming: '
                                   'test_a_global_429_pauses_every_loop_without_a_retry_storm, '
                                   'test_a_spent_invalid_request_budget_is_waited_out_without_claiming')

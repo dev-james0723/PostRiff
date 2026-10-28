@@ -147,6 +147,8 @@ SELECT jsonb_build_object(
         'status', 'observed_by_kind',
         'guards', coalesce((SELECT jsonb_object_agg(g.name, g.guard) FROM guard_rows g), '{}'::jsonb),
         'kinds', coalesce((SELECT jsonb_object_agg(k.kind, k.counts) FROM kinds k), '{}'::jsonb),
+        -- the database round trip is measured by the health route from its function (coordinator.roundTrip); SQL cannot
+        'roundTrip', jsonb_build_object('status', 'not_measured', 'source', 'sql'),
         'traffic', jsonb_build_object(
             'responses429', l.r429, 'responses429Global', l.r429_global, 'invalid10m', l.invalid,
             'invalidWindowCovered', l.sampled < 20000 OR o.epoch - l.oldest >= 600,
