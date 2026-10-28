@@ -12,7 +12,7 @@
     "page_lag_seconds": 2700,
     "create_warn_seconds": 300,
     "readback_warn_seconds": 3600,
-    "_split": "The lanes' own split (discord.lane.lagging, W-02): a create late above create_warn_seconds warns and above page_lag_seconds pages; a read-back, which a long burst defers, warns only above readback_warn_seconds. Both equal the lane's LAG_WARNING_SECONDS and READBACK_LAG_WARNING_SECONDS (a test pins them). While Discord is paused (execution or authorization off) these rules warn and never page.",
+    "_split": "The lanes' own split (discord.lane.lagging, W-02): a create late above create_warn_seconds warns and above page_lag_seconds pages; a read-back, which a long burst defers, warns only above readback_warn_seconds. Both equal the lane's LAG_WARNING_SECONDS and READBACK_LAG_WARNING_SECONDS (a test pins them). While Discord is paused (execution or authorization off) these rules warn and never page. A projection lag at or below create_warn_seconds (0 when nothing is due) means the newest lagging line is from before a recovery, and it is not read.",
     "_burst": "A declared burst (5,000 posts due in one minute) drains in about 21 to 25 minutes at the reviewed 25 requests a second, and one busy workspace can need 20 to 40 minutes (docs/w02/OPEN-QUESTIONS.md Q6), so the warn level is expected during a burst. The page level (45 minutes) is above the standard's 40-minute maximum with margin and before approvals start lapsing (a post needs re-approval from about 55 minutes after its scheduled time). The real halt detectors are SILENT_HALT_NO_PROGRESS and SILENT_HALT_NO_CREATE."
   },
   "delivery": {
@@ -46,7 +46,7 @@
     "policy_days_page": 1,
     "retention_age_factor_warn": 3,
     "retention_remaining_warn": 50000,
-    "_retention": "RATE_RETENTION_BEHIND (limiter B3): the oldest settled row of a kind older than retention_age_factor_warn retentions, retention_remaining_warn settled rows past their retention still present (coordinator.retention.remaining, when the payload carries it), or a purge that could not delete (denied, timeout, error).",
+    "_retention": "RATE_RETENTION_BEHIND (limiter B3): the oldest settled row of a kind older than retention_age_factor_warn retentions, retention_remaining_warn settled rows past their retention still present (coordinator.retention.remaining, when the payload carries it), or a purge that could not delete (denied, timeout, error). Fields read when present (proposed to the limiter, not required): coordinator.retention.purged = {status: ok|busy|denied|timeout|error, reads, publications, more, ageSeconds}, the last purge as purge_settled() returns it plus its age; coordinator.retention.remaining = {reads, publications, capped}, settled rows past their retention still present, counted up to a cap through the purge index (capped true when the count stopped there); and the discord.lane.retention log lines (status, reads, publications, more).",
     "transient_route_circuits_warn": 5,
     "_invalid": "Discord restricts an IP above 10,000 invalid requests in 10 minutes; the policy's own budget is 2,000. Below 25 percent left is ban danger."
   },

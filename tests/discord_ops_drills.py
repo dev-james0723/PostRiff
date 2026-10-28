@@ -780,8 +780,16 @@ def o2_rollback_order(lab):
            jobs=dict(lab.states()))
     d.expect('the coordinator refuses the older worker under the hold: no create sent (review M7)',
              len(lab.wire.requests(method='POST')) == posts_before, len(lab.wire.requests(method='POST')) - posts_before)
-    d.record['simulated'].append('the older worker ran two ticks under the hold, as in the gap before the lift; read-backs it '
-                                 'claimed burned a check each (five park a post for 24 hours, which is why step 4 is at once)')
+    if any(burned):
+        d.record['simulated'].append('the older worker ran two ticks under the hold, as in the gap before the lift; read-backs it '
+                                     'claimed burned a check each (five park a post for 24 hours, which is why step 4 is at once)')
+    else:
+        wait = getattr(ops.rate_limits, 'HOLD_WAIT_SECONDS', None)     # the limiter's read wait (B4), where the build has it
+        d.record['simulated'].append('the older worker ran two ticks under the hold, as in the gap before the lift; no read-back '
+                                     'burned a check (%s). A real older build without the read wait (RC1) burns a check per '
+                                     'claimed read-back and parks a post at the fifth (review E1c), which is why step 4 is at '
+                                     'once' % ('this build makes a read under a hold wait %d s and keeps its check' % wait
+                                               if wait else 'none was due in these two ticks'))
     returned = lab.sql(statements['HOLD_OFF'])
     with lab.cluster.connect(autocommit=True) as db:  # posts refused by the hold wait five minutes; skip the wait
         for workspace, state in db.execute("SELECT id,state FROM public.pr_workspaces WHERE state ? 'phase2'").fetchall():
