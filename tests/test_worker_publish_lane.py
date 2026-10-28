@@ -32,7 +32,7 @@ class PublishLane(unittest.TestCase):
         outcomes = iter([(False, True), (True, False), (False, True), (True, False), (False, False)])
         def step(*_a, **_k):
             claimed, busy = next(outcomes)
-            worker.last_claim_busy = busy
+            worker.claim_contended = busy
             return claimed
         worker.step = step
         result = worker.tick(max_jobs=25, max_seconds=45, publish_only=True)
@@ -44,7 +44,7 @@ class PublishLane(unittest.TestCase):
         worker, _ = self.worker()
         worker.sleep = Mock()
         def step(*_a, **_k):
-            worker.last_claim_busy = True
+            worker.claim_contended = True
             return False
         worker.step = step
         self.assertEqual(worker.tick(max_jobs=25, max_seconds=45, publish_only=True)['processed'], 0)

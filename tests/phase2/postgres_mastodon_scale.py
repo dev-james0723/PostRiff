@@ -177,7 +177,7 @@ try:
             result = worker.claim()
             if result:
                 lane_claims[index].append((result['workspaceId'], result['job']['id']))
-            elif worker.last_claim_busy:
+            elif worker.claim_contended:
                 lane_busy[index] += 1; time.sleep(0.01)
             else:
                 break

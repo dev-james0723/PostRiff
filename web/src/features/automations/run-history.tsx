@@ -1,5 +1,8 @@
 'use client';
 
+import { usePreferences } from '@/lib/preferences';
+import { discordCopy } from '@/lib/channels/discord-copy';
+
 /**
  * One run of a Raffi workflow automation (orchestration §2–§3): its lifecycle status, when it drafts, is reviewed and
  * publishes, what research found, and each destination's post with its own state, reason and time. Items waiting for
@@ -69,6 +72,7 @@ export interface RunDetailProps {
 }
 
 export function RunDetail({ run, timeZone, canApprove, busy, onDecide, onOpenRun }: RunDetailProps) {
+  const dc = discordCopy(usePreferences().locale);
   const shown = runStatus(run);
   const plan = runPlan(run, timeZone);
   const research = researchOutcome(run.research);
@@ -89,6 +93,10 @@ export function RunDetail({ run, timeZone, canApprove, busy, onDecide, onOpenRun
           </Button>
         )}
       </div>
+      {items.filter((item) => item.decision?.discord?.target).map((item) => {
+        const target = item.decision!.discord!.target;
+        return <p key={`discord-${item.key}`} className='text-muted-foreground text-xs' data-discord-frozen-target>{target.senderKind === 'webhook' ? dc.senderWebhook : dc.senderBot} · Frozen target: {target.guildName} ({target.guildId}) · {target.channelName} ({target.channelId})</p>;
+      })}
 
       {plan.length > 0 && (
         <ol className='text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-xs' aria-label='Plan for this run'>

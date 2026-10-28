@@ -48,10 +48,13 @@ import { CapabilityChips } from './capability-chips';
 import { ChannelHistorySheet } from './channel-history-sheet';
 import { HistoryImportControl } from './history-import-control';
 import { historyImportCopy } from '@/lib/channels/history-import-copy';
+import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordRefusal } from '@/lib/channels/discord-refusal';
 import { usePreferences } from '@/lib/preferences';
 import type { ConnectRequest } from './connect-sheet';
 import { DestinationPicker } from './destination-picker';
 import { PinterestBoardsSheet } from './pinterest-boards-sheet';
+import { DiscordEngagementPanel } from './discord-engagement-panel';
 import { MastodonAccountControls } from './mastodon-account-controls';
 import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN, STATEFUL_GLASS } from './rafii-materials';
 
@@ -229,6 +232,7 @@ function ScopesList({ scopes }: { scopes: string[] }) {
  * secondary because Connect channel is the page's one primary action.
  */
 export function ChannelCard({ channel, provider, canManage, activity, highlight = false, tour = false, onReconnect }: ChannelCardProps) {
+  const dc = discordCopy(usePreferences().locale);
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -267,7 +271,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       if (!verified) toast.error(`${channel.platform} not verified`, { description: result.detail || result.state.replace(/_/g, ' ') });
       flashVerifyOutcome(verified ? { state: 'success', label: 'Verified' } : { state: 'error', label: 'Not verified' });
     } catch (err) {
-      toast.error(`Couldn't verify ${channel.platform}`, { description: err instanceof ApiError ? err.message : undefined });
+      toast.error(`Couldn't verify ${channel.platform}`, { description: err instanceof ApiError ? (channel.platform === 'Discord' ? discordRefusal(err, dc) : err.message) : undefined });
       flashVerifyOutcome({ state: 'error', label: 'Try again' });
     } finally {
       setBusy(false);
@@ -317,6 +321,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
     onReconnect({
       providerId: provider.id,
       capability: reconnectCapability(channel),
+      ...(channel.discordConnectionKind === 'webhook' ? { discordPurpose: 'webhook' as const } : {}),
       reconnect: { channelId: channel.id, account: channel.account }
     });
   }
@@ -364,6 +369,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         />
       )}
 
+      {channel.platform === 'Discord' && <p className='text-muted-foreground text-sm' data-discord-sender>{channel.discordConnectionKind === 'webhook' ? dc.senderWebhook : dc.senderBot}</p>}
       {!disconnected && <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />}
       {!disconnected && channel.socialReadiness && (
         <ul className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Permissions for this account'>
@@ -437,6 +443,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
 
       {channel.platform === 'Mastodon' && canManage && !disconnected && <MastodonAccountControls connectionId={channel.id} account={channel.account} />}
       <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
+        {channel.platform === 'Discord' && !disconnected && <DiscordEngagementPanel channel={channel} />}
         {canManage && channel.platform === 'Instagram' && channel.capabilities.analytics?.level === 'Direct' && (
           <StatefulButton
             variant='outline'
