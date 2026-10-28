@@ -558,6 +558,13 @@ platform before any claim is made to customers.
   one-day test policy; seen under heavy CPU contention in the many-loops, cron-gap and fairness tests, where six to
   ten posts on such channels ended held]. Coordinator code; left to the coordinator's reviewer.
 
+- A route whose first (cold) probe never got an answer refuses every later request with the probe window (about a second),
+  so the approved posts to that channel churn (claim, three admitted reads, release) until their approval ends [independent
+  review of the send path: 10 such guilds, 86 percent of the requests in 30 s were their reads]. A refusal by an embargo or a
+  circuit already carries the embargo's remaining time, and the release waits until its end (`nextAt` = release time plus
+  that wait; offline `PositionKept`, penalty cases); this refusal has no end to wait for. The cause is the coordinator's
+  (the unanswered admission keeps its slot, Q3); left to the coordinator's reviewer.
+
 ## Not done
 
 Phase 1b (scheduled-time jitter) is not started. Not run: the owner's Depot capacity run, any hosted build, the
