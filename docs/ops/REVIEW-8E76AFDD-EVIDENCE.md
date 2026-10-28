@@ -150,6 +150,18 @@ The second reviewer's probe `exp_runbook2.py e5`, unchanged, re-run on this bran
 
 Read: the created post (the third job) is marked `uncertain` at the first claim that reaches it, spends a check per claim and is parked for 86,400 s at the fifth; when the coordinator returns it stays parked (`checks 7`, `nextIn 86400.0`) while the unsent posts resume and verify. The runbook's lever 2 and `H07-EVIDENCE.md` section 3 said the paused build strands nothing; they now say this. The code fix (defer such a read when the coordinator is missing or degraded) is with the limiter lane, open.
 
+Seen afterwards on the limiter's head: `c6843f89` ("the read-back of a created post waits for a coordinator that is missing, degraded or down; it is never made uncertain or parked by it (N-1)"). The same probe on the sparse scratch merge `4dd2fa97` (alerts `ea5da7fe` + limiter `02fd679b`, which contains it, + W-02 `4cf85a78`; local, never pushed):
+
+```
+  paused tick  2 (the created post only): [{'state': 'provider_accepted', 'checks': 0, 'nextIn': 299.9, 'nextAction': 'Await provider reconciliation; do not resubmit'}]
+  paused tick 10 (the created post only): [{'state': 'provider_accepted', 'checks': 0, 'nextIn': 300.0, 'nextAction': 'Await provider reconciliation; do not resubmit'}]
+  paused tick 14 (the created post only): [{'state': 'provider_accepted', 'checks': 0, 'nextIn': 299.9, 'nextAction': 'Await provider reconciliation; do not resubmit'}]
+  promote the normal build back (coordinator restored), 4 passes:
+    [{'state': 'verified', 'checks': 1, 'nextIn': (due)}, {'state': 'verified', 'checks': 1, 'nextIn': 4.8}, {'state': 'provider_accepted', 'checks': 0, 'nextIn': 0.9}, {'state': 'scheduled', 'checks': 0, 'nextIn': (due)}] POSTs 3 duplicates 0
+```
+
+There the created post keeps its checks and waits 300 s per claim, and it is not parked when the coordinator returns. This branch keeps the hazard **open** in the runbook and the evidence until the Release Captain confirms the fix has landed where the serving build comes from.
+
 ## 3. The reviewer's vacuous mutants re-run on this branch
 
 Command: the reviewer's `mutate.py` (copy of the worktree with one change, then `tests/discord_ops_drills.py --only ...`). Before (reviewer, `8e76afdd`): both PASS, so the drills did not test these properties. Now:
