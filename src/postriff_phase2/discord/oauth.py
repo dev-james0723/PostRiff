@@ -176,6 +176,29 @@ class DiscordConnections:
         from .sender_names import SenderNames
         return SenderNames(self, workspace, token, connection).set(body)
 
+    def nickname_contenders(self, cur, workspace, connection, guild):
+        """How many OTHER live bot installations of this server exist (any workspace). A count, never an identifier.
+
+        The bot's nickname is one value per server, but any workspace whose authorizer manages the server can hold an
+        installation of it. Rafii therefore writes that nickname only while this installation is the server's only live
+        one: for two workspaces to both pass this check, each would have to commit its installation row after the other's
+        check, which is impossible because a connection is only editable once its own row exists. The check runs in the
+        final guard immediately before the provider write. Revoked rows (disconnect, identity loss) do not count.
+        """
+        self.guild_lock(cur, guild)
+        cur.execute("SELECT count(*) FROM public.pr_encrypted_credentials WHERE provider='discord' AND provider_account_id=%s AND 'bot' = ANY(scopes) AND revoked_at IS NULL AND NOT (workspace_id=%s AND connection_id=%s)", (guild, workspace, connection))
+        return int(cur.fetchone()[0])
+
+    def guild_lock(self, cur, guild):
+        """Orders an authority check against a competing installation of the same server, application-wide.
+
+        Transaction-scoped (released at commit, never held across Discord IO) and taken by BOTH the nickname authority
+        check and the installation commit, so a second workspace's installation row cannot appear half-way through a
+        check: it commits strictly before or strictly after it. Lock order everywhere: workspace row, then credential
+        rows, then this lock, so no cycle exists between two workspaces."""
+        key = 'rafii.discord.nickname:' + str(self.adapter.client_id) + ':' + str(guild)
+        cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (key,))
+
     def read_credential(self, cur, workspace, connection):
         cur.execute("SELECT access_ciphertext,key_id,refresh_ciphertext,extract(epoch from access_expires_at),authorization_generation::text,scopes,provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='discord' AND revoked_at IS NULL FOR NO KEY UPDATE", (workspace, connection))
         row = cur.fetchone()
@@ -521,6 +544,7 @@ class DiscordConnections:
             prior = next((x for x in state.get('phase2', {}).get('channels', []) if x['id'] == connection), None)
             if prior and (context.get('connectionId') != connection or prior.get('discordAuthorizationGeneration') != context.get('installationGeneration')):
                 fail('This server is already connected or changed meanwhile. Reconnect its existing card.')
+            self.guild_lock(cur, context['guildId'])   # orders this installation against a bot-nickname authority check
             generation = self.upsert(cur, workspace, connection, context['guildId'], envelope, scopes)
             now = self.oauth.clock()
             channel = {'id': connection, 'platform': 'Discord', 'account': str(guild.get('name') or context['guildId'])[:128],
@@ -753,7 +777,10 @@ class DiscordConnections:
                         'discordAuthorizationGeneration', 'scopes', 'revoked',
                         'defaultDestinationId', 'discordDestinations', 'enabledPermissionGroups',
                         'configured', 'identityVerified', 'capabilityVerified', 'verifiedAt',
-                        'capabilityVersion', 'discordVerificationGeneration')
+                        'capabilityVersion', 'discordVerificationGeneration',
+                        # Sender settings: a nickname write, a saved name or an edit claim that commits while Discord is
+                        # being read is newer than this observation, which must then not be written over it.
+                        'discordBotNickname', 'discordSenderEdit', 'discordSenderName', 'discordSenderRevision')
 
         authorizer_gone = False
 
@@ -813,13 +840,15 @@ class DiscordConnections:
                 actor = member
         if authorizer_gone:
             return self._authorizer_gone(workspace, connection, token=token, actor=actor, event=event, scopes=scopes)
-        outcome, identity_verified = 'read_verified', False
+        outcome, identity_verified, seen_nickname = 'read_verified', False, None
         try:
             identity = self._fresh_identity(workspace, None, envelope['identityConnectionId'])
             if (identity['authorizationGeneration'] != envelope.get('identityGeneration')
                     or identity['userId'] != envelope.get('user') or 'identify' not in identity['scopes']):
                 fail('The linked Discord identity changed. Reconnect it.')
             live = adapter.destinations(json.dumps(envelope))
+            if live and 'botNickname' in live[0]:
+                seen_nickname = {'value': live[0]['botNickname'], 'observedAt': self.oauth.clock()}
             identity_verified = True
             # A live unrelated channel cannot stand in for a previously
             # approved destination whose permissions have since been removed.
@@ -880,6 +909,8 @@ class DiscordConnections:
                     outcome = 'scope_changed'
                 else:
                     channel['verifiedAt'] = self.oauth.clock()
+                    if seen_nickname is not None:
+                        channel['discordBotNickname'] = seen_nickname   # what a later review freezes into its approval
                     if token is not None:
                         matrix = self.oauth._capabilities(adapter, 'publish', scopes, [], self.oauth.clock(), json.dumps(envelope))
                         channel['capabilityVerified'] = matrix['publish']['level'] == 'Direct'
@@ -1025,6 +1056,7 @@ class DiscordConnections:
         with self.local(workspace, token) as (cur, state, actor):
             if actor != context['memberId']: fail()
             channels = state.setdefault('phase2', {}).setdefault('channels', [])
+            carried_name = None
             if context.get('identityConnectionId'):
                 selected = identity_record(state, context['identityConnectionId'], actor)
                 selected_row, _ = self.bind_identity(cur, workspace, selected)
@@ -1039,6 +1071,7 @@ class DiscordConnections:
                 # New OAuth creates a new remote webhook. Revoke only old local authority.
                 prior.update(revoked=True, capabilityVerified=False, defaultDestinationId=None)
                 for d in prior.get('discordDestinations', []): d['status'] = 'revoked'
+                carried_name = prior.get('discordSenderName')   # a Rafii-side setting; same authorizer, same channel
                 cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,authorization_generation=gen_random_uuid() WHERE workspace_id=%s AND connection_id=%s AND provider='discord'", (workspace, prior['id']))
             connection = stable_id('webhook', workspace, self.adapter.client_id, hook['id'], actor)
             if any(c.get('id') == connection for c in channels): fail('This webhook is already connected.')
@@ -1060,7 +1093,8 @@ class DiscordConnections:
                 # webhook grants preserve their own consent lifecycle.
                 **({'discordIdentityConnectionId': context['identityConnectionId']}
                    if context.get('identityConnectionId') else {}),
-                'discordDestinations': [], 'revoked': False})
+                'discordDestinations': [], 'revoked': False,
+                **({'discordSenderName': carried_name, 'discordSenderRevision': str(uuid.uuid4())} if carried_name is not None else {})})
             self.save_state(cur, workspace, state)
         return {'connected': True, 'connectionId': connection, 'discordPurpose': 'webhook', 'senderKind': 'webhook',
                 'account': 'Rafii webhook', 'missingScopes': [], 'requiresDestinationAuthorization': True}

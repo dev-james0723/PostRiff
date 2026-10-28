@@ -4,6 +4,7 @@ All transport and custody are synthetic; this never contacts Discord or a DB.
 """
 import copy
 import json
+import os
 import unittest
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -21,6 +22,12 @@ from test_discord_publish_authorization import (
 
 
 class FrozenWebhookName(unittest.TestCase):
+    def setUp(self):
+        # The master switch is on only for the exact string "true" (SNR2-3); these upstream cases are about the ON feature.
+        patcher = patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_customer_name_is_visible_in_review_and_frozen_wire(self):
         engine, state, channel, variant = webhook_fixture()
         channel['discordSenderName'] = 'D Festival 公告'
@@ -155,6 +162,11 @@ class SettingsHarness:
         self.s.validate_installation = Mock()
         self.s.reverify_installation = Mock()
         self.s.reverify_webhook = Mock()
+        # POSTs refresh only the linked identity (never the connection's verified state); no other workspace shares
+        # the server unless a test says so (the real count is proven against PostgreSQL elsewhere).
+        self.s._fresh_identity = Mock()
+        self.other_installations = 0
+        self.s.nickname_contenders = lambda *_: self.other_installations
         self.s.adapter.webhook_v1_enabled = True
         self.wire = HookWire() if kind == 'webhook' else SyntheticWire()
         def transport(method, url, **kwargs):
@@ -169,9 +181,9 @@ class SettingsHarness:
             response = self.wire(method, url, **kwargs)
             if path == f'/guilds/{GUILD}':
                 response['body']['roles'] = [
-                    {'id': GUILD, 'permissions': str((1 << 10) | (1 << 11))},
-                    {'id': '11223344', 'permissions': str(self.user_permissions)},
-                    {'id': '22334455', 'permissions': str(self.bot_permissions)},
+                    {'id': GUILD, 'permissions': str((1 << 10) | (1 << 11)), 'position': 0},
+                    {'id': '11223344', 'permissions': str(self.user_permissions), 'position': 5},
+                    {'id': '22334455', 'permissions': str(self.bot_permissions), 'position': 2},
                 ]
             if path == f'/guilds/{GUILD}/members/{USER}':
                 response['body']['roles'] = ['11223344']
@@ -190,7 +202,10 @@ class SettingsHarness:
     def call(self, case, operation, *args):
         method = getattr(self.s, operation, None)
         case.assertTrue(callable(method), 'Discord customer sender-name settings are missing')
-        with patch('postriff_phase2.hosted.audit'):
+        with patch('postriff_phase2.hosted.audit'), patch('postriff_phase2.hosted.throttle'), \
+                patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True, create=True), \
+                patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true',
+                                        'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}):
             return method(WORKSPACE, 'synthetic-session', self.channel['id'], *args)
 
 
@@ -219,18 +234,41 @@ class SenderSettings(unittest.TestCase):
         self.assertEqual(h.patches, [('PATCH', f'/guilds/{GUILD}/members/@me', {'nick': 'D Festival 助手'})])
 
     def test_wrong_workspace_or_member_cannot_change_sender(self):
-        for corruption in ('workspace', 'member', 'generation', 'credential'):
-            with self.subTest(corruption=corruption):
-                h = SettingsHarness()
-                current = h.call(self, 'sender_profile')
+        # Every corruption exists BEFORE the first read. Applied after reading the profile it would be refused by the stale
+        # fingerprint whether or not the custody check exists (the independent review's finding on the earlier shape of this
+        # test); the one-condition-at-a-time table is in test_discord_sender_name_custody.py.
+        for kind, corruption in (('webhook', 'workspace'), ('webhook', 'generation'), ('webhook', 'credential'),
+                                 ('bot', 'workspace'), ('bot', 'generation')):
+            with self.subTest(kind=kind, corruption=corruption):
+                h = SettingsHarness(kind)
+                self.assertTrue(h.call(self, 'sender_profile')['editable'], 'the control: this harness answers')
                 if corruption == 'workspace': h.state['workspace']['id'] = 'other-workspace'
-                if corruption == 'member': h.actor = 'other-member'
                 if corruption == 'generation': h.channel['discordAuthorizationGeneration'] = 'changed-generation'
                 if corruption == 'credential': h.envelope['workspaceId'] = 'other-workspace'
                 with self.assertRaises(AlphaError):
-                    h.call(self, 'set_sender_name', {'name': 'Wrong brand', 'fingerprint': current['fingerprint'], 'confirmed': True})
+                    h.call(self, 'sender_profile')
+                with self.assertRaises(AlphaError) as refused:
+                    h.call(self, 'set_sender_name', {'name': 'Wrong brand', 'fingerprint': 'f' * 64, 'confirmed': True,
+                                                     'sharedServerConfirmed': True})
+                self.assertNotEqual(refused.exception.code, 'discord_sender_name_required', 'refused for custody, not for a stale form')
                 self.assertNotIn('discordSenderName', h.channel)
                 self.assertEqual(h.patches, [])
+
+    def test_a_bot_nickname_is_only_for_the_authorizing_member_but_any_connection_manager_edits_a_webhook_name(self):
+        h = SettingsHarness('bot')
+        h.actor = 'another-member'
+        profile = h.call(self, 'sender_profile')
+        self.assertFalse(profile['editable'])
+        with self.assertRaises(AlphaError) as refused:
+            h.call(self, 'set_sender_name', {'name': 'Wrong brand', 'fingerprint': profile['fingerprint'], 'confirmed': True,
+                                             'sharedServerConfirmed': True})
+        self.assertEqual(refused.exception.status, 403)
+        self.assertEqual(h.patches, [])
+        w = SettingsHarness()
+        w.actor = 'another-member'
+        saved = w.call(self, 'set_sender_name', {'name': 'Team brand', 'confirmed': True,
+                                                 'fingerprint': w.call(self, 'sender_profile')['fingerprint']})
+        self.assertEqual(saved['savedName'], 'Team brand')
 
     def test_stale_editor_cannot_overwrite_a_newer_saved_name(self):
         h = SettingsHarness()
@@ -317,7 +355,9 @@ class SenderSettings(unittest.TestCase):
         h = SettingsHarness('bot')
         h.channel['discordSenderEdit'] = {'id': 'expired-edit', 'name': 'Old', 'expiresAt': NOW - 1}
         replacement = {'id': 'new-edit', 'name': 'New', 'expiresAt': NOW + 120}
-        h.s.reverify_installation.side_effect = lambda *_args, **_kwargs: h.channel.update(discordSenderEdit=replacement)
+        # The replacement appears while the recovery read is in flight (a settings page no longer reverifies the
+        # connection, so the race is injected at the provider read itself).
+        h.after_read = lambda: h.channel.update(discordSenderEdit=replacement)
         with self.assertRaises(AlphaError): h.call(self, 'sender_profile')
         self.assertEqual(h.channel['discordSenderEdit'], replacement)
 
@@ -372,7 +412,9 @@ class SenderTransportBoundary(unittest.TestCase):
         ledger = MemoryLedger()
         h.s.adapter.rate_limiter = SharedPostgresBudget(ledger.connection, APP, policy=synthetic_policy())
         consent = Mock(side_effect=[True, False])
-        with self.assertRaises(AlphaError):
+        # The coordinator may admit the nickname route only while the capability is on (R1); this test is about what
+        # happens after the admission, so it turns the capability on itself and passes with or without R1.
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}), self.assertRaises(AlphaError):
             h.s.adapter._bot('PATCH', f'/guilds/{GUILD}/members/@me', body={'nick': 'Blocked'}, write_authorize=consent)
         self.assertEqual(consent.call_count, 2)
         self.assertEqual(h.patches, [])

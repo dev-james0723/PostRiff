@@ -362,9 +362,11 @@ class HostedSocial:
     def prepare_discord_dispatch(self, manifest, *, read_authorize=None):
         """Provider checks and immutable media reads outside all worker SQL locks."""
         from .discord.authorization import grant_matches, wire_content, digest
+        from .discord.sender_names import assert_sendable
         provider = self._provider(manifest)
         if provider is None or not getattr(provider, 'authorization_v2_enabled', False):
             raise AlphaError('Discord publishing is paused pending authorization and rollout validation.', 409, code='discord_paused')
+        assert_sendable(manifest)  # a frozen custom name is held, never stripped, while the feature is off
         grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
         if not grant_matches(manifest, grant, provider.session(grant['accessToken'])):
             raise AlphaError('Discord was reconnected or changed. Review the post again.', 409)
@@ -374,6 +376,9 @@ class HostedSocial:
         if manifest.get('operation') == 'discord.reply' and not callable(read_authorize):
             raise AlphaError('Discord reply consent must be rechecked before provider reads.', 409)
         evidence = provider.authorize_destination(grant['accessToken'], manifest['discord']['target'], media=bool(wire['files']), read_authorize=read_authorize)
+        if manifest.get('senderKind') != 'webhook' and 'discordBotNickname' in manifest:
+            from .discord.sender_names import assert_nickname_unchanged
+            assert_nickname_unchanged(manifest, evidence)   # the nickname the person approved is still the server's
         if manifest.get('operation') == 'discord.reply':
             from .discord.engagement import validate_parent
             from .discord.message_content import verify as verify_content
@@ -442,6 +447,12 @@ class HostedSocial:
             return {'state': 'held', 'confirmed': 'Discord dispatch authorization is missing or stale. Nothing was posted.', 'discordDeliveryEvidence': 'not_sent'}
         target = manifest['discord']['target']
         channel = target['channelId']
+        from .discord.sender_names import assert_sendable
+        try:
+            assert_sendable(manifest)
+        except AlphaError:
+            return {'state': 'held', 'confirmed': 'Discord custom sender names are switched off; nothing was posted.', 'discordDeliveryEvidence': 'not_sent',
+                    'reason': 'discord_sender_names_disabled'}
         wire = wire_content(manifest)
         # Discord dedupes nonces only over a recent window. Durable Rafii intents
         # block a fresh POST after an ambiguous result, including beyond that window.

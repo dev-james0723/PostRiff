@@ -184,6 +184,9 @@ def commit(engine, state: dict, principal: str, payload: dict, now: float) -> di
             if channel.get('discordConnectionKind') == 'webhook':
                 review['manifest'].pop('discordSenderName', None)
                 freeze_manifest(state, channel, review['manifest'], item.get('destinationId'))
+            elif 'discordBotNickname' in decision or 'discordBotNickname' in review['manifest']:
+                review['manifest'].pop('discordBotNickname', None)
+                freeze_manifest(state, channel, review['manifest'], item.get('destinationId'))
             queued = review['manifest']['discord']
             if any(queued[k] != decision['discord'][k] for k in ('schema', 'target', 'wireDigest', 'deliveryDigest', 'operationDigest')):
                 raise AlphaError('The Discord preview changed after human approval.', 409, code='discord_approval_required')

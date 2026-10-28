@@ -448,6 +448,11 @@ class HostedPhase2Commands:
                 saved['discordDestinations'] = copy.deepcopy(existing.get('discordDestinations', []))
                 for destination in saved['discordDestinations']:
                     destination['status'] = 'reauthorization_required'
+                # The sender record is Rafii-side, and a pending bot-nickname edit claim points at a rate admission that
+                # only the claim can resolve: a reconnect must not wipe either (the nickname itself lives on in Discord).
+                for key in ('discordSenderName', 'discordSenderRevision', 'discordSenderEdit', 'discordBotNickname'):
+                    if key in existing:
+                        saved[key] = copy.deepcopy(existing[key])
             existing.clear()
             existing.update(saved)
         else:

@@ -80,6 +80,16 @@ def connection_state(channel, now):
     return "read_verified"
 
 
+def _discord_sender_fields(channel):
+    """What a review would freeze as the sender RIGHT NOW (not the raw setting), because that is what an automation approval is
+    checked against: a webhook's custom name (None when the feature is off or none is saved), and for a bot installation the
+    server nickname it last observed, only while the nickname capability is on. Values only; the observation and the edit claim
+    stay internal."""
+    from .discord.sender_names import bot_nickname_in_view, sender_name_in_view
+    return {"discordSenderName": sender_name_in_view(channel) if channel.get("discordConnectionKind") == 'webhook' else None,
+            **bot_nickname_in_view(channel)}
+
+
 def customer_view(channel, matrix, now):
     """What the Channels card shows: identity, then one row per capability, never a blended 'Ready'."""
     return {
@@ -98,7 +108,7 @@ def customer_view(channel, matrix, now):
             "discordAuthorizationGeneration": channel.get("discordAuthorizationGeneration"),
             "discordIdentityConnectionId": channel.get("discordIdentityConnectionId"),
             "discordConnectionKind": channel.get("discordConnectionKind"),
-            "discordSenderName": channel.get("discordSenderName") if channel.get("discordConnectionKind") == 'webhook' else None,
+            **_discord_sender_fields(channel),
             "providerAccountId": channel.get("providerAccountId")}
            if channel.get("platform") == "Discord" else {}),
     }

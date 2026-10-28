@@ -122,7 +122,11 @@ def wire_content(manifest):
                       'sha256': asset['hash'], 'bytes': asset['bytes'], 'mime': asset['mime']})
     wire = {'content': manifest['payload']['text'], 'allowed_mentions': {'parse': []}, 'files': files}
     if manifest.get('senderKind') == 'webhook': wire['flags'] = 4  # suppress automatic embeds; exact text-only contract
-    if 'discordSenderName' in manifest and manifest.get('senderKind') == 'webhook':
+    if 'discordSenderName' in manifest:
+        # The per-send override is part of the frozen wire content and nothing else ever supplies it. A bot manifest
+        # has no such field (the nickname is a property of the server), so one that carries it is not authentic.
+        if manifest.get('senderKind') != 'webhook':
+            reject('Only a webhook post can carry a custom sender name.')
         from .sender_names import validate_name
         wire['username'] = validate_name(manifest['discordSenderName'], 'webhook')
     if manifest.get('operation') == 'discord.reply':
@@ -257,9 +261,21 @@ def freeze_manifest(state, channel, manifest, selected_id):
     record = destination(state, channel, selected_id)
     target = {k: copy.deepcopy(record.get(k)) for k in identity_keys(record) + LABELS}
     manifest['senderKind'] = sender_kind(target)
-    if manifest['senderKind'] == 'webhook' and 'discordSenderName' in channel:
-        from .sender_names import validate_name
-        manifest['discordSenderName'] = validate_name(channel['discordSenderName'], 'webhook')
+    if manifest['senderKind'] == 'webhook':
+        # Frozen per connection at review: the setting of THIS connection's own channel record, validated, and only
+        # while the feature is on. Unset (or the feature off) freezes nothing: the webhook's own name, as in RC1.
+        from .sender_names import frozen_webhook_name
+        frozen_name = frozen_webhook_name(channel)
+        if frozen_name is not None:
+            manifest['discordSenderName'] = frozen_name
+    else:
+        # A bot post is displayed under the server's CURRENT nickname, which Rafii cannot freeze on Discord. Instead the
+        # nickname the person saw (the last one this connection observed) is frozen into the approval, and the dispatch
+        # preflight holds the post if Discord reports another one. Only while the nickname capability is on.
+        from .sender_names import frozen_bot_nickname
+        seen = frozen_bot_nickname(channel)
+        if seen is not None:
+            manifest['discordBotNickname'] = seen[0]
     wire = wire_content(manifest)
     delivery_digest = digest({'workspaceId': manifest['workspaceId'],
                               'applicationId': target['applicationId'],
@@ -353,6 +369,10 @@ def approved_campaign_channel(channel, decision):
         else:
             from .sender_names import validate_name
             frozen['discordSenderName'] = validate_name(decision['discordSenderName'], 'webhook')
+    elif 'discordBotNickname' in decision:
+        frozen['discordBotNickname'] = {'value': decision['discordBotNickname'], 'observedAt': decision.get('at', 0)}
+    else:
+        frozen.pop('discordBotNickname', None)
     return frozen
 
 
