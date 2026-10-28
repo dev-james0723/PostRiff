@@ -370,28 +370,44 @@ def d3_rate_limit(lab):
     _, alerts = lab.look()
     d.expect('policy alert cleared after renewal (a new build with a new policy)', 'RATE_POLICY' not in severities(alerts),
              severities(alerts))
-    # (d) the application budget spent for a whole minute: 2 requests a second, asked for continuously for 62 s
+    # (d) the application budget spent for a whole minute: 2 requests a second, asked for continuously for 62 s by three
+    # loops, as several senders would: one loop alone leaves each slot idle for its own round trips (the observation, a
+    # slow machine), which is not a spent budget and made the injection fall short under load
     lab.fresh(capacity=2)
     limiter, identity = lab.provider().rate_limiter, lab.provider()._rate_identity('bot')
-    admitted, refused, number, until = 0, 0, 0, time.monotonic() + 62
-    while time.monotonic() < until:
-        number += 1
-        try:
-            permit = limiter.reserve_read('GET', '/guilds/%d' % (7100000 + number), identity=identity)
-        except RateDelayed as error:
-            refused += 1
-            time.sleep(min(error.retry_after_seconds, 0.5))
-            continue
-        limiter.observe(permit, {'status': 200, 'headers': {}, 'body': {}})
-        admitted += 1
+    tally, lock, until = Counter(), threading.Lock(), time.monotonic() + 62
+
+    def demand(loop):
+        number = 0
+        while time.monotonic() < until:
+            number += 1
+            try:
+                permit = limiter.reserve_read('GET', '/guilds/%d' % (7100000 + 100000 * loop + number), identity=identity)
+            except RateDelayed as error:
+                with lock:
+                    tally['refused'] += 1
+                time.sleep(min(error.retry_after_seconds, 0.25))
+                continue
+            limiter.observe(permit, {'status': 200, 'headers': {}, 'body': {}})
+            with lock:
+                tally['admitted'] += 1
+    loops = [threading.Thread(target=demand, args=(loop,), daemon=True) for loop in range(3)]
+    for loop in loops:
+        loop.start()
+    for loop in loops:
+        loop.join(90)
     snapshot, alerts = lab.look()
     spent = next((alert['evidence'] for alert in alerts if alert['id'] == 'RATE_APP_BUDGET_SPENT'), {})
     # The ceiling is what the coordinator can grant (each admission holds its slot for the window plus the guard),
     # not the nominal 120 a minute; the guard comes from the build (config.policy.slotGuardSeconds).
-    d.step('injected: 62 s of demand above a 2-per-second budget', alerts, admitted=admitted, refused=refused,
-           admissions60s=snapshot['coordinator']['traffic']['admissions60s'],
-           slotGuardSeconds=snapshot['config']['policy'].get('slotGuardSeconds'),
-           achievable60s=spent.get('achievable60s'), saturation=spent.get('saturation'), guard=spent.get('guard'))
+    guard = snapshot['config']['policy'].get('slotGuardSeconds')
+    ceiling = check.achievable_per_minute(2, 1, guard)
+    admissions = snapshot['coordinator']['traffic']['admissions60s']
+    d.step('injected: 62 s of demand above a 2-per-second budget', alerts, admitted=tally['admitted'], refused=tally['refused'],
+           admissions60s=admissions, slotGuardSeconds=guard, achievable60s=round(ceiling, 1),
+           saturation=spent.get('saturation'), guard=spent.get('guard'))
+    d.expect('the injection spent the budget: admissions of the last minute at least 95%% of the %.1f the coordinator can '
+             'grant' % ceiling, admissions >= THRESHOLDS['rate_limit']['saturation_warn'] * ceiling, admissions)
     d.fires(alerts, 'RATE_APP_BUDGET_SPENT', 'warn', 'budget spent for the last minute')
     lab.shift_ledger(120)
     d.record['simulated'].append('the quiet minute after the demand: ledger moved 2 minutes into the past')
