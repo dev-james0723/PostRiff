@@ -205,6 +205,7 @@ class Client:
         # (provider calls, provider writes) the LOCAL harness attributes to the last request, from its
         # X-Q05-Provider-Calls / -Writes headers; None when unobservable (every hosted run).
         self.last_provider = None
+        self.last_elapsed = None     # seconds the last request took (twin timing comparison)
 
     def marker(self, name):
         """Local harness only: tell it where the attack phase starts/ends (a GET it answers itself)."""
@@ -240,6 +241,7 @@ class Client:
             headers[self.config.extra_header_name] = self.config.extra_header_value
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         self.last_provider = None
+        started = time.monotonic()
         try:
             with self._opener.open(req, timeout=30) as resp:
                 raw = resp.read(2_000_000)
@@ -251,6 +253,8 @@ class Client:
             rhead = err.headers
         except (urllib.error.URLError, TimeoutError, OSError) as err:
             return (0, "transport_error:" + type(err).__name__, None)
+        finally:
+            self.last_elapsed = time.monotonic() - started
         try:
             calls, writes = rhead.get("X-Q05-Provider-Calls"), rhead.get("X-Q05-Provider-Writes")
             if calls is not None and writes is not None:
@@ -529,6 +533,7 @@ class Case:
         self.observed = None
         self.owner_observed = None
         self.twin_observed = None
+        self.timing = None
         self.verdict = None
         self.note = ""
 
@@ -878,10 +883,11 @@ IDENTITY_DENY_BODY = "This Discord identity is unavailable to this workspace mem
 # kind-specific custody, so viewer/editor/removed are probed on the webhook only)
 ROLE_KINDS = {"viewer": ("webhook",), "editor": ("webhook",), "connmgr": ("webhook", "bot"),
               "admin": ("webhook", "bot"), "removed": ("webhook",)}
-# Contract v2 throttles sender-name POSTs to 15 per 10 minutes per workspace (and counts every POST that
-# passes the gate and the permission check), so the probe spends as few as it can: the bot connection's
-# non-authorizer POST is probed with the admin only.
-ROLE_POST_SKIP = {("connmgr", "bot")}
+# Contract v2 throttles sender-name POSTs to 6 per 10 minutes per connection and 15 per workspace, counting
+# every POST that gets past the gate, the role check and the connection lookup. The owner's webhook needs 5
+# (stale control, one invalid name, save / stale replay / restore), so a non-authorizing manager's POST is
+# probed with the admin only (the connection manager's would be the same answer).
+ROLE_POST_SKIP = {("connmgr", "bot"), ("connmgr", "webhook")}
 
 
 def role_expect(role, kind, method, contract):
@@ -916,9 +922,14 @@ def role_expect(role, kind, method, contract):
 
 MALFORMED_CONNECTIONS = (("short", "x"), ("dots", ".."), ("quote", "discord-webhook-%27%20OR%201%3D1--"),
                          ("long", "A" * 300))
-# Kept to two: on contract v2 every POST by a connection manager counts against a 15-per-10-minutes
-# per-workspace throttle, and the whole sender-name set must stay inside it.
-BAD_NAMES = (("too_long", "x" * 81), ("reserved", "Discord official"))
+# One: every owner POST counts against the per-connection throttle (see ROLE_POST_SKIP). A reserved word
+# (Discord's own name) is the impersonation rule that matters for a sender name.
+BAD_NAMES = (("reserved", "Discord official"),)
+
+
+def _sender_clear(fingerprint):
+    """The contract's "clear" body (webhook only): remove the saved name."""
+    return {"reset": True, "fingerprint": fingerprint, "confirmed": True}
 
 
 def build_sender_cases(disc, config):
@@ -958,22 +969,34 @@ def build_sender_cases(disc, config):
                 # differential: the owner's identical request would succeed and rename)
                 (f"write.sender.replay_ws_scope.{kind}.{arrow}", "POST", t_ws, "write", "state", "ws_scope",
                  v_ws, "victim-fingerprint", None),
-            )
+            ) + ((
+                # CLEAR the victim's saved webhook name with its real fingerprint, through the victim's workspace
+                # (the gate) and through the attacker's own workspace (the connection lookup); both refused before
+                # any throttle is counted, and the IDOR one against a never-existing-connection twin
+                (f"write.sender.ws_scope_clear.{kind}.{arrow}", "POST", t_ws, "write", "state", "ws_scope",
+                 v_ws, "victim-clear", None),
+                (f"write.sender.idor_clear.{kind}.{arrow}", "POST", t_idor, "write", "state", "idor",
+                 a_ws, "victim-clear", None),
+            ) if kind == "webhook" else ())
             for cid, method, tmpl, ck, blast, scope, ws_path, body, deferred in specs:
                 if absent[victim]:
                     cases.append(_not_applicable(cid, method, tmpl, arrow, ck, blast, victim, na_why))
                     continue
-                if not vconn or (body == "victim-fingerprint" and not prof):
+                real_fp = body in ("victim-fingerprint", "victim-clear")
+                if not vconn or (real_fp and not prof):
                     cases.append(_not_built(cid, method, tmpl, arrow, ck, blast, victim,
                                             f"no victim {kind} connection"
-                                            + (" sender profile" if body == "victim-fingerprint" else "") + " discovered"))
+                                            + (" sender profile" if real_fp else "") + " discovered"))
                     continue
                 if body == "victim-fingerprint":
                     body = _sender_post(prof["fingerprint"])
-                # existence twins: every gate case; the IDOR GET (an IDOR POST would only spend the attacker's
-                # own v2 POST throttle again for the same custody answer)
+                elif body == "victim-clear":
+                    body = _sender_clear(prof["fingerprint"])
+                # existence twins: every gate case; the IDOR GET and the IDOR clear (the connection lookup
+                # precedes the throttle, so neither spends a POST of the attacker's own budget)
                 twin = (route(NONEXISTENT_WORKSPACE, vconn) if scope == "ws_scope"
-                        else route(a_ws, NONEXISTENT_CONNECTION[kind]) if method == "GET" else None)
+                        else route(a_ws, NONEXISTENT_CONNECTION[kind]) if method == "GET" or "clear" in cid
+                        else None)
                 cases.append(Case(cid, method, tmpl, arrow, ck, blast, route(ws_path, vconn), attacker,
                                   body=body, mutation=(method == "POST"), victim_key=victim, scope=scope,
                                   twin_path=twin, deferred=deferred))
@@ -1034,8 +1057,14 @@ def build_sender_cases(disc, config):
                     if absent[owner]:
                         cases.append(_not_applicable(cid, method, tmpl, direction, ck, blast, None, na_why))
                     elif not config.token.get(tok_key):
-                        cases.append(_not_built(cid, method, tmpl, direction, ck, blast, None,
-                                                f"role principal not provided (Q05_TOKEN_{owner}_{role.upper()})"))
+                        # The hosted run signs in the two owners only, so same-workspace roles run in the local
+                        # harness (exact SHA). Reported NOT RUN (local-only); scope "role" lets the hosted gate
+                        # tell these apart from an undiscovered victim object, which always fails a gate run.
+                        c = _not_built(cid, method, tmpl, direction, ck, blast, None,
+                                       f"role principal not provided (Q05_TOKEN_{owner}_{role.upper()}); "
+                                       "the local harness runs this case")
+                        c.local_only, c.scope = True, "role"
+                        cases.append(c)
                     elif not oconn:
                         cases.append(_not_built(cid, method, tmpl, direction, ck, blast, None,
                                                 f"no {kind} connection discovered"))
@@ -1176,7 +1205,8 @@ def error_code(obj):
 def run_case(client, case, disc, flags):
     if case.needs:
         case.verdict = "NOT_RUN"
-        case.note = ("not-applicable:" if getattr(case, "not_applicable", False) else "undiscovered:") + case.needs
+        case.note = ("not-applicable:" if getattr(case, "not_applicable", False)
+                     else "local-only:" if getattr(case, "local_only", False) else "undiscovered:") + case.needs
         case.observed = "-"
         return
     gate = gated_reason(case, flags)
@@ -1189,6 +1219,7 @@ def run_case(client, case, disc, flags):
     status, text, obj = client.request(case.method, case.path, case.token_key,
                                        body=case.body, mutation=case.mutation)
     provider = client.last_provider        # (calls, writes) when the local harness can attribute them
+    elapsed = getattr(client, "last_elapsed", None)
     case.observed = str(status)
     err = error_body(obj, text)
 
@@ -1229,7 +1260,9 @@ def run_case(client, case, disc, flags):
             case.note = "control did not succeed (INCONCLUSIVE): the owner must get through this route"
         return
 
-    markers = disc[case.victim_key].markers if case.victim_key else set()
+    # what only the victim has: a fact both tenants legitimately see (a Discord server both installed the bot in,
+    # that server's shared bot nickname) is not a leak
+    markers = (disc[case.victim_key].markers - disc[OTHER[case.victim_key]].markers) if case.victim_key else set()
 
     def inconclusive(reason):
         case.verdict = "INCONCLUSIVE"
@@ -1242,13 +1275,22 @@ def run_case(client, case, disc, flags):
         return
     _score_attack(client, case, status, text, obj, err, markers, inconclusive)
     if case.verdict == "PASS" and case.twin_path:
-        _check_twin(client, case, status, err, error_code(obj), inconclusive)
+        _check_twin(client, case, status, err, error_code(obj), inconclusive, obj=obj, elapsed=elapsed)
 
 
-def _check_twin(client, case, status, err, code, inconclusive):
-    """The same request at an id that never existed must get the same (status, error, code)."""
+TIMING_PAIRS = 2          # extra alternating (victim id, never-existing id) pairs for a sender-name GET twin
+TIMING_MARGIN = 0.025     # seconds: every victim-id answer slower than every twin answer by more than this fails
+
+
+def _check_twin(client, case, status, err, code, inconclusive, obj=None, elapsed=None):
+    """The same request at an id that never existed must get the same answer: the same status, error and
+    code, and (JSON) the same whole body, so no extra field, reason or retry time can tell the two apart.
+    For a sender-name GET the timing is compared too: a few alternating pairs, and the case fails only if
+    EVERY answer for the victim's id is slower than EVERY never-existing-id answer by more than
+    TIMING_MARGIN (dominance, so ordinary jitter cannot fail it)."""
     t_status, t_text, t_obj = client.request(case.method, case.twin_path, case.token_key,
                                              body=case.body, mutation=case.mutation)
+    t_times = [getattr(client, "last_elapsed", None)]
     case.twin_observed = str(t_status)
     t_provider = client.last_provider
     if t_status == 0 or 300 <= t_status <= 399 or t_status >= 500 or t_status == 429:
@@ -1256,9 +1298,27 @@ def _check_twin(client, case, status, err, code, inconclusive):
     if t_provider is not None and t_provider[0] > 0:
         case.verdict, case.note = "FAIL", "the never-existing-id twin reached the provider"
         return
-    if (t_status, error_body(t_obj, t_text), error_code(t_obj)) != (status, err, code):
+    if (t_status, error_body(t_obj, t_text), error_code(t_obj)) != (status, err, code) or (
+            isinstance(obj, dict) and obj != t_obj):
         case.verdict = "FAIL"
         case.note = "existence oracle: the answer for the victim's id differs from a never-existing id"
+        return
+    if case.method != "GET" or ".sender." not in case.cid or elapsed is None:
+        return
+    v_times = [elapsed]
+    for _ in range(TIMING_PAIRS):
+        for path, times in ((case.path, v_times), (case.twin_path, t_times)):
+            r_status, _r_text, r_obj = client.request("GET", path, case.token_key)
+            times.append(getattr(client, "last_elapsed", None))
+            if (r_status, r_obj) != (status, obj):
+                case.verdict, case.note = "FAIL", "existence oracle: a repeated answer differs"
+                return
+    if any(not isinstance(t, float) for t in v_times + t_times):
+        return
+    case.timing = (min(v_times), max(t_times))
+    if min(v_times) > max(t_times) + TIMING_MARGIN:
+        case.verdict = "FAIL"
+        case.note = "timing oracle: the victim's id is consistently slower than a never-existing id"
 
 
 def _as_set(value):
@@ -1449,6 +1509,8 @@ def case_record(case):
         "observed": case.observed,
         "ownerObserved": case.owner_observed,
         "twinObserved": case.twin_observed,
+        # [fastest victim-id answer, slowest never-existing-id answer] in ms (sender-name GET twins only)
+        "timingMs": [round(t * 1000, 1) for t in case.timing] if case.timing else None,
         "scope": case.scope or "",
         "verdict": case.verdict,
         "note": case.note,
@@ -1483,6 +1545,11 @@ def write_markdown(path, cases, summary, flags, config):
         lines.append(f"> NOT APPLICABLE: **{summary['not_applicable']}** case(s) target a route this build does "
                      "not serve (e.g. customer sender names before RC2). They do not fail this probe run, but a "
                      "hosted GATE run fails on any NOT RUN case, and gate runs are pinned to the reviewed build.")
+        lines.append("")
+    if summary.get("local_only"):
+        lines.append(f"> NOT RUN (local-only): **{summary['local_only']}** same-workspace role case(s) need other "
+                     "members of the workspace, which this run did not sign in; the local harness runs them against "
+                     "the same SHA. They are not passes and do not fail this run.")
         lines.append("")
     if summary["inconclusive"]:
         lines.append(f"> INCONCLUSIVE: **{summary['inconclusive']}** case(s) could not be classified as a "
@@ -1528,7 +1595,7 @@ def summarize(cases, smoke=False):
     s = {k: 0 for k in ("total", "passed", "failed", "not_run_gated", "undiscovered",
                          "controls_passed", "controls_failed", "reads", "writes",
                          "blast_state", "blast_send", "blast_inert", "inconclusive",
-                         "not_applicable", "sender_cases", "sender_passed")}
+                         "not_applicable", "local_only", "sender_cases", "sender_passed")}
     for c in cases:
         s["total"] += 1
         if c.kind == "read":
@@ -1561,6 +1628,8 @@ def summarize(cases, smoke=False):
                 s["undiscovered"] += 1
             elif c.note.startswith("not-applicable"):
                 s["not_applicable"] += 1   # the build does not serve the route: reported, not a probe failure
+            elif c.note.startswith("local-only"):
+                s["local_only"] += 1       # same-workspace roles this run could not sign in: reported, not a failure
             else:
                 s["not_run_gated"] += 1
     # exit 0 only if no FAIL, nothing INCONCLUSIVE (a control that did not succeed, or an attack

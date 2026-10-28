@@ -181,5 +181,111 @@ class _Args:
     allow_writes = allow_send_risk = victim_is_synthetic = smoke = True
 
 
+class PathClient:
+    """Scripted answers by PATH, with a scripted elapsed time and provider attribution per answer."""
+    def __init__(self, by_path, elapsed=None, provider=None):
+        self.by_path, self.elapsed, self.provider = by_path, elapsed or {}, provider or {}
+        self.last_provider = self.last_elapsed = None
+        self.calls = []
+
+    def request(self, method, path, token_key, *, body=None, mutation=False):
+        self.calls.append((method, path, body))
+        self.last_provider = self.provider.get(path)
+        self.last_elapsed = self.elapsed.get(path)
+        return self.by_path[path]
+
+
+SENDER = "/api/workspaces/wsa/channels/{}/discord-sender-name"
+
+
+class SenderScoring(unittest.TestCase):
+    """The sender-name additions: role profiles and accepted pairs, local-only role cases, the whole-body
+    existence twin and the timing comparison, and the cross-tenant clear cases."""
+
+    def run_role(self, role, kind, method, answer, provider=(0, 0)):
+        pairs, twin, profile = probe.role_expect(role, kind, method, 2)
+        path = SENDER.format("conn-" + kind)
+        case = probe.Case("read.sender.role.x", method, "/t", "A:" + role, "read", "", path, "A.admin",
+                          scope="role", expect_pairs=pairs, role_profile=profile, late=profile == "manager")
+        probe.run_case(PathClient({path: answer}, provider={path: provider}), case, _disc(), probe.Flags(_Args()))
+        return case
+
+    def test_role_profiles(self):
+        readonly = {"connectionId": "conn-bot", "editable": False, "observedAt": None,
+                    "unavailable": [{"code": "not_authorizing_member"}]}
+        editable = {"connectionId": "conn-webhook", "editable": True, "observedAt": 1.0, "unavailable": []}
+        # a bot nickname is authorizer-only: the read-only answer passes, an offered edit fails
+        self.assertEqual(self.run_role("admin", "bot", "GET", (200, "", readonly)).verdict, "PASS")
+        self.assertEqual(self.run_role("admin", "bot", "GET", (200, "", dict(editable, connectionId="conn-bot")),
+                                       provider=(3, 0)).verdict, "FAIL")
+        # a read-only answer that read Discord fails
+        self.assertEqual(self.run_role("admin", "bot", "GET", (200, "", dict(readonly, observedAt=2.0))).verdict, "FAIL")
+        # a webhook name: any connection manager may edit (contract head); reads allowed, no write
+        self.assertEqual(self.run_role("admin", "webhook", "GET", (200, "", editable), provider=(1, 0)).verdict, "PASS")
+        self.assertEqual(self.run_role("admin", "webhook", "GET", (200, "", editable), provider=(1, 1)).verdict, "FAIL")
+        # the profile of another connection is never acceptable
+        self.assertEqual(self.run_role("admin", "webhook", "GET", (200, "", dict(editable, connectionId="other")),
+                                       provider=(1, 0)).verdict, "FAIL")
+
+    def test_role_pairs(self):
+        stale = (409, "", {"error": probe.SENDER_STALE_BODY, "code": "discord_sender_name_required"})
+        unavailable = (403, "", {"error": probe.UNAVAILABLE_BODY, "code": "discord_sender_name_unavailable"})
+        self.assertEqual(self.run_role("admin", "webhook", "POST", stale).verdict, "PASS")
+        self.assertEqual(self.run_role("admin", "bot", "POST", unavailable).verdict, "PASS")
+        # the bot nickname must be refused by the authorizer rule, not merely by the fingerprint
+        self.assertEqual(self.run_role("admin", "bot", "POST", stale).verdict, "INCONCLUSIVE")
+        # a refused write that reached the provider fails
+        self.assertEqual(self.run_role("admin", "bot", "POST", unavailable, provider=(1, 0)).verdict, "FAIL")
+
+    def test_role_cases_without_a_role_token_are_local_only(self):
+        config = probe.Config({"Q05_BASE_URL": "http://127.0.0.1:1", "Q05_TOKEN_A": "a", "Q05_TOKEN_B": "b",
+                               "Q05_WORKSPACE_A": "wsa", "Q05_WORKSPACE_B": "wsb"})
+        disc = probe._full_discovery(config)
+        for d in disc.values():
+            d.sender_contract = 2
+        cases = [c for c in probe.build_sender_cases(disc, config) if ".role." in c.cid]
+        self.assertTrue(cases)
+        for c in cases:
+            probe.run_case(None, c, disc, probe.Flags(_Args()))
+            self.assertEqual((c.verdict, c.scope), ("NOT_RUN", "role"))
+            self.assertTrue(c.note.startswith("local-only:"), c.note)
+        summary = probe.summarize(cases)
+        self.assertEqual((summary["local_only"], summary["undiscovered"], summary["exit"]), (len(cases), 0, 0))
+
+    def twin_case(self, victim, twin, v_time=0.01, t_time=0.01):
+        path, twin_path = SENDER.format("victim-conn"), SENDER.format("never-existed")
+        case = probe.Case("read.sender.idor.webhook.A->B", "GET", "/t", "A->B", "read", "", path, "A",
+                          victim_key="B", scope="idor", twin_path=twin_path)
+        client = PathClient({path: victim, twin_path: twin}, elapsed={path: v_time, twin_path: t_time})
+        probe.run_case(client, case, _disc(), probe.Flags(_Args()))
+        return case
+
+    def test_whole_body_twin(self):
+        body = {"error": "This Discord connection is unavailable.", "code": "not_found"}
+        self.assertEqual(self.twin_case((404, "", body), (404, "", dict(body))).verdict, "PASS")
+        # same status, error and code, but an extra field only for the victim's id: an existence oracle
+        self.assertEqual(self.twin_case((404, "", dict(body, retryAfterSeconds=7)), (404, "", body)).verdict, "FAIL")
+
+    def test_timing_oracle_needs_dominance(self):
+        body = {"error": "This Discord connection is unavailable.", "code": "not_found"}
+        slow = self.twin_case((404, "", body), (404, "", dict(body)), v_time=0.090, t_time=0.010)
+        self.assertEqual((slow.verdict, slow.note.startswith("timing oracle")), ("FAIL", True))
+        jitter = self.twin_case((404, "", body), (404, "", dict(body)), v_time=0.030, t_time=0.010)
+        self.assertEqual(jitter.verdict, "PASS")
+
+    def test_cross_tenant_clear_cases_use_the_victims_real_fingerprint(self):
+        config = probe.Config({"Q05_BASE_URL": "http://127.0.0.1:1", "Q05_TOKEN_A": "a", "Q05_TOKEN_B": "b",
+                               "Q05_WORKSPACE_A": "wsa", "Q05_WORKSPACE_B": "wsb"})
+        disc = probe._full_discovery(config)
+        disc["B"].sender["B-webhook"]["fingerprint"] = "b" * 64
+        cases = {c.cid: c for c in probe.build_sender_cases(disc, config)}
+        for cid, scope in (("write.sender.ws_scope_clear.webhook.A->B", "ws_scope"),
+                           ("write.sender.idor_clear.webhook.A->B", "idor")):
+            c = cases[cid]
+            self.assertEqual((c.scope, c.body), (scope, {"reset": True, "fingerprint": "b" * 64, "confirmed": True}))
+            self.assertTrue(c.twin_path)
+        self.assertNotIn("write.sender.ws_scope_clear.bot.A->B", cases)
+
+
 if __name__ == "__main__":
     unittest.main()
