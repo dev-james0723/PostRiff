@@ -3,6 +3,9 @@ ADVISED AGAINST: the independent review of 8e76afdd and the Release Captain reco
 hold itself strands posts (each created post's read-back is parked for 24 hours when a Discord-claiming worker runs
 under it, and a post needs a new approval from about 55 minutes after its own scheduled time; PHONE-RUNBOOK.md).
 
+CROSS_TENANT_PROBE_FAILED has no producer in this build (second review N-5): nothing writes security.probe, so the
+default rule cannot engage until the Q-05 hosted run feeds its result to the payload or the scheduled runner.
+
 If the owner enables it anyway: when an incident of a listed rule (by default only CROSS_TENANT_PROBE_FAILED, a
 confirmed isolation failure; never probing, which is the gate working) is live at the listed severity, the engine runs
 the PHONE-RUNBOOK HOLD_ON statement through an injected executor. The statement returns the rows it held, so an empty

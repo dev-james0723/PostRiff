@@ -515,11 +515,15 @@ def cross_tenant(snapshot, t, out):
         out.append(_alert('CROSS_TENANT_DISCORD_4XX', 'CROSS_TENANT', 'warn',
                           '%d client errors on Discord routes in 15 minutes (a superset of denials; tune after a '
                           'baseline).' % discord_4xx, responses4xx=discord_4xx))
+    # security.probe has NO producer in this build (second review N-5): neither the route nor the SQL twin writes it, so
+    # this rule cannot fire today. Its producer would be the Q-05 hosted isolation run, its result carried as
+    # security.probe {failed, ...} by the payload or merged into the snapshot by the scheduled runner. Until then a failing
+    # probe is seen only in that run's own receipt (PHONE-RUNBOOK row 1).
     probe = security.get('probe') if isinstance(security.get('probe'), dict) else None
     if probe and int(probe.get('failed') or 0) > 0:
         out.append(_alert('CROSS_TENANT_PROBE_FAILED', 'CROSS_TENANT', 'page',
-                          'The Q-05 isolation probe reports %d failing cases: a cross-tenant read or write was allowed.'
-                          % int(probe['failed']), failed=int(probe['failed'])))
+                          'The Q-05 isolation probe (security.probe, from the Q-05 hosted run) reports %d failing cases: a '
+                          'cross-tenant read or write was allowed.' % int(probe['failed']), failed=int(probe['failed'])))
 
 
 def config(snapshot, t, out, phase):

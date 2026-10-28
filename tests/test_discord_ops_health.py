@@ -322,6 +322,17 @@ class SlotGuard(unittest.TestCase):
         self.assertEqual(payload['config']['holdReadWaitSeconds'], getattr(rate_limits, 'HOLD_WAIT_SECONDS', None))
 
 
+class ProbeProducer(unittest.TestCase):
+    def test_nothing_in_this_build_writes_the_isolation_probe(self):
+        """Second review N-5: CROSS_TENANT_PROBE_FAILED reads security.probe, which neither the route nor the SQL twin
+        writes. The runbook (row 1), H07-EVIDENCE and the policy map say so; when a producer lands (the Q-05 hosted run),
+        this fails and they must change."""
+        adapter = provider()
+        payload = ops.snapshot(worker_for(adapter, FakeDatabase(adapter)), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
+        self.assertNotIn('probe', payload['security'])
+        self.assertNotIn("'probe'", (ROOT / 'docs/ops/discord-ops-snapshot.sql').read_text())
+
+
 class Constants(unittest.TestCase):
     def test_the_readback_route_key_is_the_coordinators_own(self):
         template, _major = route_identity('GET', '/channels/1234567/messages/7654321')

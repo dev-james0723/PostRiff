@@ -61,7 +61,7 @@ P0 means "wake someone at 3 a.m.": it is dangerous to continue, or every custome
 
 | Rule id | warn | page | Why |
 |---|---|---|---|
-| CROSS_TENANT_PROBE_FAILED | | **P0** | isolation is broken |
+| CROSS_TENANT_PROBE_FAILED | | **P0** | isolation is broken. No producer in this build (second review N-5): the Q-05 hosted run would write `security.probe`; until it does, this row never fires |
 | CROSS_TENANT_PROBING | P1 | **P0** | active probing of other workspaces |
 | CROSS_TENANT_DISCORD | P1 | | a refusal on a Discord route |
 | CROSS_TENANT_DISCORD_4XX | P2 | | a superset of refusals; tune first |
