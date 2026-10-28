@@ -156,9 +156,12 @@ class PacedSocial:
 
     It is also where the lane asks to be booked (rate_limits.booking): the preflight reads, the create permit and the read-back
     run inside it, so a full application window gives each of them the next exact slot (at most BOOK_AHEAD_SECONDS ahead,
-    slept inside the coordinator's reserve, never between the seal and the consume) instead of a refusal to poll for. Only
-    these three calls, and only on this thread: a direct provider call, another thread, the minute worker and a web request
-    never see it. The waits above stay for what a booking cannot cover (a full horizon, an embargo).
+    slept inside the coordinator's reserve, never between the seal and the consume) instead of a refusal to poll for. The
+    read-back is wrapped twice because the worker reaches it two ways: `reconcile_discord` for a reply and `reconcile` for every
+    other post, and HostedSocial.reconcile calls ITS OWN reconcile_discord, so wrapping only the second left every ordinary
+    post's read-back unbooked (found on the first hosted run: 1,559 read-backs, none booked, 36 percent refused). Only these
+    four calls, and only on this thread: a direct provider call, another thread, the minute worker and a web request never see
+    it. The waits above stay for what a booking cannot cover (a full horizon, an embargo).
     """
     def __init__(self, social, *, wait_seconds=1.0, sleep=time.sleep, monotonic=time.monotonic):
         self._social, self._wait, self._sleep, self._monotonic = social, wait_seconds, sleep, monotonic
@@ -175,6 +178,10 @@ class PacedSocial:
     def reconcile_discord(self, manifest, job, **kwargs):
         with booking(BOOK_AHEAD_SECONDS, self.booked):
             return self._social.reconcile_discord(manifest, job, **kwargs)
+
+    def reconcile(self, manifest, job):
+        with booking(BOOK_AHEAD_SECONDS, self.booked):
+            return self._social.reconcile(manifest, job)
 
     def reserve_discord_send(self, manifest, **kwargs):
         deadline = self._monotonic() + self._wait

@@ -683,10 +683,12 @@ of the 12 shards woke for the same freed slot, one won, and a read that lost thr
 threw away the one to five preflight reads it had already made. Booking gives a caller that finds the window full a place in
 line instead (Q19 has the models and the measurements).
 
-*Who books.* Only the three calls the lane makes for a post, on the lane's own thread: `PacedSocial` wraps
+*Who books.* Only the four calls the lane makes for a post, on the lane's own thread: `PacedSocial` wraps
 `prepare_discord_dispatch` (the identity, server, two membership and channel reads), `reserve_discord_send` (the create
-permit, a bot's or a webhook's) and `reconcile_discord` (the read-back) in `rate_limits.booking(BOOK_AHEAD_SECONDS, tally)`, a
-context variable. `DiscordProvider._book_ahead(room)` hands its seconds (never more than `BOOK_AHEAD_SECONDS`, 1.0, and not
+permit, a bot's or a webhook's), and the read-back in both ways the worker reaches it, `reconcile_discord` (a reply's) and
+`reconcile` (every other post's: `HostedSocial.reconcile` calls its own `reconcile_discord`, so wrapping only that one left the
+ordinary read-back unbooked, as the first hosted run measured: 1,559 read-backs, none booked, 36 percent refused; fixed after
+02fd679b) in `rate_limits.booking(BOOK_AHEAD_SECONDS, tally)`, a context variable. `DiscordProvider._book_ahead(room)` hands its seconds (never more than `BOOK_AHEAD_SECONDS`, 1.0, and not
 more than a read's own remaining wait; nothing under 5 ms) to `reserve_read` / `reserve` as `book_ahead`, and passes no
 keyword at all outside the context. A direct provider call, another thread, the minute worker (it shares a warm instance's
 provider and never sees the context), and every web request (connect, destinations, installation checks, webhook set-up, the
@@ -760,7 +762,7 @@ the deadline, the gate, a crash in the wait, the constants, the statement shape,
 against a brute-force count of every closed second, which also catches the permit mutation); `tests/test_discord_rate_booking_postgres.py`
 (24 threads on PostgreSQL keep the ceiling with far fewer lock statements; creates are not starved when reads are booked too;
 the gate against a 429, a hold and a circuit; a dying process; `consume` before the slot; a web caller; the health payload);
-`tests/test_discord_lane_booking.py` (the three places and no others, the counters, a coordinator that blocks a second per
+`tests/test_discord_lane_booking.py` (the four places and no others, the counters, a coordinator that blocks a second per
 reservation still ends the invocation inside budget plus one step, `outlook`); `tests/test_discord_lane_booking_postgres.py`
 (12 and 16 loops at a full window: about one pass a post, nothing posted twice; an approval ending inside a pass; a loop killed
 inside a booked sleep; no sleep between the seal and the consume; a pause during booked waits).

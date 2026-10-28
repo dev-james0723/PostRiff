@@ -1,7 +1,8 @@
 """The lane's side of booking (docs/w02/OPEN-QUESTIONS.md, Q19; docs/w02/AMPLIFICATION.md), offline.
 
-The lane asks to be booked in exactly three places, around the calls that read or reserve for a post: the preflight, the create
-permit and the read-back. Nothing else books: a direct provider call, another thread, the minute worker and a web request keep
+The lane asks to be booked in exactly four places, around the calls that read or reserve for a post: the preflight, the create
+permit and the read-back, which the worker makes in two ways (`reconcile_discord` for a reply, `reconcile` for every other post,
+which reaches HostedSocial's own `reconcile_discord`). Nothing else books: a direct provider call, another thread, the minute worker and a web request keep
 the immediate answer. The loop's budget, the stored application row `lane.outlook` reads and the two new counters are proved
 here; the coordinator's arithmetic is test_discord_rate_booking.py, real PostgreSQL is test_discord_lane_booking_postgres.py.
 No database, network or credential.
@@ -43,6 +44,13 @@ class Seen:
         self.note('reconcile')
         return {'state': 'verified'}
 
+    def reconcile(self, manifest, job):
+        """HostedSocial.reconcile: the worker's read-back of every post that is not a reply goes through it, and it calls ITS OWN
+        reconcile_discord, never the wrapper's (hosted_worker.py, hosted_social.py)."""
+        if manifest.get('platform') == 'Discord':
+            return self.reconcile_discord(manifest, job)
+        return {'state': 'uncertain'}
+
     def submit_discord_authorized(self, manifest, dispatch):
         self.note('submit')
         return {'state': 'provider_accepted'}
@@ -51,17 +59,28 @@ class Seen:
         self.note('other')
 
 
-class TheLaneBooksInThreePlacesOnly(unittest.TestCase):
-    def test_prepare_reserve_and_reconcile_run_inside_booking_and_nothing_else_does(self):
+class TheLaneBooksInFourPlacesOnly(unittest.TestCase):
+    def test_prepare_reserve_and_both_read_backs_run_inside_booking_and_nothing_else_does(self):
         seen = Seen()
         paced = lane.PacedSocial(seen)
         paced.prepare_discord_dispatch({}, read_authorize=None)
         paced.reserve_discord_send({}, job={})
-        paced.reconcile_discord({}, {}, read_authorize=None)
+        paced.reconcile_discord({}, {}, read_authorize=None)           # a reply's read-back
+        paced.reconcile({'platform': 'Discord'}, {})                    # every other post's: the worker's `reconcile`
         paced.submit_discord_authorized({}, {})
         paced.anything_else()
-        self.assertEqual(seen.calls, [('prepare', 1.0), ('reserve', 1.0), ('reconcile', 1.0), ('submit', 0.0), ('other', 0.0)])
+        self.assertEqual(seen.calls, [('prepare', 1.0), ('reserve', 1.0), ('reconcile', 1.0), ('reconcile', 1.0),
+                                      ('submit', 0.0), ('other', 0.0)])
         self.assertEqual(rate_limits.current_book_ahead(), 0.0, 'and none of it outlives the call')
+
+    def test_the_read_back_of_an_ordinary_post_is_booked_though_the_worker_calls_reconcile_not_reconcile_discord(self):
+        """Found on the first hosted run of the lane with booking: 1,559 read-backs, none booked. PacedSocial wrapped only
+        reconcile_discord; the worker calls `reconcile`, which PacedSocial forwarded, and HostedSocial.reconcile calls its own
+        reconcile_discord, so the wrapper and its context were never entered."""
+        seen = Seen()
+        lane.PacedSocial(seen).reconcile({'platform': 'Discord'}, {'providerReference': 'channel/message'})
+        self.assertEqual(seen.calls, [('reconcile', 1.0)])
+        self.assertEqual(seen.aside, [('reconcile', 0.0)], 'on this thread only')
 
     def test_a_second_thread_never_sees_the_context(self):
         seen = Seen()
