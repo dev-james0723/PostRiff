@@ -277,7 +277,7 @@ statement (its pin updated in this branch).
 | UI-16 history import "Requesting import…" | `171a73de` | ship (wording, 9 languages) | 11 lines |
 | UI-3 connect tiles locked while a start is in flight | Discord connect-sheet rework | ship (prevents a double start); not separable from the Discord request-generation guard without touching the Discord flow | about 15 of the 197 changed lines in `connect-sheet.tsx` (estimate) |
 | DEP-5 Pillow 13.0.0 | `21f3d961` (security, dependency audit) | ship (the impact suite renders 15 customer images identically) | 1 line, but reopens the audit finding |
-| DEP-6 pypdf 6.21.1 | `0bce18dd` (four advisories) | ship | 1 line, reopens the advisories |
+| DEP-6 pypdf 6.21.2 | `0bce18dd` (four advisories) and the 2026-10-28 bump to 6.21.2 (three more) | ship | 1 line, reopens the advisories |
 | DEP-7 psycopg-pool 3.3.3 | pool (inert while off) | ship | 1 line plus the pool module |
 | API-1 `workerBinding: null` in workspace reads | `381ac2d0` machinery | ship (inert) | about 10 lines in `hosted.py` (estimate) and the dormant preview code it feeds |
 | UI-12 / API-9 "Save as draft" (`manual_draft_create`) | `edcdf286`, `4fdc09c3` | **accepted** (owner reply 17, 2026-10-28; the caps come from the G2a branch): a new feature every editor sees | about 170 lines (`manual_drafts.py` 100, `hosted.py` about 8 (estimate), `permissions.py` 1, `home-view.tsx` 47, API types) plus `tests/test_manual_drafts.py` |

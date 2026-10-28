@@ -1,6 +1,6 @@
 """Customer impact of the candidate's Python dependency moves on the unchanged paths every customer uses.
 
-The candidate moves Pillow 12.3.0 -> 13.0.0 and pypdf 6.19.0 -> 6.21.1 (requirements.txt); media.py,
+The candidate moves Pillow 12.3.0 -> 13.0.0 and pypdf 6.19.0 -> 6.21.2 (requirements.txt); media.py,
 account_pictures.py and library_extract.py are byte-identical in both trees. These tests feed the same inputs to the
 same code under different library versions in separate interpreters and require identical results:
 

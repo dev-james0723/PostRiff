@@ -1,5 +1,5 @@
 Pillow==13.0.0
-pypdf==6.21.1
+pypdf==6.21.2
 pypdfium2==5.14.0
 Markdown==3.11
 psycopg[binary]==3.3.5

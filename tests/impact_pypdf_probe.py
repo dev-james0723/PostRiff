@@ -3,7 +3,7 @@
 usage: python impact_pypdf_probe.py <tree root> <pdf directory>
 
 library_extract.extract_text is unchanged between the live tree and the candidate; only the pinned pypdf moves (live
-6.19.0, candidate 6.21.1). Running this file under several pypdf versions on the same files shows what the dependency
+6.19.0, candidate 6.21.2). Running this file under several pypdf versions on the same files shows what the dependency
 change does to a customer's PDF upload. Used by tests/test_customer_impact_dependencies.py.
 """
 import hashlib

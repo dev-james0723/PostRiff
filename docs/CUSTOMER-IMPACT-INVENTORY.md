@@ -145,7 +145,7 @@ Counts of rows in sections 2-8 by verdict: **OBSERVABLE-INTENDED 7, OBSERVABLE-U
 | DEP-3 | build tooling data | browserslist 4.29.4, caniuse-lite, baseline-browser-mapping, electron-to-chromium, Babel 7.29.10; dotenv 16 -> 17 inside the Sentry bundler plugin (build time only) | lockfile | NOT-OBSERVABLE |
 | DEP-4 | Node and Python | `engines.node` 24.x unchanged; `.python-version` 3.12 unchanged | files | NOT-OBSERVABLE |
 | DEP-5 | Pillow | 12.3.0 -> 13.0.0 (major) on the upload and account-picture paths every customer uses | `test_pillow_13_renders_customer_images_exactly_as_the_live_pin`: 15 images, identical accept/refuse decisions, rendition bytes and pixels | NOT-OBSERVABLE |
-| DEP-6 | pypdf | 6.19.0 -> 6.21.1 on the Library's PDF path | `test_pypdf_reads_customer_pdfs_alike_across_the_pinned_versions`: 6.17.0, 6.20.1 and 6.21.1 read 6 PDFs identically; 6.19.0 itself is not available here (inference: it lies between) | NOT-OBSERVABLE |
+| DEP-6 | pypdf | 6.19.0 -> 6.21.2 on the Library's PDF path (6.21.1 until 2026-10-28, when three new advisories made the dependency audit fail) | `test_pypdf_reads_customer_pdfs_alike_across_the_pinned_versions`: 6.17.0, 6.20.1 and 6.21.1 read 6 PDFs identically; 6.19.0 itself is not available here (inference: it lies between) | NOT-OBSERVABLE |
 | DEP-7 | psycopg-pool 3.3.3 (new) | imported only when the pool is enabled | grep | NOT-OBSERVABLE |
 | DEP-8 | function and web bundles | new Python modules and one wheel; the web bundle gains the Discord components | sizes not measured | UNKNOWN |
 | DEP-9 | `vercel.json` (RC1) | `git.deploymentEnabled: false` replaces the per-branch map; rewrites, headers, functions and the cron list unchanged | diff; superset `crons` | NOT-OBSERVABLE |
@@ -234,7 +234,7 @@ Still missing (not possible here):
 
 ```
 SUPERSET_ALLOW=/home/user/PostRiff/docs/launch-20261023-discord/superset-allowlist.json \
-IMPACT_PYPDF_PYTHONS="/opt/prvenv/bin/python:/usr/bin/python3:<an interpreter with pypdf 6.21.1>" \
+IMPACT_PYPDF_PYTHONS="/opt/prvenv/bin/python:/usr/bin/python3:<an interpreter with pypdf 6.21.2>" \
 scripts/impact_rerun.sh <candidate sha>
 ```
 
