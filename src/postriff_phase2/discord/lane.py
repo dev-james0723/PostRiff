@@ -95,6 +95,12 @@ COUNTERS = ('steps', 'claimed', 'posted', 'verified', 'held', 'uncertain', 'rate
             'permitWaits', 'quarantined', 'positionsKept')
 _QUARANTINED = [0]  # workspaces this process has set aside since it started; a count, never an identifier
 _QUARANTINE_LOCK = threading.Lock()
+# Retention of the coordinator's admissions (rate_limits.SharedPostgresBudget.purge_settled): an invocation that had work
+# asks for it once its loop is over, at most once a minute per process. No flag: it deletes only rows nothing counts any
+# more, there is nothing to do when none are old enough, and it never stops a lane (see purge_admissions).
+PURGE_PERIOD_SECONDS = 60.0
+_PURGED_AT = [None]  # this process's monotonic clock at its last attempt
+_PURGE_GATE = threading.Lock()
 
 
 def quarantined():
@@ -306,6 +312,40 @@ class LaneWorker(PostgresWorker):
                 self.lane_counts[{'accepted': 'posted', 'rejected': 'rejected',
                                   'not_sent': 'notSent'}.get(evidence, 'uncertainCreates')] += 1
         return super().complete(claimed, result)
+
+
+def purge_admissions(lane, *, monotonic=time.monotonic):
+    """Ask the coordinator to delete the admissions past their retention, at most once a minute in this process.
+
+    Returns the coordinator's outcome, or None when it was not asked (too soon, or the lane has no coordinator). It never
+    raises: retention must not stop a post. It logs counts only, as one INFO line when it deleted something and one WARNING
+    when it could not (a role without DELETE, a timeout): `status` and the exception class, no database message, no identifier.
+    The shards of one minute may each ask; one purger runs at a time and the others find `busy` (an advisory lock)."""
+    limiter = getattr(_discord(lane.social), 'rate_limiter', None)
+    purge = getattr(limiter, 'purge_settled', None)
+    if not callable(purge):
+        return None
+    with _PURGE_GATE:
+        now = monotonic()
+        if _PURGED_AT[0] is not None and 0 <= now - _PURGED_AT[0] < PURGE_PERIOD_SECONDS:
+            return None
+        _PURGED_AT[0] = now
+    try:
+        outcome = purge()
+        deleted = outcome['reads'] + outcome['publications']
+        if outcome['status'] not in ('ok', 'busy'):
+            level = logging.WARNING
+        elif deleted:
+            level = logging.INFO
+        else:
+            return outcome
+        logging.getLogger('postriff.request').log(level, json.dumps({
+            'event': 'discord.lane.retention', 'status': outcome['status'], 'reads': outcome['reads'],
+            'publications': outcome['publications'], 'rounds': outcome['rounds'], 'more': outcome['more'],
+            **({'error': outcome['error']} if 'error' in outcome else {})}))
+        return outcome
+    except Exception:
+        return None
 
 
 def _discord(social):
@@ -597,6 +637,8 @@ def run(worker, number, values=None, *, started=None, request_id=None, sleep=tim
             counts['idleWaits'] += 1
             waited['idle'] += pause
             sleep(pause)
+        if ready is True:
+            purge_admissions(lane, monotonic=monotonic)
     except BaseException as caught:
         stopped, error = 'error', type(caught).__name__
         raise

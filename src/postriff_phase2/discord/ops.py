@@ -318,6 +318,37 @@ def read_servers(cur, now, context):
             'ratio': round(used / cap, 4) if cap else None}
 
 
+_RETENTION = """SELECT
+    (SELECT extract(epoch FROM min(reserved_at))::double precision FROM public.pr_discord_request_admissions
+      WHERE state IN ('observed', 'blocked') AND NOT is_publish),
+    (SELECT extract(epoch FROM min(reserved_at))::double precision FROM public.pr_discord_request_admissions
+      WHERE state IN ('observed', 'blocked') AND is_publish),
+    s.n_live_tup, s.n_dead_tup, s.n_tup_del,
+    extract(epoch FROM greatest(s.last_autovacuum, s.last_vacuum))::double precision
+FROM (SELECT 1) one LEFT JOIN pg_stat_user_tables s
+  ON s.schemaname = 'public' AND s.relname = 'pr_discord_request_admissions'"""
+
+
+def read_retention(cur, now, context):
+    """Retention of the coordinator's admissions (rate_limits.SharedPostgresBudget.purge_settled), from the partial index
+    of migration 142 and the table's statistics: no scan, no count(*). The two ages are of the oldest SETTLED row of each
+    kind; the purge keeps them under their retention, so an age far past it (an alert at three times) means the purge is
+    not running or cannot delete."""
+    from .rate_limits import SharedPostgresBudget
+    cur.execute(_RETENTION)
+    oldest_read, oldest_publication, live, dead, deleted, vacuumed = cur.fetchone()
+
+    def count(value):
+        return None if value is None else int(value)
+    return {'status': 'observed',
+            'retentionSeconds': {'reads': int(SharedPostgresBudget.PURGE_READ_SECONDS),
+                                 'publications': int(SharedPostgresBudget.PURGE_PUBLICATION_SECONDS)},
+            'oldestSettledReadAgeSeconds': _age(now, oldest_read),
+            'oldestSettledPublicationAgeSeconds': _age(now, oldest_publication),
+            'liveRowsEstimate': count(live), 'deadRowsEstimate': count(dead), 'rowsDeletedTotal': count(deleted),
+            'lastVacuumAgeSeconds': _age(now, vacuumed)}
+
+
 def read_platform(cur, now, context):
     cur.execute("SELECT to_regclass('public.pr_operational_snapshots') IS NOT NULL")
     if not cur.fetchone()[0]:
@@ -397,7 +428,8 @@ def snapshot(worker, values=None, *, clock=time.time, monotonic=time.monotonic):
             db_now = float(cur.fetchone()[2])
             result['observedAt'] = round(db_now, 3)
             for name, read in (('queue', read_queue), ('ledger', read_ledger), ('coordinator', read_coordinator),
-                               ('servers', read_servers), ('platform', read_platform), ('requests', read_requests)):
+                               ('retention', read_retention), ('servers', read_servers), ('platform', read_platform),
+                               ('requests', read_requests)):
                 found[name] = _savepoint(cur, errors, name, read, db_now, context)
     except Exception as error:
         errors.append({'section': 'database', 'error': type(error).__name__})
@@ -413,6 +445,7 @@ def snapshot(worker, values=None, *, clock=time.time, monotonic=time.monotonic):
     result['progress'] = progress
     coordinator = found.get('coordinator') or _unavailable('coordinator', errors)
     coordinator['traffic'] = ledger[1] if ledger else {'status': 'unavailable'}
+    coordinator['retention'] = found.get('retention') or _unavailable('retention', errors)
     result['coordinator'] = coordinator
     config['servers'] = found.get('servers') or _unavailable('servers', errors)
     result['platform'] = found.get('platform') or _unavailable('platform', errors)

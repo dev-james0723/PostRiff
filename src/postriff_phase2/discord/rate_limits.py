@@ -33,6 +33,9 @@ SENT_SLACK = 6.0
 # What a READ refused by an operator or coordinator hold is told to wait. Nothing was sent and nothing is lost by waiting: the
 # read-back of a post that was already created defers by it (and gets its check back) instead of failing five times.
 HOLD_WAIT_SECONDS = 300.0
+# The transaction-level advisory lock that serializes the retention purge (purge_settled): one deleter at a time, the others
+# return at once. Not a row or table lock; it conflicts with nothing the coordinator does.
+PURGE_LOCK = int.from_bytes(hashlib.sha256(b'postriff.discord.admissions.purge').digest()[:8], 'big') >> 1
 NICKNAME_TEMPLATE = 'PATCH:/guilds/{id}/members/@me'   # the one Discord write the sender-name feature makes
 NICKNAME_ENV = 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED'
 _ID = re.compile(r'^[0-9]{5,25}$')
@@ -362,6 +365,20 @@ class SharedPostgresBudget:
     SLOT_GUARD_SECONDS = 0.1
     # How many times a route's circuit after a 403 may double: circuit_seconds x 2**5 = 16 minutes at most.
     DENIAL_BACKOFF_STEPS = 5
+    # Retention (purge_settled). An admission the coordinator can no longer count is deleted: it counts for the application
+    # window only for one span after its wire time (a second and a tenth), and unresolved it counts for _horizon at most, and
+    # only while it is unresolved; a settled row counts for nothing. What is kept past that is the record. A read is kept an
+    # hour (the health payload's windows are at most 15 minutes, a sender-name claim ends 15 minutes after its permit), a
+    # publication a day: nothing reads a created post's row again after its approval's hour (the unique intent and binding
+    # indexes only have to outlast a stale worker, whose lease and approval are long over), the read-back that follows is a new
+    # row, and a day lets a person read yesterday's incident; each further day costs about a third of a gigabyte at 100 posts a
+    # minute (docs/w02/OPEN-QUESTIONS.md, Q16). An unresolved row (sent, uncertain, reserved, sealed) is never deleted: it is
+    # the evidence a person reviews.
+    PURGE_BATCH = 2000                    # rows one statement deletes at most
+    PURGE_ROUNDS = 3                      # rounds one call runs while they come back full
+    PURGE_READ_SECONDS = 3600.0           # a settled admission that is not a publication
+    PURGE_PUBLICATION_SECONDS = 86400.0   # a settled publication
+    PURGE_SETTLE_GRACE_SECONDS = 600.0    # a row settled more recently than this stays, however old its reservation
 
     def __init__(self, connection_factory, application_id, *, policy=None, **_compat):
         if not isinstance(application_id, str) or not _ID.fullmatch(application_id):
@@ -1351,6 +1368,72 @@ class SharedPostgresBudget:
         cur.execute(f"UPDATE {ADMISSIONS} SET state='observed',outcome_at=clock_timestamp(),status_code=NULL,rate_scope='unknown' WHERE id=%s::uuid AND state IN ('reserved','sent','uncertain') AND NOT is_publish AND method='PATCH' AND route_key=%s", (admission_id, _digest(NICKNAME_TEMPLATE)))
         if cur.rowcount != 1:
             raise RateCoordinatorUnavailable()
+
+    # --- retention -----------------------------------------------------------------------------------------------
+
+    # now(), not clock_timestamp(): a volatile function cannot bound an index scan, and then a call with nothing to delete would
+    # walk every young row of the partial index (66 ms at 50,000 rows) instead of none. The transaction is a few ms old.
+    _PURGE_SQL = """WITH doomed AS MATERIALIZED (
+            SELECT request_seq FROM {admissions}
+            WHERE application_key=%s AND {publication} AND state IN ('observed','blocked')
+              AND reserved_at<now()-make_interval(secs=>%s)
+              AND coalesce(outcome_at,reserved_at)<now()-make_interval(secs=>%s)
+            ORDER BY reserved_at LIMIT %s FOR UPDATE SKIP LOCKED),
+        gone AS (DELETE FROM {admissions} a USING doomed d
+                 WHERE a.request_seq=d.request_seq AND a.state IN ('observed','blocked') RETURNING 1)
+        SELECT count(*) FROM gone"""
+
+    def _purge_round(self):
+        """One transaction: (reads deleted, publications deleted), or None when another caller is purging."""
+        with self.connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT set_config('lock_timeout','1000ms',true),set_config('statement_timeout','5000ms',true),"
+                        "pg_try_advisory_xact_lock(%s)", (PURGE_LOCK,))
+            row = cur.fetchone()
+            if not row or row[2] is not True:
+                return None
+            counts = []
+            for publication, seconds in (('NOT is_publish', self.PURGE_READ_SECONDS), ('is_publish', self.PURGE_PUBLICATION_SECONDS)):
+                cur.execute(self._PURGE_SQL.format(admissions=ADMISSIONS, publication=publication),
+                            (self.application_key, seconds, self.PURGE_SETTLE_GRACE_SECONDS, self.PURGE_BATCH))
+                count = cur.fetchone()[0]
+                if type(count) is not int or count < 0:
+                    raise RateCoordinatorUnavailable()
+                counts.append(count)
+            return tuple(counts)
+
+    def purge_settled(self):
+        """Delete the settled admissions that are past their retention, a bounded batch at a time. Never raises.
+
+        Reads: `observed` or `blocked`, not a publication, reserved more than PURGE_READ_SECONDS ago. Publications: the same
+        past PURGE_PUBLICATION_SECONDS. A row that settled in the last PURGE_SETTLE_GRACE_SECONDS stays whatever its age (a
+        late reconciliation of an old row must find it again if its caller repeats). Nothing unresolved is touched, and no
+        scope row: windows, embargoes, circuits and holds are the coordinator's, not retention's. It reads and deletes only
+        this application's admissions, never takes the application row's lock (or any scope lock), skips rows another
+        transaction holds, and one purger runs at a time (a transaction-level advisory lock; the others return `busy`).
+        Idempotent. Each statement is bounded by PURGE_BATCH rows, 1 s of lock wait and 5 s of run time.
+
+        Returns {'status': 'ok' | 'busy' | 'denied' | 'timeout' | 'error', 'reads': n, 'publications': n, 'rounds': n,
+        'more': True when the last round came back full}. `denied` is a role without DELETE on the table. No database
+        message is returned or logged: the exception class only."""
+        outcome = {'status': 'ok', 'reads': 0, 'publications': 0, 'rounds': 0, 'more': False}
+        try:
+            for _ in range(self.PURGE_ROUNDS):
+                done = self._purge_round()
+                if done is None:
+                    outcome['status'] = 'busy' if outcome['rounds'] == 0 else outcome['status']
+                    outcome['more'] = outcome['rounds'] > 0 and outcome['more']
+                    break
+                outcome['rounds'] += 1
+                outcome['reads'] += done[0]
+                outcome['publications'] += done[1]
+                outcome['more'] = max(done) >= self.PURGE_BATCH
+                if not outcome['more']:
+                    break
+        except Exception as error:
+            code = getattr(error, 'sqlstate', None)
+            outcome['status'] = 'denied' if code == '42501' else 'timeout' if code in ('55P03', '57014') else 'error'
+            outcome['error'] = type(error).__name__
+        return outcome
 
     def report(self):
         """Internal bounded aggregates, not customer data or a capacity claim."""

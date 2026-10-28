@@ -76,6 +76,11 @@ class FakeDatabase:
     def execute(self, sql, params=None):
         self.statements.append(sql)
         self.result = None
+        if 'pg_stat_user_tables' in sql:   # the retention section: the two oldest settled rows and the table's statistics
+            if 'retention' in self.fail:
+                raise RuntimeError('synthetic failure')
+            self.result = [(NOW - 5 * 3600, NOW - 60 * 3600, 5400, 12, 880, NOW - 120)]
+            return
         for name, marker in (('queue', 'pr_discord_worker_projection'), ('ledger', 'pr_discord_request_admissions'),
                              ('coordinator', 'pr_discord_rate_state'), ('servers', 'pr_encrypted_credentials'),
                              ('platform', 'FROM public.pr_operational_snapshots'), ('requests', 'FROM public.pr_request_metrics')):
@@ -262,6 +267,10 @@ class Payload(unittest.TestCase):
         self.assertEqual(payload['coordinator']['kinds'], {'route': {'holds': 0, 'blocks': 1, 'circuits': 3,
                                                                      'persistentCircuits': 2, 'openOver5Min': 0}})
         self.assertEqual(payload['coordinator']['traffic']['admissions60s'], 80)
+        self.assertEqual(payload['coordinator']['retention'], {
+            'status': 'observed', 'retentionSeconds': {'reads': 3600, 'publications': 86400},
+            'oldestSettledReadAgeSeconds': 18000.0, 'oldestSettledPublicationAgeSeconds': 216000.0,
+            'liveRowsEstimate': 5400, 'deadRowsEstimate': 12, 'rowsDeletedTotal': 880, 'lastVacuumAgeSeconds': 120.0})
         self.assertEqual(payload['security']['responses4xx'], {'status': 'observed', 'windowSeconds': 900,
                                                                'workspace': 7, 'connections': 5, 'discord': 3, 'other': 1})
         self.assertEqual(payload['platform']['queueDelayed'], 4)
@@ -279,6 +288,14 @@ class Payload(unittest.TestCase):
         self.assertEqual(payload['queue']['status'], 'observed')
         self.assertEqual(payload['progress']['status'], 'partial')
         self.assertEqual(payload['errors'], [{'section': 'ledger', 'error': 'RuntimeError'}])
+
+    def test_a_failing_retention_section_answers_unavailable_alone(self):
+        adapter = provider()
+        payload, _ = self.snapshot(adapter, FakeDatabase(adapter, fail={'retention'}))
+        self.assertEqual(payload['coordinator']['retention'], {'status': 'unavailable', 'error': 'RuntimeError'})
+        self.assertEqual(payload['coordinator']['traffic']['admissions60s'], 80, 'the traffic section is unaffected')
+        self.assertEqual(payload['deliveries']['status'], 'observed')
+        self.assertEqual(payload['errors'], [{'section': 'retention', 'error': 'RuntimeError'}])
 
     def test_an_unreachable_database_still_answers_the_process_view(self):
         adapter = provider()
