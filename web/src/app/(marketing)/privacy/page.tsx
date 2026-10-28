@@ -89,6 +89,11 @@ export default function PrivacyPage() {
         Rafii connects to LinkedIn, Threads, Instagram and other platforms only through your own authorisation, requesting the minimum permissions for the capability you enable. Data received from a platform (account identity, post ids, metrics, comments) is used solely to provide the service to you — showing your results, letting you reply, and reconciling publications. It is not sold or combined across customers. Service providers process data needed to deliver enabled features, as described in the AI processing and Subprocessors sections. When you disconnect an account, the stored token is wiped and revoked with the platform where supported, and platform data for that account stops being collected. Your use of each platform remains subject to that platform’s own terms and privacy policy.
       </p>
 
+      <h3 id='bluesky'>Bluesky</h3>
+      <p>
+        When you connect a Bluesky account, you sign in on your own Bluesky server, not on Rafii, and Rafii never sees your password. Rafii stores your account identifier (DID), your handle, and an access and refresh grant with its cryptographic proof key, encrypted with a key held only on our servers. An identity-only connection lets Rafii confirm which account you own and nothing else. If you separately grant publishing, Rafii can create posts and upload images to that account, and only after you approve each exact post; Rafii does not automate follows, likes, replies or other interactions. Rafii does not read your direct messages, likes, follows or followers. When you disconnect, Rafii asks your Bluesky server to revoke the grant and stops using it; deleting your workspace deletes these records.
+      </p>
+
       <h3 id='youtube'>YouTube</h3>
       <p>
         Rafii uses YouTube API Services for the creator features you enable. Connect through Google's authorization screen and select the intended channel. Rafii manages the application's Google configuration; you do not need your own Google Cloud project or OAuth client credentials. Read-only connection does not enable publishing.

@@ -173,7 +173,8 @@ export const channels: Channel[] = [
     region: 'global',
     notes: [
       hostedTesting,
-      'You sign in on your own Bluesky server. Rafii never sees your password.'
+      'You sign in on your own Bluesky server. Rafii never sees your password.',
+      'Connecting confirms your identity only. Rafii asks again, and you approve each post, before anything is published.'
     ]
   },
   {

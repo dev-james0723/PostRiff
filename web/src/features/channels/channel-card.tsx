@@ -247,6 +247,9 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const expired = !renewable && typeof channel.expiresAt === 'number' && channel.expiresAt <= nowSeconds();
   const sentence = attentionSentence(channel, undefined, held);
   const identityVerifiedAt = channel.capabilities.identity?.verifiedAt ?? null;
+  // Matches BlueskyProvider.has_publish_scopes: a granular grant needs both post creation and image upload.
+  const blueskyHasPostGrant = channel.scopes.includes('transition:generic') ||
+    (channel.scopes.includes('repo:app.bsky.feed.post?action=create') && channel.scopes.includes('blob:image/*'));
   const activityTotal = activity ? activity.scheduled + activity.held + activity.published : 0;
 
   async function refresh() {
@@ -364,6 +367,24 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         />
       )}
 
+      {channel.platform === 'Bluesky' && channel.connectionState === 'read_verified' && !blueskyHasPostGrant && (
+        <StateMessage
+          kind='permission'
+          layout='inline'
+          title='Bluesky identity connected — publishing permission required'
+          description='Rafii has confirmed this Bluesky identity, but it cannot publish posts with an identity-only grant.'
+          action={canManage && provider?.connectReady ? (
+            <Button variant='glass' size='control' onClick={() => onReconnect({
+              providerId: provider.id,
+              capability: 'publish',
+              reconnect: { channelId: channel.id, account: channel.account }
+            })}>
+              Grant publishing…
+            </Button>
+          ) : undefined}
+          className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3'
+        />
+      )}
       {!disconnected && <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />}
       {!disconnected && channel.socialReadiness && (
         <ul className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Permissions for this account'>

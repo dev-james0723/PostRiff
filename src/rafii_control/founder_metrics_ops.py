@@ -723,7 +723,7 @@ def project_connections(channels, levels, now, connection_state, youtube_status=
     `youtube_status` ({(workspace, connection): vault facts} from channels.youtube_credential_status) overlays the same
     secret-free vault facts the Channels card uses, so an expired access token with a working refresh grant is not reported
     as an expired connection, and a retained but disabled refresh grant is client_binding_missing."""
-    from postriff_phase2.channels import with_youtube_credential_status
+    from postriff_phase2.channels import RENEWING_PROVIDERS, with_youtube_credential_status
     rows = {}
     for workspace_id, connection_id, platform, configured, revoked, identity, has_account, expires, scopes, capability_verified, verified_at in channels:
         if not connection_id or not CONNECTION_ID.fullmatch(str(connection_id)):
@@ -733,7 +733,7 @@ def project_connections(channels, levels, now, connection_state, youtube_status=
                    'expiresAt': expires_at if expires_at is not None else 0, 'scopes': bool(scopes), 'capabilityVerified': capability_verified}
         if youtube_status is not None:
             channel = with_youtube_credential_status(channel, youtube_status.get((workspace_id, connection_id)))
-            if platform == 'YouTube' and channel.get('accessTokenExpiresAt') is not None:
+            if platform in RENEWING_PROVIDERS and channel.get('accessTokenExpiresAt') is not None:
                 expires_at = float(channel['accessTokenExpiresAt'])   # the vault deadline the classification used, not stale channel JSON
         raw = connection_state(channel, now)
         if raw == 'disconnected':
@@ -793,7 +793,7 @@ def connection_health_stage(fstore, service, values, now):
                     for workspace_id, connection_id, capability, level in cur.fetchall():
                         levels.setdefault((workspace_id, connection_id), {})[capability] = level
                 youtube, overlay = None, 'not_needed'
-                youtube_workspaces = sorted({row[0] for row in channels if row[2] == 'YouTube'})
+                youtube_workspaces = sorted({row[0] for row in channels if row[2] in ('YouTube', 'Bluesky')})
                 if youtube_workspaces and _table_exists(cur, 'public.pr_encrypted_credentials'):
                     # Booleans, an expiry and the revoked flag reach Python; ciphertext presence is tested in SQL only. A savepoint keeps
                     # this optional overlay from ever aborting the refresh: on any error the projection falls back to channel state.
