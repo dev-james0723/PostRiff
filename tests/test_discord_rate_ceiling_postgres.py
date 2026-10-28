@@ -251,17 +251,17 @@ class ExactCeilingOnPostgres(unittest.TestCase):
     def test_the_owners_cap_holds_with_many_threads_and_the_mock_sees_no_more(self):
         """cap 25 across 32 threads, each answered after 50 ms. The coordinator's guarantee is strict: no closed second of wire
         times holds more than 25. The mock's own trailing second is the arrival side, which the owner's D-16 reads as reported
-        and not failed (Discord's real limit is 50): it stays within two requests of the cap and almost never above it. (Asserted
-        strictly it failed once in a run on a loaded shared box, when a thread was descheduled for more than the 50 ms the guard
+        and not failed (Discord's real limit is 50): it is bounded by what a stall of one second can bunch, twice the cap. (Asserted
+        tighter it failed on a loaded shared box in two CI runs, when threads were descheduled for more than the 50 ms the guard
         absorbs between a request's wire time and its arrival; tests/discord_ceiling_probe.py reports the distribution.)"""
         stack, counts, stamps, rate = self.run_hammer(25, .05, workers=32, seconds=8)
         self.assertEqual(counts['other'], [])
         self.assertLessEqual(busiest_closed(stamps, 1.0), 25)
-        # The arrival side is reported, not failed (D-16): on a loaded shared runner a descheduled thread can arrive more than the
-        # guard's 50 ms after its wire time (CI run 904: 7 of about 200 requests, peak 27). What stays asserted is that the
-        # stamps never exceed 25 (above), that no arrival second goes beyond 27 (below) and that overshoots stay a small share.
-        self.assertLessEqual(stack.wire.over_ceiling, max(10, len(stamps) // 10), 'a small share of the trailing seconds above 25 at the mock')
-        self.assertLessEqual(stack.wire.peak_second, 27)
+        # The arrival side is reported, not failed (D-16): on a loaded shared runner descheduled threads arrive more than the
+        # guard's 50 ms after their wire times (CI run 904: peak 27; run 906: peak 32; the stamps stayed at 25 in both). The
+        # coordinator cannot prevent that, so what stays asserted is the stamps (above) and that no arrival second holds more than
+        # a one-second stall bunches: twice the cap, which is also Discord's own global limit of 50 a second.
+        self.assertLessEqual(stack.wire.peak_second, 2 * 25, 'at the mock, within a one-second stall')
         self.assertEqual(stack.wire.route429, 0)
 
     def mixed_credentials(self, **policy):

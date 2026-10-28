@@ -100,7 +100,7 @@ class LaneBookingOnPostgres(unittest.TestCase):
         counters = {key: sum(r['counters'][key] for r in results) for key in ('rateDelayed', 'permitWaits', 'bookedWaits', 'bookedSeconds')}
         self.assertEqual(self.wire.route429, 0)
         self.assertLessEqual(busiest_closed(self.stamps(), 1.0), capacity, 'the ceiling on the database clock')
-        self.assertLessEqual(self.wire.peak_second, capacity + 2, 'and at the mock, within the headroom\'s room for a stalled box')
+        self.assertLessEqual(self.wire.peak_second, 2 * capacity, 'and at the mock, within what a one-second stall of a shared box bunches')
         return counters
 
     def test_twelve_loops_at_a_full_window_make_about_one_pass_per_post_and_never_post_twice(self):
