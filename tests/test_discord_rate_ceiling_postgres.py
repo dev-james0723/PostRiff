@@ -618,7 +618,14 @@ class ExactCeilingOnPostgres(unittest.TestCase):
             with self.assertRaises(RateDelayed) as caught:
                 self.answered(stack, '/guilds/740000000000000900')
             self.assertEqual(caught.exception.rate_scope_kind, 'application')
-            time.sleep(1 + 1.5 + .3)
+            # Past the span (1.05 s) every one of them is older than a window, and only the SQL clause that keeps an unanswered request
+            # (sent or uncertain, for the window plus the margin) still counts it: the independent review's mutant S1, which turns that
+            # clause off, survived every test that looked only at the start and at the end.
+            time.sleep(1.3)
+            with self.assertRaises(RateDelayed) as middle:
+                self.answered(stack, '/guilds/740000000000000901')
+            self.assertEqual(middle.exception.rate_scope_kind, 'application', 'still counted: a request never answered may still reach Discord')
+            time.sleep(1.5 + .3 - 1.3 + 1)
             free = 0
             try:
                 while free < 20:

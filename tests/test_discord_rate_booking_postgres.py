@@ -11,6 +11,7 @@ import secrets
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 import psycopg
 
@@ -154,6 +155,38 @@ class BookingOnPostgres(unittest.TestCase):
         starved = outcomes[False]['creates']
         self.assertGreaterEqual(fair, 8, 'four creators took their share of a window the other twenty kept full')
         self.assertGreater(fair, 1.5 * starved, 'booked creates against creates left to ask for a slot now: starved (%d against %d)' % (fair, starved))
+
+    def test_a_permit_used_inside_a_later_booked_burst_keeps_every_closed_second_at_the_cap(self):
+        """A permit reserved before a booked burst and used inside the burst's last window may be used at any later time, so a booking
+        counts it in every window (the SQL that lists the permits still to be used, `unused` in _window_state). The independent
+        review's mutant S2, which turns that list off, survived every test: with it four wires fell into one closed second at a cap of
+        three. Cap 3, window 1, no guard and no reserve, the arithmetic at its plainest; the real clock."""
+        with patch.object(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', 0.0), patch.object(SharedPostgresBudget, 'IMMEDIATE_RESERVE', 0):
+            stack = self.stack(capacity=3, latency=0, spread=0, tenants=6, unknown_window_seconds=1)
+            began = time.time()
+            path = '/guilds/%s' % stack.tenants[0].guild
+            permit = stack.limiter.reserve('GET', path, identity=stack.identity)              # unused; its wire time is now
+            time.sleep(.15)
+            thread_errors = []
+
+            def book(number):
+                try:
+                    answered = stack.limiter.reserve_read('GET', '/guilds/%d' % (7600000000000 + number), identity=stack.identity,
+                                                          book_ahead=1.0)
+                    stack.limiter.observe(answered, OK)
+                except RateDelayed:
+                    pass
+                except Exception as error:  # noqa: BLE001
+                    thread_errors.append(repr(error))
+            threads = [threading.Thread(target=book, args=(number,)) for number in range(5)]
+            for thread in threads:
+                thread.start()
+            time.sleep(max(0.0, began + 1.05 - time.time()))
+            stack.limiter.consume(permit, 'GET', path)                                        # used inside the burst's last window
+            for thread in threads:
+                thread.join()
+            self.assertEqual(thread_errors, [])
+            self.assertLessEqual(busiest_closed(stack.stamps(), 1.0), 3)
 
     # --- what happens while a booked read waits ----------------------------------------------------------------------------
 

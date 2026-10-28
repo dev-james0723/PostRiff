@@ -319,7 +319,14 @@ What to know before relying on it.
   bound in code]. The approval, the lease and the fences are rechecked at the seal as before.
 - **One slot of every window is kept for callers that cannot wait** (`IMMEDIATE_RESERVE`): a web request never finds the window
   full of bookings. It costs 1 of 25 at saturation (4 percent). With 5 web reads a second [simulated], 84 percent of them were
-  admitted while the lane polled and 99 to 100 percent are with booking (their 90th-percentile latency 0.36 s to 0.55 s).
+  admitted while the lane polled and 99 to 100 percent are with booking (their 90th-percentile latency 0.36 s to 0.55 s). That
+  holds for a web rate far below the budget. The independent review measured what the reserve is: a guaranteed minimum, not a
+  share. While the lane saturates the window, all web traffic together gets about reserve / 1.05 admissions a second, so four web
+  threads asking about 20 times a second were admitted 40 percent of the time at reserve 1, 74 percent at 2 and 88 percent at 4,
+  and a call that needs several reads (the destination picker and the verification make 4 to 6) completed 4 to 10 percent of the
+  time under heavy demand and 33 percent under light demand at reserve 1 (one 5-read call needs 5 of the 0.9 admissions a
+  second). A reserve of 3 costs the lane about 4 percent of its ceiling per slot, and the loops, not the window, bind the lane at
+  about 21.8 a second, so 3 would bind at 20.95.
 - **What can happen during a wait.** A process that dies leaves the booked read stored `sent` with a wire time ahead: it is never
   sent, keeps its slot for the window plus 30 s (31 s) and then stops counting, at most one per shard (12 of 25 at the very worst).
   A hold, an embargo or an open circuit that begins during a wait of 25 ms or more is found by the read's last look just before it

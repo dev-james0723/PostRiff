@@ -614,6 +614,24 @@ platform before any claim is made to customers.
   `_invalidate_owned`'s filter (which also leaves out jobs bound to another deployment), so it can still hold a
   scheduled, approved or claimed Discord job whose approval, channel or entitlement changed (it never claims or
   sends one). The same in `2a5a523d`; W-02 changes nothing about it [reasoned].
+- **What the independent review of the coordinator (scope B, at 02fd679b) left as limits, no code.** (G2E-B-03) A minute worker
+  built without the worker flag, with migration 128 installed, aborts every Discord claim with a `CheckViolation` ("Discord requires
+  the current fenced worker protocol before dispatch."): the posts stay scheduled and nothing is sent, not "held". The reactive guard
+  is not built; the preflight `scripts/check_postriff_hosted_preflight.py validate_discord_worker_protocol` refuses such a build
+  before it is promoted (K2). (G2E-B-10) A person's cancel, hold or revoke that lands in the window between the seal of a post's intent
+  and its POST leaves the post `uncertain` (the intent is kept; the POST may or may not have been sent) and a re-approval is
+  refused with a 409 until a person reconciles it. That is the worker's rule and the coordinator does not change it. The
+  coordinator's own hold (the runbook's UPDATE) is another matter: `consume()` looks at it just before the permit is marked sent
+  (G2E-B-16, "Consume looks too"), so what is left of it is the few milliseconds between that look and the wire. (G2E-B-14) `route_identity` accepts a path
+  with an embedded newline and maps it to the normal template (40 of 200,000 mutated paths in the review's fuzz); the hostile
+  string never reaches Discord as it is, and the route key is the template's. (G2E-B-15) A single 401 on the bot token holds the
+  credential row (by design: the fingerprint stays blocked), and the runbook's hold UPDATE changes nothing while the application
+  row does not exist yet: the runbook's fallback INSERT (`HOLD_INSERT`, docs/ops/PHONE-RUNBOOK.md) creates it held. (LANE-3) A
+  workspace with thousands of queued Discord posts makes the create-to-consume chain long (about 1.9 ms per queued post, 28
+  statements, three connections): 300 posts take about 0.6 s against the 5-second permit; the per-workspace ceiling of 300 due
+  Discord posts (the owner's D-4, on the G2a branch) is what closes it. (D-16) The guard reads "25 a second" as the coordinator's
+  own admission line: never more than 25 wire stamps in any sliding second, exact and pinned; what arrives at Discord is reported
+  (the probe's peak and the share of arrivals above 25), not failed, and stays far under Discord's real 50.
 - A coordinator that failed to record an outcome rests for 45 seconds in that process and then asks again; one set at setup
   because the reviewed policy does not parse stays degraded until the runtime attaches a coordinator (a configuration to
   restore). If every process that runs lane loops is degraded, every loop stops and every minute cron still leaves Discord to the
@@ -733,7 +751,10 @@ there is room `reset_at` is the write's own time, nothing to wait for. `lane.out
 busy lane keeps the window full of wire times, and an earlier version, which counted only those up to now, read 0 in 21 of 35
 busy health readings of the first hosted run with the horizon never full. The twelve loops hold at most twelve bookings at once
 of the 24 the horizon takes, so a lane that fills the budget reads about 11 [from the count], and 0 means callers are being
-refused; a stored 0 whose reset has passed is old. With `BOOK_AHEAD_SECONDS` 0 the row is what it has always been.
+refused; a stored 0 whose reset has passed is old. The signals that callers are being refused are `remaining` 0 with `reset` ahead
+(as of the last admission), `coordinator.booking.horizonSeconds` near `bookAheadSeconds` in the payload, and, in the process that
+was refused, `booking_stats()['horizonRefusals']` (a count; not exported to the payload or the lane line). With
+`BOOK_AHEAD_SECONDS` 0 the row is what it has always been.
 
 *The gate.* A booked read that slept at least 25 ms (`BOOK_GATE_MIN_SECONDS`) is looked at once more just before it is sent:
 one short statement of its own, with no application or scope lock, closes it `blocked` if any scope it was admitted under now
