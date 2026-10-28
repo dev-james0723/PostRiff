@@ -1,3 +1,4 @@
+<!-- SUPERSEDED COPY (2026-10-28 16:40Z): the maintained inventory is docs/CUSTOMER-IMPACT-INVENTORY.md on claude/discord-rc2-fixes-20261023 (head 1ae232df): UI-8 and UI-21 are stripped there (owner reply 17), the counts for sections 2 to 8 are 7 / 17 / 58 / 3, and UI-21 carries a correction. Do not read the counts and verdicts below as current. -->
 <!-- Copied into the ledger on 2026-10-23 from branch claude/discord-impact-20261023 @9f1946cf (the tools, tests and route list stay on that branch). FB-1 and CH-1 are fixed on claude/discord-rc2-fixes-20261023 (9c044aa7, 4d41a86a); the other findings are tracked in RC2-EVIDENCE-PACKET.md. -->
 
 # Customer impact inventory: Discord launch candidate versus the live build
