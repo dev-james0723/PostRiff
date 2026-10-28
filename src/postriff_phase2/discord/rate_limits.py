@@ -169,6 +169,11 @@ def route_identity(method, path):
         'GET:/guilds/{id}/members/{id}', NICKNAME_TEMPLATE}
     if template not in allowed:
         raise RateCoordinatorUnavailable()
+    if template == NICKNAME_TEMPLATE and os.environ.get(NICKNAME_ENV) != 'true':
+        # The write exists only while its capability is on, read now (no import-time read, no cache, only the exact
+        # string `true`). This gates NEW admissions only: observe, abandon and reconcile act on admissions that already
+        # exist, and turning the capability off must not strand them.
+        raise RateCoordinatorUnavailable()
     return template, _digest(major)
 
 

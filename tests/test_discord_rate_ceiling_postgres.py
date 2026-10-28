@@ -12,6 +12,7 @@ Runs where PostgreSQL server binaries are named by POSTRIFF_PG_BIN; never reads 
 """
 import hashlib
 import json
+import os
 import random
 import secrets
 import threading
@@ -428,6 +429,10 @@ class ExactCeilingOnPostgres(unittest.TestCase):
         good (the credential digest differs); by id it settles the row: `observed`, no status invented (NULL), scope
         `unknown`. The reader in ops.py and report() must not trip over a settled row without a status."""
         from postriff_phase2.discord import ops
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}):
+            self.nickname_case(ops)
+
+    def nickname_case(self, ops):
         stack = Stack(self.cluster, capacity=25)
         guild = '740000000000009001'
         path = '/guilds/%s/members/@me' % guild
@@ -468,11 +473,12 @@ class ExactCeilingOnPostgres(unittest.TestCase):
         stack = Stack(self.cluster, capacity=25)
         circuit = json.loads(stack.policy)['circuit_seconds']
         path = '/guilds/740000000000009100/members/@me'
-        permit = stack.limiter.reserve('PATCH', path, identity=stack.identity)
-        stack.limiter.consume(permit, 'PATCH', path)
-        stack.limiter.observe(permit, {'status': 403, 'headers': {}})
-        with self.assertRaises(RateDelayed) as caught:
-            stack.limiter.reserve('PATCH', path, identity=stack.identity)
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'true'}):
+            permit = stack.limiter.reserve('PATCH', path, identity=stack.identity)
+            stack.limiter.consume(permit, 'PATCH', path)
+            stack.limiter.observe(permit, {'status': 403, 'headers': {}})
+            with self.assertRaises(RateDelayed) as caught:
+                stack.limiter.reserve('PATCH', path, identity=stack.identity)
         self.assertEqual(caught.exception.rate_scope_kind, 'embargo')
         self.assertLessEqual(caught.exception.retry_after_seconds, circuit + .5, 'a bounded circuit, not the policy lifetime')
         self.assertGreater(caught.exception.retry_after_seconds, circuit - 5)

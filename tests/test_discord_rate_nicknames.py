@@ -29,6 +29,31 @@ def path_of(guild=GUILD):
     return '/guilds/%s/members/@me' % guild
 
 
+class Gate(unittest.TestCase):
+    def test_the_nickname_route_is_admitted_only_while_its_capability_is_exactly_true(self):
+        for value in (None, '', 'false', '0', '1', 'True', 'TRUE', ' true', 'true ', 'yes', 'on'):
+            environment = {key: v for key, v in os.environ.items() if key != NICKNAME_ENV}
+            if value is not None:
+                environment[NICKNAME_ENV] = value
+            with self.subTest(value=value), patch.dict(os.environ, environment, clear=True), self.assertRaises(RateCoordinatorUnavailable):
+                route_identity('PATCH', path_of())
+        with patch.dict(os.environ, {NICKNAME_ENV: 'true'}):
+            self.assertEqual(route_identity('PATCH', path_of())[0], 'PATCH:/guilds/{id}/members/@me')
+            route_identity('GET', '/guilds/%s/members/%s' % (GUILD, A))
+        ledger = MemoryLedger(now=1000)
+        budget = SharedPostgresBudget(ledger.connection, APP, policy=synthetic_policy())
+        identity = RequestIdentity.make(APP, 'bot', 'gate-bot-token')
+        with patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != NICKNAME_ENV}, clear=True):
+            with self.assertRaises(RateCoordinatorUnavailable):
+                budget.reserve('PATCH', path_of(), identity=identity)
+        self.assertEqual((ledger.admissions, ledger.states), ({}, {}), 'a refused reserve leaves no admission and no state')
+        with patch.dict(os.environ, {NICKNAME_ENV: 'false'}):   # no other route depends on it
+            route_identity('GET', '/guilds/%s/members/%s' % (GUILD, A))
+            route_identity('POST', '/channels/%s/messages' % A)
+            with self.assertRaises(RateCoordinatorUnavailable):
+                route_identity('PATCH', '/guilds/%s/members/%s' % (GUILD, A))   # and the allowlist is exact: only `@me`
+
+
 class Admissions(unittest.TestCase):
     def setUp(self):
         patcher = patch.dict(os.environ, {NICKNAME_ENV: 'true'})
@@ -228,6 +253,19 @@ class Admissions(unittest.TestCase):
         self.age(200)
         self.s.reconcile_nickname(self.db, orphan, GUILD)
         self.s.reconcile_nickname_by_id(self.db, sent.id, B)
+        self.assertEqual([self.state(orphan), self.state(sent)], ['observed', 'observed'])
+
+
+    def test_turning_the_capability_off_strands_no_admission_that_exists(self):
+        orphan, sent = self.lost(guild=GUILD), self.admit(guild=B)
+        self.age(200)
+        with patch.dict(os.environ, {NICKNAME_ENV: 'false'}):
+            with self.assertRaises(RateCoordinatorUnavailable):
+                self.s.reserve('PATCH', path_of(), identity=self.identity)          # no new admission
+            self.s.observe(sent, OK)                                                # but the existing ones settle
+            self.s.reconcile_nickname(self.db, orphan, GUILD)
+            self.s.reconcile_nickname_by_id(self.db, orphan.id, GUILD)
+            self.s.abandon_unsent_nickname(sent)
         self.assertEqual([self.state(orphan), self.state(sent)], ['observed', 'observed'])
 
 
