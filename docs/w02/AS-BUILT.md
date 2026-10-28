@@ -789,7 +789,9 @@ count and nothing else:
   minute in a process (`PURGE_PERIOD_SECONDS`), no flag. One INFO line `discord.lane.retention` when it deleted something, one
   WARNING when it could not (`denied`, `timeout`, `error`), counts and the status only. It cannot stop a post: a failure is
   swallowed.
-- **Migration 142** (written, not applied, with its rollback): `pr_discord_admission_purge (is_publish, reserved_at) WHERE state IN
+- **Migration 142** (written, not applied; its rollback is `migrations/postriff/rollback/142_discord_admission_retention_index.sql`,
+  outside the numbered sequence because `scripts/postriff_migrate.py` takes every `[0-9][0-9][0-9]_*.sql` of the folder as a migration):
+  `pr_discord_admission_purge (is_publish, reserved_at) WHERE state IN
   ('observed','blocked')`, 32 bytes a row, the index the purge walks. Without it the purge works and scans.
 - **Health payload.** `coordinator.retention`: `status`, `retentionSeconds` (`reads`, `publications`), `oldestSettledReadAgeSeconds`,
   `oldestSettledPublicationAgeSeconds` (three times the retention means the purge is not running or cannot delete),

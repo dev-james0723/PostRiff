@@ -18,6 +18,9 @@
 --       (is_publish, reserved_at) WHERE state IN ('observed','blocked');
 -- The purge works without the index (it scans), so applying this file late loses nothing but speed.
 --
+-- Rollback: migrations/postriff/rollback/142_discord_admission_retention_index.sql. It is not beside this file on purpose:
+-- scripts/postriff_migrate.py reads every [0-9][0-9][0-9]_*.sql of this folder as a migration and refuses two with one number.
+--
 -- Privilege. The purge needs DELETE on the table for the role the application connects as. Migrations 124 and 125 give
 -- service_role SELECT, INSERT and UPDATE only, and this file changes no grant. If the application connects as a role
 -- without DELETE the purge reports 'denied' (health payload: oldestSettledReadAgeSeconds keeps growing) and deletes nothing.

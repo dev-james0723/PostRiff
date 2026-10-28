@@ -29,7 +29,7 @@ from postriff_phase2.discord.rate_limits import RateDelayed, RequestIdentity, Sh
 
 ADMISSIONS = 'public.pr_discord_request_admissions'
 MIGRATION = F.ROOT / 'migrations/postriff/142_discord_admission_retention_index.sql'
-ROLLBACK = F.ROOT / 'migrations/postriff/142_discord_admission_retention_index.rollback.sql'
+ROLLBACK = F.ROOT / 'migrations/postriff/rollback/142_discord_admission_retention_index.sql'
 HOUR, DAY = 3600, 86400
 ROWS = int(os.environ.get('POSTRIFF_RETENTION_ROWS', '200000'))
 

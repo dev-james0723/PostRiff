@@ -137,9 +137,21 @@ class Migration(unittest.TestCase):
         with open('%s/migrations/postriff/%s' % (ROOT, name)) as handle:
             return handle.read()
 
+    def test_the_rollback_is_outside_the_numbered_sequence_the_migration_runner_reads(self):
+        """scripts/postriff_migrate.py takes every [0-9][0-9][0-9]_*.sql of the folder as a migration and refuses two with one
+        number, so a rollback named like the migration made migrations() raise for every plan and every apply (found on the
+        first hosted run: tests.test_migration_numbers failed). It lives in its own folder."""
+        import sys
+        sys.path.insert(0, '%s/scripts' % ROOT)
+        import postriff_migrate
+        names = [path.name for path in postriff_migrate.migrations()]
+        self.assertEqual([name for name in names if name.startswith('142_')], ['142_discord_admission_retention_index.sql'])
+        self.assertFalse([name for name in names if 'rollback' in name])
+        self.assertTrue(self.read('rollback/142_discord_admission_retention_index.sql').startswith('-- Candidate only. Rollback of'))
+
     def test_the_index_is_the_one_the_purge_walks_and_the_rollback_drops_it(self):
         up = self.read('142_discord_admission_retention_index.sql')
-        down = self.read('142_discord_admission_retention_index.rollback.sql')
+        down = self.read('rollback/142_discord_admission_retention_index.sql')
         statement = re.sub(r'\s+', ' ', re.search(r'CREATE INDEX IF NOT EXISTS.*?;', up, re.S).group(0))
         self.assertEqual(statement, "CREATE INDEX IF NOT EXISTS pr_discord_admission_purge ON public.pr_discord_request_admissions"
                                     "(is_publish,reserved_at) WHERE state IN ('observed','blocked');")
