@@ -273,7 +273,12 @@ class PostgresWorker:
                 self.discord_stats['renewals'] += 1
             return allowed
 
-    def release_discord_unsent(self, claimed, *, reason='shutdown', retry_after_seconds=None, rate_cause=None):
+    def _discord_rate_released(self, state, job, claimed, now, *, scope, cause):
+        """Called in a release's own transaction, after the post went back to scheduled for a rate wait and before the
+        document is written, with the denial's scope kind and cause. Nothing here: the lane's worker decides whether
+        the post keeps its queue position (discord/lane.py)."""
+
+    def release_discord_unsent(self, claimed, *, reason='shutdown', retry_after_seconds=None, rate_cause=None, rate_scope=None):
         """Only the current owner can release a proven pre-intent operation."""
         with self.connection_factory() as db, db.cursor() as cur:
             cur.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (claimed['workspaceId'],))
@@ -297,6 +302,8 @@ class PostgresWorker:
             if job.get('cancelRequested'):
                 status = 'canceled'
             self._event(job, status, 'Proven unsent Discord operation released: ' + reason, at=now)
+            if reason == 'rate_delayed':
+                self._discord_rate_released(state, job, claimed, now, scope=rate_scope, cause=rate_cause)
             cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
                         (json.dumps(state), claimed['workspaceId'], revision))
             if cur.rowcount != 1:
@@ -1039,6 +1046,7 @@ class PostgresWorker:
                                 if error.rate_cause == 'permit_blocked' else
                                 'Discord rate permit expired before intent; frozen approval waits without a POST', at=now)
                     self.discord_stats['rateDelays'] += 1
+                    self._discord_rate_released(state, job, claimed, now, scope=error.rate_scope_kind, cause=error.rate_cause)
                 else:
                     self._event(job,'held','Discord pre-intent permit recovery limit reached; nothing was posted',at=now)
                     job['leaseOwner'],job['leaseUntil'] = None,0
@@ -1145,6 +1153,7 @@ class PostgresWorker:
             self._event(job, status, ('A Discord embargo blocked the sealed permit before it was consumed; no POST was '
                                       'started; intent archived before safe rate wait') if blocked else
                         'Expired Discord permit was never consumed; intent archived before safe rate wait', at=now)
+            self._discord_rate_released(state, job, claimed, now, scope=error.rate_scope_kind, cause=error.rate_cause)
             cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
                 (json.dumps(state), claimed['workspaceId'], revision))
             if cur.rowcount != 1:
@@ -1236,7 +1245,15 @@ class PostgresWorker:
                     self.release_discord_unsent(
                         claimed, reason='rate_delayed',
                         retry_after_seconds=getattr(error, 'retry_after_seconds', 300),
-                        rate_cause=getattr(error,'rate_cause',None))
+                        rate_cause=getattr(error,'rate_cause',None), rate_scope=getattr(error,'rate_scope_kind',None))
+                    return True
+                if managed and getattr(error, 'code', None) == 'discord_paused':
+                    # Discord is paused (execution disabled, authorization or rate limits off): a wait, not a verdict
+                    # about this post or its destination. Released unsent, asked again later; never held, never
+                    # demoted. A revoked connection or a missing permission is another error and still holds.
+                    self.release_discord_unsent(claimed, reason='rate_delayed',
+                                                retry_after_seconds=discord_worker.PAUSED_RETRY_SECONDS,
+                                                rate_cause='discord_paused')
                     return True
                 if managed and discord_worker.transient_preflight(error):
                     self.release_discord_unsent(claimed, reason='preflight_transient')
@@ -1363,13 +1380,17 @@ class PostgresWorker:
         """Server-only opt-in lane inside the existing scheduler, no other IO."""
         return self._tick(max_jobs, max_seconds, discord_only=True)
 
-    def discord_report(self):
-        """Internal aggregates only; bounded sample, never a tenant-facing list."""
+    def discord_report(self, split=False):
+        """Internal aggregates only; bounded sample, never a tenant-facing list.
+
+        split=True (the lane-owned minute tick only; the frozen tick keeps the statement below byte for byte) adds the
+        lag of the oldest due create and of the oldest due read-back (a job in a state the claim reconciles) next to
+        the unchanged mixed oldestEligibleLagSeconds: read-backs are deferred behind creates by design."""
         queue = {'status': 'unavailable', 'sampled': True, 'workspaceLimit': discord_worker.QUEUE_WORKSPACE_LIMIT,
                  'jobLimit': 4096}
         try:
             with self.connection_factory() as db, db.cursor() as cur:
-                cur.execute('''WITH sample AS MATERIALIZED (
+                sql = ('''WITH sample AS MATERIALIZED (
                     SELECT state FROM public.pr_workspaces WHERE state ? 'phase2'
                       AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock'
                     ORDER BY id LIMIT 256), jobs AS MATERIALIZED (
@@ -1383,10 +1404,19 @@ class PostgresWorker:
                           AND coalesce((j->>'leaseUntil')::double precision,0)<=observed.at),0),
                       count(*) FILTER(WHERE j->>'state'='held'),count(*) FILTER(WHERE j->>'state'='uncertain'),
                       count(*) FILTER(WHERE j#>'{discordWorker,deadLetter}' IS NOT NULL)
-                    FROM jobs CROSS JOIN observed''', (json.dumps(self.worker_binding),))
+                    FROM jobs CROSS JOIN observed''')
+                if split:
+                    reconciling = "('" + "','".join(IN_FLIGHT) + "')"
+                    lag = ("coalesce(max(greatest(0,observed.at-coalesce((j->>'nextAt')::double precision,observed.at)))"
+                           "FILTER(WHERE j->>'state' %s " + reconciling + " AND j->>'state' NOT IN ('verified','failed','canceled','held')"
+                           " AND coalesce((j->>'leaseUntil')::double precision,0)<=observed.at),0)")
+                    sql = sql.replace('FROM jobs CROSS JOIN observed', ',' + (lag % 'NOT IN') + ',' + (lag % 'IN') + ' FROM jobs CROSS JOIN observed', 1)
+                cur.execute(sql, (json.dumps(self.worker_binding),))
                 row = cur.fetchone()
                 queue.update(status='observed_sample', depth=int(row[0]), oldestEligibleLagSeconds=float(row[1]),
                              held=int(row[2]), uncertain=int(row[3]), deadLetters=int(row[4]))
+                if split:
+                    queue.update(oldestEligibleCreateLagSeconds=float(row[5]), oldestEligibleReadbackLagSeconds=float(row[6]))
         except Exception:
             pass  # Monitoring failure cannot activate or weaken dispatch.
         provider = getattr(self.social,'providers',{}).get('discord')
@@ -1438,5 +1468,5 @@ class PostgresWorker:
                 **({'mastodonMaintenance': mastodon_maintenance} if mastodon_maintenance is not None else {}),
                 "budget": {"maxJobs": max_jobs, "maxSeconds": max_seconds}}
         if self.discord_workers or discord_only:
-            result['discordWorker'] = self.discord_report()
+            result['discordWorker'] = self.discord_report(split=True) if exclude_discord else self.discord_report()
         return result
