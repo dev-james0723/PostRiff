@@ -5,6 +5,7 @@ import http.server
 import importlib.util
 import io
 import json
+import math
 import secrets
 import tempfile
 import threading
@@ -37,7 +38,7 @@ def healthy():
                    'coordinatorDegraded': False,
                    'policy': {'present': True, 'valid': True, 'daysLeft': 20.0, 'revision': 'rafii-w1-20261101',
                               'appCapacity': 25, 'appWindowSeconds': 1, 'invalidCapacity': 2000,
-                              'invalidWindowSeconds': 600},
+                              'invalidWindowSeconds': 600, 'slotGuardSeconds': 0.1},
                    'servers': {'status': 'observed', 'counted': 120, 'inFlight': 3, 'used': 123, 'ratio': 0.0123}},
         'queue': {'status': 'observed', 'dueWorkspaces': 2, 'dueWithin5Min': 10, 'pendingWorkspaces': 12,
                   'oldestDueLagSeconds': 20.0},
@@ -184,16 +185,64 @@ class Delivery(unittest.TestCase):
 
 
 class RateLimit(unittest.TestCase):
-    def test_application_budget_spent_for_a_minute(self):
+    # The coordinator holds each admission's slot for its window plus a guard of at most a tenth of it
+    # (SharedPostgresBudget._span), so under continuous demand 25 a second over 1 s with a 0.1 s guard admits at most
+    # 25 x 60 / 1.1 = 1363.6 a minute. "Budget nearly spent" is 95% of what can be admitted, not of the nominal 1,500.
+    ACHIEVABLE = 25 * 60 / 1.1
+
+    def spent(self, admitted, **policy):
+        snapshot = with_(('coordinator', 'traffic', 'admissions60s'), admitted)
+        for key, value in policy.items():
+            if value is None:
+                snapshot['config']['policy'].pop(key, None)
+            else:
+                snapshot['config']['policy'][key] = value
+        return found(snapshot, 'RATE_APP_BUDGET_SPENT')
+
+    def test_application_budget_spent_against_the_achievable_ceiling(self):
+        warn_at = math.ceil(0.95 * self.ACHIEVABLE)
+        for admitted, expected in ((warn_at - 1, None), (warn_at, 'warn'), (int(self.ACHIEVABLE), 'warn')):
+            with self.subTest(admitted=admitted):
+                self.assertEqual(self.spent(admitted, slotGuardSeconds=0.1), expected)
+
+    def test_continuous_demand_under_the_limiters_guard_is_reported(self):
+        # Review of D3 on the limiter head: at a 0.1 s guard the ledger shows 0.909 of the nominal ceiling at most, so a
+        # rule against the nominal ceiling and 0.95 could never fire again.
+        self.assertEqual(self.spent(int(1500 / 1.1), slotGuardSeconds=0.1), 'warn')
+
+    def test_without_a_guard_the_nominal_ceiling_is_the_achievable_one(self):
         for admitted, expected in ((1424, None), (1425, 'warn')):
             with self.subTest(admitted=admitted):
-                self.assertEqual(found(with_(('coordinator', 'traffic', 'admissions60s'), admitted),
-                                       'RATE_APP_BUDGET_SPENT'), expected)
+                self.assertEqual(self.spent(admitted, slotGuardSeconds=0.0), expected)
+
+    def test_a_guard_above_a_tenth_of_the_window_counts_as_a_tenth(self):
+        self.assertEqual(self.spent(int(self.ACHIEVABLE), slotGuardSeconds=5.0), 'warn')
+        self.assertEqual(self.spent(math.ceil(0.95 * self.ACHIEVABLE) - 1, slotGuardSeconds=5.0), None)
+
+    def test_an_unknown_guard_is_the_largest_the_coordinator_allows(self):
+        # A snapshot without the build's guard (the SQL twin, an older build) is judged against the smallest achievable
+        # ceiling, so no guard the coordinator can use makes the alert unreachable.
+        self.assertEqual(self.spent(math.ceil(0.95 * self.ACHIEVABLE), slotGuardSeconds=None), 'warn')
+        self.assertEqual(self.spent(math.ceil(0.95 * self.ACHIEVABLE) - 1, slotGuardSeconds=None), None)
+
+    def test_the_evaluators_ceiling_is_the_coordinators_span(self):
+        from types import SimpleNamespace
+        from postriff_phase2.discord.rate_limits import SharedPostgresBudget
+        span = getattr(SharedPostgresBudget, '_span', None)
+        guard = getattr(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', None)
+        if span is None or guard is None:
+            self.skipTest('this build has no slot guard (the limiter line adds it)')
+        for window in (1.0, 0.5, 10.0):
+            with self.subTest(window=window):
+                expected = 25 * 60.0 / span(SimpleNamespace(SLOT_GUARD_SECONDS=guard), window)
+                self.assertAlmostEqual(check.achievable_per_minute(25, window, guard), expected)
 
     def test_the_sql_twin_reads_the_budget_from_the_policy_row(self):
         snapshot = with_(('coordinator', 'traffic', 'admissions60s'), 1500)
         del snapshot['config']
         self.assertEqual(found(snapshot, 'RATE_APP_BUDGET_SPENT'), 'warn')
+        snapshot['coordinator']['traffic']['admissions60s'] = math.ceil(0.95 * self.ACHIEVABLE) - 1
+        self.assertIsNone(found(snapshot, 'RATE_APP_BUDGET_SPENT'))
 
     def test_invalid_requests_in_ten_minutes(self):
         for count, expected in ((1000, None), (1001, 'page')):
@@ -639,6 +688,134 @@ class ReviewFindings(unittest.TestCase):
         self.assertEqual(json.loads(printed.getvalue()), {'error': 'RuntimeError', 'worst': None})
         line = json.dumps({'message': json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'idle', 'counters': {}})})
         self.assertEqual(check.parse_logs([line], 600)['laneLines'], 1)
+
+
+def lagging(creates=None, readbacks=None, projected=None, late=(), owns=True):
+    return json.dumps({'event': 'discord.lane.lagging', 'oldestEligibleLagSeconds': max(creates or 0, readbacks or 0),
+                       'oldestEligibleCreateLagSeconds': creates, 'oldestEligibleReadbackLagSeconds': readbacks,
+                       'projectedLagSeconds': projected, 'thresholdSeconds': 300, 'readbackThresholdSeconds': 3600,
+                       'lateKinds': list(late), 'report': 'sample', 'projection': 'read', 'laneOwnsDiscord': owns,
+                       'laneBlocker': None if owns else 'disabled'})
+
+
+def with_fleet(lines, snapshot=None, window=600):
+    snapshot = snapshot or healthy()
+    snapshot['fleet'] = check.parse_logs(lines, window)
+    return snapshot
+
+
+class LaterBranches(unittest.TestCase):
+    """What the W-02 head (090c7ce6) and the limiter head (e6aa7db8) added that the rules read: the lane's new counters,
+    stop reason and events, the lag split of discord.lane.lagging, failed reads as observed 503, and retention."""
+
+    def test_the_lane_counters_include_quarantined_and_positions_kept(self):
+        line = json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'idle',
+                           'counters': {'claimed': 4, 'quarantined': 1, 'positionsKept': 2}})
+        fleet = check.parse_logs([line, line], 600)
+        self.assertEqual((fleet['laneCounters']['quarantined'], fleet['laneCounters']['positionsKept']), (2, 4))
+
+    def test_a_quarantined_workspace_is_a_warning_with_its_error_class_only(self):
+        line = json.dumps({'event': 'discord.lane.quarantined', 'error': 'JSONDecodeError', 'quarantineSeconds': 300})
+        fleet = check.parse_logs([line, line], 600)
+        self.assertEqual(fleet['quarantine'], {'events': 2, 'errors': {'JSONDecodeError': 2}})
+        alert = [a for a in alerts(with_fleet([line])) if a['id'] == 'SILENT_HALT_QUARANTINE']
+        self.assertEqual([(a['severity'], a['evidence']['events']) for a in alert], [('warn', 1)])
+        self.assertNotIn('SILENT_HALT_QUARANTINE', {a['id'] for a in alerts(with_fleet([]))})
+
+    def test_late_creates_use_the_lanes_split_at_300_seconds_and_page_at_the_backlog_page(self):
+        cases = [(lagging(creates=290, readbacks=10), None), (lagging(creates=301, readbacks=10, late=['creates']), 'warn'),
+                 (lagging(creates=2701, readbacks=10, late=['creates']), 'page')]
+        for line, expected in cases:
+            with self.subTest(line=line):
+                self.assertEqual(found(with_fleet([line]), 'BACKLOG_LAG'), expected)
+
+    def test_read_backs_deferred_by_a_burst_warn_only_past_an_hour(self):
+        deferred = with_fleet([lagging(creates=100, readbacks=3000)], with_(('queue', 'oldestDueLagSeconds'), 3000.0))
+        self.assertIsNone(found(deferred, 'BACKLOG_LAG'), 'the projection cannot tell them apart; the split shows a deferral')
+        late = with_fleet([lagging(creates=100, readbacks=3601, late=['readbacks'])], with_(('queue', 'oldestDueLagSeconds'), 3601.0))
+        self.assertEqual(found(late, 'BACKLOG_LAG'), 'warn')
+        self.assertEqual(found(with_(('queue', 'oldestDueLagSeconds'), 3000.0), 'BACKLOG_LAG'), 'page', 'without the split: as before')
+
+    def test_the_newest_lagging_line_is_the_one_read(self):
+        snapshot = with_fleet([lagging(creates=2800, readbacks=10, late=['creates']), lagging(creates=20, readbacks=10)])
+        self.assertIsNone(found(snapshot, 'BACKLOG_LAG'))
+
+    def test_a_known_pause_never_pages_and_says_so(self):
+        paused = with_(('queue', 'oldestDueLagSeconds'), 3000.0)
+        paused['config']['executionEnabled'] = False
+        paused['progress'].update(lastClaimAgeSeconds=None, lastAdmissionAgeSeconds=None, lastAcceptedCreateAgeSeconds=None,
+                                  lastReadbackAgeSeconds=None)
+        result = {a['id']: a for a in alerts(paused)}
+        for rule in ('BACKLOG_LAG', 'SILENT_HALT_NO_PROGRESS', 'SILENT_HALT_NO_CREATE'):
+            with self.subTest(rule=rule):
+                self.assertEqual(result[rule]['severity'], 'warn')
+                self.assertIn('Discord is paused', result[rule]['message'])
+                self.assertTrue(result[rule]['evidence']['discordPaused'])
+        by_lanes = with_fleet([json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'discord_paused', 'counters': {}})],
+                              with_(('queue', 'oldestDueLagSeconds'), 3000.0))
+        self.assertEqual(found(by_lanes, 'BACKLOG_LAG'), 'warn')
+        self.assertNotIn('SILENT_HALT_LANE_STOPS', {a['id'] for a in alerts(by_lanes)}, 'a paused stop is not abnormal')
+
+    def test_the_create_and_read_back_thresholds_are_the_lanes_own(self):
+        from postriff_phase2.discord import lane
+        self.assertEqual(THRESHOLDS['backlog']['create_warn_seconds'], lane.LAG_WARNING_SECONDS)
+        if not hasattr(lane, 'READBACK_LAG_WARNING_SECONDS'):
+            self.skipTest('this build has no read-back lag threshold (the W-02 line adds it)')
+        self.assertEqual(THRESHOLDS['backlog']['readback_warn_seconds'], lane.READBACK_LAG_WARNING_SECONDS)
+
+    def test_server_errors_include_failed_reads_and_say_so(self):
+        snapshot = healthy()
+        snapshot['coordinator']['traffic'].update(responses5m=100, serverErrors5m=5, uncertainReads=0)
+        alert = [a for a in alerts(snapshot) if a['id'] == 'DELIVERY_DISCORD_5XX'][0]
+        self.assertIn('failed before an answer', alert['message'])
+        self.assertNotIn('Usually a Discord outage', alert['message'])
+
+    def test_the_hold_message_follows_what_the_serving_build_does_with_a_read_under_a_hold(self):
+        """With the limiter's read wait (rate_limits.HOLD_WAIT_SECONDS, B4) a read-back under a hold waits and keeps its
+        checks; without it five refusals park the post for a day. The page must not tell the older story on a newer build."""
+        held = with_(('coordinator', 'guards', 'policy', 'hold'), True)
+        held['config']['holdReadWaitSeconds'] = None
+        older = [a for a in alerts(held) if a['id'] == 'SILENT_HALT_OPERATOR_HOLD'][0]
+        self.assertIn('parked for 24 hours', older['message'])
+        self.assertNotIn('read-backs wait', older['message'])
+        twin = with_(('coordinator', 'guards', 'policy', 'hold'), True)
+        del twin['config']                      # the SQL twin has no process view: it cannot know the build
+        unknown = [a for a in alerts(twin) if a['id'] == 'SILENT_HALT_OPERATOR_HOLD'][0]
+        self.assertIn('read-backs wait if the serving build has', unknown['message'])
+        self.assertIn('parked for 24 hours', unknown['message'])
+        held['config']['holdReadWaitSeconds'] = 300.0
+        newer = [a for a in alerts(held) if a['id'] == 'SILENT_HALT_OPERATOR_HOLD'][0]
+        self.assertNotIn('parked', newer['message'])
+        self.assertIn('read-backs wait', newer['message'])
+        self.assertEqual(newer['evidence'].get('holdReadWaitSeconds'), 300.0)
+
+    def retention(self, **values):
+        snapshot = healthy()
+        snapshot['coordinator']['retention'] = {
+            'status': 'observed', 'retentionSeconds': {'reads': 3600, 'publications': 86400},
+            'oldestSettledReadAgeSeconds': 5000.0, 'oldestSettledPublicationAgeSeconds': 90000.0, 'liveRowsEstimate': 5400,
+            'deadRowsEstimate': 12, 'rowsDeletedTotal': 880, 'lastVacuumAgeSeconds': 120.0, **values}
+        return snapshot
+
+    def test_retention_behind_when_settled_rows_outlive_three_retentions(self):
+        self.assertIsNone(found(self.retention(), 'RATE_RETENTION_BEHIND'))
+        self.assertEqual(found(self.retention(oldestSettledReadAgeSeconds=3 * 3600 + 1), 'RATE_RETENTION_BEHIND'), 'warn')
+        self.assertEqual(found(self.retention(oldestSettledPublicationAgeSeconds=3 * 86400 + 1), 'RATE_RETENTION_BEHIND'), 'warn')
+
+    def test_retention_purged_and_remaining_counts_are_read_when_present(self):
+        snapshot = self.retention(remaining={'reads': 60000, 'publications': 0, 'capped': False})
+        self.assertEqual(found(snapshot, 'RATE_RETENTION_BEHIND'), 'warn')
+        purged = self.retention(purged={'status': 'denied', 'reads': 0, 'publications': 0, 'more': False, 'ageSeconds': 30.0})
+        self.assertEqual(found(purged, 'RATE_RETENTION_BEHIND'), 'warn')
+        line = json.dumps({'event': 'discord.lane.retention', 'status': 'ok', 'reads': 2000, 'publications': 5, 'rounds': 1,
+                           'more': False})
+        failed = json.dumps({'event': 'discord.lane.retention', 'status': 'timeout', 'reads': 0, 'publications': 0, 'rounds': 0,
+                             'more': False, 'error': 'QueryCanceled'})
+        fleet = check.parse_logs([line, line, failed], 600)
+        self.assertEqual(fleet['retention'], {'lines': 3, 'purgedReads': 4000, 'purgedPublications': 10,
+                                              'failures': {'timeout': 1}, 'more': 0})
+        self.assertEqual(found(with_fleet([failed], self.retention()), 'RATE_RETENTION_BEHIND'), 'warn')
+        self.assertIsNone(found(with_fleet([line], self.retention()), 'RATE_RETENTION_BEHIND'))
 
 
 if __name__ == '__main__':

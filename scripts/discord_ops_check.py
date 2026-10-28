@@ -44,8 +44,12 @@ SEVERITIES = ('page', 'warn', 'info')
 CLASSES = ('BACKLOG', 'DELIVERY', 'RATE_LIMIT', 'SILENT_HALT', 'CROSS_TENANT', 'CONFIG')
 PHASES = ('pre_open', 'canary', 'open')
 GUARD_KINDS = ('policy', 'global', 'credential', 'invalid')
-QUIET_STOPS = ('idle', 'time_budget', 'step_budget', 'rate_wait', 'operator_hold')
-LANE_COUNTERS = ('claimed', 'posted', 'verified', 'held', 'uncertain', 'deadLetters', 'rateDelayed', 'leaseLost')
+# discord_paused (W-02 090c7ce6): the provider's execution or authorization is off, so a loop claims nothing; a pause is
+# reported by the backlog and halt rules (never as an abnormal stop), and they never page for it.
+QUIET_STOPS = ('idle', 'time_budget', 'step_budget', 'rate_wait', 'operator_hold', 'discord_paused')
+LANE_COUNTERS = ('claimed', 'posted', 'verified', 'held', 'uncertain', 'deadLetters', 'rateDelayed', 'leaseLost',
+                 'quarantined', 'positionsKept')
+RETENTION_FAILURES = ('denied', 'timeout', 'error')
 DENIAL_EVENT = 'security.cross_tenant_denied'
 KIND = 'rafii.discord.ops.health'
 # The sections each source must carry (a missing one is a malformed snapshot, not a quiet one).
@@ -73,6 +77,16 @@ def _alert(rule, cls, severity, message, **evidence):
             'evidence': {key: value for key, value in evidence.items() if value is not None}}
 
 
+def achievable_per_minute(capacity, window, guard):
+    """How many admissions the coordinator can grant in a minute under continuous demand. Each one occupies a slot of
+    the application window for the window plus a guard of at most a tenth of it (SharedPostgresBudget._span); a guard
+    the snapshot does not carry (the SQL twin, a build without one) is taken at that maximum, so no guard the
+    coordinator can use makes the budget alert unreachable."""
+    tenth = window / 10.0
+    guard = tenth if guard is None else min(max(float(guard), 0.0), tenth)
+    return capacity * 60.0 / (window + guard)
+
+
 def _over(value, warn, page):
     """'page' when value >= page, 'warn' when value >= warn, else None (None thresholds are off)."""
     if value is None:
@@ -86,16 +100,56 @@ def _over(value, warn, page):
 
 # --- the six classes ---------------------------------------------------------------------------------------------------
 
+PAUSED = ('Discord is paused on the serving build (its execution or authorization is off): posts wait until it resumes, '
+          'and a post needs a new approval from about 55 minutes after its scheduled time. ')
+
+
+def discord_paused(snapshot):
+    """A known pause (W-02 lane.paused): the serving build's Discord execution or authorization is off, or the shards
+    said so (stoppedBy discord_paused). Waiting work is then expected: the backlog and halt rules warn, never page."""
+    config = snapshot.get('config') if isinstance(snapshot.get('config'), dict) else {}
+    fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else {}
+    return (config.get('executionEnabled') is False or config.get('authorizationV2') is False
+            or bool((fleet.get('laneStops') or {}).get('discord_paused')))
+
+
+def _lower(level, cap):
+    return cap if level == 'page' and cap == 'warn' else level
+
+
 def backlog(snapshot, t, out):
     queue = _section(snapshot, 'queue')
     lag = _number(queue.get('oldestDueLagSeconds')) if queue else None
     t = t['backlog']
     level = None if lag is None else 'page' if lag > t['page_lag_seconds'] else 'warn' if lag > t['warn_lag_seconds'] else None
+    fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else {}
+    split = fleet.get('lag') if isinstance(fleet.get('lag'), dict) else {}
+    creates, readbacks = _number(split.get('createSeconds')), _number(split.get('readbackSeconds'))
+    if creates is not None and readbacks is not None:
+        # The lanes' own split (discord.lane.lagging, W-02 M5): creates are late past create_warn_seconds; read-backs,
+        # which a long burst defers, only past readback_warn_seconds. The projection cannot tell them apart, so when the
+        # split shows that deferral (read-backs late, no create late) its lag is judged at the read-back threshold.
+        deferral = readbacks > t['create_warn_seconds'] and creates <= t['create_warn_seconds']
+        if deferral and lag is not None:
+            level = 'warn' if lag > t['readback_warn_seconds'] else None
+        for value, warn_at, page_at in ((creates, t['create_warn_seconds'], t['page_lag_seconds']),
+                                        (readbacks, t['readback_warn_seconds'], None)):
+            found = 'page' if page_at is not None and value > page_at else 'warn' if value > warn_at else None
+            if found and (level is None or found == 'page'):
+                level = found
+    paused = discord_paused(snapshot)
+    if paused:
+        level = _lower(level, 'warn')
     if level:
         out.append(_alert('BACKLOG_LAG', 'BACKLOG', level,
-                          'The oldest due Discord work is %d s late (warn above %d s, page above %d s). During a declared '
-                          'burst the warn level is expected; the page level is not.' % (lag, t['warn_lag_seconds'], t['page_lag_seconds']),
-                          oldestDueLagSeconds=lag, dueWorkspaces=queue.get('dueWorkspaces')))
+                          '%sThe oldest due Discord work is %s s late (warn above %d s, page above %d s; from the lanes: '
+                          'creates late above %d s, read-backs above %d s). During a declared burst the warn level is '
+                          'expected; the page level is not.' % (PAUSED if paused else '', 'unknown' if lag is None else '%d' % lag,
+                                                                 t['warn_lag_seconds'], t['page_lag_seconds'],
+                                                                 t['create_warn_seconds'], t['readback_warn_seconds']),
+                          oldestDueLagSeconds=lag, dueWorkspaces=queue.get('dueWorkspaces') if queue else None,
+                          oldestCreateLagSeconds=creates, oldestReadbackLagSeconds=readbacks,
+                          lateKinds=split.get('lateKinds') or None, discordPaused=paused or None))
 
 
 def delivery(snapshot, t, out, memory=None):
@@ -176,8 +230,10 @@ def delivery(snapshot, t, out, memory=None):
         responses, errors = int(traffic.get('responses5m') or 0), int(traffic.get('serverErrors5m') or 0)
         if responses >= t['min_responses_for_server_errors'] and errors / responses > t['server_error_share_warn']:
             out.append(_alert('DELIVERY_DISCORD_5XX', 'DELIVERY', 'warn',
-                              'Discord server errors are %.1f%% of %d responses in 5 minutes. Usually a Discord outage: '
-                              'do not roll back (RUNBOOK-INCIDENT 4.A).' % (100 * errors / responses, responses),
+                              'Server errors are %.1f%% of %d responses in 5 minutes: Discord answered 5xx, or a request '
+                              'failed before an answer (the coordinator records a failed read as 503). A Discord outage if '
+                              'discordstatus.com shows one, otherwise our side or the network; either way do not roll back '
+                              'for this alone (RUNBOOK-INCIDENT 4.A).' % (100 * errors / responses, responses),
                               serverErrors=errors, responses=responses))
 
 
@@ -193,14 +249,18 @@ def rate_limit(snapshot, t, out):
         capacity = _number(policy.get('appCapacity')) or _number(row.get('limit'))
         window = _number(policy.get('appWindowSeconds')) or _number(row.get('windowSeconds'))
         admitted = _number(traffic.get('admissions60s'))
+        guard = _number(policy.get('slotGuardSeconds'))
         if capacity and window and admitted is not None:
-            saturation = admitted / (capacity * 60.0 / window)
+            achievable = achievable_per_minute(capacity, window, guard)
+            saturation = admitted / achievable
             if saturation >= t['saturation_warn']:
                 out.append(_alert('RATE_APP_BUDGET_SPENT', 'RATE_LIMIT', 'warn',
-                                  'The application request budget was spent for the whole last minute (%d of %d '
-                                  'admissions). Expected during a declared burst; otherwise something is sending more '
-                                  'than it should.' % (admitted, capacity * 60 / window),
-                                  admissions60s=admitted, saturation=round(saturation, 3)))
+                                  'The application request budget was spent for the whole last minute (%d admissions of '
+                                  'the %.0f the coordinator can grant in a minute; nominal %d). Expected during a declared '
+                                  'burst; otherwise something is sending more than it should.'
+                                  % (admitted, achievable, capacity * 60 / window),
+                                  admissions60s=admitted, achievable60s=round(achievable, 1), saturation=round(saturation, 3),
+                                  slotGuardSeconds=guard, guard='build' if guard is not None else 'assumed_largest'))
         invalid = int(traffic.get('invalid10m') or 0)
         if invalid > t['invalid_10m_page']:
             out.append(_alert('RATE_INVALID_REQUESTS', 'RATE_LIMIT', 'page',
@@ -253,6 +313,7 @@ def rate_limit(snapshot, t, out):
             out.append(_alert('RATE_ROUTE_CIRCUITS', 'RATE_LIMIT', 'warn',
                               '%d Discord routes have a short circuit open after repeated server errors.' % transient,
                               transientCircuits=transient))
+    retention(snapshot, t, out)
     if config and config.get('rateLimitsV1'):
         policy = config.get('policy') or {}
         days = _number(policy.get('daysLeft'))
@@ -279,6 +340,38 @@ def malformed(snapshot):
     missing = [name for name in REQUIRED[source]
                if not isinstance(snapshot.get(name), list if name == 'errors' else dict)]
     return 'missing:' + ','.join(missing) if missing else None
+
+
+def retention(snapshot, t, out):
+    """The coordinator's admission retention (limiter B3, coordinator.retention and discord.lane.retention lines):
+    settled rows far past their retention, rows still due for deletion, or a purge that cannot delete."""
+    coordinator = _section(snapshot, 'coordinator') or {}
+    section = coordinator.get('retention') if isinstance(coordinator.get('retention'), dict) else {}
+    section = section if section.get('status', 'observed') == 'observed' else {}
+    fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else {}
+    logged = fleet.get('retention') if isinstance(fleet.get('retention'), dict) else {}
+    keep = section.get('retentionSeconds') if isinstance(section.get('retentionSeconds'), dict) else {}
+    reasons = []
+    for kind, age_key in (('reads', 'oldestSettledReadAgeSeconds'), ('publications', 'oldestSettledPublicationAgeSeconds')):
+        age, limit = _number(section.get(age_key)), _number(keep.get(kind))
+        if age is not None and limit and age > t['retention_age_factor_warn'] * limit:
+            reasons.append('the oldest settled %s is %.1f retentions old' % (kind[:-1], age / limit))
+    remaining = section.get('remaining') if isinstance(section.get('remaining'), dict) else {}
+    left = sum(int(remaining.get(k) or 0) for k in ('reads', 'publications'))
+    if left >= t['retention_remaining_warn']:
+        reasons.append('%d settled rows past their retention are still there' % left)
+    purged = section.get('purged') if isinstance(section.get('purged'), dict) else {}
+    failures = dict(logged.get('failures') or {})
+    if purged.get('status') in RETENTION_FAILURES:
+        failures[purged['status']] = failures.get(purged['status'], 0) + 1
+    if failures:
+        reasons.append('the purge could not delete (%s)' % ', '.join('%s %d' % kv for kv in sorted(failures.items())))
+    if reasons:
+        out.append(_alert('RATE_RETENTION_BEHIND', 'RATE_LIMIT', 'warn',
+                          'Retention of the coordinator\'s admissions is behind: %s. The table grows (about a third of a '
+                          'gigabyte a day at 100 posts a minute); nothing is lost and nothing is sent twice.' % '; '.join(reasons),
+                          remaining=left or None, failures=failures or None,
+                          purgedInWindow=(logged.get('purgedReads', 0) + logged.get('purgedPublications', 0)) if logged else None))
 
 
 def silent_halt(snapshot, t, out, now=None, previous=None):
@@ -321,28 +414,33 @@ def silent_halt(snapshot, t, out, now=None, previous=None):
     progress = snapshot.get('progress') if isinstance(snapshot.get('progress'), dict) else {}
     lag = _number(queue.get('oldestDueLagSeconds')) if queue else None
     held = bool((((coordinator or {}).get('guards') or {}).get('policy') or {}).get('hold'))
+    paused = discord_paused(snapshot)
     if lag is not None and lag > t['due_lag_seconds']:
         # An age the payload could not read (the ledger section failed) counts as no progress: absence is not proof.
         claim, admission = _number(progress.get('lastClaimAgeSeconds')), _number(progress.get('lastAdmissionAgeSeconds'))
         if (claim is None or claim > t['quiet_seconds']) and (admission is None or admission > t['quiet_seconds']):
-            out.append(_alert('SILENT_HALT_NO_PROGRESS', 'SILENT_HALT', 'warn' if held else 'page',
-                              'Discord work has been due for %d s and nothing was claimed or admitted for %s. %s'
-                              % (lag, 'ever' if claim is None and admission is None else 'more than %d s' % t['quiet_seconds'],
-                                 'The operator hold explains it.' if held else
+            out.append(_alert('SILENT_HALT_NO_PROGRESS', 'SILENT_HALT', 'warn' if held or paused else 'page',
+                              '%sDiscord work has been due for %d s and nothing was claimed or admitted for %s. %s'
+                              % (PAUSED if paused else '', lag,
+                                 'ever' if claim is None and admission is None else 'more than %d s' % t['quiet_seconds'],
+                                 'The operator hold explains it.' if held else '' if paused else
                                  'The senders are not running (shard crons, the minute cron, or a stop).'),
                               oldestDueLagSeconds=lag, lastClaimAgeSeconds=claim, lastAdmissionAgeSeconds=admission,
-                              operatorHold=held or None, ledger='unread' if progress.get('status') != 'observed' else None))
+                              operatorHold=held or None, discordPaused=paused or None,
+                              ledger='unread' if progress.get('status') != 'observed' else None))
         ages = [a for a in (_number(progress.get('lastAcceptedCreateAgeSeconds')), _number(progress.get('lastReadbackAgeSeconds')))
                 if a is not None]
         quiet = min(ages) if ages else lag
         level = _over(quiet, t['no_create_warn_seconds'], t['no_create_page_seconds'])
         if level:
-            out.append(_alert('SILENT_HALT_NO_CREATE', 'SILENT_HALT', 'warn' if held else level,
-                              'Discord work has been due for %d s and no create was accepted and no read-back succeeded for '
-                              '%d s. %s' % (lag, quiet, 'The operator hold explains it.' if held else
-                                            'Claims may continue, but nothing reaches Discord: refusals, rate waits or a '
-                                            'stuck worker.'),
-                              oldestDueLagSeconds=lag, quietSeconds=quiet, operatorHold=held or None))
+            out.append(_alert('SILENT_HALT_NO_CREATE', 'SILENT_HALT', 'warn' if held or paused else level,
+                              '%sDiscord work has been due for %d s and no create was accepted and no read-back succeeded '
+                              'for %d s. %s' % (PAUSED if paused else '', lag, quiet,
+                                                'The operator hold explains it.' if held else '' if paused else
+                                                'Claims may continue, but nothing reaches Discord: refusals, rate waits '
+                                                'or a stuck worker.'),
+                              oldestDueLagSeconds=lag, quietSeconds=quiet, operatorHold=held or None,
+                              discordPaused=paused or None))
     lane = snapshot.get('lane') if isinstance(snapshot.get('lane'), dict) else None
     if lane and lane.get('enabled') and not lane.get('ready'):
         blocker = lane.get('blocker')
@@ -355,10 +453,16 @@ def silent_halt(snapshot, t, out, now=None, previous=None):
                           blocker=blocker))
     guards = (coordinator or {}).get('guards') or {}
     if (guards.get('policy') or {}).get('hold'):
+        build = snapshot.get('config') if isinstance(snapshot.get('config'), dict) else {}
+        wait = _number(build.get('holdReadWaitSeconds'))
+        older = 'while the lane does not own Discord each created post\'s read-back is parked for 24 hours'
+        readbacks = ('read-backs wait (every %d s) and keep their checks' % wait if wait is not None else
+                     older if 'holdReadWaitSeconds' in build else      # the build says it has no read wait
+                     'read-backs wait if the serving build has the limiter\'s read wait; on an older build, ' + older)
         out.append(_alert('SILENT_HALT_OPERATOR_HOLD', 'SILENT_HALT', 'warn',
                           'The operator hold is on: Discord sends nothing and posts wait. A post needs a new approval from '
-                          'about 55 minutes after its own scheduled time, and while the lane does not own Discord each '
-                          'created post\'s read-back is parked for 24 hours. Lift it only on the Release Captain\'s word.'))
+                          'about 55 minutes after its own scheduled time, and %s. Lift it only on the Release Captain\'s '
+                          'word.' % readbacks, holdReadWaitSeconds=wait))
     fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else None
     window = _number((fleet or {}).get('windowSeconds'))
     if fleet and lane and lane.get('enabled') and window is not None and window >= t['min_lane_window_seconds']:
@@ -371,6 +475,15 @@ def silent_halt(snapshot, t, out, now=None, previous=None):
         if abnormal:
             out.append(_alert('SILENT_HALT_LANE_STOPS', 'SILENT_HALT', 'warn',
                               'Shard invocations stopped for %s.' % ', '.join(sorted(abnormal)), stops=abnormal))
+    quarantine = (fleet or {}).get('quarantine') if isinstance((fleet or {}).get('quarantine'), dict) else {}
+    set_aside = max(int(quarantine.get('events') or 0), int(((fleet or {}).get('laneCounters') or {}).get('quarantined') or 0))
+    if set_aside:
+        out.append(_alert('SILENT_HALT_QUARANTINE', 'SILENT_HALT', 'warn',
+                          '%d time(s) in the window a lane set a workspace aside for 5 minutes because its job document '
+                          'could not be read (%s). Its Discord posts wait meanwhile; one that stays unreadable needs a '
+                          'person (the log lines carry the error class only).'
+                          % (set_aside, ', '.join(sorted(quarantine.get('errors') or {})) or 'error class not logged'),
+                          events=set_aside, errors=quarantine.get('errors') or None))
 
 
 def cross_tenant(snapshot, t, out):
@@ -514,7 +627,8 @@ def parse_logs(lines, window_seconds):
     """Fleet numbers from function log lines of one window (the caller selects the window): cross-tenant denials by
     family and by actor key (keys are counted, never returned), shard invocations and their stop reasons."""
     families, actors, stops, counters = {}, {}, {}, dict.fromkeys(LANE_COUNTERS, 0)
-    running = {}
+    running, lag, quarantine = {}, {}, {'events': 0, 'errors': {}}
+    retention = {'lines': 0, 'purgedReads': 0, 'purgedPublications': 0, 'failures': {}, 'more': 0}
     lane_lines = lagging = 0
     for line in lines:
         event = _event(line)
@@ -541,11 +655,29 @@ def parse_logs(lines, window_seconds):
                 counters[name] += value if type(value) is int else 0
         elif event.get('event') == 'discord.lane.lagging':
             lagging += 1
+            # The newest line wins: the lanes write one a minute while work is late, so it is the current lag.
+            lag = {'createSeconds': _number(event.get('oldestEligibleCreateLagSeconds')),
+                   'readbackSeconds': _number(event.get('oldestEligibleReadbackLagSeconds')),
+                   'projectedSeconds': _number(event.get('projectedLagSeconds')),
+                   'lateKinds': [k for k in event.get('lateKinds') or [] if k in ('creates', 'readbacks', 'projection', 'sample')],
+                   'laneOwnsDiscord': event.get('laneOwnsDiscord') if isinstance(event.get('laneOwnsDiscord'), bool) else None}
+        elif event.get('event') == 'discord.lane.quarantined':
+            quarantine['events'] += 1
+            error = event.get('error') if isinstance(event.get('error'), str) and event['error'].isidentifier() else 'unknown'
+            quarantine['errors'][error] = quarantine['errors'].get(error, 0) + 1
+        elif event.get('event') == 'discord.lane.retention':
+            retention['lines'] += 1
+            for key, field in (('purgedReads', 'reads'), ('purgedPublications', 'publications')):
+                retention[key] += event[field] if type(event.get(field)) is int else 0
+            status = event.get('status')
+            if status in RETENTION_FAILURES:
+                retention['failures'][status] = retention['failures'].get(status, 0) + 1
+            retention['more'] += 1 if event.get('more') is True else 0
     for (key, family, _minute, _instance), count in running.items():
         families[family] = families.get(family, 0) + count
         actors[key] = actors.get(key, 0) + count
     return {'windowSeconds': window_seconds, 'laneLines': lane_lines, 'laneStops': stops, 'laneCounters': counters,
-            'lagging': lagging,
+            'lagging': lagging, 'lag': lag, 'quarantine': quarantine, 'retention': retention,
             'denials': {'scope': 'fleet_logs', 'denied': families, 'deniedTotal': sum(families.values()),
                         'actors10m': len(actors), 'topActorDenials10m': max(actors.values(), default=0)}}
 

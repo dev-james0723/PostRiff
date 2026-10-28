@@ -14,7 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from postriff_phase2.discord import lane, launch_gate, ops
+from postriff_phase2.discord import lane, launch_gate, ops, rate_limits
 from postriff_phase2.discord.rate_limits import SharedPostgresBudget, route_identity
 from postriff_phase2.hosted_app import HostedApplication
 from postriff_phase2.hosted_social import HostedSocial
@@ -302,6 +302,24 @@ class Payload(unittest.TestCase):
         self.assertEqual(payload['coordinator']['status'], 'no_coordinator')
         self.assertFalse([s for s in database.statements if 'scope_key = ANY' in s])
         self.assertFalse(payload['config']['policy']['present'])
+
+
+class SlotGuard(unittest.TestCase):
+    def test_the_payload_reports_the_guard_the_serving_coordinator_uses(self):
+        """RATE_APP_BUDGET_SPENT divides by what can be admitted: the payload carries the coordinator's own constant, so a
+        later guard change moves the alert with it instead of disarming it."""
+        adapter = provider()
+        payload = ops.snapshot(worker_for(adapter, FakeDatabase(adapter)), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
+        self.assertEqual(payload['config']['policy']['slotGuardSeconds'],
+                         getattr(adapter.rate_limiter, 'SLOT_GUARD_SECONDS', None))
+        self.assertEqual(payload['config']['policy']['slotGuardSeconds'], getattr(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', None))
+
+    def test_the_payload_says_whether_a_read_under_a_hold_waits(self):
+        """The operator-hold alert says what a hold does to read-backs on the serving build (rate_limits.HOLD_WAIT_SECONDS
+        where the build has the limiter's read wait; null where it does not)."""
+        adapter = provider()
+        payload = ops.snapshot(worker_for(adapter, FakeDatabase(adapter)), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
+        self.assertEqual(payload['config']['holdReadWaitSeconds'], getattr(rate_limits, 'HOLD_WAIT_SECONDS', None))
 
 
 class Constants(unittest.TestCase):

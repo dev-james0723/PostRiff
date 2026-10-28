@@ -41,7 +41,7 @@ import time
 
 from postriff_alpha.domain import AlphaError
 
-from . import lane, launch_gate, worker as discord_worker
+from . import lane, launch_gate, rate_limits, worker as discord_worker
 
 ROUTE = '/api/ops/discord/health'
 PREFIX = '/api/ops/discord/'
@@ -145,6 +145,14 @@ def config_section(provider, now, values):
                              revision=policy.revision, appCapacity=policy.app_capacity,
                              appWindowSeconds=policy.app_window_seconds, invalidCapacity=policy.invalid_capacity,
                              invalidWindowSeconds=policy.invalid_window_seconds)
+    # The coordinator's own slot guard (SharedPostgresBudget.SLOT_GUARD_SECONDS, where the build has one): the budget
+    # alert divides by what can be admitted, and reading the constant here means a later change moves the alert with it.
+    guard = getattr(limiter, 'SLOT_GUARD_SECONDS', None) if limiter is not None else None
+    out['policy']['slotGuardSeconds'] = float(guard) if discord_worker.finite(guard) else None
+    # What a read refused by a hold is told to wait (rate_limits.HOLD_WAIT_SECONDS, the limiter's B4), or null on a build
+    # without it, where a created post's read-back fails under the hold and is parked: the hold alert says which.
+    wait = getattr(rate_limits, 'HOLD_WAIT_SECONDS', None)
+    out['holdReadWaitSeconds'] = float(wait) if discord_worker.finite(wait) else None
     return out
 
 

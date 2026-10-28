@@ -385,8 +385,13 @@ def d3_rate_limit(lab):
         limiter.observe(permit, {'status': 200, 'headers': {}, 'body': {}})
         admitted += 1
     snapshot, alerts = lab.look()
+    spent = next((alert['evidence'] for alert in alerts if alert['id'] == 'RATE_APP_BUDGET_SPENT'), {})
+    # The ceiling is what the coordinator can grant (each admission holds its slot for the window plus the guard),
+    # not the nominal 120 a minute; the guard comes from the build (config.policy.slotGuardSeconds).
     d.step('injected: 62 s of demand above a 2-per-second budget', alerts, admitted=admitted, refused=refused,
-           admissions60s=snapshot['coordinator']['traffic']['admissions60s'])
+           admissions60s=snapshot['coordinator']['traffic']['admissions60s'],
+           slotGuardSeconds=snapshot['config']['policy'].get('slotGuardSeconds'),
+           achievable60s=spent.get('achievable60s'), saturation=spent.get('saturation'), guard=spent.get('guard'))
     d.fires(alerts, 'RATE_APP_BUDGET_SPENT', 'warn', 'budget spent for the last minute')
     lab.shift_ledger(120)
     d.record['simulated'].append('the quiet minute after the demand: ledger moved 2 minutes into the past')
