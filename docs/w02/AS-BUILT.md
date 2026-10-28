@@ -16,7 +16,7 @@ read from the code.
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. A `discord-worker-protocol` check fails when any Discord feature flag is on (authorization v2, connections v2, rate limits, webhook, user install, engagement, the lane) and `POSTRIFF_DISCORD_WORKER_V1_ENABLED` is not 1 or true ("The worker flag and migration 128"). |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
-| `tests/test_discord_parallel_lane.py` (new) | 101 offline tests (run under the synthetic fence). |
+| `tests/test_discord_parallel_lane.py` (new) | 104 offline tests (run under the synthetic fence). |
 | `tests/test_discord_worker_lifecycle.py` | Its in-memory database double answers the lane's projection due probe. |
 | `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 62 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
@@ -301,6 +301,12 @@ A release that one tenant's resource caused keeps today's penalty: a learned or 
 probe, an embargo (also one that blocked a permit), a provider 429, a window about to end, and a transient preflight failure;
 otherwise workspaces sharing a full channel could take their turn over and over. So does a post that is held or canceled by
 the release. The base worker's hook does nothing, so the minute cron's frozen path is unchanged.
+
+The snapshot is read from the candidate row the way the claim itself reads it: a mapping, or the JSON text of one (`LaneWorker._document`;
+the quarantine mark of a set-aside workspace is found in a text document the same way). A document that is neither takes no
+snapshot at all, and a post without one keeps today's penalty. A restore from an empty snapshot would pop the cursor and the
+dispatch stamp, a jump to the front of the rotation [found by the independent delta re-review; the PostgreSQL driver returns
+mappings, so only a driver that hands over text could reach it].
 
 Why this is fair [reasoned; the rotation and shares measured in `test_permit_expiries_do_not_change_the_rotation_or_any_workspaces_share_of_the_work`]:
 1. The round robin gives each tenant one claim per round while others wait: it bounds a tenant's share of *completed* work.
