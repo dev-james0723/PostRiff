@@ -116,6 +116,37 @@ class HostedPreflight(unittest.TestCase):
             with self.subTest(off=off):
                 self.assertEqual(self.lane_check(off)['status'], 'pass')
 
+    def worker_check(self, values):
+        return {item['name']: item for item in self.preflight.validate_environment(values)}['discord-worker-protocol']
+
+    def test_any_discord_feature_flag_without_the_worker_flag_fails_the_preflight(self):
+        """Migration 128's guard refuses a legacy claim of a Discord post, the claim aborts on every attempt for every
+        provider (K2). An unset or mistyped worker flag is exactly such a worker."""
+        for name in self.preflight.DISCORD_FEATURE_FLAGS:
+            for worker in (None, 'false', 'yes', 'on', ''):
+                with self.subTest(flag=name, worker=worker):
+                    values = {name: 'true', **({'POSTRIFF_DISCORD_WORKER_V1_ENABLED': worker} if worker is not None else {})}
+                    check = self.worker_check(values)
+                    self.assertEqual(check['status'], 'fail')
+                    self.assertIn(name, check['detail'])
+                    self.assertIn('POSTRIFF_DISCORD_WORKER_V1_ENABLED', check['detail'])
+            for worker in ('1', 'true', 'TRUE', 'True'):
+                with self.subTest(flag=name, ok=worker):
+                    self.assertEqual(self.worker_check({name: 'true', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': worker})['status'], 'pass')
+
+    def test_without_any_discord_feature_flag_the_worker_flag_is_not_required(self):
+        for values in ({}, {'POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED': 'false'}, {'POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED': 'TRUE'},
+                       {'POSTRIFF_OAUTH_DISCORD_DISABLED': 'true'}):
+            with self.subTest(values=values):
+                self.assertEqual(self.worker_check(values)['status'], 'pass')
+
+    def test_the_failed_worker_check_fails_the_command(self):
+        with patch.dict('os.environ', {'POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED': 'true'}, clear=True), \
+                patch('sys.stdout', io.StringIO()) as printed:
+            self.assertEqual(self.preflight.main([]), 1)
+        self.assertIn({'name': 'discord-worker-protocol', 'status': 'fail'},
+                      [{key: item[key] for key in ('name', 'status')} for item in json.loads(printed.getvalue())['checks']])
+
     def test_the_failed_lane_check_fails_the_command(self):
         values = {lane.ENV_ENABLED: 'true', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}
         with patch.dict('os.environ', values, clear=True), patch('sys.stdout', io.StringIO()) as printed:

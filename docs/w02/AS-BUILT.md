@@ -14,9 +14,9 @@ read from the code.
 | `src/postriff_phase2/discord/rate_limits.py`, `src/postriff_phase2/social_connectors.py` | After review, at the coordinator's request: `seal()` and `consume()` refuse a reserved or sealed permit that an embargo or hold blocked, before any transport, as `permit_blocked` (with the embargo's remaining time), `confirm_blocked_publish()` proves such an intent unsent from its admission row, and the sender turns that refusal into the same pre-transport signal as an expired unconsumed permit ("A permit an embargo blocks before it is used", below). |
 | `src/postriff_phase2/hosted_app.py` | Route `GET /api/cron/discord-worker/<shard>`: cron secret checked before the runtime starts (as the YouTube lanes); flag read per request; the request log files it under `cron`. |
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
-| `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. |
+| `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. A `discord-worker-protocol` check fails when any Discord feature flag is on (authorization v2, connections v2, rate limits, webhook, user install, engagement, the lane) and `POSTRIFF_DISCORD_WORKER_V1_ENABLED` is not 1 or true ("The worker flag and migration 128"). |
 | `scripts/discord_lane_capacity_sim.py` (new) | The capacity simulation (model and real run). |
-| `tests/test_discord_parallel_lane.py` (new) | 91 offline tests (run under the synthetic fence). |
+| `tests/test_discord_parallel_lane.py` (new) | 94 offline tests (run under the synthetic fence). |
 | `tests/test_discord_worker_lifecycle.py` | Its in-memory database double answers the lane's projection due probe. |
 | `tests/test_discord_parallel_lane_postgres.py`, `tests/discord_lane_fixture.py` (new) | 61 real-PostgreSQL tests and their fixture; skipped under the fence. |
 | `tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt` (new) | The frozen worker source, pinned by SHA-256, for the flag-off equivalence test. |
@@ -42,7 +42,7 @@ Prerequisites. The lane runs only with all of these; while any is missing the sh
 cron keeps Discord when one of the first four is missing (not when only its own process's coordinator is degraded);
 it cannot see the last three, which is what the lag warning is for:
 
-- `POSTRIFF_DISCORD_WORKER_V1_ENABLED` on: the lease protocol the lane uses. Without it the lane flag has no effect.
+- `POSTRIFF_DISCORD_WORKER_V1_ENABLED` on (1 or true): the lease protocol the lane uses. Without it the lane flag has no effect, and the preflight requires it whenever any Discord feature flag is on ("The worker flag and migration 128").
 - `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` (exact string): the shared coordinator that admits every request.
   Without it the loops stop with `coordinator_unavailable`, and the hosted runtime also turns Discord authorization
   off, so the minute cron holds each due Discord post and asks for its destination to be verified again (today's
@@ -357,6 +357,29 @@ Not changed: a read-back of an already created post that meets a disabled execut
 original Discord application is unavailable. Keep the receipt for manual review."), an existing rule; the lane does not
 claim one while paused, the minute cron's frozen path can.
 
+## The worker flag and migration 128
+
+Migration 128's guard trigger (installed in production) refuses the claim of a Discord post by a worker that does not use
+the fenced lease protocol: CheckViolation "Discord requires the current fenced worker protocol before dispatch."
+`POSTRIFF_DISCORD_WORKER_V1_ENABLED` (1 or true) is what makes the worker use it. With the flag unset or mistyped, the
+minute worker still claims a due Discord post the old way, the guard refuses, and the whole claim transaction aborts on
+every attempt: the tenant cursor does not advance, so the same workspace is first again every tick and the later
+workspaces of that claim, of any provider, are never processed [independent review of the send path, scope B: three ticks,
+another tenant's due post still scheduled]. This is the frozen worker's behaviour with that guard installed, with or without
+W-02, and the earlier statements that Discord is then "held, not sent" or "claimed and sent as before" were wrong for a
+database with migration 128.
+
+Fixed at the release, not in the frozen path: the hosted preflight now fails a build with any Discord feature flag on
+(authorization v2, connections v2, rate limits, webhook, user install, engagement, the lane) and the worker flag not 1 or
+true (`discord-worker-protocol`; the lane's own check stays). Environment changes reach new deployments only, so every
+deployment passes it. Not done, proposed (the owner decides, it touches the frozen path): in `PostgresWorker.claim`, react to
+that one CheckViolation (sqlstate 23514 and its message), roll back, run the claim again with `exclude_discord` for the rest
+of the process's life, count it (`discord_stats['fenced']`, created on first use so no trace changes) and log one WARNING.
+It acts only after the failure the frozen code raises, so `FlagOffIsTheFrozenBase` would stay green; the caveat is that in
+that state the minute worker would stop raising and leave Discord posts unsent. The simpler "the tick excludes Discord
+when the flag is off" is not proposed: it changes the trace `test_flag_on_without_the_worker_protocol_matches_the_base_exactly`
+pins.
+
 ## Fail-safe behaviour
 
 What each cause does, in the minute cron's tick, in the 12 shards, and on the customer's post [reasoned from the
@@ -365,7 +388,7 @@ quoted texts are the events and next actions the existing worker writes.
 
 | Cause | Minute tick | Shards | The customer's post | Signal |
 |---|---|---|---|---|
-| Flag off, or the lease protocol off | frozen path: claims and sends Discord as before W-02 | answer `{"enabled": false}` without starting the runtime | sent as before | `status.blocker` `disabled` |
+| Flag off, or the lease protocol off | frozen path: claims Discord as before W-02. With the worker flag off AND migration 128 installed (as in production) a due Discord post is refused by the database guard and the claim aborts for every provider ("The worker flag and migration 128"); the preflight now fails such a build | answer `{"enabled": false}` without starting the runtime | sent as before when the worker flag is on; with it off and migration 128 installed not sent, and the claim aborts | `status.blocker` `disabled`; the preflight's `discord-worker-protocol` |
 | Lane budget misconfigured | frozen path, sends as before | 503 `discord_lane_configuration`, nothing claimed | sent as before | shard 503s; `blocker` `configuration` |
 | Rate limits off; or rate limits on with no coordinator (no policy, or one that does not parse: `runtime_from_environment` then builds no coordinator and turns Discord authorization off) | frozen path; Discord authorization is off, so Discord is paused: each claimed post is released unsent for a minute at a time (before K1: held, destination set to `verification_required`) [measured on PostgreSQL for both] | stop at once, `coordinator_unavailable`, nothing claimed | later than scheduled ("Await Discord shared rate budget; no POST occurred and this approval remains frozen"), sent after the repair if still inside its approval; held, never sent late, once the wait passes its approval; no destination is touched | the preflight fails; WARNING shard lines; `blocker` `coordinator_unavailable` |
 | Discord paused: execution disabled (the kill switch `POSTRIFF_OAUTH_DISCORD_DISABLED`, or a provider flag not set), or authorization off | the step releases each post it claims unsent for a minute at a time (never held, destination untouched) | every loop stops before any claim, `discord_paused` (WARNING line) | waits; sent after the pause if still inside its approval; held (never sent late) once the wait passes its approval; no customer has to authorize again [measured on PostgreSQL: 4 workspaces, 8 posts: before, 4 of 4 destinations demoted and 8 of 8 posts held] | `discord_paused` lines; the ops health payload's `executionEnabled`, `authorizationV2`, `killSwitch` |
