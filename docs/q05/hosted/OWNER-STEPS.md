@@ -57,8 +57,9 @@ are the only steps you do.
 
 ## Tell the Release Captain before you approve
 
-- A healthy run makes roughly **40 cross-tenant requests that are correctly denied** (about forty
-  `403`s). That volume can trip the **H-07 cross-tenant alert**. Let the Release Captain know a Q-05
+- A healthy run makes roughly **150 cross-tenant requests that are correctly denied** (mostly `403`s and
+  `404`s; with the RC2 sender-name cases, their never-existing-id comparisons and timing repeats). That
+  volume can trip the **H-07 cross-tenant alert**. Let the Release Captain know a Q-05
   run is about to happen, so the spike is expected and not handled as an incident.
 - Each run also sends **two login e-mails** (one per account), which counts against the provider's
   e-mail / OTP rate budget. Don't re-run many times in quick succession.
@@ -97,7 +98,9 @@ A gate run exercises the real write routes, so set the throwaway accounts up fir
   **server where both throwaway owners' Discord users are members** (with Manage Nicknames), so that
   both workspaces can install the bot into that one server. Until that server exists, this case runs
   only in the local harness.
-- **Optional, for the same-workspace sender-name cases:** other members of each workspace — a viewer,
-  an editor, an editor with connection-management, an admin who did not authorize the connections, and
-  a member removed again — each a plus-addressed throwaway sign-up. Without them those cases are
-  reported **NOT RUN** (they always run in the local harness).
+- **Nothing to set up for the same-workspace sender-name cases** (a viewer, an editor, a connection
+  manager, an admin who did not install the bot, a removed member): this run signs in the two owners
+  only, so it reports those cases **NOT RUN (local-only)** and the gate accepts exactly that; the local
+  harness runs them against the same SHA.
+- The probe never changes a **bot nickname** on the live site (it only reads it); the same-server nickname
+  authority, the nickname hold and the send-level name checks run in the local harness.

@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -133,6 +134,7 @@ sys.exit(int(knobs.get("exit", 0)))
 '''
 
 PROBE_SHA256 = hashlib.sha256(STUB_PROBE.encode()).hexdigest()
+INHERITED_VALUE = 'leaky-' + secrets.token_hex(6)   # an inherited variable the probe env must drop
 EXPECT_REV = "c" * 40  # a 40-hex "promoted build" sourceRevision for gate-mode tests
 
 failures = []
@@ -461,7 +463,7 @@ def signin_suite():
         open(os.path.join(root, 'work', 'probe.py'), 'w').write(STUB_PROBE)
         with open(os.path.join(root, 'work', 'probe_knobs.json'), 'w') as fh:
             json.dump({'cases': cases or [], 'exit': exit_code}, fh)
-        env = {'MODE': mode, 'EXPECT_REV': EXPECT_REV, 'INHERITED_SECRET': 'leaky-inherited-value'}
+        env = {'MODE': mode, 'EXPECT_REV': EXPECT_REV, 'INHERITED_SECRET': INHERITED_VALUE}
         env.update(secrets)
         env.update(knobs or {})
         code, text, _ = run(SIGNIN, root, env)
@@ -567,6 +569,14 @@ def signin_suite():
     check('gate tolerates a send-blast case being NOT RUN (send-risk off)', code == 0, text[-200:])
     code, text, *_ = signin('generic', secrets_otp, cases=[{'case': 'read.x', 'verdict': 'NOT_RUN', 'blast': ''}])
     check('generic/smoke does not fail the job on a NOT RUN case', code == 0, text[-200:])
+    role_local = {'case': 'read.sender.role.viewer.webhook.A', 'verdict': 'NOT_RUN', 'blast': '', 'scope': 'role',
+                  'note': 'local-only:role principal not provided'}
+    code, text, *_ = signin('gate', secrets_otp, cases=[role_local], knobs={'HEALTH_REV': EXPECT_REV})
+    check('gate tolerates a same-workspace role case reported local-only', code == 0, text[-200:])
+    code, text, *_ = signin('gate', secrets_otp, cases=[dict(role_local, scope='idor', case='read.idor.x')], knobs={'HEALTH_REV': EXPECT_REV})
+    check('gate fails a local-only note outside the role scope', code != 0 and 'were NOT RUN that must run' in text, text[-200:])
+    code, text, *_ = signin('gate', secrets_otp, cases=[dict(role_local, note='undiscovered:no webhook connection discovered')], knobs={'HEALTH_REV': EXPECT_REV})
+    check('gate fails an undiscovered role case', code != 0 and 'were NOT RUN that must run' in text, text[-200:])
 
 
 def docs_suite():
@@ -692,7 +702,7 @@ def evaluate(path):
         open(os.path.join(root, 'work', 'probe.py'), 'w').write(STUB_PROBE)
         with open(os.path.join(root, 'work', 'probe_knobs.json'), 'w') as fh:
             json.dump({'cases': cases or [], 'exit': exit_code}, fh)
-        env = {'MODE': mode, 'EXPECT_REV': EXPECT_REV, 'INHERITED_SECRET': 'leaky-inherited-value'}
+        env = {'MODE': mode, 'EXPECT_REV': EXPECT_REV, 'INHERITED_SECRET': INHERITED_VALUE}
         env.update(secrets); env.update(knobs or {})
         code, text, _ = run(signinrun, root, env)
         penv = read(root, 'work/probe_env.json'); penv = json.loads(penv) if penv else {}
@@ -717,6 +727,14 @@ def evaluate(path):
     # gate: health must match expectSourceRevision (checked before any code is spent), and a non-send
     # NOT-RUN case fails the gate
     code, _t, *_ = signin('gate', sotp, cases=[{'case': 'read.x', 'verdict': 'NOT_RUN', 'blast': ''}], knobs={'HEALTH_REV': EXPECT_REV})
+    results.append(code != 0)
+    role_local = {'case': 'read.sender.role.viewer.webhook.A', 'verdict': 'NOT_RUN', 'blast': '', 'scope': 'role',
+                  'note': 'local-only:role principal not provided'}
+    code, _t, *_ = signin('gate', sotp, cases=[role_local], knobs={'HEALTH_REV': EXPECT_REV})
+    results.append(code == 0)                                              # local-only role cases only
+    code, _t, *_ = signin('gate', sotp, cases=[dict(role_local, scope='idor')], knobs={'HEALTH_REV': EXPECT_REV})
+    results.append(code != 0)
+    code, _t, *_ = signin('gate', sotp, cases=[dict(role_local, note='undiscovered:x')], knobs={'HEALTH_REV': EXPECT_REV})
     results.append(code != 0)
     code, _t, _p, curl, _a = signin('gate', sotp, knobs={'HEALTH_REV': 'a' * 40})
     results.append(code != 0 and '/auth/v1/verify' not in curl)          # N6 (and the M6 build gate)
@@ -759,6 +777,10 @@ MUTATIONS = [
     ('accept a password grant again', '"$SUPABASE_URL/auth/v1/verify"', '"$SUPABASE_URL/auth/v1/token?grant_type=password"'),
     ('stop exiting with the probe code', 'exit "$rc"', 'exit 0'),
     ('let gate accept any NOT RUN case', '.verdict == "NOT_RUN" and .blast != "send"', '.verdict == "NOT_RUN" and .blast == "send"'),
+    ('let gate accept a local-only note on any scope', '((.scope == "role" and ((.note // "") | startswith("local-only:"))) | not)',
+     '(((.note // "") | startswith("local-only:")) | not)'),
+    ('let gate accept every NOT RUN role case', '((.scope == "role" and ((.note // "") | startswith("local-only:"))) | not)',
+     '((.scope == "role") | not)'),
     ('accept any mode (drop the generic/gate allowlist)', '*) echo \'mode must be "generic" or "gate"\'; exit 1 ;;', '*) : ;;'),
     ('drop the run_attempt guard', "[ \"${GITHUB_RUN_ATTEMPT:-1}\" = 1 ] || { echo 're-runs are refused; push a new request'; exit 1; }", "true"),
     ('drop the tip-of-branch check', '[ "$tip" = "$sha" ] || { echo "the request SHA is not the current tip of ${RC_BRANCH}"; exit 1; }', 'true'),

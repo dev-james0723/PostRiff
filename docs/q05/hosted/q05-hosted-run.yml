@@ -250,8 +250,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           [ "$REV_BEFORE" = "$REV_AFTER" ] || { echo "the serving build changed mid-run; result is void"; rc=1; }
           if [ "$MODE" = gate ]; then
-            bad="$(jq -rs '[.[] | select(.verdict == "NOT_RUN" and .blast != "send")] | length' cases.jsonl 2>/dev/null || echo 999)"
-            [ "$bad" = 0 ] || { echo "gate: ${bad} case(s) were NOT RUN that must run (only send-blast cases may be gated off)"; rc=1; }
+            # Only send-blast cases, and same-workspace ROLE cases the probe marks local-only (this run signs in the
+            # two owners only; the local harness runs those against the same SHA), may be NOT RUN in a gate run.
+            bad="$(jq -rs '[.[] | select(.verdict == "NOT_RUN" and .blast != "send" and ((.scope == "role" and ((.note // "") | startswith("local-only:"))) | not))] | length' cases.jsonl 2>/dev/null || echo 999)"
+            [ "$bad" = 0 ] || { echo "gate: ${bad} case(s) were NOT RUN that must run (only send-blast and local-only role cases may be)"; rc=1; }
           fi
           echo "probe exit: ${rc} (mode ${MODE})"
           exit "$rc"

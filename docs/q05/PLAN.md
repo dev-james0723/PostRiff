@@ -97,6 +97,35 @@ connection-health, phone, agent, coworker; generic workspace routes that share t
 gate; and non-workspace/self routes). `tests/test_q05_probe_coverage.py` fails if any hosted
 `/api/workspaces/<id>/…` family is neither in the matrix nor excluded with a reason.
 
+### Customer Discord sender names (RC2)
+
+`GET`/`POST /api/workspaces/{ws}/channels/{conn}/discord-sender-name` (contract:
+`docs/sender-name/UI-API-CONTRACT.md` on the sender-name branch), both directions, per sender kind
+(incoming webhook, bot installation), scored like the rest of the matrix:
+
+- **read, write, clear, replay** of the victim's settings through the victim's workspace id (the
+  membership gate) and through the attacker's own workspace with the victim's connection id (the
+  connection lookup): `ws_scope`/`idor` reads and writes, a write and a **clear** (`reset`) carrying the
+  victim's REAL current fingerprint, mixed ids, malformed connection and workspace ids;
+- **learn**: every gate and IDOR case is compared with a never-existing id (same status, code and the
+  WHOLE body, so no extra field, reason or retry time differs), sender-name reads also on timing (a few
+  alternating pairs; a case fails only if every victim-id answer is slower than every twin answer by more
+  than 25 ms), victim markers in any response, and the attacker's own audit after the attacks;
+- **same workspace**: viewer and editor (refused before anything is read), removed member (the gate),
+  connection manager and admin who did not install the bot (bot nickname: read-only, refused; webhook
+  name: any connection manager may edit per the contract, a never-current fingerprint is refused);
+  these need other members and run in the local harness; a hosted run reports them NOT RUN (local-only);
+- owner controls after the attack phase (own read, stale fingerprint, a reserved-word name, save /
+  stale replay / restore), which also serve as the deferred owner differentials.
+
+Locally the probe marks its attack phase and the harness proves that in exactly that phase neither
+tenant changed (revision delta 0) and the mock Discord saw no request at all. After the probe the
+harness runs four send-level scenarios through the real app and two concurrent real workers against the
+mock Discord (`tests/q05_sender_scenarios.py`): name pollution, switch-off hold, single-installation
+nickname authority (both directions and three concurrent orders), and the nickname hold after an
+admin-side rename. Mutations S1 to S5 in `tests/test_q05_tenant_probe_mutations.py` delete each guard
+and must be detected.
+
 ## 2. What needs no Discord connection, and what needs real Discord objects in BOTH tenants
 
 - **No Discord connection required**: every style-(i) workspace-scope case (state, members, audit,
