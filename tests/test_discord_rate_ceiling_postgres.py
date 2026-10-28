@@ -257,8 +257,10 @@ class ExactCeilingOnPostgres(unittest.TestCase):
         self.assertLessEqual(stack.wire.peak_second, 25)
         self.assertEqual(stack.wire.route429, 0)
 
-    def test_every_credential_and_both_kinds_of_admission_share_one_ceiling(self):
-        stack = Stack(self.cluster, capacity=12)
+    def mixed_credentials(self, **policy):
+        """Twelve threads asking with the bot's token, a person's bearer and the client secret in turn, reads and permits alike,
+        for five seconds, on a policy of cap 12 (and whatever else `policy` says)."""
+        stack = Stack(self.cluster, capacity=12, **policy)
         bot = stack.identity
         user = RequestIdentity.make(stack.app, 'user', 'someone', '810000000000000001')
         oauth = RequestIdentity.make(stack.app, 'oauth', 'a-client-secret-with-enough-length')
@@ -289,13 +291,34 @@ class ExactCeilingOnPostgres(unittest.TestCase):
             thread.start()
         for thread in threads:
             thread.join()
-        stamps = stack.stamps()
         self.assertEqual(errors, [])
+        return stack
+
+    def kind_stamps(self, stack):
+        """(the wire times of the person's bearer, of every other credential), in whole microseconds, and the kinds admitted."""
+        with self.cluster.connect(autocommit=True) as db:
+            rows = db.execute(f"SELECT credential_kind,(extract(epoch from {WIRE})*1000000)::bigint FROM public.pr_discord_request_admissions "
+                              'WHERE application_key=%s ORDER BY request_seq', (stack.key,)).fetchall()
+        return ([m for kind, m in rows if kind == 'user'], [m for kind, m in rows if kind != 'user'], {kind for kind, _ in rows})
+
+    def test_every_credential_and_both_kinds_of_admission_share_one_ceiling_without_a_bearer_budget(self):
+        """A policy without the bearer pair (what a build that predates the bearer budget reads, and the way back to it): the
+        person's bearer is charged to the application budget with every other credential."""
+        stack = self.mixed_credentials(bearer_capacity=None, bearer_window_seconds=None)
+        stamps = stack.stamps()
         self.assertGreater(len(stamps), 30)
         self.assertLessEqual(busiest_closed(stamps, 1.0), 12)
-        with self.cluster.connect(autocommit=True) as db:
-            kinds = {row[0] for row in db.execute('SELECT DISTINCT credential_kind FROM public.pr_discord_request_admissions '
-                                                  'WHERE application_key=%s', (stack.key,))}
+        self.assertEqual(self.kind_stamps(stack)[2], {'bot', 'user', 'oauth'}, 'all credential kinds were admitted')
+
+    def test_every_credential_but_the_person_s_bearer_shares_one_ceiling_and_the_bearer_has_its_own(self):
+        """With the bearer budget (the owner's D-2 option 1): the bot, the client secret and (not here) a webhook secret share the
+        application ceiling; the person's own bearer has a second exact ceiling, and neither takes a slot of the other."""
+        stack = self.mixed_credentials(bearer_capacity=5, bearer_window_seconds=1)
+        bearer, rest, kinds = self.kind_stamps(stack)
+        self.assertGreater(len(rest), 30)
+        self.assertGreater(len(bearer), 10)
+        self.assertLessEqual(busiest_closed(rest, 1.0), 12, 'the bot and the client secret share the application ceiling')
+        self.assertLessEqual(busiest_closed(bearer, 1.0), 5, 'the bearer has its own')
         self.assertEqual(kinds, {'bot', 'user', 'oauth'}, 'all credential kinds were admitted')
 
     def test_a_learned_route_limit_is_never_exceeded(self):

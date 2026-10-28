@@ -5,8 +5,9 @@
 -- workspace, member, job, channel, server, message, scope key or token. Same statements and field names as
 -- src/postriff_phase2/discord/ops.py (a real-PostgreSQL test compares the two), with three differences: no process
 -- view (lane status, effective gate, cap, flags and policy come only from the route), the application-wide guard
--- rows are chosen by kind (policy and invalid are one row each; the bot's global and credential rows need the bot
--- token to name, so only their kind counts are here), and no optional founder tables. Feed the result to
+-- rows are chosen by kind (policy and invalid are one row each, and the bearer budget's row, which is a policy row too, is
+-- told by its scope key; the bot's global and credential rows need the bot token to name, so only their kind counts are
+-- here), and no optional founder tables. Feed the result to
 -- `python3 scripts/discord_ops_check.py evaluate -` (the JSON value of the `snapshot` column).
 -- Cost: one pass over the due-work projection, the newest 20,000 coordinator admissions through the request_seq
 -- index, one pass over the coordinator's state rows, and the connect gate's own server count. No customer state.
@@ -20,9 +21,13 @@ queue AS (
     FROM observed o LEFT JOIN public.pr_discord_worker_projection p ON true
     GROUP BY o.epoch
 ), sample AS MATERIALIZED (
-    SELECT is_publish, state, status_code, rate_scope, route_key, reserved_at, sent_at, outcome_at,
+    SELECT is_publish, state, status_code, rate_scope, route_key, reserved_at, sent_at, outcome_at, credential_kind,
            coalesce(outcome_at, sent_at, reserved_at) AS last_at
     FROM public.pr_discord_request_admissions ORDER BY request_seq DESC LIMIT 20000
+), budgets AS (
+    -- the bearer budget (OPEN-QUESTIONS Q21) has a row of its own, scope key 01:, once the person's bearer has been used under a
+    -- policy that carries it; with it the application budget counts the other credentials alone
+    SELECT EXISTS (SELECT 1 FROM public.pr_discord_rate_state WHERE scope_key LIKE '01:%') AS bearer
 ), ledger AS (
     SELECT count(*) AS sampled,
            extract(epoch FROM min(s.reserved_at))::double precision AS oldest,
@@ -54,7 +59,10 @@ queue AS (
                                    OR (s.status_code = 429 AND coalesce(s.rate_scope, 'unknown') <> 'shared'))) AS invalid,
            count(*) FILTER (WHERE s.outcome_at > o.at - interval '300 seconds' AND s.status_code IS NOT NULL) AS responses,
            count(*) FILTER (WHERE s.outcome_at > o.at - interval '300 seconds' AND s.status_code >= 500) AS server_errors,
-           count(*) FILTER (WHERE s.reserved_at > o.at - interval '60 seconds') AS admitted,
+           count(*) FILTER (WHERE s.reserved_at > o.at - interval '60 seconds'
+                              AND NOT (b.bearer AND s.credential_kind = 'user')) AS admitted,
+           count(*) FILTER (WHERE b.bearer AND s.credential_kind = 'user'
+                              AND s.reserved_at > o.at - interval '60 seconds') AS bearer_admitted,
            count(*) FILTER (WHERE NOT s.is_publish AND s.state = 'uncertain'
                               AND s.last_at > o.at - interval '900 seconds') AS uncertain_reads,
            count(*) FILTER (WHERE s.status_code = 401 AND s.last_at > o.at - interval '900 seconds') AS unauthorized,
@@ -63,9 +71,9 @@ queue AS (
            -- the reconciliation read-back route, stored as the SHA-256 of its template (ops.READBACK_ROUTE_KEY)
            extract(epoch FROM max(s.outcome_at) FILTER (WHERE s.route_key = encode(sha256(convert_to('GET:/channels/{id}/messages/{id}', 'UTF8')), 'hex')
                                                           AND s.state = 'observed' AND s.status_code BETWEEN 200 AND 299))::double precision AS last_readback
-    FROM sample s CROSS JOIN observed o
+    FROM sample s CROSS JOIN observed o CROSS JOIN budgets b
 ), guard_rows AS (
-    SELECT r.kind,
+    SELECT CASE WHEN r.scope_key LIKE '01:%' THEN 'bearer' ELSE r.kind END AS name,
            jsonb_build_object(
                'present', true, 'hold', r.manual_hold,
                'blocked', coalesce(r.blocked_until > o.at, false), 'circuit', coalesce(r.circuit_until > o.at, false),
@@ -118,12 +126,13 @@ SELECT jsonb_build_object(
         'stuckSent', l.stuck_new, 'stuckSentTotal', l.stuck_all),
     'coordinator', jsonb_build_object(
         'status', 'observed_by_kind',
-        'guards', coalesce((SELECT jsonb_object_agg(g.kind, g.guard) FROM guard_rows g), '{}'::jsonb),
+        'guards', coalesce((SELECT jsonb_object_agg(g.name, g.guard) FROM guard_rows g), '{}'::jsonb),
         'kinds', coalesce((SELECT jsonb_object_agg(k.kind, k.counts) FROM kinds k), '{}'::jsonb),
         'traffic', jsonb_build_object(
             'responses429', l.r429, 'responses429Global', l.r429_global, 'invalid10m', l.invalid,
             'invalidWindowCovered', l.sampled < 20000 OR o.epoch - l.oldest >= 600,
             'responses5m', l.responses, 'serverErrors5m', l.server_errors, 'admissions60s', l.admitted,
+            'bearerAdmissions60s', l.bearer_admitted,
             'uncertainReads', l.uncertain_reads, 'unauthorized', l.unauthorized)),
     'servers', jsonb_build_object('status', 'observed', 'counted', sv.counted, 'inFlight', sv.in_flight,
                                   'used', sv.counted + sv.in_flight),

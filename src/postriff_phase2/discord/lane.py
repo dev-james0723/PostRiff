@@ -80,7 +80,8 @@ MAX_QUARANTINES_PER_CLAIM = 2
 MAX_POSITION_RESTORES = 3
 SHAPE_ERRORS = (AttributeError, IndexError, KeyError, TypeError, ValueError)
 _SHARD = re.compile(r'^(0|[1-9][0-9]?)$')
-_GUARDS = ('00:', '10:', '11:', '20:')  # application policy, bot global, bot credential, invalid-request budget
+# application policy, the bearer budget (when the policy has one), bot global, bot credential, invalid-request budget
+_GUARDS = ('00:', '01:', '10:', '11:', '20:')
 _OUTLOOK = '''WITH observed AS (SELECT extract(epoch from clock_timestamp())::double precision AS at)
     SELECT observed.at,r.scope_key,r.kind,r.manual_hold,r.remaining,extract(epoch from r.reset_at)::double precision,
         extract(epoch from r.blocked_until)::double precision,extract(epoch from r.circuit_until)::double precision
@@ -557,6 +558,9 @@ def outlook(lane):
     marker = '0' * 64
     keys = sorted(key for key in provider.rate_limiter._keys(provider._rate_identity('bot'), marker, marker, marker)
                   if key[:3] in _GUARDS)
+    bearer = getattr(provider.rate_limiter, 'bearer_key', None)   # the person's own bearer calls' budget: the grant check opens every step
+    if bearer:
+        keys = sorted(keys + [bearer])
     with lane.connection_factory() as db, db.cursor() as cur:
         cur.execute(_OUTLOOK, (keys,))
         rows = cur.fetchall()

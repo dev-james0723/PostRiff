@@ -54,7 +54,7 @@ STUCK_SENT_SECONDS = 120       # docs/w02/monitoring.sql M5
 # The reconciliation read-back of a created message (hosted_social: GET /channels/{channel}/messages/{message}). The
 # coordinator stores the route as the SHA-256 of its template (rate_limits.route_identity); a test keeps them equal.
 READBACK_ROUTE_KEY = hashlib.sha256(b'GET:/channels/{id}/messages/{id}').hexdigest()
-GUARDS = {'00:': 'policy', '10:': 'global', '11:': 'credential', '20:': 'invalid'}
+GUARDS = {'00:': 'policy', '01:': 'bearer', '10:': 'global', '11:': 'credential', '20:': 'invalid'}   # 'bearer' only with a bearer budget
 KINDS = ('policy', 'global', 'credential', 'invalid', 'discovery', 'resource', 'route')
 FAMILIES = ('workspace', 'connections', 'discord', 'other')
 PLATFORM_COUNTS = ('publicationUncertain', 'queueDelayed', 'publicationFailed', 'publicationHeld')
@@ -141,7 +141,9 @@ def config_section(provider, now, values):
         out['policy'].update(valid=bool(valid), daysLeft=round((policy.expires_at - now) / 86400, 2),
                              revision=policy.revision, appCapacity=policy.app_capacity,
                              appWindowSeconds=policy.app_window_seconds, invalidCapacity=policy.invalid_capacity,
-                             invalidWindowSeconds=policy.invalid_window_seconds)
+                             invalidWindowSeconds=policy.invalid_window_seconds,
+                             bearerCapacity=policy.bearer_capacity or None,
+                             bearerWindowSeconds=policy.bearer_window_seconds if policy.bearer_capacity else None)
     return out
 
 
@@ -167,7 +169,7 @@ def read_queue(cur, now, context):
 
 _LEDGER = '''WITH observed AS MATERIALIZED (SELECT clock_timestamp() AS at),
 sample AS MATERIALIZED (
-    SELECT is_publish, state, status_code, rate_scope, route_key, reserved_at, sent_at, outcome_at,
+    SELECT is_publish, state, status_code, rate_scope, route_key, reserved_at, sent_at, outcome_at, credential_kind,
            coalesce(outcome_at, sent_at, reserved_at) AS last_at
     FROM public.pr_discord_request_admissions ORDER BY request_seq DESC LIMIT %(limit)s)
 SELECT count(*),
@@ -201,24 +203,31 @@ SELECT count(*),
                                OR (s.status_code = 429 AND coalesce(s.rate_scope, 'unknown') <> 'shared'))),
        count(*) FILTER (WHERE s.outcome_at > o.at - make_interval(secs => %(errors)s) AND s.status_code IS NOT NULL),
        count(*) FILTER (WHERE s.outcome_at > o.at - make_interval(secs => %(errors)s) AND s.status_code >= 500),
-       count(*) FILTER (WHERE s.reserved_at > o.at - make_interval(secs => %(saturation)s)),
+       count(*) FILTER (WHERE s.reserved_at > o.at - make_interval(secs => %(saturation)s)
+                          AND NOT (%(bearer)s AND s.credential_kind = 'user')),
        count(*) FILTER (WHERE NOT s.is_publish AND s.state = 'uncertain'
                           AND s.last_at > o.at - make_interval(secs => %(window)s)),
        count(*) FILTER (WHERE s.status_code = 401 AND s.last_at > o.at - make_interval(secs => %(window)s)),
        extract(epoch FROM max(s.outcome_at) FILTER (WHERE s.is_publish AND s.state = 'observed'
                                                       AND s.status_code BETWEEN 200 AND 299))::double precision,
        extract(epoch FROM max(s.outcome_at) FILTER (WHERE s.route_key = %(readback)s AND s.state = 'observed'
-                                                      AND s.status_code BETWEEN 200 AND 299))::double precision
+                                                      AND s.status_code BETWEEN 200 AND 299))::double precision,
+       count(*) FILTER (WHERE %(bearer)s AND s.credential_kind = 'user'
+                          AND s.reserved_at > o.at - make_interval(secs => %(saturation)s))
 FROM sample s CROSS JOIN observed o'''
 
 
 def read_ledger(cur, now, context):
+    # With a bearer budget the application budget counts the bot's class alone (rate_limits.BEARER_KIND is the other): the
+    # admissions of the last minute are given for each, so each can be read against its own cap.
+    limiter = getattr(context.get('provider'), 'rate_limiter', None)
+    bearer = bool(getattr(limiter, 'bearer_key', None))
     cur.execute(_LEDGER, {'limit': SAMPLE_LIMIT, 'window': DELIVERY_WINDOW, 'stuck': STUCK_SENT_SECONDS,
                           'invalid': INVALID_WINDOW, 'errors': ERROR_WINDOW, 'saturation': SATURATION_WINDOW,
-                          'readback': READBACK_ROUTE_KEY})
+                          'readback': READBACK_ROUTE_KEY, 'bearer': bearer})
     (sampled, oldest, newest, creates, accepted, customer, system, limited, uncertain, blocked, in_flight,
      stuck_new, stuck_all, r429, r429_global, invalid, responses, server_errors, admitted, uncertain_reads,
-     unauthorized, last_accepted, last_readback) = cur.fetchone()
+     unauthorized, last_accepted, last_readback, bearer_admitted) = cur.fetchone()
     sampled = int(sampled)
     span = _age(now, oldest) if sampled else None
     # The sample is the newest SAMPLE_LIMIT rows: a window is fully seen when the sample is not full or reaches back.
@@ -234,6 +243,7 @@ def read_ledger(cur, now, context):
     traffic = {'responses429': int(r429), 'responses429Global': int(r429_global), 'invalid10m': int(invalid),
                'invalidWindowCovered': covered(INVALID_WINDOW), 'responses5m': int(responses),
                'serverErrors5m': int(server_errors), 'admissions60s': int(admitted),
+               'bearerAdmissions60s': int(bearer_admitted),
                'uncertainReads': int(uncertain_reads), 'unauthorized': int(unauthorized)}
     progress = {'lastAdmissionAgeSeconds': _age(now, newest), 'lastAcceptedCreateAgeSeconds': _age(now, last_accepted),
                 'lastReadbackAgeSeconds': _age(now, last_readback), 'sampleSpanSeconds': span}
@@ -265,7 +275,11 @@ def guard_keys(provider):
         return {}
     marker = '0' * 64
     keys = limiter._keys(provider._rate_identity('bot'), marker, marker, marker)
-    return {key: GUARDS[key[:3]] for key in keys if key[:3] in GUARDS}
+    found = {key: GUARDS[key[:3]] for key in keys if key[:3] in GUARDS}
+    bearer = getattr(limiter, 'bearer_key', None)   # the person's own bearer calls' budget, when the policy has one
+    if bearer:
+        found[bearer] = GUARDS[bearer[:3]]
+    return found
 
 
 def _guard(row, now):
@@ -287,7 +301,7 @@ def _guard(row, now):
 
 def read_coordinator(cur, now, context):
     keys = guard_keys(context.get('provider'))
-    guards = {name: {'present': False} for name in GUARDS.values()}
+    guards = {name: {'present': False} for name in GUARDS.values() if name != 'bearer' or 'bearer' in keys.values()}
     if keys:
         cur.execute(_GUARD_ROWS, (sorted(keys),))
         for row in cur.fetchall():

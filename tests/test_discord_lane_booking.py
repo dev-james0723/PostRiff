@@ -221,7 +221,7 @@ class OutlookReadsTheBookedHorizon(unittest.TestCase):
     not wait; once the horizon is full, `remaining` is 0 and `reset` is when a booking is possible again."""
     def setUp(self):
         exact_arithmetic(self)
-        self.fixture = Outlook('test_it_reads_the_four_application_wide_rows_without_locking')   # its fake cursor and worker
+        self.fixture = Outlook('test_it_reads_the_four_application_wide_rows_and_the_bearer_budget_s_without_locking')   # its fake cursor and worker
         self.fixture.setUp()
         self.ledger = MemoryLedger(now=T0)
         self.coordinator = SharedPostgresBudget(self.ledger.connection, APP, policy=policy(3, 1),

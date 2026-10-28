@@ -14,10 +14,12 @@ import secrets
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 
 import discord_lane_fixture as F
-from postriff_phase2.discord import rate_limits
+from postriff_phase2.discord import ops, rate_limits
 from postriff_phase2.discord.rate_limits import RateDelayed, RateCoordinatorUnavailable
+from postriff_phase2.hosted_social import HostedSocial
 from test_discord_rate_booking_postgres import Jittered
 from test_discord_rate_ceiling_postgres import Stack, busiest_closed
 
@@ -164,6 +166,31 @@ class TwoBudgetsOnPostgres(unittest.TestCase):
         self.assertEqual(rows['01:'][0], BEARER_CAP)
         for prefix, cap in (('00:', BOT_CAP), ('01:', BEARER_CAP)):
             self.assertTrue(0 <= rows[prefix][1] <= cap, prefix)
+
+    def test_the_health_payload_counts_the_two_classes_apart_and_shows_each_budget(self):
+        stack = self.stack()
+        counts = self.hammer(stack, 12, 6, 4, book=True)
+        self.assertEqual(counts['other'], [])
+        with self.cluster.connect(autocommit=True) as db:
+            bearer, rest = db.execute("SELECT count(*) FILTER (WHERE credential_kind='user'), count(*) FILTER (WHERE credential_kind<>'user') "
+                                      "FROM public.pr_discord_request_admissions WHERE reserved_at > clock_timestamp() - interval '60 seconds'").fetchone()
+        self.assertGreater(bearer, 10)
+        self.assertGreater(rest, 20)
+        worker = SimpleNamespace(social=HostedSocial(None, {'discord': stack.provider}), connection_factory=self.cluster.factory())
+        payload = ops.snapshot(worker, {'VERCEL_ENV': 'development'})
+        traffic, guards = payload['coordinator']['traffic'], payload['coordinator']['guards']
+        self.assertEqual((traffic['admissions60s'], traffic['bearerAdmissions60s']), (rest, bearer),
+                         'the application budget is read against the bot\'s class alone, the bearer budget against its own')
+        self.assertEqual((guards['policy']['limit'], guards['bearer']['limit']), (BOT_CAP, BEARER_CAP))
+        for name, cap in (('policy', BOT_CAP), ('bearer', BEARER_CAP)):
+            self.assertTrue(guards[name]['present'] and 0 <= guards[name]['remaining'] <= cap, name)
+        policy = payload['config']['policy']
+        self.assertEqual((policy['appCapacity'], policy['bearerCapacity'], policy['bearerWindowSeconds']), (BOT_CAP, BEARER_CAP, 1))
+        # the SQL twin of the payload (docs/ops/discord-ops-snapshot.sql, for a phone) says the same
+        with self.cluster.connect(autocommit=True) as db:
+            twin = db.execute((F.ROOT / 'docs/ops/discord-ops-snapshot.sql').read_text()).fetchone()[0]
+        self.assertEqual((twin['coordinator']['traffic']['admissions60s'], twin['coordinator']['traffic']['bearerAdmissions60s']), (rest, bearer))
+        self.assertEqual((twin['coordinator']['guards']['policy']['limit'], twin['coordinator']['guards']['bearer']['limit']), (BOT_CAP, BEARER_CAP))
 
 
 if __name__ == '__main__':
