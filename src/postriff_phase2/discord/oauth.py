@@ -244,7 +244,14 @@ class DiscordConnections:
         """Fresh token/subject/application proof; identify includes the user here."""
         info = self._response('GET', '/oauth2/@me', bearer, user_id=user_id)
         user = info.get('user') if isinstance(info, dict) else None
-        verified_id = user.get('id') if isinstance(user, dict) else None
+        if not isinstance(user, dict):
+            # A 200 that is not Discord's authorization record (an edge or proxy page arrives as {'raw': ...}, or the body is
+            # empty) is not Discord's verdict on the person's consent: like any other non-authoritative answer it must never
+            # revoke the identity or the servers installed through it (G2E-A-01; final review RA-1).
+            error = AlphaError('Discord did not confirm this just now. Nothing was changed. Try again shortly.', 503)
+            error.discord_permanent = False
+            raise error
+        verified_id = user.get('id')
         if not snowflake(verified_id) or user_id is not None and verified_id != user_id:
             fail('Discord did not verify the expected identity.')
         if (not isinstance(info.get('application'), dict)

@@ -277,6 +277,32 @@ class NonAuthoritativeAnswersRevokeNothing(unittest.TestCase):
             self.assert_untouched(harness, label)
             harness.s.save_state.assert_not_called()
 
+    def test_a_200_that_is_not_discords_authorization_record_on_the_still_valid_token_changes_nothing(self):
+        # Final review RA-1: the status was 200 but the body was an edge or proxy page (the transport hands it over as
+        # {'raw': ...}), an empty body or a record without the user. None of that is Discord's verdict on the person's consent.
+        answers = [('200 html', {'status': 200, 'headers': {'content-type': 'text/html'}, 'body': {'raw': '<html>edge</html>'}}),
+                   ('200 empty', {'status': 200, 'body': {}}),
+                   ('200 record without a user', {'status': 200, 'body': {'application': {'id': APP}, 'scopes': ['identify', 'guilds']}})]
+        for label, answer in answers:
+            harness = self.harness(('GET', '/oauth2/@me'), answer, expired=False)
+            error = harness.refresh()
+            self.assertEqual(error.status, 503, label)
+            self.assertNotEqual(error.code, 'discord_connection_required', label)
+            self.assertFalse(error.discord_permanent, label)
+            self.assert_untouched(harness, label)
+            harness.s.save_state.assert_not_called()
+
+    def test_a_200_record_for_another_user_still_revokes(self):
+        # The unchanged half: Discord's own record that names someone else is a real mismatch.
+        other = '999999999999999999'
+        answer = {'status': 200, 'headers': {'content-type': 'application/json'},
+                  'body': {'user': {'id': other}, 'application': {'id': APP}, 'scopes': ['identify', 'guilds']}}
+        harness = self.harness(('GET', '/oauth2/@me'), answer, expired=False)
+        error = harness.refresh()
+        self.assertEqual(error.code, 'discord_connection_required')
+        self.assertEqual(harness.record['status'], 'reconnect_required')
+        self.assertTrue(harness.card['revoked'])
+
     def test_a_lost_connection_on_the_still_valid_token_changes_nothing(self):
         harness = Harness(None, expired=False)
         harness.s._response = DiscordConnections._response.__get__(harness.s)
