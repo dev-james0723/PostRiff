@@ -171,6 +171,17 @@ no real secret.
   trailing second: the coordinator had already sent more than 25 in that second ('coordinator'), or the arrivals
   bunched ('wire'), or only the mock's own processing order put it over ('mock'). The same stamps make traffic
   from invocations other than the lane shards visible at the mock.
+- **Preflight passes.** From the mock log: passes per created post, what a released pass had completed (so which request
+  was refused next), the time until the same workspace's next pass (the re-claim), when in the minute the releases fall, and
+  whether the application window held 25 sends within 1.1 s over the second after each release. Per step, the wait from the
+  previous answer being observed to the next admission. `scripts/discord_lane_cap_release_trace.py RUN_DIR` prints the
+  summary and the sequence of events of a few typical released posts.
+- **Reservation attempts.** The invocation wrapper wraps the shared coordinator's `reserve_read`, `reserve` and `consume`
+  in every cron process and logs each call (time, seconds taken, operation, request kind, credential kind, outcome, and for a
+  refusal the quoted wait, scope and cause) to `attempts.jsonl`. A refused reservation leaves no row in the database, so this
+  is its only record. The receipt tabulates attempts, refusals and quoted waits by credential and request kind, and how many
+  attempts a read step needed. The wrapper also stamps the admitted permit's id on the request it sends, so an admission is
+  joined to its arrival at the mock exactly (older logs are joined by path and order).
 - **Witness age.** Per create: the person's grant check (else the server read) of its pass to the create reaching
   the mock, p50 / p90 / p99 / max, and the channel list's age.
 - **Per lane step.** Loop seconds (minus waits for the budget and for work) per step, and the database share of it:
@@ -211,7 +222,7 @@ PostgreSQL's log and PgBouncer's log. The per-run environment files are never up
 
 `python3 docs/w02/ci/run_tests.py` runs the workflow's own blocks against local git repositories. It covers request
 validation, exact-SHA fetches, the request script, action-validator and shellcheck. With `POSTRIFF_PG_BIN` set it
-adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (111 checks).
+adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (112 checks).
 
 ## The official run on Depot
 

@@ -18,16 +18,21 @@ Writes one JSON result: timings (spawn, import, start, handler start/end, exit),
 memory, the request log lines the application emitted, and any refused egress.
 """
 import argparse
+import functools
 import io
 import json
 import logging
 import os
+import re
 import resource
 import socket
 import sys
 import time
 
 BLOCKED = []
+# The permit the shared coordinator last admitted in this process. The next request this process sends carries it as
+# X-Cap-Permit, so the analysis can join an admission to its arrival at the mock exactly (not by path and order).
+CURRENT = {'permit': None}
 
 
 def fence_network():
@@ -100,6 +105,9 @@ def shim_discord_transport(mock_port, source='other'):
                         counts['misrouted'] += 1
                 headers = dict(request.header_items())
                 headers['X-Cap-Source'] = source
+                if CURRENT['permit']:
+                    headers['X-Cap-Permit'] = CURRENT['permit']
+                    CURRENT['permit'] = None
                 headers['X-Cap-Call-At'] = repr(time.time())  # the last thing before the call: the wire time's lower bound
                 rewritten = urllib.request.Request(local + path, data=request.data, headers=headers,
                                                    method=request.get_method())
@@ -107,6 +115,69 @@ def shim_discord_transport(mock_port, source='other'):
         return Opener()
     providers.build_opener = build_opener
     return counts
+
+
+GUILD0, CHANNEL0 = 1392000000000000000, 1393000000000000000  # the mock world's id bases (discord_lane_cap_mock)
+
+
+def instrument_coordinator(path, source):
+    """Record every reservation attempt of the shared request coordinator in this process, and change nothing.
+
+    reserve_read (a witness read, the grant check, the bot identity), reserve (the create permit) and consume (the create
+    leaving for the wire) are wrapped: each call is logged as one JSON array [time, seconds the call took, operation, method,
+    route with ids masked, credential kind, workspace index where the path names a server or channel, outcome (A admitted,
+    R refused with a wait, E error), the wait the coordinator quoted, its scope, its cause, the permit id when admitted,
+    the cron source of this process].
+    A refused reservation leaves no row in the database, so this log is the only record of the wait it was quoted. The
+    wrapped methods return and raise exactly what the originals do."""
+    from postriff_phase2.discord import rate_limits as limits
+    handle = open(path, 'a', buffering=1)
+    cls = limits.SharedPostgresBudget
+
+    def workspace(target):
+        match = re.match(r'/(guilds|channels)/([0-9]{5,25})', target)
+        if not match:
+            return None
+        number = int(match.group(2)) - (GUILD0 if match.group(1) == 'guilds' else CHANNEL0)
+        return number if 0 <= number < 10 ** 9 else None
+
+    def emit(operation, method, target, identity, started, took, outcome, error=None, permit=None):
+        row = [round(started, 4), round(took, 4), operation, method, re.sub(r'/[0-9]{5,25}', '/{id}', target.split('?')[0]),
+               getattr(identity, 'kind', None), workspace(target), outcome,
+               round(error.retry_after_seconds, 4) if isinstance(error, limits.RateDelayed) else None,
+               getattr(error, 'rate_scope_kind', None), getattr(error, 'rate_cause', None),
+               getattr(permit, 'id', None), source]
+        handle.write(json.dumps(row, separators=(',', ':')) + '\n')
+
+    def wrap(name, operation):
+        original = getattr(cls, name)
+
+        @functools.wraps(original)
+        def wrapper(self, *args, **kwargs):
+            CURRENT['permit'] = None  # an earlier admission whose request never left must not stamp the next one
+            started, began = time.time(), time.monotonic()
+            consuming = operation == 'consume'
+            permit_arg = args[0] if consuming and args else None
+            method, target = (args[1:3] if consuming else args[:2]) if len(args) >= 2 else ('?', '')
+            if consuming and len(args) < 3:
+                method, target = '?', ''
+            identity = kwargs.get('identity') or getattr(permit_arg, 'identity', None)
+            try:
+                result = original(self, *args, **kwargs)
+            except BaseException as error:
+                emit(operation, method, target, identity, started, time.monotonic() - began,
+                     'R' if isinstance(error, limits.RateDelayed) else 'E', error)
+                raise
+            permit = permit_arg if consuming else result
+            emit(operation, method, target, identity, started, time.monotonic() - began, 'A', None, permit)
+            if operation != 'reserve':  # a create permit is stamped when it is consumed, just before the POST
+                CURRENT['permit'] = getattr(permit, 'id', None)
+            return result
+        setattr(cls, name, wrapper)
+    for name, operation in (('reserve_read', 'read'), ('reserve', 'reserve'), ('consume', 'consume')):
+        if hasattr(cls, name):
+            wrap(name, operation)
+    return handle
 
 
 class Capture(logging.Handler):
@@ -136,6 +207,7 @@ def main(argv=None):
     parser.add_argument('--out', required=True)
     parser.add_argument('--warm', action='store_true', help='build the runtime before the request (a warm instance)')
     parser.add_argument('--nice', type=int, default=0)
+    parser.add_argument('--attempts', help='write the coordinator attempt log (one JSON array per line) to this file')
     args = parser.parse_args(argv)
     if args.nice:
         os.nice(args.nice)
@@ -155,6 +227,11 @@ def main(argv=None):
     try:
         import api.index as entry
         counts = shim_discord_transport(args.mock_port, source_tag(args.path))
+        if args.attempts:
+            try:
+                instrument_coordinator(args.attempts, source_tag(args.path))
+            except Exception as error:  # the log is evidence, not part of the system under test: say so and carry on
+                result['attemptLogError'] = '%s: %s' % (type(error).__name__, error)
         app = entry.app
         result['importedAt'] = time.time()
         if args.warm:

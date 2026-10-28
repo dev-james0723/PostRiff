@@ -235,7 +235,7 @@ def _spread(values):
     if not values:
         return None
     ordered = sorted(values)
-    return {'n': len(ordered), 'min': ordered[0], 'p50': quantile(ordered, .5), 'p90': quantile(ordered, .9),
+    return {'n': len(ordered), 'min': ordered[0], 'p10': quantile(ordered, .1), 'p50': quantile(ordered, .5), 'p90': quantile(ordered, .9),
             'p99': quantile(ordered, .99), 'p999': quantile(ordered, .999), 'max': ordered[-1]}
 
 
@@ -289,31 +289,44 @@ def witness_age(window, posts):
             'oldest': _spread(oldest), 'newest': _spread(newest)}
 
 
-def pair_admissions(window, admissions, max_gap=30.0):
-    """Join each admission that was sent to the mock's arrival of that request: same path digest, in order, an arrival
-    no earlier than 5 ms before the admission's send time and within `max_gap` seconds after it. Returns
-    (pairs [(send time, record, is publish)], sends without an arrival, every send time sorted)."""
-    sends, every = defaultdict(list), []
+def pair_admissions(window, admissions, max_gap=30.0, with_rows=False):
+    """Join each admission that was sent to the mock's arrival of that request. Exactly by the coordinator's permit id where
+    the mock logged it (the invocation wrapper stamps it on the request, harness commits after the attempt log), and for the
+    rest by path digest and order: an arrival no earlier than 5 ms before the admission's send time and within `max_gap`
+    seconds after it. Returns (pairs [(send time, record, is publish)], sends without an arrival, every send time sorted);
+    with `with_rows` each pair also carries the admission row as a fourth element."""
+    sends, every, pairs = defaultdict(list), [], []
+    by_id = {row[11]: row for row in admissions if len(row) > 11 and row[11]}
+    matched, rest = set(), []
+    for record in window:
+        row = by_id.get(record.get('permit')) if record.get('permit') else None
+        if row is not None and row[2] is not None and id(row) not in matched:
+            matched.add(id(row))
+            publish = bool(row[8]) if len(row) > 8 else False
+            pairs.append((row[2], record, publish, row) if with_rows else (row[2], record, publish))
+        else:
+            rest.append(record)
     for row in admissions:
         sent, key = row[2], row[7]
         if sent is None:
             continue  # reserved or blocked without ever being sent
-        sends[key].append((sent, bool(row[8]) if len(row) > 8 else False))
         every.append(sent)
+        if id(row) not in matched:
+            sends[key].append((sent, bool(row[8]) if len(row) > 8 else False, row))
     arrivals = defaultdict(list)
-    for record in window:
+    for record in rest:
         if record.get('pathKey'):
             arrivals[record['pathKey']].append(record)
-    pairs, unpaired = [], 0
+    unpaired = 0
     for key, items in sends.items():
-        items.sort()
+        items.sort(key=lambda item: item[0])
         hits = sorted(arrivals.get(key, ()), key=lambda r: r['arrived'])
         cursor = 0
-        for at, publish in items:
+        for at, publish, row in items:
             while cursor < len(hits) and hits[cursor]['arrived'] < at - 0.005:
                 cursor += 1  # an arrival from before this send belongs to no send of this path
             if cursor < len(hits) and hits[cursor]['arrived'] - at <= max_gap:
-                pairs.append((at, hits[cursor], publish))
+                pairs.append((at, hits[cursor], publish, row) if with_rows else (at, hits[cursor], publish))
                 cursor += 1
             else:
                 unpaired += 1
@@ -400,6 +413,207 @@ def wire_jitter(window, admissions, ceiling=25):
             'sendPeakTrailingSecond': peak_trailing(every, 1.0), 'sendPeakCalendarSecond': peak_calendar_second(every),
             'arrivalPeakTrailingSecond': peak_trailing(arrivals, 1.0), 'arrivalPeakCalendarSecond': peak_calendar_second(arrivals),
             'aboveCeilingAtMock': sum(causes.values()), 'aboveCeilingBy': dict(causes), 'ceiling': ceiling}
+
+
+_WITNESS = {'GET /oauth2/@me': 'grant', 'GET /guilds/{id}': 'guild', 'GET /guilds/{id}/members/{id}': 'member',
+            'GET /guilds/{id}/channels': 'channels'}
+
+
+def workspace_passes(window):
+    """Each workspace's preflight passes in the mock log. A pass starts at the person's grant check (`GET /oauth2/@me`)
+    and holds the witness reads that follow; it ends 'created' at the workspace's create, or 'released' when the next
+    grant check or a read-back of the same workspace shows the lane let it go before the create (the lane keeps no
+    memory of a released pass: the next claim of that post starts again at the grant check)."""
+    by_tenant = defaultdict(list)
+    for record in window:
+        tenant = tenant_of(record)
+        if tenant is not None and (record.get('route') in _WITNESS or record.get('route') in (CREATE, READBACK)):
+            by_tenant[tenant].append(record)
+    result = {}
+    for tenant, records in by_tenant.items():
+        records.sort(key=lambda r: r['arrived'])
+        passes, current = [], None
+        for record in records:
+            route = record['route']
+            if route == 'GET /oauth2/@me':
+                if current is not None:
+                    current['end'] = 'released'
+                    passes.append(current)
+                current = {'start': record['arrived'], 'requests': [record], 'end': None}
+            elif route == CREATE:
+                if current is None:
+                    current = {'start': record['arrived'], 'requests': [], 'end': None}
+                current['requests'].append(record)
+                current['end'] = 'created'
+                passes.append(current)
+                current = None
+            elif route == READBACK:
+                if current is not None:
+                    current['end'] = 'released'
+                    passes.append(current)
+                    current = None
+            elif current is not None:
+                current['requests'].append(record)
+        if current is not None:
+            current['end'] = 'open at end'
+            passes.append(current)
+        result[tenant] = passes
+    return result
+
+
+def last_answer(record):
+    return record.get('answered') or record['processed']
+
+
+def preflight_passes(window, admissions, span=1.1, ceiling=25):
+    """How often the whole witness pass repeats and why it is let go (from the mock log and the admissions export).
+
+    Per created post: the number of passes it took. Per released pass: what it had completed (so which request was refused
+    next), how long until the same workspace's next pass (the re-claim), when in the minute it happened, and whether the
+    application window held `ceiling` sends within `span` seconds at five instants over the second after the pass's last
+    answer (the provider waits at most one second for a read). Per witness step: the wait between the previous request's
+    answer being observed and this request's admission, which holds every refused attempt, every sleep and the
+    reservation's own lock wait. Refused reservations leave no row, so their count and quoted waits are not here."""
+    import bisect
+    by_tenant = workspace_passes(window)
+    passes = [p for items in by_tenant.values() for p in items]
+    if not passes:
+        return None
+    per_post, reclaim, released = Counter(), [], []
+    for items in by_tenant.values():
+        count = 0
+        for number, item in enumerate(items):
+            count += 1
+            if item['end'] == 'created':
+                per_post[count] += 1
+                count = 0
+            elif item['end'] == 'released':
+                released.append(item)
+                if number + 1 < len(items):
+                    reclaim.append(items[number + 1]['start'] - last_answer(item['requests'][-1]))
+    posts = sum(per_post.values())
+    sends = sorted(row[2] for row in admissions if row[2] is not None)
+    occupied = lambda t: bisect.bisect_right(sends, t) - bisect.bisect_right(sends, t - span)
+    stages, window_state, by_stage_window, minute_bins, per_minute = Counter(), Counter(), defaultdict(Counter), Counter(), Counter()
+    for item in released:
+        stage = '+'.join(_WITNESS[r['route']] for r in item['requests'] if r['route'] in _WITNESS) or 'none'
+        t = last_answer(item['requests'][-1])
+        counts = [occupied(t + dt) for dt in (0.0, 0.25, 0.5, 0.75, 1.0)]
+        state = 'full throughout' if min(counts) >= ceiling else 'full at some instant' if max(counts) >= ceiling else 'never full'
+        stages[stage] += 1
+        window_state[state] += 1
+        by_stage_window[stage][state] += 1
+        minute_bins[int(t % 60) // 5 * 5] += 1
+    steps = {}
+    if admissions and any(len(row) > 8 for row in admissions):
+        pairs, _unpaired, _every = pair_admissions(window, admissions, with_rows=True)
+        row_of = {id(record): row for _at, record, _publish, row in pairs}
+        gaps = defaultdict(list)
+        for item in passes:
+            previous = None
+            for record in item['requests']:
+                row, last = row_of.get(id(record)), row_of.get(id(previous)) if previous is not None else None
+                if previous is not None and row is not None and last is not None and last[3] is not None:
+                    route = record['route']
+                    label = ('guild read' if route == 'GET /guilds/{id}' else
+                             'channel list' if route == 'GET /guilds/{id}/channels' else
+                             'create permit' if route == CREATE else
+                             ('first member read' if previous['route'] == 'GET /guilds/{id}' else 'second member read'))
+                    gaps[label].append(row[0] - last[3])
+                previous = record
+        steps = {label: dict(_spread(values) or {}, over100ms=sum(1 for v in values if v > .1) / len(values),
+                             over1s=sum(1 for v in values if v > 1.0) / len(values)) for label, values in gaps.items()}
+    return {'passes': len(passes), 'createdPosts': posts, 'released': len(released),
+            'openAtEnd': sum(1 for p in passes if p['end'] == 'open at end'),
+            'passesPerPost': {str(k): v for k, v in sorted(per_post.items())},
+            'meanPassesPerPost': (sum(k * v for k, v in per_post.items()) / posts) if posts else None,
+            'releasedAfter': dict(stages.most_common()), 'reclaimDelay': _spread(reclaim),
+            'reclaimWithinTwoSeconds': (sum(1 for d in reclaim if d <= 2.0) / len(reclaim)) if reclaim else None,
+            'releasesBySecondOfMinute': {str(k): v for k, v in sorted(minute_bins.items())},
+            'applicationWindow': dict(window_state), 'applicationWindowByStage': {k: dict(v) for k, v in by_stage_window.items()},
+            'span': span, 'ceiling': ceiling, 'stepWait': steps}
+
+
+_KINDS = {'GET /oauth2/@me': 'grant check', 'GET /guilds/{id}': 'server read', 'GET /guilds/{id}/members/{id}': 'member read',
+          'GET /guilds/{id}/channels': 'channel list', 'POST /channels/{id}/messages': 'create',
+          'GET /channels/{id}/messages/{id}': 'read-back', 'GET /users/@me': 'bot identity',
+          'GET /oauth2/applications/@me': 'bot identity'}
+
+
+def attempt_statistics(attempts, created_posts=None, restart_gap=3.0):
+    """Every reservation attempt of the shared coordinator, from the invocation wrapper's attempt log: outcomes and the wait
+    quoted to each refused attempt, by credential class and request kind; how many attempts a read step needed; per
+    created post. Rows are [time, seconds the call took, operation (read, reserve, consume), method, route, credential kind,
+    workspace, outcome (A admitted, R refused, E error), quoted wait, scope, cause, permit id, cron source].
+
+    A read step is a run of attempts at the same route by the same cron process and workspace: refusals until an admission
+    (or the last refusal, when the provider gives up and the lane releases the post), restarted after `restart_gap` seconds."""
+    if not attempts:
+        return None
+    groups = defaultdict(list)
+    for row in attempts:
+        route = _KINDS.get('%s %s' % (row[3], row[4]), 'other')
+        groups[(row[5], route, row[2])].append(row)
+    by_kind = {}
+    for (credential, route, operation), rows in groups.items():
+        refused = [r for r in rows if r[7] == 'R']
+        admitted = [r for r in rows if r[7] == 'A']
+        by_kind['%s / %s / %s' % (credential, route, operation)] = {
+            'credential': credential, 'kind': route, 'operation': operation, 'attempts': len(rows), 'admitted': len(admitted),
+            'refused': len(refused), 'errors': sum(1 for r in rows if r[7] == 'E'),
+            'quotedWait': _spread([r[8] for r in refused if r[8] is not None]),
+            'scopes': dict(Counter('%s/%s' % (r[9], r[10]) for r in refused).most_common()),
+            'callSecondsAdmitted': _spread([r[1] for r in admitted]), 'callSecondsRefused': _spread([r[1] for r in refused])}
+    steps = defaultdict(Counter)
+    runs = defaultdict(list)
+    for row in sorted(attempts, key=lambda r: r[0]):
+        if row[2] != 'read':
+            continue
+        key = (row[12], row[3] + ' ' + row[4], row[6])
+        run = runs[key]
+        if run and (run[-1][7] == 'A' or row[0] - run[-1][0] > restart_gap):
+            kind = _KINDS.get(run[0][3] + ' ' + run[0][4], 'other')
+            steps[kind]['%d attempt(s), %s' % (len(run), 'admitted' if run[-1][7] == 'A' else 'gave up')] += 1
+            run.clear()
+        run.append(row)
+    for key, run in runs.items():
+        if run:
+            kind = _KINDS.get(run[0][3] + ' ' + run[0][4], 'other')
+            steps[kind]['%d attempt(s), %s' % (len(run), 'admitted' if run[-1][7] == 'A' else 'gave up')] += 1
+    totals = Counter(r[7] for r in attempts)
+    return {'attempts': len(attempts), 'admitted': totals['A'], 'refused': totals['R'], 'errors': totals['E'],
+            'refusedPerAdmitted': totals['R'] / totals['A'] if totals['A'] else None,
+            'attemptsPerCreatedPost': (len(attempts) / created_posts) if created_posts else None,
+            'refusedPerCreatedPost': (totals['R'] / created_posts) if created_posts else None,
+            'byKind': by_kind, 'readSteps': {k: dict(v) for k, v in steps.items()},
+            'refusalsByScopeAndCause': dict(Counter('%s/%s' % (r[9], r[10]) for r in attempts if r[7] == 'R').most_common())}
+
+
+def attempt_lines(stats):
+    """Markdown lines for the receipt (the table of reservation attempts)."""
+    if not stats:
+        return []
+    lines = ['## Reservation attempts (the coordinator attempt log)', '',
+             '%s attempts of the shared coordinator: %s admitted, %s refused with a quoted wait (%s per admission), %s errors; %s attempts '
+             'and %s refusals per created post. A refused attempt leaves no row in the database; this log is its only record.' % (
+                 _count(stats['attempts']), _count(stats['admitted']), _count(stats['refused']), _fmt(stats['refusedPerAdmitted']),
+                 _count(stats['errors']), _fmt(stats['attemptsPerCreatedPost']), _fmt(stats['refusedPerCreatedPost'])), '',
+             '| Credential / request / operation | Attempts | Admitted | Refused | Quoted wait of a refusal, p10 / p50 / p90 / p99 / max (s) | Refused by scope / cause | Call took, admitted / refused p50 (ms) |',
+             '|---|---|---|---|---|---|---|']
+    for label, row in sorted(stats['byKind'].items()):
+        wait = row['quotedWait']
+        lines.append('| %s | %s | %s | %s (%.1f%%) | %s | %s | %s / %s |' % (
+            label, _count(row['attempts']), _count(row['admitted']), _count(row['refused']),
+            100 * row['refused'] / row['attempts'] if row['attempts'] else 0,
+            ' / '.join(_fmt(wait.get(k)) for k in ('p10', 'p50', 'p90', 'p99', 'max')) if wait else 'n/a',
+            json.dumps(row['scopes']) if row['scopes'] else 'none',
+            _ms((row['callSecondsAdmitted'] or {}).get('p50')), _ms((row['callSecondsRefused'] or {}).get('p50'))))
+    lines.append('')
+    lines.append('Attempts a read step needed (a run of attempts at one route by one process until it was admitted or the provider gave up): '
+                 + '; '.join('%s: %s' % (kind, ', '.join('%s %s' % (k, _count(v)) for k, v in sorted(counts.items())))
+                             for kind, counts in sorted(stats['readSteps'].items())) + '.')
+    lines.append('')
+    return lines
 
 
 def permit_stats(admissions):
@@ -623,6 +837,9 @@ def analyse(run_dir):
     witness = witness_age(window, posts)
     jitter = wire_jitter(window, admissions)
     permits = permit_stats(admissions)
+    passes_summary = preflight_passes(window, admissions)
+    attempts_summary = attempt_statistics(load_jsonl(os.path.join(run_dir, 'attempts.jsonl')),
+                                          sum(1 for p in posts.values() if p['createdAt'] is not None))
     hot = hot_channel(posts, window, T) if config.get('hotPosts') else None
     channel_items = max((r.get('items') or 0 for r in window), default=0) or None
     refreshes = sum(1 for r in window if r.get('route') == 'POST /oauth2/token')
@@ -803,7 +1020,7 @@ def analyse(run_dir):
                     'busiest300sPerSecond': busiest_window([r['processed'] for r in window], 300.0) / 300.0,
                     'coordinatorAdmissions': extra.get('admissionWindow')},
         'ledger': ledger, 'grantCustody': custody, 'pacing': paced, 'witnessAge': witness, 'wireJitter': jitter,
-        'permits': permits, 'stepTiming': step_timing, 'hotChannel': hot, 'largestChannelList': channel_items,
+        'permits': permits, 'preflightPasses': passes_summary, 'attempts': attempts_summary, 'stepTiming': step_timing, 'hotChannel': hot, 'largestChannelList': channel_items,
         'tokenRefreshRequests': refreshes, 'nonLaneDiscordRequests': non_lane,
         'invocationResultsPresent': os.path.isdir(folder) or bool(invocations),
         'requests': {'total': len(window), 'perVerifiedPost': requests_per_verified, 'byRoute': dict(routes),
@@ -1224,6 +1441,24 @@ def evidence_lines(result):
     else:
         lines.append('- Admission-to-wire spread: not measurable in this directory (needs admissions.jsonl and a mock that '
                      'records path digests, harness commit with the wire timing).')
+    pp = result.get('preflightPasses')
+    if pp:
+        rc, win = pp.get('reclaimDelay') or {}, pp['applicationWindow']
+        lines.append(
+            '- **Preflight passes** (%s passes for %s created posts = %s per post; %s were released before the create, %s '
+            'still open at the end): posts by number of passes %s. A released pass had completed: %s (so the next request '
+            'was the one refused). Re-claim of the same post after a release, p10 / p50 / p90 / p99 / max: %s s (%.0f%% within '
+            '2 s). Application window (%d sends within %.1f s) at five instants over the second after a release: full '
+            'throughout %s, full at some instant %s, never full %s. Wait from the previous answer being observed to the '
+            'next admission, per step, p50 / p90 / p99 and the share over 100 ms / over 1 s: %s.' % (
+                _count(pp['passes']), _count(pp['createdPosts']), _fmt(pp['meanPassesPerPost']), _count(pp['released']),
+                pp['openAtEnd'], json.dumps(pp['passesPerPost']), json.dumps(pp['releasedAfter']),
+                ' / '.join(_fmt(rc.get(k)) for k in ('p10', 'p50', 'p90', 'p99', 'max')),
+                100 * (pp.get('reclaimWithinTwoSeconds') or 0), pp['ceiling'], pp['span'], win.get('full throughout', 0),
+                win.get('full at some instant', 0), win.get('never full', 0),
+                '; '.join('%s %s / %s / %s ms, %.0f%% / %.1f%%' % (label, *(_fmt(1000 * v[k]) for k in ('p50', 'p90', 'p99')),
+                                                                  100 * v['over100ms'], 100 * v['over1s'])
+                          for label, v in sorted(pp['stepWait'].items())) or 'n/a'))
     w = result.get('witnessAge')
     if w:
         lines.append('- **Witness age at the create** (%d creates; %d with no witness found; the grant check was the oldest '
@@ -1580,6 +1815,7 @@ def receipt(result, verdicts, config, differences, expectations=()):
                          ', '.join('%s pass(es): %d posts' % item for item in passes.items()) or 'none'))
         lines.append('')
     lines.extend(evidence_lines(result))
+    lines.extend(attempt_lines(result.get('attempts')))
     d = result['database']
     lines.append('## Database')
     lines.append('')

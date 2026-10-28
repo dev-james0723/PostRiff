@@ -809,6 +809,8 @@ class Harness:
                 '--start-at', repr(scheduled), '--out', str(out)]
         if self.s['invocation_mode'] == 'warm':
             argv.append('--warm')
+        (self.dir / 'attempts').mkdir(exist_ok=True)
+        argv += ['--attempts', str(self.dir / 'attempts' / (name + '.jsonl'))]
         handle = open(self.dir / 'invocations' / (name + '.log'), 'w')
         process = subprocess.Popen(argv, stdout=handle, stderr=subprocess.STDOUT, env=env, cwd='/tmp')
         handle.close()
@@ -1140,6 +1142,24 @@ class Harness:
             keep.append(item)
         (self.dir / 'invocations-summary.json').write_text(json.dumps(keep, separators=(',', ':')))
 
+    def merge_attempt_logs(self):
+        """The coordinator attempt logs of every invocation in one file, in time order (attempts.jsonl): one JSON array per
+        reservation attempt, with the wait the coordinator quoted when it refused (discord_lane_cap_invoke.py)."""
+        folder = self.dir / 'attempts'
+        if not folder.is_dir():
+            return
+        rows = []
+        for path in sorted(folder.glob('*.jsonl')):
+            for line in path.read_text(errors='replace').splitlines():
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue  # the tail of a killed process's log
+                if isinstance(row, list) and len(row) == 13:
+                    rows.append((row[0], line))
+        rows.sort()
+        (self.dir / 'attempts.jsonl').write_text(''.join(line + '\n' for _, line in rows))
+
     def budget_checks(self):
         """After the run: how much of the application budget a fresh window grants at once, and again after
         `budget_probe_delay_seconds` (longer than any age bound for an unanswered request), with the admissions still
@@ -1237,7 +1257,7 @@ class Harness:
                 for row in db.execute("""SELECT extract(epoch from reserved_at)::double precision,
                            extract(epoch from sealed_at)::double precision,extract(epoch from sent_at)::double precision,
                            extract(epoch from outcome_at)::double precision,extract(epoch from expires_at)::double precision,
-                           state,method,left(path_key,16),is_publish,publication_id,credential_kind
+                           state,method,left(path_key,16),is_publish,publication_id,credential_kind,id::text
                     FROM public.pr_discord_request_admissions
                     WHERE reserved_at >= to_timestamp(%s) AND reserved_at < to_timestamp(%s) ORDER BY request_seq""",
                         (start, stop)):
@@ -1365,6 +1385,7 @@ class Harness:
                 thread.join(timeout=30)
             self.collect()
             self.write_invocation_summary()
+            self.merge_attempt_logs()
             self.budget_checks()
             if self.budget_probes or self.open_after_wait is not None:
                 final = json.loads((self.dir / 'database-final.json').read_text())

@@ -194,6 +194,8 @@ class World:
         source = headers.get('x-cap-source')
         if source:
             record['src'] = str(source)[:16]
+        if headers.get('x-cap-permit'):
+            record['permit'] = str(headers['x-cap-permit'])[:36]  # the coordinator's admission id: an exact join
         try:
             record['callAt'] = round(float(headers['x-cap-call-at']), 6)
         except (KeyError, TypeError, ValueError):

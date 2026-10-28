@@ -365,6 +365,114 @@ class WireTimingAndPermits(unittest.TestCase):
         self.assertEqual({g['id']: g['verdict'] for g in analysis.launch_gates(broken)}['budget_restored'], 'NOT MEASURED')
 
 
+class AttemptLog(unittest.TestCase):
+    """The coordinator attempt log: a wrapper that observes and changes nothing, and the statistics read from it."""
+
+    def fake_coordinator(self):
+        import types
+
+        class RateDelayed(Exception):
+            def __init__(self, seconds, scope='application', cause='rate_budget'):
+                super().__init__('delayed')
+                self.retry_after_seconds, self.rate_scope_kind, self.rate_cause = seconds, scope, cause
+
+        class Permit:
+            def __init__(self, ident, identity):
+                self.id, self.identity = ident, identity
+
+        class Identity:
+            kind = 'bot'
+
+        class SharedPostgresBudget:
+            refuse = 0
+
+            def reserve_read(self, method, path, *, identity):
+                if self.refuse:
+                    self.refuse -= 1
+                    raise RateDelayed(0.4)
+                return Permit('permit-read', identity)
+
+            def reserve(self, method, path, *, identity, binding=None, valid_until=None):
+                return Permit('permit-create', identity)
+
+            def consume(self, permit, method, path, *, binding=None, intent_id=None, authorize=None):
+                if permit.id == 'late':
+                    raise RateDelayed(0.05, scope='permit', cause='permit_expired')
+                return None
+
+        module = types.ModuleType('postriff_phase2.discord.rate_limits')
+        module.RateDelayed, module.SharedPostgresBudget = RateDelayed, SharedPostgresBudget
+        package, discord = types.ModuleType('postriff_phase2'), types.ModuleType('postriff_phase2.discord')
+        discord.rate_limits, package.discord = module, discord
+        saved = {name: sys.modules.get(name) for name in ('postriff_phase2', 'postriff_phase2.discord', 'postriff_phase2.discord.rate_limits')}
+        sys.modules.update({'postriff_phase2': package, 'postriff_phase2.discord': discord, 'postriff_phase2.discord.rate_limits': module})
+        self.addCleanup(lambda: [sys.modules.pop(n, None) if v is None else sys.modules.__setitem__(n, v) for n, v in saved.items()])
+        return SharedPostgresBudget, RateDelayed, Permit, Identity
+
+    def test_the_wrapper_logs_every_attempt_and_changes_nothing(self):
+        import discord_lane_cap_invoke as invoke
+        budget, delayed, permit, identity = self.fake_coordinator()
+        path = Path(tempfile.mkdtemp(prefix='cap-attempts-')) / 'a.jsonl'
+        self.addCleanup(shutil.rmtree, path.parent, True)
+        handle = invoke.instrument_coordinator(str(path), 'lane3')
+        self.addCleanup(handle.close)
+        coordinator = budget()
+        coordinator.refuse = 2
+        with self.assertRaises(delayed) as caught:
+            coordinator.reserve_read('GET', '/guilds/1392000000000000007/channels', identity=identity())
+        self.assertEqual(caught.exception.retry_after_seconds, 0.4, 'the original exception is raised unchanged')
+        self.assertIsNone(invoke.CURRENT['permit'])
+        with self.assertRaises(delayed):
+            coordinator.reserve_read('GET', '/guilds/1392000000000000007/channels', identity=identity())
+        got = coordinator.reserve_read('GET', '/guilds/1392000000000000007/channels', identity=identity())
+        self.assertEqual(got.id, 'permit-read', 'the original result is returned unchanged')
+        self.assertEqual(invoke.CURRENT['permit'], 'permit-read', 'the next request carries the admitted permit')
+        create = coordinator.reserve('POST', '/channels/1393000000000000009/messages', identity=identity())
+        self.assertIsNone(invoke.CURRENT['permit'], 'a create permit is stamped when it is consumed, not when it is reserved')
+        coordinator.consume(create, 'POST', '/channels/1393000000000000009/messages')
+        self.assertEqual(invoke.CURRENT['permit'], 'permit-create')
+        with self.assertRaises(delayed):
+            coordinator.consume(permit('late', identity()), 'POST', '/channels/1393000000000000009/messages')
+        self.assertIsNone(invoke.CURRENT['permit'], 'a refused consume stamps nothing')
+        handle.flush()
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        self.assertEqual([(r[2], r[7]) for r in rows], [('read', 'R'), ('read', 'R'), ('read', 'A'), ('reserve', 'A'), ('consume', 'A'),
+                                                       ('consume', 'R')])
+        self.assertEqual(rows[0][4:11], ['/guilds/{id}/channels', 'bot', 7, 'R', 0.4, 'application', 'rate_budget'])
+        self.assertEqual((rows[5][8], rows[5][9], rows[5][10], rows[2][11], rows[2][12]), (0.05, 'permit', 'permit_expired', 'permit-read', 'lane3'))
+        self.assertEqual(rows[3][6], 9, 'the channel names its workspace')
+
+    def test_statistics_count_attempts_outcomes_quoted_waits_and_read_steps(self):
+        def row(t, outcome, wait=None, kind='bot', route='/guilds/{id}', operation='read', ws=1, source='lane1', scope='application'):
+            return [t, 0.05, operation, 'GET', route, kind, ws, outcome, wait, scope if outcome == 'R' else None,
+                    'rate_budget' if outcome == 'R' else None, 'p%s' % t if outcome == 'A' else None, source]
+        attempts = [row(1.0, 'R', 0.3), row(1.4, 'R', 0.2), row(1.7, 'A'),            # a step admitted at the third attempt
+                    row(2.0, 'A'),                                                      # a step admitted at the first
+                    row(5.0, 'R', 0.9), row(5.9, 'R', 0.8), row(6.5, 'R', 0.7),      # a step that gave up after three
+                    row(1.0, 'R', 0.5, kind='user', route='/oauth2/@me', ws=None, scope='learned_route')]
+        stats = analysis.attempt_statistics(attempts, created_posts=2)
+        self.assertEqual((stats['attempts'], stats['admitted'], stats['refused']), (8, 2, 6))
+        self.assertAlmostEqual(stats['refusedPerCreatedPost'], 3.0)
+        server = stats['byKind']['bot / server read / read']
+        self.assertEqual((server['attempts'], server['admitted'], server['refused']), (7, 2, 5))
+        self.assertAlmostEqual(server['quotedWait']['p50'], 0.7)
+        self.assertEqual(stats['byKind']['user / grant check / read']['scopes'], {'learned_route/rate_budget': 1})
+        self.assertEqual(stats['readSteps']['server read'], {'3 attempt(s), admitted': 1, '1 attempt(s), admitted': 1, '3 attempt(s), gave up': 1})
+        self.assertTrue(any('Quoted wait' in line for line in analysis.attempt_lines(stats)))
+        self.assertIsNone(analysis.attempt_statistics([]))
+
+    def test_an_admission_is_paired_to_its_arrival_by_the_permit_id_before_path_and_order(self):
+        rows = [[10.0, None, 10.0, 10.2, 20.0, 'observed', 'GET', 'aaaaaaaaaaaaaaaa', False, None, 'bot', 'id-1'],
+                [10.5, None, 10.5, 10.7, 20.0, 'observed', 'GET', 'aaaaaaaaaaaaaaaa', False, None, 'bot', 'id-2']]
+        # The first admission never reached the wire, but the second did: by path and order they would be swapped.
+        window = [{'arrived': 10.6, 'pathKey': 'aaaaaaaaaaaaaaaa', 'permit': 'id-2'}]
+        pairs, unpaired, every = analysis.pair_admissions(window, rows, with_rows=True)
+        self.assertEqual([(p[0], p[3][11]) for p in pairs], [(10.5, 'id-2')])
+        self.assertEqual((unpaired, len(every)), (1, 2), 'the other admission is reported without an arrival')
+        legacy, unpaired, _ = analysis.pair_admissions([{'arrived': 10.6, 'pathKey': 'aaaaaaaaaaaaaaaa'}], [r[:11] for r in rows])
+        self.assertEqual([p[0] for p in legacy], [10.0], 'without the permit id the old pairing by path and order still works')
+
+
 class CrashInjector(unittest.TestCase):
     """Fcrash's random kills land inside a loop, and a kill with nothing to hit is recorded as missed."""
 

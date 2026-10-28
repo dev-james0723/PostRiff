@@ -81,7 +81,7 @@ def shape():
     check('the artifact never includes the per-run environment files', 'env-' not in paths and 'env*' not in paths)
     # A failure must be diagnosable from the artifact alone: every child process's own output is kept.
     for name in ('seed-*.out', 'seed-plan.json', 'pooler.out', 'pgbouncer.out', 'mock.out', 'harness.log',
-                 'pgbouncer/pgbouncer.log', 'postgres.log', 'admissions.jsonl', 'invocations-summary.json'):
+                 'pgbouncer/pgbouncer.log', 'postgres.log', 'admissions.jsonl', 'invocations-summary.json', 'attempts.jsonl'):
         check('the artifact keeps %s' % name, '${{ runner.temp }}/capacity/*/' + name in paths)
     check('every artifact path is under the run directories', all(
         line.strip().startswith('${{ runner.temp }}/capacity/*/') for line in paths.splitlines() if line.strip()))
