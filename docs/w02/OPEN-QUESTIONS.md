@@ -508,6 +508,10 @@ cores), so the fixed part is larger than a quiet machine's; the slopes and the s
   built). At 2 ms or less leave everything as it is; between 2.4 and 4.6 build (a), then (b); above 5 the observation's lock has to
   go. A slow lock is only a lower rate: the ceiling is a property of the stamps, not of the lock, and since NEW-1 a lock timeout
   is a 1.5-second wait for the caller, not a release of the post for 300 seconds.
+- **Status, 2026-10-28.** The cuts are not built. (a) was built and measured on a scratch tree and parked unmerged: with the stand-in
+  pooler an observation holds the lock 10, 13, 14 and 15 percent shorter at 2, 5, 10 and 20 ms (a reservation is unchanged), and its five
+  PostgreSQL tests kill 9 of 10 mutants (the tenth is equivalent). (b) and (c) were not started. The real round trip decides: they come back
+  if the health probe on the dark build reads more than about 2.4 ms.
 - **NEW-1 under the load that exposed it** (24 loops, 20 ms, +100 ms to connect, 12 seconds; the review: 4 of 4 runs ended with
   `rate_coordinator_degraded`, 3 to 358 fast-fail errors, 4.0 to 4.8 admissions a second). On this head: 0 of 2 degraded, 0 and 1
   errors (one lock timeout in a direct `observe` of the harness, which the provider would have asked again), 4.5 and 4.7
