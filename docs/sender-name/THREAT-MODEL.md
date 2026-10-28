@@ -174,8 +174,10 @@ cannot rename it. The bot is never asked to change anything but its own nickname
 (`PATCH /guilds/{id}/members/@me`; the transport refuses the call without a guard and refuses the guard on any other route).
 Only the member whose Discord account installed the bot may edit it (`authorizing`); every other member sees it read-only.
 Each write carries `X-Audit-Log-Reason: Rafii shared bot nickname change (ref <16 hex>)`, a one-way hash of application,
-server and workspace, so a server administrator reading the server's audit log can tell a Rafii change from a person's and
-quote the reference to Rafii; it names no workspace, person or customer text (`BotNicknameInTheApproval` audit-reason test and
+server and workspace; it names no workspace, person or customer text. The intent is that a server administrator reading the server's
+audit log can tell a Rafii change from a person's and quote the reference to Rafii, but that is NOT verified: Discord may not write
+an entry when a member changes its own nickname, and may not show the reason. It is a courtesy, not a control; Rafii's own audit event
+is the record (`BotNicknameInTheApproval` audit-reason test and
 `ClaimFlowOnPostgres::test_a_successful_write_leaves_one_observed_admission_no_claim_and_an_audit_reason_for_the_server`).
 
 ### 5.5 What remains impossible
@@ -294,7 +296,8 @@ coordinator keeps an `invalid` row that debits one per such response and blocks 
 | --- | --- | --- |
 | Does a refusal reveal that a workspace or connection of another customer exists? | No. A foreign, non-existent and malformed workspace id get the same `403 permission_denied "Workspace unavailable."`. Another workspace's connection id, a non-existent id and a malformed id inside your own workspace get the same `404 not_found`. Malformed ids never reach the database as a typed value (workspace ids are checked before any SQL; connection ids are matched against a pattern). | `::CrossTenant`, `RoutesOnPostgres::test_cross_tenant_matrix_on_the_real_repository_and_sql` (injection strings, 5,000-character ids) |
 | Does any response contain another customer's name, id, guild, channel, webhook or credential? | No, and the webhook token is never returned, never an input of the fingerprint and never audited | `::test_a_tenants_names_and_ids_never_appear_in_the_other_tenants_responses` |
-| What does the audit trail hold? | event kind, actor, connection id, sender kind, scope, server id. Never the name. The server's OWN audit log gets a one-way reference (section 5.4). | `RoutesOnPostgres::test_save_replay_stale_session_and_role_refusals_on_real_rows` |
+| What does the audit trail hold? | event kind, actor, connection id, sender kind, scope, server id. Never the name. The server's OWN audit log is sent a one-way reference (section 5.4; whether Discord records it is not verified). | `RoutesOnPostgres::test_save_replay_stale_session_and_role_refusals_on_real_rows` |
+| What does the channels view reveal? | the webhook name and the bot nickname a review would freeze NOW, as plain values, in the rows of the caller's own workspace only (they are computed from that workspace's own connection record; two workspaces on one Discord server each see only what their own connection observed). Not the observation time, not an edit claim, not an admission id. Without it the page cannot echo the value an automation approval is checked against (delta list R1, R2). | `test_discord_sender_name_approval.py::BotNicknameCarrier`, `test_discord_sender_name_claims.py::Shapes::test_the_channels_card_shows_the_value_a_review_would_freeze_and_never_an_internal_claim` |
 | The one cross-workspace fact | `nickname_authority_other_workspace` tells an authorized member that some other Rafii workspace also has THEIR OWN server connected. No identifier, no number. Both workspaces see the same thing. | `::SharedServer` |
 | Do refusals leave traces? | No state change in any workspace, no audit event and no Discord request, for every refusal in the matrix (the snapshot of states, audit, credentials and the Discord side is compared before and after) | `::CrossTenant`, `::Roles`, `::Bodies` |
 

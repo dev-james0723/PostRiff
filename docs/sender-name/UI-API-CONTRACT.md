@@ -31,6 +31,28 @@ on, and the shared request coordinator can admit requests (the same gate the rou
 When false, do not render the editor and do not call the routes. A route called anyway answers with the reasons below and makes no
 Discord request.
 
+## The channels view: the sender a review would freeze now
+
+Each Discord row of `GET /api/workspaces/{workspace}/channels` carries two sender fields. Both are computed for the request from the
+connection's own record and the switches, as the value a review of that connection would freeze right now (the very function an
+automation approval is checked against), so what a page shows and what it echoes cannot disagree:
+
+| field | webhook connection | bot installation |
+| --- | --- | --- |
+| `discordSenderName` | the saved, validated name while the master switch is on; `null` when none is saved, the feature is off, or the stored name no longer validates (a review or approval then says why, with `discord_sender_name_invalid`) | `null` |
+| `discordBotNickname` | absent | present only while the master switch AND the nickname capability are on and this connection has observed the server's nickname: a string, or `null` meaning "the bot has no nickname". Absent when a review would freeze nothing |
+
+Nothing else of the sender record is exposed: not when the nickname was observed, not an edit in progress. The settings route below
+still shows the saved name (`savedName`) whatever the switches say.
+
+**Approving an automation run item** (`raffi_run_decide`, a Discord item with a publish time): send `discordSenderName` (webhook; `null`
+for none) or `discordBotNickname` (bot; send it exactly when the row has it, omit it when the row has none), copied from the row the
+person was looking at. The server compares it with what a review would freeze at that moment and answers `409` ("The webhook sender name
+changed. Review it again." or "The Rafii bot's server nickname changed. Review it again.") when it differs, because the person approved
+something other than what is now current. The value is then bound by the approval digest (it is part of the publication id) and the
+dispatch holds the post if Discord reports another nickname. The value belongs to the workspace's own connection: another workspace never
+receives it, even for the same Discord server.
+
 ## Routes (unchanged paths)
 
 ```
@@ -205,10 +227,19 @@ staleness from any other.
   `verification_unavailable` (nothing is extended): repeat it.
 * **One writer per server**: Rafii changes a server's nickname from a workspace only while that workspace is the only live Rafii
   installation of the server. With two, both see `nickname_authority_other_workspace` and neither can write.
-* **The server's own audit log** shows each Rafii nickname change with the reason "Rafii shared bot nickname change (ref
-  xxxxxxxxxxxxxxxx)", where the reference is a one-way hash of the workspace and server; quote it to Rafii support, it names no person.
-* **Automation approvals** (recurring tasks) carry the name or nickname the person saw: `discordSenderName` for a webhook,
-  `discordBotNickname` for a bot. If it no longer matches what Rafii would freeze now the approval is refused and must be redone.
+* **Audit log.** Every Rafii nickname write sends the audit-log reason "Rafii shared bot nickname change (ref xxxxxxxxxxxxxxxx)", where the
+  reference is a one-way hash of the workspace and server and names no person. Whether Discord records an audit-log entry at all when a
+  member changes its own nickname (the write is `PATCH /guilds/{id}/members/@me`), and whether it shows that reason, has NOT been
+  observed: do not promise a customer an audit-log entry. Rafii's own audit event for the change (`discord.sender_name_updated`) is the
+  record that exists.
+* **Automation approvals** (recurring tasks) echo the sender the person was shown, taken from the channels view (next section):
+  `discordSenderName` for a webhook, `discordBotNickname` for a bot. If it no longer matches what a review would freeze at that moment
+  the approval is refused with 409 and must be redone.
+* **A held post says why, in a code.** When the dispatch preflight holds a post because of its sender, the held event on the job is
+  `{ "state": "held", "message": "<English text>", "reason": "<code>", ... }`. `discord_bot_nickname_changed`: Discord reports another
+  nickname than the one the post was approved under (offer Verify, then a new review). `discord_sender_names_disabled`: the master switch
+  is off, so a custom name is never sent; the post stays held until the person acts on it. Branch on `reason`, never on the text. Every
+  other hold has no `reason`.
 * Messages in `error` are English diagnostics and may change; branch on `code`, `reason`, `reasons[].code`.
 * Nothing in any response contains another workspace's identifiers, names, counts or timings. The one cross-workspace fact is the
   boolean-like reason `nickname_authority_other_workspace`.
@@ -239,3 +270,14 @@ For the UI agent, because they could break a page built against the earlier text
 5. A webhook with no name of its own: `observedName` is `null`, `nameSource` is `saved_override` or `none`, and the form works (it used to be
    a 502 `upstream_error`).
 6. Reserved words: `discord`, `clyde`, `everyone` and `here` are refused in webhook names only; bot nicknames refuse the product's names only.
+
+## Changes since 9f170585 (the web engineer's backend list R1 to R3)
+
+1. **R1.** The channels view now carries `discordBotNickname` (a string, or `null` for "no nickname") while the master switch and the nickname
+   capability are on and the connection has observed one; absent otherwise. A page copies it into an automation approval. Before, no field
+   carried it and every such approval of a bot post was refused once the capability was on.
+2. **R2.** `discordSenderName` in the channels view is the name a review would freeze now: `null` while the master switch is off or when a stored
+   name no longer validates, instead of the raw saved setting. The settings route is unchanged.
+3. **R3.** A post held for its sender has `reason` (`discord_bot_nickname_changed` or `discord_sender_names_disabled`) on the held event, next to
+   the unchanged English `message`.
+4. The audit-log statement is softened to what is known (see "Audit log").
