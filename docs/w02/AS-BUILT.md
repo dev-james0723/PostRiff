@@ -12,6 +12,7 @@ read from the code.
 | `src/postriff_phase2/discord/lane.py` (new) | The lane: flag and budget parsing, shard parsing, the readiness test (`blocker`), one bounded loop per invocation, the pre-claim coordinator read, the bounded wait for a refused create permit, per-invocation counters and the log line; the minute cron's lag warning (`warn_if_lagging`); the health status (`status`); the worker's guard for a document it cannot read (`LaneWorker.claim`). |
 | `src/postriff_phase2/hosted_worker.py` | `tick()` passes `exclude_discord=True` when the lane is on and the static part of `lane.blocker()` says it can run (the minute cron then does not claim Discord), and whenever Discord is paused (`lane.paused()`, with the lane off or on but unable to run), and with the lane on adds the health status (`discordLaneStatus`) and logs the lag warning from its own report and, when the lane owns Discord, the projection; `_tick` accepts that keyword. With the lane off, or on but unable to run, the code path is the old one, proven against the frozen source (below), with one deliberate exception: a paused Discord is a wait, not a hold, and the tick leaves it alone ("A paused Discord is a wait"). After review: the seal path and the unsent-permit recovery also release a permit an embargo or hold blocked before it was used ("A permit an embargo blocks before it is used"); the three releases for a rate wait call a hook that does nothing here and that the lane's worker uses to keep a post's place ("A release the shared budget caused keeps its place"). |
 | `src/postriff_phase2/discord/rate_limits.py`, `src/postriff_phase2/social_connectors.py` | After review, at the coordinator's request: `seal()` and `consume()` refuse a reserved or sealed permit that an embargo or hold blocked, before any transport, as `permit_blocked` (with the embargo's remaining time), `confirm_blocked_publish()` proves such an intent unsent from its admission row, and the sender turns that refusal into the same pre-transport signal as an expired unconsumed permit ("A permit an embargo blocks before it is used", below). |
+| `rate_limits.py`, `social_connectors.py`, `hosted_social.py`, `discord/lane.py`, `discord/ops.py` (limiter branch, after the first hosted measurement) | Booking: the lane's preflight reads, create permit and read-back are given the next exact slot of a full application window and wait for it inside the coordinator, instead of being refused and asking again; two lane counters and a health section show it ("Booking", below; Q19). |
 | `src/postriff_phase2/hosted_app.py` | Route `GET /api/cron/discord-worker/<shard>`: cron secret checked before the runtime starts (as the YouTube lanes); flag read per request; the request log files it under `cron`. |
 | `vercel.json` | 12 cron entries `/api/cron/discord-worker/0` to `/11`, every minute. `git.deploymentEnabled` stays `false`; nothing else changed. |
 | `scripts/check_postriff_hosted_preflight.py` | The cron check accepts exactly the worker plus these 12 shards. A `discord-parallel-lane` check fails when the lane flag is on without `POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true` or without the worker lease protocol. A `discord-worker-protocol` check fails when any Discord feature flag is on (authorization v2, connections v2, rate limits, webhook, user install, engagement, the lane) and `POSTRIFF_DISCORD_WORKER_V1_ENABLED` is not 1 or true ("The worker flag and migration 128"). |
@@ -135,15 +136,18 @@ time [simulated]. It adds a new path that can multiply invocations, which the co
      misses or when nothing is due soon.
 5. One log line, `discord.lane.completed`: shard, `stoppedBy`, elapsed seconds and counts only (claimed, posted,
    verified, held, uncertain, rateDelayed, leaseLost, recoveries, retries, deadLetters, claimMisses, rejected, notSent,
-   uncertainCreates, rateWaits, idleWaits, permitWaits, quarantined, positionsKept). No workspace, job, channel, content or lease owner id. An
+   uncertainCreates, rateWaits, idleWaits, permitWaits, quarantined, positionsKept, bookedWaits, bookedSeconds). No workspace, job, channel, content or lease owner id. An
    exception is logged with its class name only and re-raised, so the request returns 500 with its failure site.
 
-The one behavioural addition inside a step: when the create permit is refused because the application window is spent,
-the lane's worker waits for the next window (at most one second, the same bound reads already have) instead of releasing
-the job. Without it, at a saturated budget each refused create re-spends its four preflight reads and almost nothing is
-created [measured: with the wait off, see CAPACITY-SIMULATION.md]. It waits before any intent is sealed, the job keeps its
-live lease, and the step rechecks every fence afterwards. Any other refusal (an embargo, a channel window, a passed lease
-or approval deadline) releases the job as before.
+The behavioural addition inside a step has two layers. First, booking ("Booking", below): the preflight's reads, the create
+permit and the read-back are asked for inside `rate_limits.booking()`, so where the application window is full each is given
+the next exact slot, at most one second ahead, and waits for it inside the coordinator. Second, the older bounded wait stays
+for what a booking cannot cover (the booked horizon full, or a permit that lapsed while it was being stored): when the create
+permit is refused because the application window is spent, the lane's worker waits for the next window (at most one second,
+the same bound reads already have) instead of releasing the job. Without any wait, at a saturated budget each refused create
+re-spends its four preflight reads and almost nothing is created [measured: with the wait off, see CAPACITY-SIMULATION.md].
+Both happen before any intent is sealed, the job keeps its live lease, and the step rechecks every fence afterwards. Any other
+refusal (an embargo, a channel window, a passed lease or approval deadline) releases the job as before.
 
 The existing minute cron, with the flag on and the lane able to run, runs every other provider exactly as before and
 does not claim Discord (`exclude_discord`). "Able to run" is the static part of `lane.blocker()`
@@ -470,7 +474,9 @@ which carries no status.
 | A loop crashes after sealing or after the create left | never re-posted; the job is 'uncertain' for manual reconciliation; the request's admission keeps a slot until reviewed, and if it was the first request on that route, later posts to that channel wait until review (Q3) |
 | Operator hold set | every loop stops before its next claim; a post whose permit the hold blocked before it was used is released unsent (Q4); queued posts wait |
 | Global 429 or circuit | loops sleep until it ends; the post whose read was refused waits and is sent later; a 429 on a create holds that post for review (existing rule) |
-| Budget exhausted | creates wait for the next window (bounded); reads wait as before |
+| An embargo, circuit or hold begins while a read waits for its booked slot | a read that slept 25 ms or more is looked at once more just before it is sent; if any scope it was admitted under is now held, embargoed or in circuit it is closed `blocked`, not sent (its slot stays spent), and the post waits as for the same refusal at admission (a hold: five minutes, as in Q17). A booked create's permit is blocked by the existing rule and refused at seal or consume before any transport |
+| A loop dies inside a booked wait | nothing was sent: a booked read is stored `sent` but had not left, so it is never sent, keeps its slot until its scope's window plus 30 s (31 s on the application row) and then stops counting; a booked create's permit expires unused (5 s) and the post is released when its lease expires and sent once later. A loop is in one booked wait at a time: at most one slot per shard, 12 of 25 for at most 31 s if every shard dies at once |
+| Budget exhausted | the lane's reads and creates are booked the next exact slot, at most one second ahead, and wait for it inside the coordinator; beyond that horizon they wait for the next window (bounded) as before; web requests are refused as before ("Booking") |
 | Approval expires in the queue | held for a fresh approval when next claimed (monitor M7) |
 | Coordinator observation fails in a process | that process's provider refuses every later request; its loops stop with `coordinator_degraded`; its minute cron still leaves Discord to the lane (it could not send either); loops in other processes continue |
 | Database unavailable | the loop's exception is logged and the request returns 500; leases expire and are recovered |
@@ -518,7 +524,8 @@ minutes later. The hold of the shared bot credential after a 401 (`kind = 'crede
 The `discord.lane.completed` log lines (12 a minute; sum `posted`, `verified`, `held`, `uncertain`, `rateDelayed`,
 `leaseLost` per minute; any `stoppedBy` other than `idle`, `time_budget` or `rate_wait`), and `docs/w02/monitoring.sql`:
 M1 oldest due lag, M2 leases expired but still owned, M3 busiest second, M4 rate waits, M5 unanswered admissions (Q3),
-M6 holds on the four rows, M7 posts held for an expired approval. The launch monitors Q1 to Q13 still apply.
+M6 holds on the four rows, M7 posts held for an expired approval. The launch monitors Q1 to Q13 still apply. The lane's
+`bookedWaits` and `bookedSeconds` and the health payload's `coordinator.booking` show the booking ("Booking", below).
 The lines' `held` (like the minute cron's `discordWorker.counters.held`) misses a post held by a rate-wait release,
 one whose wait outlasts its approval: `discord_worker.release_unsent` sets the state before the event that counts it
 (unchanged worker code, the same in `2a5a523d`) [measured: 3 such holds counted 0]. M7's `held_total` and
@@ -600,7 +607,8 @@ document should know:
   `SLOT_GUARD_SECONDS` (0.1 s). A permit not used yet, and a request sent but never answered, keep a slot as well
   (`held`). So no closed second of wire times holds more than the cap, and arrivals at Discord stay within it while the
   admission-to-wire spread is at most 100 ms; the cost is 22.7 of 25 a second at the ceiling and nothing below it. The
-  capacity harness reports the real spread (wire jitter p99.9): the guard is the one constant to set from it.
+  capacity harness reports the real spread (wire jitter p99.9): the guard is the one constant to set from it. With booking a
+  wire time may also lie up to one second ahead of the database clock (a booked slot); the rule, `_fits`, is the same.
 - **A permit lives `permit_ttl_seconds`** (5 in the reviewed policy), the lease and the approval, not its window: a
   window that ends while a permit is unused refills its row counting the permit as pending, and the application window
   holds a slot for it until it is used or expires. Before, 11.5% of create preflights of a 5,000-post run were repeated
@@ -641,10 +649,98 @@ document should know:
   that wait; offline `PositionKept`, penalty cases); this refusal has no end to wait for. The cause is the coordinator's
   (the unanswered admission keeps its slot, Q3); left to the coordinator's reviewer.
 
+## Booking
+
+*Why.* The first hosted measurement of the lane (5,000 posts, 12 shards, 25 a second) took a median of 19.8 minutes against a
+plan of 12, with 8.95 requests and 18.6 reservation lock statements a post and 4,714 posts released after a refused read. A
+full window refused a read with the time until a slot freed; every refused read slept that quote and asked again, about half
+of the 12 shards woke for the same freed slot, one won, and a read that lost three times (1 s) released its whole post and
+threw away the one to five preflight reads it had already made. Booking gives a caller that finds the window full a place in
+line instead (Q19 has the models and the measurements).
+
+*Who books.* Only the three calls the lane makes for a post, on the lane's own thread: `PacedSocial` wraps
+`prepare_discord_dispatch` (the identity, server, two membership and channel reads), `reserve_discord_send` (the create
+permit, a bot's or a webhook's) and `reconcile_discord` (the read-back) in `rate_limits.booking(BOOK_AHEAD_SECONDS, tally)`, a
+context variable. `DiscordProvider._book_ahead(room)` hands its seconds (never more than `BOOK_AHEAD_SECONDS`, 1.0, and not
+more than a read's own remaining wait; nothing under 5 ms) to `reserve_read` / `reserve` as `book_ahead`, and passes no
+keyword at all outside the context. A direct provider call, another thread, the minute worker (it shares a warm instance's
+provider and never sees the context), and every web request (connect, destinations, installation checks, webhook set-up, the
+message-content check, reply reads, the sender-name routes) get the immediate answer or refusal they always got.
+
+*The rule.* A booking caller is admitted at once when one more wire time now is exact in every window that holds it. If not,
+`_booking_slot` gives the earliest instant at or after now, and not before any wire time already stored, at which it is exact
+in every window of one span (the window plus the guard) that holds it; a permit not used yet counts in every window for a
+booking (it may be used at any later time), so it is taken out of the wires and out of the free slots. The caller is refused,
+as an immediate caller would be, with the wait until a booking is possible, if the slot is more than its book-ahead away, if
+no slot is free for bookings, if a create's permit (`permit_ttl_seconds`, 5) would not live `BOOK_MIN_LIFE_SECONDS` (0.5 s)
+after its slot, or if the slot plus the permit's life would pass the caller's deadline (the lease, the approval, the
+policy's end). Otherwise the admission is stored with the slot as its wire time (a read: `sent`, `sent_at` = slot; a create:
+`reserved`, `reserved_at` = slot, living `permit_ttl_seconds` from there), its scopes are debited as for any admission (the
+same statements under the lock: the lock, the reading, one write, the commit), and `reserve` / `reserve_read` return when the
+slot has come. The sleep is after the commit with no lock held, in slices of at most 0.1 s, counted on the process's
+monotonic clock from the moment the database clock was read (a send is never early by the reservation's own duration), and a
+create's sleep also ends at its deadline if that comes first (the permit is left to expire, `permit_expired`). There is no
+sleep in `seal` or `consume` (F5), and `consume` refuses a booked permit before its slot (`permit_early`).
+
+*Exactness.* Unchanged: at every instant at most `cap` wire times lie in any half-open span, so no closed second of wire times
+holds more than `cap`; only a wire time may now lie ahead of the clock. Bookings fill all but `IMMEDIATE_RESERVE` (1) slots,
+so a web request, which cannot wait, always finds one (4 percent of the ceiling at saturation). A wire time further ahead
+than the book-ahead plus 50 ms (the database clock stepped back) is waited out as before: every wire counts and the quote is
+the wait.
+
+*What the application row stores.* The same whoever wrote it. `remaining` is the free slots that bookings may still fill
+(`cap` less the held, less `IMMEDIATE_RESERVE`, less the wire times up to now; never below 0), and `reset_at`, while none is
+free, the instant from which a booking within the book-ahead is possible (the next wire to leave its span, less the
+book-ahead; an instant already past means possible now). `lane.outlook`, which waits while `remaining` is 0 and `reset` lies
+ahead, is unchanged and now waits only while the booked horizon is full. For a monitor this changes the meaning: a busy lane
+keeps the window full and `remaining` no longer approaches 0 with it; it reaches 0 when the horizon is full and callers are
+refused again. With `BOOK_AHEAD_SECONDS` 0 the row is what it has always been.
+
+*The gate.* A booked read that slept at least 25 ms (`BOOK_GATE_MIN_SECONDS`) is looked at once more just before it is sent:
+one short statement of its own, with no application or scope lock, closes it `blocked` if any scope it was admitted under now
+has a manual hold, an embargo or an open circuit, and the caller is told as at admission (a hold: `RateDelayed(300,
+cause='hold', scope='embargo')`; an embargo: what is left of it). Its slot stays spent. What can still reach Discord after an
+embargo begins is what could before: whatever lies between this look (for a wait under 25 ms, the commit) and the wire. A
+booked create's permit is blocked by the existing rule for unused permits and refused at seal or consume.
+
+*A process that dies in the wait* is in the failure table: nothing is sent, at most one slot per shard is held, for at most 31
+seconds.
+
+*The lane.* The counters `bookedWaits` and `bookedSeconds` (in `lane.COUNTERS`; summed in the invocation result and the
+`discord.lane.completed` line) count the lane's own bookings. Nothing else changes: the loop budget (a step's seven requests
+may each wait one second, so a step may take seven seconds longer; `STEP_RESERVE_SECONDS` 160 holds it, 147 of 160), the
+lease and its renewal, F2 (a post refused beyond the horizon keeps its place), the pause and K1, the quarantine, the frozen
+path, the shard count (12).
+
+*Health payload.* `coordinator.booking`: `status`, `bookAheadSeconds`, `aheadNow` (admissions whose wire time is still ahead),
+`horizonSeconds` (how far ahead the latest lies; close to `bookAheadSeconds` means the horizon is full and callers are being
+refused again), `bookedReads60s`, `bookedReadWaitSeconds60s`, `meanBookedReadWaitSeconds60s`, `maxBookedReadWaitSeconds60s`.
+Reads only: a create's booked wait is not recorded (`aheadNow` counts creates).
+
+*Limits.* A horizon of one second holds about (`cap` - 1) / 1.1 bookers, one for each loop in a booked wait: about 21 at the
+reviewed 25, comfortably 12 loops, 24 at the edge; a caller beyond the horizon is refused and asks again, as before booking
+(and with a cap of 10 for 12 loops, measured, a little worse than before). The evidence behind a create grows older: its
+permission reads come first in a pass and each may now wait up to a second [simulated: median 1.3 to 2.3 s at 12 loops, 2.2
+to 5.7 s at 24; no bound in the code]; what the send rests on besides them (approval, lease, fences) is rechecked at the seal
+and consume as before. A gated or abandoned booked read still spent its slot.
+
+*Off.* The lane's flag returns Discord to the minute worker, which never books; a build with `BOOK_AHEAD_SECONDS = 0` in
+`rate_limits.py` (pinned by `ShippedConstants`) restores the old coordinator behaviour for every caller.
+
+*Evidence.* `tests/test_discord_rate_booking.py` (36 offline: the arithmetic, the stored row, the web reserve, booked permits,
+the deadline, the gate, a crash in the wait, the constants, the statement shape, and 32 randomized lives of 300 steps checked
+against a brute-force count of every closed second, which also catches the permit mutation); `tests/test_discord_rate_booking_postgres.py`
+(24 threads on PostgreSQL keep the ceiling with far fewer lock statements; creates are not starved when reads are booked too;
+the gate against a 429, a hold and a circuit; a dying process; `consume` before the slot; a web caller; the health payload);
+`tests/test_discord_lane_booking.py` (the three places and no others, the counters, a coordinator that blocks a second per
+reservation still ends the invocation inside budget plus one step, `outlook`); `tests/test_discord_lane_booking_postgres.py`
+(12 and 16 loops at a full window: about one pass a post, nothing posted twice; an approval ending inside a pass; a loop killed
+inside a booked sleep; no sleep between the seal and the consume; a pause during booked waits).
+
 ## Not done
 
 Phase 1b (scheduled-time jitter) is not started. Not run: the owner's Depot capacity run, any hosted build, the
-exact-SHA CI workflow on this branch. An independent review's findings are addressed (the readiness test, the lag
+exact-SHA CI workflow on this branch, the hosted-runner measurement after booking (the capacity harness's). An independent review's findings are addressed (the readiness test, the lag
 warning, the invalid-budget wait, the 90-second cap, the preflight check); that fix set has not been reviewed again.
 Not changed on purpose: requests per post, the coordinator's handling of unanswered admissions, the hold's effect on
 sealed permits, the step order (Q2 to Q4, Q12).

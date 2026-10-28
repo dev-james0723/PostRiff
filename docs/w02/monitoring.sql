@@ -4,7 +4,7 @@
 -- and returns counts, ages and states only: no workspace, job, channel, message, token or customer content. Record
 -- results as counts. The lane's own per-invocation counters are in the function logs, one line per invocation:
 -- event "discord.lane.completed" with stoppedBy, claimed, posted, verified, held, uncertain, rateDelayed, leaseLost,
--- rateWaits, idleWaits and permitWaits (see AS-BUILT.md).
+-- rateWaits, idleWaits, permitWaits, bookedWaits and bookedSeconds (see AS-BUILT.md).
 --
 -- Thresholds (starting points; tune after the first busy hour):
 --   M1  oldest due lag                  > 10 minutes            the lane is not keeping up, or is stopped (read M6)
@@ -13,6 +13,7 @@
 --   M5  unobserved admissions > 2 min   rising, or any publish  slots kept by dead requests (see M5)
 --   M6  any hold on the four rows       any                     the lane stops while it lasts (stoppedBy in logs)
 --   M7  held for an expired approval    rising                  the queue is longer than an approval lives
+--   M8  booked horizon                  near 1 s for minutes    the lane asks for more places than the window has (Q19)
 
 -- M1. Due Discord work from the transactional projection (migration 126; the same index the lane claims through).
 -- due_workspaces: workspaces with work due now; oldest_due_lag_seconds: how late the oldest of them is running.
@@ -46,11 +47,13 @@ FROM jobs CROSS JOIN observed;
 
 -- M3. Request rate across every loop, last 10 minutes, from the coordinator's own admissions: the busiest second
 -- and the average. The busiest second may reach twice the policy capacity where two fixed windows meet; above
--- that is a defect.
+-- that is a defect. Counted by WIRE time (sent_at, else reserved_at): a booked admission (OPEN-QUESTIONS Q19) is
+-- stored with the instant it is to be sent, up to a second after the one it was made, and that instant is what the
+-- ceiling counts.
 WITH seconds AS (
-    SELECT date_trunc('second', reserved_at) AS second, count(*) AS requests
+    SELECT date_trunc('second', coalesce(sent_at, reserved_at)) AS second, count(*) AS requests
     FROM public.pr_discord_request_admissions
-    WHERE reserved_at > now() - interval '10 minutes'
+    WHERE coalesce(sent_at, reserved_at) > now() - interval '10 minutes'
     GROUP BY 1
 )
 SELECT coalesce(max(requests), 0) AS busiest_second,
@@ -91,6 +94,8 @@ ORDER BY is_publish;
 -- M6. The four application-wide coordinator rows every loop reads before it claims (policy, bot global, bot
 -- credential, invalid-request budget). A manual hold on the policy row is the runbook's stop; while any hold is set,
 -- every loop ends with stoppedBy operator_hold or coordinator_hold. An active block or circuit is slept out.
+-- policy_remaining_now: since booking (Q19) the free slots that bookings may still fill, not the window's free slots; a
+-- busy lane keeps it high and it is 0 only when the booked horizon is full (see M8).
 SELECT kind,
        count(*) FILTER (WHERE manual_hold) AS holds,
        count(*) FILTER (WHERE blocked_until > now()) AS blocks_active,
@@ -117,3 +122,22 @@ SELECT count(*) FILTER (WHERE (j #>> '{manifest,expiresAt}')::double precision <
                           AND (j #>> '{manifest,expiresAt}')::double precision > observed.at - 3600) AS held_after_expiry_last_hour,
        count(*) AS held_total
 FROM jobs CROSS JOIN observed;
+
+-- M8. Booking (OPEN-QUESTIONS Q19): admissions that still wait for their wire time (reads and create permits booked ahead),
+-- how far ahead the latest lies, and what the reads booked in the last minute waited. A horizon close to the book-ahead (1
+-- second) means the booked horizon is full and callers are being refused again; the lane's bookedWaits and bookedSeconds
+-- (per invocation, in the discord.lane.completed line) count the same from the lane's side. Newest 20,000 admissions.
+WITH observed AS MATERIALIZED (SELECT clock_timestamp() AS at),
+sample AS MATERIALIZED (
+    SELECT is_publish, reserved_at, sent_at, coalesce(sent_at, reserved_at) AS wire
+    FROM public.pr_discord_request_admissions ORDER BY request_seq DESC LIMIT 20000
+)
+SELECT count(*) FILTER (WHERE s.wire > o.at) AS admissions_ahead_now,
+       round(extract(epoch FROM max(s.wire) FILTER (WHERE s.wire > o.at) - o.at)::numeric, 3) AS horizon_seconds,
+       count(*) FILTER (WHERE NOT s.is_publish AND s.sent_at > s.reserved_at + interval '5 milliseconds'
+                          AND s.reserved_at > o.at - interval '60 seconds') AS booked_reads_60s,
+       round(coalesce(sum(extract(epoch FROM s.sent_at - s.reserved_at)) FILTER (WHERE NOT s.is_publish
+                  AND s.sent_at > s.reserved_at + interval '5 milliseconds'
+                  AND s.reserved_at > o.at - interval '60 seconds'), 0)::numeric, 3) AS booked_read_wait_seconds_60s
+FROM sample s CROSS JOIN observed o
+GROUP BY o.at;

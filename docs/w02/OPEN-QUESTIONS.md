@@ -128,17 +128,160 @@ or `blocked` and older than an hour (at 25 a second the table then stays near 90
 dropped after two days (a migration); or a ring of the last 25 wire times in the application row, which puts a write on the
 hottest row at every consume and loses the per-request record. Nothing is built; a grant would be a migration.
 
-**Q17. A hold and a read-back.** A read admitted under an operator hold raises `RateCoordinatorUnavailable`. The read-back
-(`hosted_social`, the `except RateDelayed` branch) treats only a `RateDelayed` as a deferral, so the answer is `uncertain`,
-the check is not refunded and the worker comes back in 5 s: five attempts, about 25 s of hold, park the post for a day
-("Manual provider review required"). A `RateDelayed` would refund the check and keep the post polling. The smallest change is
-in `_reserve`: when `read_sent` and a locked row has `hold`, raise `RateDelayed(300.0, cause='hold', scope='embargo')`
-instead (three lines); `_discord_http` already turns a read's `RateDelayed` into `ReadAdmissionDelayed` and the read-back
-already answers that with a deferral that refunds the check. Tried in a scratch tree on all 910 offline Discord tests: it
-breaks `PolicyAndHold.test_hold_refuses_everything_and_release_resumes_with_the_same_exact_state` (its reads) and the
-randomized model (`RandomizedAgainstModel`, which would learn the rule); the ban and break-glass tests use `reserve`, not
-`reserve_read`, and stay green; the PostgreSQL drills were not run. It also changes what every other direct read sees during
-a hold: 429 `discord_rate_delayed` where it was 503 `discord_rate_coordinator_unavailable` (destinations, the preflight's
-identity reads). The alternative that touches only the read-back is to catch `RateCoordinatorUnavailable` there too, which
-would also defer a missing policy or an unreachable database for ever. Not built.
+**Q17. A hold and a read-back (built, 1fe434c7).** A read admitted under a hold (the operator's, a held credential or a held
+route) used to raise `RateCoordinatorUnavailable`, which the read-back of a created post (`hosted_social`, the `except
+RateDelayed` branch) did not treat as a deferral: the answer was `uncertain`, the check was not refunded and the worker came
+back in 5 s, so five attempts (about 25 s of hold) parked the post for a day ("Manual provider review required"; the ops
+review's H1/E1). Now `_reserve` raises `RateDelayed(300, cause='hold', scope='embargo')` for a read; `_discord_http` makes it a
+`ReadAdmissionDelayed`, the read-back answers with a deferral that refunds the check and the post is tried again in five
+minutes, however long the hold lasts. A create is still unavailable. Pinned by `ReadsUnderAHold`, `PolicyAndHold` and the
+randomized model, and end to end on PostgreSQL by `test_discord_hold_readback_postgres` (eight claims under the hold, one per
+five minutes: still `provider_accepted`, no check spent, nothing sent; verified after the release). What else it touches: the
+direct reads of a request now answer 429 `discord_rate_delayed` where they answered 503 `discord_rate_coordinator_unavailable`
+during a hold, and the web copy differs ("Discord is busy right now ... try again in a minute" for `rateDelayed`, where
+`coordinatorUnavailable` said "Connecting to Discord is paused for a moment ... try again later"; `web/src/lib/channels/
+discord-refusal.ts`). The callers: the connect flow (`DiscordProvider.identity`, the guild and member lookups), the destination
+list (`destinations`), the installation re-verification and connect (`discord/oauth.py`), the webhook set-up reads
+(`discord/webhooks.py`), the message-content check (`discord/message_content.py`), the reply reads (`discord/engagement.py`) and
+the sender-name page (`discord/sender_names.py`); in the worker the create's preflight reads release the post unsent for five
+minutes as before. A hold on the credential or a route now defers a read-back for ever (every five minutes) instead of parking
+it after five checks; the hold is an operator's to lift. The ops drills (PostgreSQL, merged with the alerts branch at e79df41d)
+move only in what they record: 15 drills, only D3 fails, before and after (the guard, Q18). The alerts branch's runbook text that says
+read-backs are parked for 24 hours when a Discord-claiming worker runs under the hold, and the lift being "at once" for that
+reason, describes the old behaviour.
 
+**Q18. Giving back part of the guard's 9 percent (not built).** The slot headroom (`SLOT_GUARD_SECONDS`, 0.1 s) caps steady
+admissions at 25 / 1.1 = 22.7 a second. At about 7.1 requests a post the median line of the 5,000-post run (2,500 posts in 12
+minutes) needs about 24.8 a second with perfect packing, so the guard alone costs 9 percent against a modelled margin of 3 to
+6. What it buys: no closed second of ARRIVALS above 25 while the admission-to-wire spread stays inside it. Two facts frame
+every option. A guard g costs g/(1+g) of the ceiling (0.06 s: 5.7 percent, 0.03 s: 2.9, 0.02 s: 2.0). And 24.8 sustained under a
+ceiling of 25 leaves 0.8 percent, about 8 ms of spread: no guard meets both "24.8 sustained" and "never above 25 in a closed
+second"; only a smaller spread (pacing) or a higher cap can. (A side effect to know: the ops alert RATE_APP_BUDGET_SPENT fires at
+95 percent of the nominal ceiling over a minute (`saturation_warn` 0.95), and a saturated application now reaches 90.9 percent, so
+it can never fire and the drill D3 of the alerts branch fails. That branch must divide by the achievable ceiling, capacity x 60
+/ (window + min(guard, window / 10)), or lower the threshold to 0.85, which turns the drill green; it belongs to that branch.)
+The options, cheapest first, with the risk of each:
+
+1. A guard sized from the measured spread. The capacity harness reports the admission-to-arrival wire jitter on the hosted runner
+   (p99.9). Set the guard to about twice what it shows: one constant and its pin (`ShippedConstants`), no schema, no `Permit`
+   field. 30 ms of spread gives 0.06 s. Risk: the tail decides, not the typical case. A cold connection (a TLS set-up is 100 to
+   300 ms), a garbage-collection pause or a busy machine arrives later than the guard allows and puts a 26th request into a
+   second; Discord answers it with a global 429, the coordinator embargoes the global scope for its Retry-After (about a second,
+   so the overshoot repairs itself) and the 429 counts toward the invalid-request budget (2,000 reviewed of Discord's 10,000 in
+   ten minutes). A tail rarer than a few a minute is harmless; a heavier one needs a bigger guard.
+2. Keep the connection warm. Most of the spread is connection set-up: `http_transport` opens a new TLS connection per request.
+   A kept-alive connection per process removes the 100 to 300 ms tail, which shrinks the spread the guard must cover and the
+   latency of every post, with no change to the ceiling logic. Risk: it changes the transport every provider shares (timeouts,
+   no redirects, the response cap), a reused connection the platform closed while the function was frozen, and the rule that a
+   create is never sent twice must survive a retry on a dead connection (it must not retry). Do it first if the harness shows
+   the spread is the handshake.
+3. The owner's option: a policy cap with the guard inside it. Set `app_capacity` so that capacity / (1 + guard) is the rate
+   wanted: 28 with the 0.1 s guard gives 25.45 sustained and at most 28 in a closed second while the spread is inside the guard.
+   No code change except the policy tool's refusal above 25 (`judge()`), but the reviewed number and the acceptance measure
+   change from "no second above 25 at the mock" to "no second above 28". Discord's own limit is 50, so 28 is 56 percent of it
+   instead of 50. Risk: the margin the reviewers chose shrinks, and a spread beyond the guard overshoots 28, not 25. It is the
+   only option that meets 24.8 sustained at all.
+4. Pacing at the wire. The permit carries a send time and the transport waits for it, so the arrival spread becomes the
+   sleeper's jitter (milliseconds) and the guard can shrink to about 10 ms. Risk: the highest. The `Permit` has a frozen
+   seven-field shape that the sender claim rebuilds from its stored id and expiry (a new field changes that contract and the
+   claim documents); a sleep in every request path (up to the guard's size, billed function time); two clocks to reconcile (the
+   database's stamps against the process's); and it does not bound bunching: a process that stalls and then sends several late
+   requests at once arrives above the ceiling anyway unless it also holds a local token bucket. Not before 1 to 3 are measured.
+
+Suggested order: measure the spread on the hosted runner; warm the connection if it is the handshake (2); set the guard from the
+new spread (1); only if the median line still needs more, the owner decides on the cap (3).
+
+**Q19. Booking: a place in line instead of a lottery for the freed slot (built, P2: ca106be8, 9c35bda1, cdab6c98).** The hosted
+S1 run of 3dac3ccf (5,000 posts, 12 shards, 25 a second) was slower than every earlier estimate: median 19.77, p95 37.87 and
+longest 43.52 minutes against 12, 25 and 40, with 8.95 requests and 18.6 reservation lock statements a post and 4,714 releases of
+a claimed post. The cause is the way a full window is polled. A refused read slept the time it was quoted and asked again; at a
+saturated window about six of the 12 shards woke for the same freed slot, one won, and a read that lost three times (the 1 s
+deadline) released its whole post and threw away the one to five preflight reads it had completed (8,655 requests, 1.73 a post,
+all of them slots of the same budget). Lock statements are the price of the lottery, releases its waste. Booking replaces it:
+inside `rate_limits.booking()` (the lane sets it around the preflight reads, the create permit and the read-back, and nowhere
+else) a caller that finds the window full is stored at the earliest exact slot after every wire time already stored, if that is
+within one second, and waits for it after the commit with no lock held; the ceiling rule is unchanged, only a wire time may lie
+ahead of the clock. The rule, the gate, the row, the counters and the tests are in AS-BUILT.md, "Booking".
+
+Measured and modelled, per post. The measurements are local: the real coordinator, provider and lane steps on a disposable
+PostgreSQL 16, 12 threads standing for the 12 shards, an in-process mock Discord (50 to 150 ms), a 2 ms relay on every statement,
+the application window kept full (a cap of 14 or 18 is what this four-core box can saturate), 60 s after 25 s of warm-up, two runs
+each. The model is the discrete-event model (`des.py`, five seeds, the same parameters) fitted to the hosted S1 run, not to
+these. Cells are measured / model.
+
+| per post | cap 14 before | cap 14 after | cap 18 before | cap 18 after |
+|---|---|---|---|---|
+| posts a minute | 74 / 55 | 107 / 108 | 102 / 74 | 137 / 132 |
+| passes (preflight and create attempts) | 2.45 / 5.9 | 0.89 / 0.97 | 2.18 / 5.0 | 0.92 / 1.00 |
+| requests at Discord | 9.6 / 14.4 | 6.46 / 6.5 | 9.0 / 13.1 | 6.64 / 7.0 |
+| reservation attempts (refused and admitted) | 23.5 / 42.6 | 6.45 / 6.46 | 19.6 / 36.6 | 6.64 / 6.93 |
+| reservation lock statements | 29.2 / n.a. | 12.0 / n.a. | 25.3 / n.a. | 12.3 / n.a. |
+| releases of a claimed post | 1.90 / 5.0 | 0.00 / 0.00 | 1.48 / 4.0 | 0.00 / 0.00 |
+| bookings, and the seconds waited in them | none | 6.4, 4.0 s | none | 6.6, 3.0 s |
+
+The model is right about booking (posts a minute within 4 percent, attempts and requests within 6) and too pessimistic about
+polling at these small caps: its lottery is harsher than the real one (the five seeds range from 34 to 62 posts a minute at cap
+14). The lock statements are not modelled: the model counts attempts, and this fixture, which meets every server for the first
+time, adds a seeding statement to most of them (the hosted S1 run implies about 1.06 statements per attempt). Nothing went over the
+cap at the mock, nothing was posted twice, in either tree.
+
+The hosted S1 shape (12 shards, 25 a second, claim 0.8 s: the model's calibration), per post:
+
+| | S1 measured, before | model, before | model, after | expected on the S1 shape, after |
+|---|---|---|---|---|
+| posts a minute | 126.5 | 144 | 174 | 150 to 158 |
+| requests at Discord | 8.95 | 8.8 | 7.0 | 7.0 |
+| reservation lock statements | 18.6 | 16.6 (attempts) | 7.0 (attempts) | 7.5 to 8 |
+| releases of a claimed post | 0.94 (4,714) | 1.13 | 0 | 0 |
+| passes | 1.75 (8,730) | 2.0 | 1.0 | 1.0 |
+
+The expected column applies the model's ratio (1.21 in posts a minute) to the measurement: median line 16.3 minutes, p95 31, longest
+about 36, against 19.77, 37.87 and 43.52 and a plan of 12, 25 and 40; the 56-second duty cycle (`POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS`
+50 to 56) would add 12 percent of loop time to that again. With 24 shards the model gives 96 posts a minute, 45 attempts and 6.2 releases a post
+for polling, and 182, 7.1 and 0 for booking. On this box the thread model at 24 threads is bound by its own lock queue and Python
+process, not by the window (caps 26 and 36: 163 to 173 posts a minute and 18 to 19.5 requests a second, almost no refusals, in both trees), so
+it cannot show the difference; the measurement that counts at 24 is the capacity run. (Its first attempts failed for a reason worth
+knowing: every synthetic tenant of `discord_lane_fixture.py` shares one Discord user id, so the identity read of every tenant takes
+one route-bucket row `FOR UPDATE`, and at 24 threads the queue behind it passed the coordinator's 2 s lock timeout and the provider
+failed closed. The capacity harness gives each tenant its own person and does not have this; production has a user per tenant.)
+
+The exactness probe with 24 threads at a cap of 25 (`tests/discord_ceiling_probe.py`, the same fixture as before, 8 s a cell, no
+added delay and 100 ms of it): reservation lock statements per admission 3.56 and 3.53 without booking, 1.65 and 1.74 with it;
+creates in the cell 14 and 14, 31 and 31 (the creates are not starved when the reads are booked too); refused reservations 111 and
+102, 13 and 18; busiest closed second of wire stamps 25 and 25 (the cap), 24 and 24 (cap less the web reserve); arrivals above 25
+in a second at the mock 0 in all four; admissions 22.2 and 22.1 a second without booking, 20.4 and 20.7 with it (the reserve slot,
+and 24 callers against a horizon of about 21 that refuses the rest).
+
+What to know before relying on it.
+
+- **What it does not change.** The requests per post (about 7 on the bot path: Q2), the guard (0.1 s: Q18) and the ceiling (22.7 a
+  second). At 7.0 requests and 22.7 a second the floor is 194 posts a minute, so 2,500 posts take 12.9 minutes at best: booking
+  takes the lane from the lottery to that floor's neighbourhood, not below it. Its gains stack with a smaller guard (Q18) and with
+  not charging the bearer call: each is a separate decision.
+- **The horizon holds about (cap - 1) / 1.1 loops** (one booking each): 21 at the reviewed 25, so 12 loops fit and 24 are at the
+  edge. A caller beyond the horizon is refused and polls as before booking, plus the cost of the refusal; with a cap of 10 for 12
+  loops (measured) that is a little worse than before. Raising the shard count past 12 needs a cap to match; the shard count stays
+  12.
+- **The evidence behind a create grows older.** The permission reads come first in a pass and each may wait up to a second, so the
+  create leaves later [simulated, median age of the reads at the create: 1.3 s to 2.3 s at 12 loops, 2.2 s to 5.7 s at 24; no
+  bound in code]. The approval, the lease and the fences are rechecked at the seal as before.
+- **One slot of every window is kept for callers that cannot wait** (`IMMEDIATE_RESERVE`): a web request never finds the window
+  full of bookings. It costs 1 of 25 at saturation (4 percent). With 5 web reads a second [simulated], 84 percent of them were
+  admitted while the lane polled and 99 to 100 percent are with booking (their 90th-percentile latency 0.36 s to 0.55 s).
+- **What can happen during a wait.** A process that dies leaves the booked read stored `sent` with a wire time ahead: it is never
+  sent, keeps its slot for the window plus 30 s (31 s) and then stops counting, at most one per shard (12 of 25 at the very worst).
+  A hold, an embargo or an open circuit that begins during a wait of 25 ms or more is found by the read's last look just before it
+  is sent (one statement, no lock): the read is closed unsent and the post waits as for a refusal at admission; a booked create is
+  stopped by the existing block of unused permits at seal or consume. What can still leave after an embargo begins is what could
+  before: the time between that look (or the commit, for a wait under 25 ms) and the wire. The F429 and B4 tests are unchanged and
+  pass.
+- **Operators see a different `remaining`.** The application row now stores the slots bookings may still fill and when a booking is
+  possible again, so with a busy lane it stays high and falls to 0 only when the horizon is full and callers are refused again;
+  `lane.outlook` is unchanged and waits only then. Any reading of the row's `remainingRatio` or `resetSeconds` as
+  "the window is nearly spent" is now wrong: use `coordinator.booking` (below). The most a saturated lane sends is (cap - 1) /
+  1.1 a second, 21.8 of 25 (87 percent of the nominal ceiling, 96 of the 22.7 that the guard alone allows); the alert on a spent
+  budget (`saturation_warn`, Q18) must divide by that.
+- **Fields.** The lane's `bookedWaits` (bookings) and `bookedSeconds` (their total wait) in the invocation result and the
+  `discord.lane.completed` line; the health payload's `coordinator.booking`: `bookAheadSeconds`, `aheadNow`, `horizonSeconds`,
+  `bookedReads60s`, `bookedReadWaitSeconds60s`, `meanBookedReadWaitSeconds60s`, `maxBookedReadWaitSeconds60s`.
+- **Off.** The lane flag (the minute worker never books), or `BOOK_AHEAD_SECONDS = 0` in a build.
