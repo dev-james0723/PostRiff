@@ -59,13 +59,24 @@ Portal > OAuth2 > Reset Secret. Code exchange fails until `POSTRIFF_OAUTH_DISCOR
 Step 2 immediately. Identify the job by id from the ledger, not by text. Check the frozen manifest digest against the approval (`discord/authorization.py` binds destination, text, mentions and expiry). Do not delete the Discord message unless the owner asks. Root cause before lifting the hold.
 
 ### 4.G Uncertain deliveries
-State `uncertain` means the request may have reached Discord and no response was recorded. The worker reconciles only by reading back; it never reposts. Three in 15 minutes is a stop condition. Do not edit job rows by hand.
+State `uncertain` means the request may have reached Discord and the outcome is not proven. The worker never reposts. Two kinds (final review, 2026-10-28):
+
+1. **With a message id** (Discord answered and the read-back could not confirm yet): the worker keeps reading back; do nothing. (An image post used to stay here for ever; since `a2d7055e` it verifies when Discord returns the approved file's name and size.)
+2. **Without a message id** (the request timed out, the connection was reset, or the function died after Discord may have accepted it): nothing can be read back by id. Look in the destination channel. If the post is there, leave the job: it stays `uncertain` and blocks approving the same text again (change the text slightly to post again). If it is not there, the customer approves a new post. There is no tool to resolve these yet (follow-up).
+
+Three in 15 minutes is a stop condition. Do not edit job rows by hand.
 
 ### 4.H Cross-tenant exposure, a secret in a log, or any suspected data breach
 Step 2 and step 1; preserve evidence; the owner decides on notification duties (the privacy notice and Discord's developer terms both matter; there is no automated path to tell Discord, so the owner uses Discord developer support). If a database restore is considered it is the owner's decision with the PITR facts from M-03; restoring loses everything after the restore point, including credentials and OAuth state.
 
 ### 4.I Duplicate code exchange, provenance mismatch, unexpected capability changes
 Step 1. Compare the serving deployment with the frozen SHA (fingerprint). For a duplicate exchange look at the transaction outcome (`exchange_started`, `exchanged`) in the database, counts only; a one-use code must not be exchanged twice. Reopen only after the cause is found and tested.
+
+### 4.J Database restore (point in time or backup)
+A restore in place brings back jobs as they were at the restore point, including jobs that were already sent, so the lane would send them again. The restore-proof stop (a Discord-paused build kept ready, Packet 3 row 12b) is not built for the opening. Before any restore: set the operator hold (step 2 of the abort ladder) and keep it set; tell the owner in plain words that Discord stays paused until the jobs due since the restore point have been compared with the destination channels (counts from the health snapshot, then the channels themselves); lift the hold only after that. This is slow by design: a restore is the last resort, and the owner decides it with the PITR facts from M-03.
+
+### 4.K After a Discord outage
+A post that was due while Discord answered with errors or timeouts for more than about 13 seconds is marked `failed` with 'create a new exact approval': nothing was sent. The customer approves it again once Discord is back. No operator action is needed beyond the customer notice below if many customers are affected. (Known limit RA-2 of the final review; the follow-up release lets a post wait for the outage instead.)
 
 ## 5. Customer notices (short; adapt, do not promise dates)
 
