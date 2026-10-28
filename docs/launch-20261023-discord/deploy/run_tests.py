@@ -171,7 +171,7 @@ def workspace(rc_json='{\n  "git": {\n    "deploymentEnabled": false\n  }\n}\n',
     sha = commit_all(src)
     bare = os.path.join(root, 'origin', 'PostRiff.git')
     git('clone', '-q', '--bare', src, bare)
-    git('update-ref', 'refs/heads/claude/discord-launch-rc-20261023', sha, cwd=bare)
+    git('update-ref', 'refs/heads/claude/discord-launch-rc2-20261023', sha, cwd=bare)
     # the request branch (written by the caller through write_request)
     req = os.path.join(root, 'work', 'request')
     os.makedirs(os.path.join(req, 'deploy', 'cli'))
@@ -196,7 +196,7 @@ def run(script, root, extra_env=None, cwd_sub='work', flags=(), merge=False):
         'GITHUB_STEP_SUMMARY': os.path.join(root, 'summary.md'),
         'GITHUB_PATH': os.path.join(root, 'path.txt'),
         'GITHUB_REPOSITORY': 'dev-james0723/PostRiff',
-        'RC_BRANCH': 'claude/discord-launch-rc-20261023',
+        'RC_BRANCH': 'claude/discord-launch-rc2-20261023',
         'TEAM': 'team_PgXY5VdAYKcsv0RLoDPHscNq',
         'ARGLOG': os.path.join(root, 'calls.log'),
         'ARGS_OUT': os.path.join(root, 'args.log'),

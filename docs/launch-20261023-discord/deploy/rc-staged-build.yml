@@ -15,7 +15,7 @@ permissions:
   checks: read
 env:
   TEAM: team_PgXY5VdAYKcsv0RLoDPHscNq
-  RC_BRANCH: claude/discord-launch-rc-20261023
+  RC_BRANCH: claude/discord-launch-rc2-20261023
   NO_UPDATE_NOTIFIER: '1'
   VERCEL_TELEMETRY_DISABLED: '1'
   # A bracket range such as [0-9a-f] matches more than sixteen characters in many locales (full-width and other-script digits,
