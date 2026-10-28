@@ -352,6 +352,8 @@ class SharedPostgresBudget:
     # between admission and mock, none at 0.05 and at 0.1 s; with 300 ms, 3 to 6 at 0.05, 0.1 and 0.2 s (it takes 0.3 s,
     # 19 a second). The capacity harness reports the real spread (wire jitter p99.9): set this to it.
     SLOT_GUARD_SECONDS = 0.1
+    # How many times a route's circuit after a 403 may double: circuit_seconds x 2**5 = 16 minutes at most.
+    DENIAL_BACKOFF_STEPS = 5
 
     def __init__(self, connection_factory, application_id, *, policy=None, **_compat):
         if not isinstance(application_id, str) or not _ID.fullmatch(application_id):
@@ -1133,14 +1135,25 @@ class SharedPostgresBudget:
                         # ended; the refill already charged what was then in flight, so it cannot tighten the new one.
                     elif any(name in headers for name in ('x-ratelimit-limit','x-ratelimit-remaining','x-ratelimit-reset-after','x-ratelimit-reset')):
                         row['hold'] = True  # malformed numeric hints need operator review
-                    if classification['status'] in (403,404):
-                        row['circuit'] = max(row['circuit'] or 0,self.policy.expires_at)
-                    if transport_failure or classification['status'] >= 500:
+                    if classification['status'] == 403 or classification['webhookInvalid']:
+                        # A refusal of THIS route on THIS resource (the bot lacks a permission, was removed from the
+                        # server, or the webhook is gone). Discord counts it as an invalid request, and 10,000 of those in
+                        # ten minutes ban the shared egress address, so the route is not retried at once: a circuit of
+                        # circuit_seconds, doubling with each consecutive refusal (the streak, cleared by an answer)
+                        # up to DENIAL_BACKOFF_STEPS doublings (16 minutes at the reviewed 30 s). It used to last the
+                        # whole policy (up to 31 days): the bot re-added, the permission restored, the customer told
+                        # "waiting for shared request capacity" for a month.
+                        row['streak'] += 1
+                        steps = min(row['streak'] - 1, self.DENIAL_BACKOFF_STEPS)
+                        row['circuit'] = max(row['circuit'] or 0,now+self.policy.circuit_seconds*2**steps)
+                    elif transport_failure or classification['status'] >= 500:
                         row['streak'] += 1
                         if row['streak'] >= self.policy.failure_threshold:
                             row['circuit'] = max(row['circuit'] or 0,now+self.policy.circuit_seconds)
                     elif 200 <= classification['status'] < 400 and seq >= row['seq']:
                         row['streak'] = 0  # never clears an already open circuit
+                    # A 404 on anything else (a message that was deleted, a member who left) is an answer about one
+                    # object, not a fault of the route, and is no invalid request: it opens no circuit.
                 embargo = (classification['status'] == 429 and
                            (row['kind'] == 'global' and classification['global']
                             or row['kind'] == 'resource' and classification['scope'] == 'shared'

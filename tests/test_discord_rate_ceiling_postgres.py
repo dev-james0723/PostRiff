@@ -27,7 +27,7 @@ from postriff_phase2 import providers
 from postriff_phase2.discord.rate_limits import RateDelayed, RateCoordinatorUnavailable, RequestIdentity, SharedPostgresBudget
 from postriff_phase2.social_connectors import DiscordProvider
 
-GUARD = SharedPostgresBudget.SLOT_GUARD_SECONDS     # the production headroom between a slot's window and its freeing
+GUARD = getattr(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', 0.0)     # the production headroom between a slot's window and its freeing
 WIRE = 'coalesce(sent_at,reserved_at)'
 
 
@@ -461,6 +461,31 @@ class ExactCeilingOnPostgres(unittest.TestCase):
         with self.cluster.connect(autocommit=True) as db, db.cursor() as cur:
             now = float(db.execute('SELECT extract(epoch from clock_timestamp())').fetchone()[0])
             ops.read_ledger(cur, now, {})                                         # raises on a type it cannot read
+
+    def test_a_403_and_a_404_close_a_route_for_a_bounded_time_or_not_at_all_on_real_sql(self):
+        """The sender-name review measured 86,340 s of refusal after one 403 on the nickname write (up to 31 days). A 403
+        closes that server's route for circuit_seconds (30 in the reviewed policy); a 404 on a read closes nothing."""
+        stack = Stack(self.cluster, capacity=25)
+        circuit = json.loads(stack.policy)['circuit_seconds']
+        path = '/guilds/740000000000009100/members/@me'
+        permit = stack.limiter.reserve('PATCH', path, identity=stack.identity)
+        stack.limiter.consume(permit, 'PATCH', path)
+        stack.limiter.observe(permit, {'status': 403, 'headers': {}})
+        with self.assertRaises(RateDelayed) as caught:
+            stack.limiter.reserve('PATCH', path, identity=stack.identity)
+        self.assertEqual(caught.exception.rate_scope_kind, 'embargo')
+        self.assertLessEqual(caught.exception.retry_after_seconds, circuit + .5, 'a bounded circuit, not the policy lifetime')
+        self.assertGreater(caught.exception.retry_after_seconds, circuit - 5)
+        message = '/channels/740000000000009101/messages/740000000000009102'
+        read = stack.limiter.reserve_read('GET', message, identity=stack.identity)
+        stack.limiter.observe(read, {'status': 404, 'headers': {}})           # a deleted message
+        time.sleep(1.2)                                                       # the cold route's own one-second probe window
+        other = stack.limiter.reserve_read('GET', '/channels/740000000000009101/messages/740000000000009103',
+                                           identity=stack.identity)           # another message of the channel is read
+        stack.limiter.observe(other, {'status': 404, 'headers': {}})
+        with self.cluster.connect(autocommit=True) as db:
+            open_circuits = db.execute('SELECT count(*) FROM public.pr_discord_rate_state WHERE circuit_until>clock_timestamp()').fetchone()[0]
+        self.assertEqual(open_circuits, 1, 'only the nickname route of the server that refused is closed')
 
     # --- the leak that used to stall everything for good ------------------------------------------------------------
 
