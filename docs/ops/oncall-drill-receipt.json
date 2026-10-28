@@ -1,7 +1,7 @@
 {
  "command": "POSTRIFF_PG_BIN=/usr/lib/postgresql/16/bin PYTHONPATH=src:tests python tests/oncall_drills.py",
  "environment": "isolated",
- "finishedAt": "2026-10-23T07:34:10Z",
+ "finishedAt": "2026-10-28T16:39:55Z",
  "kind": "rafii.oncall.drill-receipt",
  "policy": "docs/ops/h07-oncall-policy.json",
  "postgres": "16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
@@ -227,7 +227,7 @@
    "proves": "the engine decision on a simulated clock",
    "requirement": "routing_p1",
    "result": "PASS",
-   "seconds": 0.9,
+   "seconds": 1.5,
    "title": "P1: push and e-mail in duty hours, the Backup after 15 duty minutes; at night e-mail now, push at 09:00"
   },
   {
@@ -254,7 +254,7 @@
    "proves": "the engine decision on a simulated clock",
    "requirement": "routing_p2",
    "result": "PASS",
-   "seconds": 0.9,
+   "seconds": 1.2,
    "title": "P2: e-mail in duty hours, nothing else"
   },
   {
@@ -377,7 +377,7 @@
    "proves": "the engine decision on a simulated clock",
    "requirement": "acknowledgement",
    "result": "PASS",
-   "seconds": 0.2,
+   "seconds": 0.3,
    "title": "An acknowledgement from push, e-mail, phone or the dashboard stops the chain"
   },
   {
@@ -520,7 +520,7 @@
    "proves": "the engine decision on a simulated clock",
    "requirement": "suppression",
    "result": "PASS",
-   "seconds": 0.0,
+   "seconds": 0.1,
    "title": "Maintenance and a cause hold their symptoms; a security alert pages in any window; flapping is damped"
   },
   {
@@ -630,7 +630,7 @@
    "proves": "the engine decision on a simulated clock",
    "requirement": "audit_trail",
    "result": "PASS",
-   "seconds": 3.1,
+   "seconds": 3.0,
    "title": "PostgreSQL store (migration 140): an append-only timeline and unique notifications"
   },
   {
@@ -667,7 +667,7 @@
    "proves": "the engine decision on a simulated clock",
    "requirement": "heartbeat",
    "result": "PASS",
-   "seconds": 1.5,
+   "seconds": 1.6,
    "title": "The alert about the alerting: a stale heartbeat for the watchdog, a gap noticed after a restart"
   },
   {
@@ -700,7 +700,7 @@
      "observed": [
       {
        "by": "backup-1",
-       "incident": "b1b271f6-009a-4501-95df-25471291dd0b",
+       "incident": "68a9fe2f-3195-4fec-99d6-7a1ec4e2c301",
        "ok": true
       },
       "resolved"
@@ -718,11 +718,14 @@
    "observed": {
     "acknowledged": {
      "by": "backup-1",
-     "incident": "b1b271f6-009a-4501-95df-25471291dd0b",
+     "incident": "68a9fe2f-3195-4fec-99d6-7a1ec4e2c301",
      "ok": true
     },
-    "afterDrain": [],
+    "afterDrain": [
+     "COORD_LOCK_BOUND"
+    ],
     "evaluatorAlerts": [
+     "COORD_LOCK_BOUND:info",
      "SILENT_HALT_NO_PROGRESS:page"
     ],
     "finalState": "resolved",
@@ -758,6 +761,8 @@
     {
      "check": "probing never holds (a refusal is the gate working)",
      "observed": {
+      "bearer_held": 0,
+      "bearer_rows": 0,
       "held": 0,
       "policy_rows": 1,
       "seconds_since_last_request": "0"
@@ -768,6 +773,8 @@
      "check": "a failed probe holds, read back held 1, and the lanes stop with operator_hold",
      "observed": [
       {
+       "bearer_held": 0,
+       "bearer_rows": 0,
        "held": 1,
        "policy_rows": 1,
        "seconds_since_last_request": "0"
@@ -779,6 +786,8 @@
     {
      "check": "the engine opens its own P0 and never lifts the hold, even after the alert clears",
      "observed": {
+      "bearer_held": 0,
+      "bearer_rows": 0,
       "held": 1,
       "policy_rows": 1,
       "seconds_since_last_request": "0"
@@ -790,16 +799,22 @@
    "id": "R15",
    "observed": {
     "afterAlertCleared": {
+     "bearer_held": 0,
+     "bearer_rows": 0,
      "held": 1,
      "policy_rows": 1,
      "seconds_since_last_request": "0"
     },
     "afterProbeFailed": {
+     "bearer_held": 0,
+     "bearer_rows": 0,
      "held": 1,
      "policy_rows": 1,
      "seconds_since_last_request": "0"
     },
     "afterProbing": {
+     "bearer_held": 0,
+     "bearer_rows": 0,
      "held": 0,
      "policy_rows": 1,
      "seconds_since_last_request": "0"
@@ -812,11 +827,11 @@
    "proves": "the engine decision on a simulated clock",
    "requirement": "auto_hold_owner_decision",
    "result": "PASS",
-   "seconds": 0.5,
+   "seconds": 0.6,
    "title": "Option D1 (off by default, advised against): the runbook HOLD_ON on a failed probe only"
   }
  ],
- "sourceRevision": "b193adcefd8ace31f305b7c36193bc7c5c5c91c3",
- "startedAt": "2026-10-23T07:33:49Z",
+ "sourceRevision": "git:9fcfa47606b237beba58873a7d195871b733d645",
+ "startedAt": "2026-10-28T16:39:32Z",
  "version": 1
 }

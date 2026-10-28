@@ -48,14 +48,14 @@ Today: BLOCKED, reasons `night_cover_not_declared` and `roster:{primary,backup}_
 
 | Evidence | Result |
 |---|---|
-| `tests/test_discord_ops_check.py` (the 47 alert rules, thresholds, command line, fetch) | 82 tests OK, 2 skipped on this branch (they compare with constants only the limiter and W-02 heads have; both pass on the scratch merge); 27 of the first 63 fail on the reviewed evaluator (section 5), the new ones before their fix (section 4a) |
-| `tests/test_discord_ops_health.py` (the route and payload) | 20 OK on this branch (the scratch merge `d995ff13` added the limiter's retention test) |
+| `tests/test_discord_ops_check.py` (the 47 alert rules, thresholds, command line, fetch) | 94 tests OK, none skipped since the limiter's merge (82 with 2 skipped before round 3); 27 of the first 63 fail on the reviewed evaluator (section 5), the new ones before their fix (section 4a) |
+| `tests/test_discord_ops_health.py` (the route and payload) | 28 OK (20 before round 3; the limiter's retention, booking and bearer tests and the round trip's came with it) |
 | `tests/test_security_signals.py` (the denial signal) | 12 OK |
 | `tests/test_oncall_policy.py` (policy, duty hours across both 2026 New York transitions, rosters, the rule-to-priority table) | 17 OK |
 | `tests/test_oncall_engine.py` (engine, providers, store in memory, automatic hold logic, readiness) | 38 OK |
 | `tests/test_discord_ops_drills_postgres.py` offline part (runbook statements, the hold statements of the engine, migration 141 against the twin, its search_path and ACL) | 5 OK |
-| `tests/test_discord_ops_drills_postgres.py` on PostgreSQL 16 (9 drills, `DRAIN_CHECK` at 5,201 workspaces, migration 141 applied twice) | 17 OK on this branch after the second review's fixes (12 need PostgreSQL, the new one is N-9's real-payload test); 15 OK on the scratch merge before them (section 4a); receipt `DRILL-RECEIPT-ISOLATED.md`: 9 drills, 99 checks, 0 failed (source: the scratch merge `d995ff13`, its composition in the receipt; 98 checks at `b193adce`) |
-| `tests/oncall_drills.py` / `tests/test_oncall_drills_postgres.py` (15 policy rows) | receipt `ONCALL-DRILL-RECEIPT.md`: 15 rows, 41 checks, 0 failed (source `b193adce`; not regenerated: the engine code has not changed since; the policy gained two priority rows and `SILENT_HALT_SECTION` as a no-data rule); the wrapper's 13 tests pass on this branch and on the scratch merge |
+| `tests/test_discord_ops_drills_postgres.py` on PostgreSQL 16 (9 drills, `DRAIN_CHECK` at 5,201 workspaces, migration 141 applied twice, N-9 on the real payload, the round trip) | 17 OK on `9fcfa476` (the limiter merged in; 12 need PostgreSQL); receipt `DRILL-RECEIPT-ISOLATED.md`: 9 drills, 102 checks, 0 failed (source `9fcfa476`; 99 at the scratch merge `d995ff13`, 98 at `b193adce`) |
+| `tests/oncall_drills.py` / `tests/test_oncall_drills_postgres.py` (15 policy rows) | receipt `ONCALL-DRILL-RECEIPT.md`: 15 rows, 41 checks, 0 failed (source `9fcfa476`, regenerated in round 3); the wrapper's 13 tests pass |
 
 The thresholds file holds 51 values for the 47 alert ids (49 for 42 before round 3, 45 for 40 at `e79df41d`; the reviewed head had 41 for 36). The repository's secret scan (`scripts/consumer_ready_secrets.py`, rule P2-SEC-CI-04) on `828192e8`: FAIL with 8 unexpected findings, all in five test files of other lanes that are unchanged since the base `5a94b4f2` (the same 8 as at `e79df41d`); none in this lane's files.
 
@@ -96,6 +96,40 @@ Verdict: MERGE-READY AFTER NAMED FIXES; 19 earlier findings closed, M9, L4 and L
 | N-9 | (MEDIUM) a Discord outage paged P0 as "our side" | CLOSED | 5xx answers to creates are `deliveries.rejectedUpstream` and raise `DELIVERY_DISCORD_5XX` (warn) only; a 400 still pages; the reviewer's `exp_503` before and after, and a PostgreSQL test on the real payload (5.4) |
 
 Listed for later, with their ids (section 8): N-2, N-6, N-7, N-8, N-11, N-12, N-13, N-14, N-15. H-07 stays **BLOCKED**.
+
+## 4c. Round 3 (2026-10-28): the final coordinator merged in, and the alerts that follow it
+
+The limiter's measured head `0cb19962` is merged into this branch (`87286623`), so the integration can take this branch after the limiter without resolving anything. Three files conflicted and both sides were kept: `ops.py` (the limiter's bearer fields with this branch's build facts in `config.policy`; both new ledger columns, `rejectedUpstream` and the bearer class's admissions; the section loop queue, ledger, unresolved, coordinator, retention, booking, servers, platform, requests), the health test's fake database, and the SQL twin (the limiter's budgets join, bot-only `admitted`, `bearer_admitted` and guard rows named by scope key, with this branch's unresolved section and the newest row of each name, review L1). Migration 141 (unapplied) follows the twin and may read `credential_kind` and `scope_key`.
+
+| Coordinator fact (0cb19962) | Read from | Rule | Priority |
+|---|---|---|---|
+| Slot guard 0.05 s; bookings leave 1 slot a window to callers that cannot wait | `config.policy.slotGuardSeconds`, `immediateReserve`, `bookAheadSeconds` (the build's constants) | `RATE_APP_BUDGET_SPENT` against (cap - min(reserve, cap - 1)) x 60 / (window + guard): 1,371.4 a minute at 25 a second, never the nominal 1,500 | P2 |
+| Bearer budget (the owner's D-2 option 1): `admissions60s` is the bot's class alone while it exists | `config.policy.bearerCapacity`, `bearerWindowSeconds`, `coordinator.traffic.bearerAdmissions60s`, `coordinator.guards.bearer` | `RATE_BEARER_BUDGET_SPENT` against the bearer class's own bookable ceiling (the same window, guard and reserve: 514.3 a minute at 10 a second, not 600, which only 99.7% could reach); a bearer embargo or circuit joins `RATE_EMBARGO` | P2 |
+| The booked horizon | `coordinator.booking.horizonSeconds` against `bookAheadSeconds` | `RATE_BOOKING_FULL` at 90%: callers that cannot wait are refused. Never `remaining` alone (0 in 21 of 35 busy readings of the first hosted run) | P2 |
+| The 45 s degrade of a process | a lane run's `stoppedBy: coordinator_degraded` | `RATE_COORDINATOR_DEGRADED` (no longer also counted by `SILENT_HALT_LANE_STOPS`) | P1 |
+| `RateDelayed` cause `coordinator_busy` (1.5 s, nothing sent) | proposed `counters.coordinatorBusy` in `discord.lane.completed` | `RATE_COORDINATOR_BUSY` at 10 or more in five minutes | P1 |
+| The row lock's ceiling, 1000 / (17 + 10.8 x round trip) a second (the limiter's Q22) | `coordinator.roundTrip`: a new connection to `POSTRIFF_DATABASE_URL` with the application's options, five sequential `SELECT 1` and one `COMMIT` (connectMs, selectP50Ms, selectMaxMs, commitMs, the sample time); the constants named in `ops.py` | `COORD_LOCK_BOUND` (informational) when that rate is below the bookable rate; the text says the 17 ms is a test-box figure and the result an estimate | P2 |
+
+**The round trip is the G5 evidence.** Nobody has measured the round trip from a Vercel function to the Supabase pooler; the first health read on the staged dark build prints it (`coordinator.roundTrip`), with `path: new_connection` when `POSTRIFF_DATABASE_URL` is set. It is read-only (no table, no write, no lock, a 1 s statement timeout), it is skipped when the database did not answer, and its own failure is that section's `unavailable` (listed in `errors[]`, and never a blind spot: `SILENT_HALT_SECTION` ignores it). The SQL twin says `not_measured`; `docs/w02/monitoring.sql` M9 says where to read it. In the isolated drills the lab's budget is 200 a second, above what the lock lets through however short the round trip (at most 1000 / 17 = 58.8 a second), so `COORD_LOCK_BOUND` (info) shows in nearly every step of the receipt; at the production cap of 25 it fires only above a p50 of about 2.4 ms.
+
+**N-1 is fixed** (the limiter's `c6843f89`, inside `0cb19962`): the paused build is a wait, and a read-back with no or a degraded coordinator is a deferral (`provider_accepted`, check refunded, 300 s). Probe E5 on this branch after the merge shows it; the runbook, section 3 and `H07-OPTIONS.md` say so. The hold read-backs (`HOLD_READBACK`, `HOLD_KEYCHECK`) count the application's policy row alone and report the bearer budget's row apart.
+
+**D3** books its reads as the lanes do (three bot loops and two loops on a synthetic bearer made per run), reads the guard and the reserve from the build and checks the two classes apart: on `9fcfa476` 57 bot and 57 bearer admissions in the last minute against 57.1 each (saturation 0.998), both alerts at warn, both cleared after a quiet minute. Under booking the injection has no polling gaps, so it no longer depends on the machine's load (the failure the integration saw: 108 against 95% of 114.3).
+
+**What the alerts cannot read yet.** `booking_stats()['horizonRefusals']` is per process and in no payload or log line (the full horizon is read instead); no lane counts `coordinator_busy` apart from other rate delays (the rule waits for `counters.coordinatorBusy`); a degrade in a process that runs no lane (the minute cron, a web request) leaves no line; the booked reads' waits (`meanBookedReadWaitSeconds60s`, `maxBookedReadWaitSeconds60s`) have no threshold yet; the twin cannot carry the booking, retention or round-trip sections (they are the route's).
+
+**Verified on `9fcfa476`.** Offline: 219 tests, 194 run and pass, 25 need PostgreSQL. PostgreSQL 16: `tests.test_discord_ops_drills_postgres` and `tests.test_oncall_drills_postgres` 30 OK. Receipts regenerated on that head: `DRILL-RECEIPT-ISOLATED.md` 9 drills, 102 checks, PASS; `ONCALL-DRILL-RECEIPT.md` 15 rows, 41 checks, PASS. The offline secret scan: FAIL with the same 8 unexpected findings as before, all in five test files of other lanes unchanged since the base; none in this lane's files or in what the limiter's merge brought.
+
+**Merge forecast** (`git merge-tree` of this branch at `9fcfa476` with each head, nothing written):
+
+| Branch | Head | Result |
+|---|---|---|
+| `claude/discord-rc2-fixes-20261023` | `1ae232df` | clean |
+| `claude/discord-rc2-g2a-fixes-20261023` | `217a2c8f` | clean |
+| `claude/discord-w02-parallel-20261023` | `5ef7c1ce` | clean |
+| `claude/discord-rc2-sendername-20261023` | `f6d563e8` | conflicts in `src/postriff_phase2/hosted_social.py` and `src/postriff_phase2/social_connectors.py`, inherited: the limiter alone (`0cb19962` and its tip) conflicts with it in the same two files, and this branch adds nothing to them |
+| `claude/discord-rc2-sendername-ui-20261023` | `6cfb2b78` | clean |
+| `claude/discord-rc2-limiter-20261023` | `68972488` (two commits after `0cb19962`: the Q22 analysis and the multi-read web calls' booking) | clean |
 
 ## 5. The independent review of `8e76afdd`: each finding
 
