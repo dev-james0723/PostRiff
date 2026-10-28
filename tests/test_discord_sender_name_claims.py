@@ -791,6 +791,36 @@ class NicknameObservation(unittest.TestCase):
         self.assertEqual(self.verify(s, channel)['state'], 'read_verified')
         self.assertNotIn('discordBotNickname', channel)
 
+    def test_a_verification_that_read_discord_before_a_sender_change_cannot_commit_over_it(self):
+        """The verification reads Discord outside any transaction. A nickname write, a saved name or an edit claim that
+        commits in between is newer than what it saw: committing its older observation would put the previous
+        nickname back, and the next review would freeze (and the dispatch would hold on) a value nobody chose."""
+        changes = {
+            'discordBotNickname': lambda c: c.update(discordBotNickname={'value': 'Written Nick', 'observedAt': NOW + 5}),
+            'discordSenderName': lambda c: c.update(discordSenderName='Written Nick'),
+            'discordSenderRevision': lambda c: c.update(discordSenderRevision='revision-written'),
+            'discordSenderEdit': lambda c: c.update(discordSenderEdit={'id': 'claim-1', 'name': 'Written Nick', 'expiresAt': NOW + 120}),
+        }
+        for field, change in changes.items():
+            with self.subTest(field=field):
+                s, wire, state, channel, *_ = reverify_fixture(ready=False)
+                earlier = {'value': 'Old Nick', 'observedAt': 1.0}
+                channel['discordBotNickname'] = dict(earlier)
+                wire.route_overrides[('GET', f'/guilds/{GUILD}/members/{BOT}')] = self.member('Old Nick')
+                real = s.adapter.destinations
+
+                def destinations(access, *, _real=real, _change=change, _channel=channel, **kwargs):
+                    result = _real(access, **kwargs)          # Discord has been read ...
+                    _change(_channel)                         # ... and now the other request commits
+                    return result
+                s.adapter.destinations = destinations
+                outcome = self.verify(s, channel)
+                self.assertEqual((outcome['state'], outcome['ready']), ('verification_unavailable', False))
+                self.assertEqual(channel['discordBotNickname'], {'value': 'Written Nick', 'observedAt': NOW + 5}
+                                 if field == 'discordBotNickname' else earlier,
+                                 'the older observation must not replace what was stored while Discord was being read')
+                self.assertNotEqual(channel.get('verifiedAt'), NOW, 'a stale verification extends no freshness')
+
     def test_a_failed_verification_records_nothing_and_keeps_the_earlier_observation(self):
         s, wire, state, channel, *_ = reverify_fixture(ready=False)
         earlier = {'value': 'Earlier Nick', 'observedAt': 1.0}

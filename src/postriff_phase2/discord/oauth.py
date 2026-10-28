@@ -591,7 +591,10 @@ class DiscordConnections:
                         'discordAuthorizationGeneration', 'scopes', 'revoked',
                         'defaultDestinationId', 'discordDestinations', 'enabledPermissionGroups',
                         'configured', 'identityVerified', 'capabilityVerified', 'verifiedAt',
-                        'capabilityVersion', 'discordVerificationGeneration')
+                        'capabilityVersion', 'discordVerificationGeneration',
+                        # Sender settings: a nickname write, a saved name or an edit claim that commits while Discord is
+                        # being read is newer than this observation, which must then not be written over it.
+                        'discordBotNickname', 'discordSenderEdit', 'discordSenderName', 'discordSenderRevision')
 
         def installation(cur, state, *, fresh=False):
             if state.get('accountDeletion') or state.get('accountBlock'):
