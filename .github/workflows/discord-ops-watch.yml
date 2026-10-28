@@ -1,0 +1,90 @@
+name: Discord ops watch
+# H-07 minimal (owner decision D-19, 2026-10-28): the owner is the only person on call and this job is the pager.
+# Every 10 minutes it reads the Discord operations health snapshot of Production (GET /api/ops/discord/health: read-only
+# aggregates, no customer content) and evaluates it with the reviewed alert rules (scripts/discord_ops_check.py, standard
+# library only) taken from the pinned release commit below.
+# - The job FAILS when an alert pages, when the snapshot cannot be read or evaluated, or on a planned test alert; GitHub then
+#   e-mails the user who last changed this schedule and notifies the GitHub mobile app when its notifications are on.
+# - Warnings do not fail the job.
+# - Secret absent (environment rafii-ops-watch, secret DISCORD_OPS_BEARER): a "not configured" notice, and the job passes.
+# - The log of a public repository is public, so only alert ids are printed: never the snapshot, messages or evidence.
+# Limits, stated plainly: nothing here wakes anyone at night; GitHub can delay or drop scheduled runs under load and switches
+# schedules off in a public repository after 60 days without repository activity; the check cannot see a Vercel outage
+# before the health route answers a request (an unanswered request pages by rule).
+# Variables (all optional): DISCORD_OPS_PHASE = pre_open | canary | open (default canary; set it to open when the opening is
+# done), DISCORD_OPS_URL (default https://rafii.io/api/ops/discord/health).
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      test_alert:
+        description: 'Fail this run on purpose to prove that the alert reaches the owner (nothing is wrong)'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: discord-ops-watch
+  cancel-in-progress: false
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: rafii-ops-watch
+    steps:
+      - name: Planned test alert
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_alert }}
+        run: |
+          echo '::error title=TEST ALERT::Planned H-07 test alert. Nothing is wrong; this run fails on purpose.'
+          exit 1
+      - name: Is the watch configured?
+        id: cfg
+        env:
+          BEARER: ${{ secrets.DISCORD_OPS_BEARER }}
+        run: |
+          if [ -n "$BEARER" ]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo '::notice title=Discord ops watch::Not configured (no DISCORD_OPS_BEARER in the rafii-ops-watch environment). Nothing was checked.'
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: steps.cfg.outputs.configured == 'true'
+        with:
+          # The reviewed checker: the release candidate commit; change it by pull request when the checker changes.
+          ref: 94bb61da8c5870f8249b75c89e899299bf5687f0
+          sparse-checkout: |
+            scripts/discord_ops_check.py
+            docs/ops/discord-alert-thresholds.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Read the health snapshot and evaluate the alert rules
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          DISCORD_OPS_BEARER: ${{ secrets.DISCORD_OPS_BEARER }}
+          URL: ${{ vars.DISCORD_OPS_URL || 'https://rafii.io/api/ops/discord/health' }}
+          PHASE: ${{ vars.DISCORD_OPS_PHASE || 'canary' }}
+        run: |
+          python3 scripts/discord_ops_check.py fetch "$URL" > "$RUNNER_TEMP/snapshot.json"
+          code=0
+          python3 scripts/discord_ops_check.py evaluate "$RUNNER_TEMP/snapshot.json" --phase "$PHASE" > "$RUNNER_TEMP/report.json" || code=$?
+          python3 - "$RUNNER_TEMP/report.json" "$code" "$PHASE" <<'PY'
+          import json, sys
+          path, code, phase = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+          try:
+              with open(path) as handle:
+                  report = json.load(handle)
+          except ValueError:
+              report = {}
+          alerts = report.get('alerts') or []
+          pages = sorted({str(a.get('id', '?')) for a in alerts if a.get('severity') == 'page'})
+          warns = sorted({str(a.get('id', '?')) for a in alerts if a.get('severity') == 'warn'})
+          print('phase:', phase, '| evaluation exit code:', code)
+          print('pages:', ', '.join(pages) or 'none')
+          print('warnings:', ', '.join(warns) or 'none')
+          PY
+          if [ "$code" -ge 2 ]; then
+            echo '::error title=Discord ops watch::An alert pages, or the check could not run. Open the phone runbook (docs/ops/PHONE-RUNBOOK.md) and read the snapshot.'
+            exit 1
+          fi
