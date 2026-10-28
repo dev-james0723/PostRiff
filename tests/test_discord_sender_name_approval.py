@@ -270,7 +270,10 @@ class HoldReason(unittest.TestCase):
         for bad in ('some_other_code', '', None, 5, ['discord_bot_nickname_changed'], 'DISCORD_BOT_NICKNAME_CHANGED'):
             self.assertNotIn('reason', normalize_result({**held, 'reason': bad}, job), repr(bad))
         self.assertNotIn('reason', normalize_result(held, job))
-        # a reason only describes a hold, and only on Discord
+        # a reason only describes a hold that sent nothing, and only on Discord
+        for state, evidence in (('failed', 'not_sent'), ('scheduled', 'not_sent'), ('held', 'rejected'), ('failed', 'rejected')):
+            self.assertNotIn('reason', normalize_result({'state': state, 'confirmed': 'x', 'discordDeliveryEvidence': evidence,
+                                                         'reason': 'discord_bot_nickname_changed'}, job), (state, evidence))
         sent = {'state': 'provider_accepted', 'confirmed': 'Accepted', 'reference': 'x/y', 'discordDeliveryEvidence': 'accepted',
                 'reason': 'discord_bot_nickname_changed'}
         self.assertNotIn('reason', normalize_result(sent, job))
