@@ -130,9 +130,10 @@ with the mock's timestamps), `mock/mock-summary.json`, `invocations/*.json` (eac
 CPU, memory, log lines), `invocations-summary.json` (the same without the log lines: the part that is uploaded),
 `samples.jsonl`, `pooler-final.json`, `database-final.json` (admissions by state, the open admissions, permit fates,
 coordinator holds, pg_stat_statements top statements by maximum and by total time, server-log SQLSTATEs, the
-largest document, the budget probes), `admissions.jsonl` (every admission of the run: reserved, sealed, sent,
-answered and expiry times, state, path digest), `final-states.json`, `postgres.log`, `harness/` (the harness copy
-that ran). Environment files with the synthetic credential key and cron secret are mode 600 and hold
+largest document, the budget probes, the coordinator's lock statements counted from `pg_stat_statements`),
+`admissions.jsonl` (every admission of the run: reserved, sealed, sent, answered and expiry times, state, path digest),
+`attempts.jsonl` (every reservation attempt), `health-samples.jsonl` (the operator's health payload, one reading a
+minute and one after the run), `final-states.json`, `postgres.log`, `harness/` (the harness copy that ran). Environment files with the synthetic credential key and cron secret are mode 600 and hold
 no real secret.
 
 ## Reading a receipt
@@ -181,7 +182,33 @@ no real secret.
   refusal the quoted wait, scope and cause) to `attempts.jsonl`. A refused reservation leaves no row in the database, so this
   is its only record. The receipt tabulates attempts, refusals and quoted waits by credential and request kind, and how many
   attempts a read step needed. The wrapper also stamps the admitted permit's id on the request it sends, so an admission is
-  joined to its arrival at the mock exactly (older logs are joined by path and order).
+  joined to its arrival at the mock exactly (older logs are joined by path and order). With booking (the limiter's
+  `rate_limits.booking()`, from 02fd679b) a `reserve` or `reserve_read` that finds the window full books the next free slot and
+  **sleeps inside the call** until it comes, up to a second, then returns the permit: an admitted call is a slot reached, and
+  the seconds it took include the sleep. Three more columns separate it: the seconds the coordinator booked for the call (the
+  difference of its own `booking_stats()`), the seconds the call actually slept (a wrapper around `_wait_for_slot`, the gate
+  after the sleep included) and the `book_ahead` room the caller allowed. The table splits an admitted call's duration into
+  calls that did not book and calls that did. A log of a tree without booking has the zeros; a 13-column log of an older harness
+  is read as unbooked.
+- **Booking.** The lane's own counters `bookedWaits` and `bookedSeconds` (invocation result and the `discord.lane.completed` line,
+  summed over the invocations) next to `rateDelayed`, `permitWaits`, `rateWaits`, `steps` and `positionsKept`; the reads the
+  coordinator stored booked (a read stored `sent` at a wire time more than 5 ms after its reservation: the difference is its
+  wait; a booked create permit is stored reserved at its slot, so its wait is in the attempt log only); the booked calls of the
+  attempt log; and the **health payload**. The runner reads `GET /api/ops/discord/health` through the real WSGI entry (a short
+  process at a low priority, not counted among the invocations) every `health_period_seconds` (60; 0 turns it off) and once after
+  the run, and keeps the reduced readings in `health-samples.jsonl`. The receipt prints, over the busy readings, `coordinator.booking`
+  (`bookAheadSeconds`, `aheadNow`, `horizonSeconds`, `bookedReads60s`, `bookedReadWaitSeconds60s`, `meanBookedReadWaitSeconds60s`,
+  `maxBookedReadWaitSeconds60s`), the application row `coordinator.guards.policy` and `coordinator.traffic.admissions60s`. **With
+  booking the application row means something else**: `remaining` is the number of slots bookings may still fill (the cap less the
+  held and less the slot kept for callers that cannot wait) and `resetSeconds` when a booking is possible again, so a busy lane
+  keeps it high and it falls to 0 only when the booked horizon is full and callers are refused again; it is no longer "the window
+  is nearly spent". A tree before the route answers 404; the receipt says so and shows no booking reading.
+- **Lock statements.** The coordinator's `_locked` statement counted from `pg_stat_statements`: the exclusive form (`FOR UPDATE`:
+  one per reservation attempt, and per observation that cannot share the lock), the shared form (`FOR SHARE` guards: a GET
+  observation that can share), and the seeding statement, with calls per created post, mean and maximum time (a wait for the row
+  locks is part of the time). The ceiling is also given by **wire time** (`sent_at`, the instant a request may leave: a booked read
+  is stored at its slot, after its reservation) next to the count by reservation instant, and the admission-to-observation time
+  d is measured from the wire time.
 - **Witness age.** Per create: the person's grant check (else the server read) of its pass to the create reaching
   the mock, p50 / p90 / p99 / max, and the channel list's age.
 - **Per lane step.** Loop seconds (minus waits for the budget and for work) per step, and the database share of it:
@@ -222,7 +249,7 @@ PostgreSQL's log and PgBouncer's log. The per-run environment files are never up
 
 `python3 docs/w02/ci/run_tests.py` runs the workflow's own blocks against local git repositories. It covers request
 validation, exact-SHA fetches, the request script, action-validator and shellcheck. With `POSTRIFF_PG_BIN` set it
-adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (112 checks).
+adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (113 checks).
 
 ## The official run on Depot
 

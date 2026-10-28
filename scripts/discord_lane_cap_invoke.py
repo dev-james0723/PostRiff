@@ -127,12 +127,22 @@ def instrument_coordinator(path, source):
     leaving for the wire) are wrapped: each call is logged as one JSON array [time, seconds the call took, operation, method,
     route with ids masked, credential kind, workspace index where the path names a server or channel, outcome (A admitted,
     R refused with a wait, E error), the wait the coordinator quoted, its scope, its cause, the permit id when admitted,
-    the cron source of this process].
+    the cron source of this process, seconds booked, seconds slept, book-ahead room the caller allowed].
     A refused reservation leaves no row in the database, so this log is the only record of the wait it was quoted. The
-    wrapped methods return and raise exactly what the originals do."""
+    wrapped methods return and raise exactly what the originals do.
+
+    Booking (rate_limits.booking(), the lane's own): a reserve or reserve_read that finds the application window full may
+    book the next free slot and SLEEP INSIDE THE CALL until it comes, up to a second, and then return the permit. So an
+    admitted call is a slot reached, and the seconds it took include that sleep. The last three columns separate it: the
+    seconds the coordinator booked for this call (the difference of its own booking_stats(), 0 when it did not book), the
+    seconds the call actually spent in the wait for the slot and the gate after it (a wrapper around _wait_for_slot, 0 when
+    that does not exist in the tree), and the room the caller allowed (`book_ahead`, None when it did not pass one, as
+    outside booking()). A tree without booking leaves all three at 0, 0, None. Older logs have the first 13 columns only."""
+    import threading
     from postriff_phase2.discord import rate_limits as limits
     handle = open(path, 'a', buffering=1)
     cls = limits.SharedPostgresBudget
+    waited = threading.local()  # seconds this thread spent in _wait_for_slot since the wrapped call began
 
     def workspace(target):
         match = re.match(r'/(guilds|channels)/([0-9]{5,25})', target)
@@ -141,13 +151,37 @@ def instrument_coordinator(path, source):
         number = int(match.group(2)) - (GUILD0 if match.group(1) == 'guilds' else CHANNEL0)
         return number if 0 <= number < 10 ** 9 else None
 
-    def emit(operation, method, target, identity, started, took, outcome, error=None, permit=None):
+    def booked_total(coordinator):
+        """The coordinator's own total of seconds booked so far (booking_stats), or None when the tree has none."""
+        getter = getattr(coordinator, 'booking_stats', None)
+        if getter is None:
+            return None
+        try:
+            return float(getter().get('bookedWaitSeconds', 0.0))
+        except Exception:
+            return None
+
+    def emit(operation, method, target, identity, started, took, outcome, error=None, permit=None, booked=0.0, slept=0.0,
+             room=None):
         row = [round(started, 4), round(took, 4), operation, method, re.sub(r'/[0-9]{5,25}', '/{id}', target.split('?')[0]),
                getattr(identity, 'kind', None), workspace(target), outcome,
                round(error.retry_after_seconds, 4) if isinstance(error, limits.RateDelayed) else None,
                getattr(error, 'rate_scope_kind', None), getattr(error, 'rate_cause', None),
-               getattr(permit, 'id', None), source]
+               getattr(permit, 'id', None), source, round(booked, 4), round(slept, 4),
+               round(float(room), 3) if isinstance(room, (int, float)) else None]
         handle.write(json.dumps(row, separators=(',', ':')) + '\n')
+
+    if hasattr(cls, '_wait_for_slot'):
+        original_wait = cls._wait_for_slot
+
+        @functools.wraps(original_wait)
+        def timed_wait(self, *args, **kwargs):
+            began = time.monotonic()
+            try:
+                return original_wait(self, *args, **kwargs)
+            finally:
+                waited.seconds = getattr(waited, 'seconds', 0.0) + (time.monotonic() - began)
+        cls._wait_for_slot = timed_wait
 
     def wrap(name, operation):
         original = getattr(cls, name)
@@ -156,22 +190,31 @@ def instrument_coordinator(path, source):
         def wrapper(self, *args, **kwargs):
             CURRENT['permit'] = None  # an earlier admission whose request never left must not stamp the next one
             started, began = time.time(), time.monotonic()
+            waited.seconds = 0.0
+            before = booked_total(self)
             consuming = operation == 'consume'
             permit_arg = args[0] if consuming and args else None
             method, target = (args[1:3] if consuming else args[:2]) if len(args) >= 2 else ('?', '')
             if consuming and len(args) < 3:
                 method, target = '?', ''
             identity = kwargs.get('identity') or getattr(permit_arg, 'identity', None)
+            room = kwargs.get('book_ahead')
+
+            def booked_by_this_call():
+                after = booked_total(self)
+                return max(0.0, after - before) if before is not None and after is not None else 0.0
             try:
                 result = original(self, *args, **kwargs)
             except BaseException as error:
                 emit(operation, method, target, identity, started, time.monotonic() - began,
-                     'R' if isinstance(error, limits.RateDelayed) else 'E', error)
+                     'R' if isinstance(error, limits.RateDelayed) else 'E', error, None, booked_by_this_call(),
+                     getattr(waited, 'seconds', 0.0), room)
                 raise
             permit = permit_arg if consuming else result
-            emit(operation, method, target, identity, started, time.monotonic() - began, 'A', None, permit)
+            emit(operation, method, target, identity, started, time.monotonic() - began, 'A', None, permit,
+                 booked_by_this_call(), getattr(waited, 'seconds', 0.0), room)
             if operation != 'reserve':  # a create permit is stamped when it is consumed, just before the POST
-                CURRENT['permit'] = getattr(permit, 'id', None)
+                CURRENT['permit'] = getattr(permit, 'id', None)  # the slot has come: the next request is this admission's
             return result
         setattr(cls, name, wrapper)
     for name, operation in (('reserve_read', 'read'), ('reserve', 'reserve'), ('consume', 'consume')):

@@ -189,6 +189,7 @@ jobs:
             ${{ runner.temp }}/capacity/*/invocations-summary.json
             ${{ runner.temp }}/capacity/*/admissions.jsonl
             ${{ runner.temp }}/capacity/*/attempts.jsonl
+            ${{ runner.temp }}/capacity/*/health-samples.jsonl
             ${{ runner.temp }}/capacity/*/final-states.json
             ${{ runner.temp }}/capacity/*/database-final.json
             ${{ runner.temp }}/capacity/*/pooler-final.json

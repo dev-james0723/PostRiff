@@ -540,11 +540,27 @@ _KINDS = {'GET /oauth2/@me': 'grant check', 'GET /guilds/{id}': 'server read', '
           'GET /oauth2/applications/@me': 'bot identity'}
 
 
+BOOKED_MIN = 0.005  # a room under 5 ms is not booked (SharedPostgresBudget._book_ahead); a read stored 5 ms or less after its reservation is not told from timer noise
+
+
+def _booking_columns(row):
+    """(seconds the coordinator booked for the call, seconds the call spent waiting for its slot, the room the caller allowed
+    to be booked or None) of an attempt row; zeros and None for the 13-column rows of a log written before booking."""
+    if len(row) >= 16:
+        return (row[13] or 0.0), (row[14] or 0.0), row[15]
+    return 0.0, 0.0, None
+
+
 def attempt_statistics(attempts, created_posts=None, restart_gap=3.0):
     """Every reservation attempt of the shared coordinator, from the invocation wrapper's attempt log: outcomes and the wait
     quoted to each refused attempt, by credential class and request kind; how many attempts a read step needed; per
     created post. Rows are [time, seconds the call took, operation (read, reserve, consume), method, route, credential kind,
-    workspace, outcome (A admitted, R refused, E error), quoted wait, scope, cause, permit id, cron source].
+    workspace, outcome (A admitted, R refused, E error), quoted wait, scope, cause, permit id, cron source, seconds booked,
+    seconds slept, book-ahead room allowed]; the last three only in logs of a harness with booking.
+
+    With booking an admitted call is a slot reached: a reserve or reserve_read that found the window full booked the next
+    free slot and slept in the call until it came (up to a second), so the seconds an admitted call took are split into
+    calls that did not book and calls that did, and the booked wait is reported on its own.
 
     A read step is a run of attempts at the same route by the same cron process and workspace: refusals until an admission
     (or the last refusal, when the provider gives up and the lane releases the post), restarted after `restart_gap` seconds."""
@@ -558,12 +574,19 @@ def attempt_statistics(attempts, created_posts=None, restart_gap=3.0):
     for (credential, route, operation), rows in groups.items():
         refused = [r for r in rows if r[7] == 'R']
         admitted = [r for r in rows if r[7] == 'A']
+        booked = [r for r in admitted if _booking_columns(r)[0] > 0]
+        unbooked = [r for r in admitted if not _booking_columns(r)[0] > 0]
         by_kind['%s / %s / %s' % (credential, route, operation)] = {
             'credential': credential, 'kind': route, 'operation': operation, 'attempts': len(rows), 'admitted': len(admitted),
             'refused': len(refused), 'errors': sum(1 for r in rows if r[7] == 'E'),
             'quotedWait': _spread([r[8] for r in refused if r[8] is not None]),
             'scopes': dict(Counter('%s/%s' % (r[9], r[10]) for r in refused).most_common()),
-            'callSecondsAdmitted': _spread([r[1] for r in admitted]), 'callSecondsRefused': _spread([r[1] for r in refused])}
+            'callSecondsAdmitted': _spread([r[1] for r in admitted]), 'callSecondsRefused': _spread([r[1] for r in refused]),
+            'booked': len(booked), 'bookedPlanned': _spread([_booking_columns(r)[0] for r in booked]),
+            'bookedSlept': _spread([_booking_columns(r)[1] for r in booked]),
+            'callSecondsAdmittedUnbooked': _spread([r[1] for r in unbooked]),
+            'callSecondsAdmittedBooked': _spread([r[1] for r in booked]),
+            'refusedWithRoomToBook': sum(1 for r in refused if (_booking_columns(r)[2] or 0) >= BOOKED_MIN)}
     steps = defaultdict(Counter)
     runs = defaultdict(list)
     for row in sorted(attempts, key=lambda r: r[0]):
@@ -581,7 +604,15 @@ def attempt_statistics(attempts, created_posts=None, restart_gap=3.0):
             kind = _KINDS.get(run[0][3] + ' ' + run[0][4], 'other')
             steps[kind]['%d attempt(s), %s' % (len(run), 'admitted' if run[-1][7] == 'A' else 'gave up')] += 1
     totals = Counter(r[7] for r in attempts)
+    booked_rows = [r for r in attempts if r[7] == 'A' and _booking_columns(r)[0] > 0]
     return {'attempts': len(attempts), 'admitted': totals['A'], 'refused': totals['R'], 'errors': totals['E'],
+            'withBookingColumns': sum(1 for r in attempts if len(r) >= 16),
+            'booked': len(booked_rows), 'bookedByOperation': dict(Counter(r[2] for r in booked_rows)),
+            'bookedPlannedSeconds': sum(_booking_columns(r)[0] for r in booked_rows),
+            'bookedSleptSeconds': sum(_booking_columns(r)[1] for r in booked_rows),
+            'bookedPlanned': _spread([_booking_columns(r)[0] for r in booked_rows]),
+            'bookedSlept': _spread([_booking_columns(r)[1] for r in booked_rows]),
+            'refusedWithRoomToBook': sum(1 for r in attempts if r[7] == 'R' and (_booking_columns(r)[2] or 0) >= BOOKED_MIN),
             'refusedPerAdmitted': totals['R'] / totals['A'] if totals['A'] else None,
             'attemptsPerCreatedPost': (len(attempts) / created_posts) if created_posts else None,
             'refusedPerCreatedPost': (totals['R'] / created_posts) if created_posts else None,
@@ -593,25 +624,194 @@ def attempt_lines(stats):
     """Markdown lines for the receipt (the table of reservation attempts)."""
     if not stats:
         return []
+    booking = stats.get('withBookingColumns')
     lines = ['## Reservation attempts (the coordinator attempt log)', '',
              '%s attempts of the shared coordinator: %s admitted, %s refused with a quoted wait (%s per admission), %s errors; %s attempts '
-             'and %s refusals per created post. A refused attempt leaves no row in the database; this log is its only record.' % (
+             'and %s refusals per created post. A refused attempt leaves no row in the database; this log is its only record.%s' % (
                  _count(stats['attempts']), _count(stats['admitted']), _count(stats['refused']), _fmt(stats['refusedPerAdmitted']),
-                 _count(stats['errors']), _fmt(stats['attemptsPerCreatedPost']), _fmt(stats['refusedPerCreatedPost'])), '',
-             '| Credential / request / operation | Attempts | Admitted | Refused | Quoted wait of a refusal, p10 / p50 / p90 / p99 / max (s) | Refused by scope / cause | Call took, admitted / refused p50 (ms) |',
-             '|---|---|---|---|---|---|---|']
+                 _count(stats['errors']), _fmt(stats['attemptsPerCreatedPost']), _fmt(stats['refusedPerCreatedPost']),
+                 (' With booking an admitted call is a slot reached: %s admitted calls booked a slot and slept in the call '
+                  '(planned wait p50 / p90 / max %s s, slept %s s; %s refusals still had room to book, so the horizon was '
+                  'full or the caller\'s deadline too near).' % (
+                      _count(stats.get('booked')), ' / '.join(_fmt((stats.get('bookedPlanned') or {}).get(k)) for k in ('p50', 'p90', 'max')),
+                      ' / '.join(_fmt((stats.get('bookedSlept') or {}).get(k)) for k in ('p50', 'p90', 'max')),
+                      _count(stats.get('refusedWithRoomToBook')))) if booking else
+                 ' (This log has no booking columns: written by a harness without booking.)'), '',
+             '| Credential / request / operation | Attempts | Admitted | Booked (planned wait p50 / p90 / max, s) | Refused | Quoted wait of a refusal, p10 / p50 / p90 / p99 / max (s) | Refused by scope / cause | Call took p50 (ms): admitted unbooked / admitted booked / refused |',
+             '|---|---|---|---|---|---|---|---|']
     for label, row in sorted(stats['byKind'].items()):
         wait = row['quotedWait']
-        lines.append('| %s | %s | %s | %s (%.1f%%) | %s | %s | %s / %s |' % (
-            label, _count(row['attempts']), _count(row['admitted']), _count(row['refused']),
+        planned = row.get('bookedPlanned') or {}
+        lines.append('| %s | %s | %s | %s | %s (%.1f%%) | %s | %s | %s / %s / %s |' % (
+            label, _count(row['attempts']), _count(row['admitted']),
+            ('%s (%s / %s / %s)' % (_count(row.get('booked')), *(_fmt(planned.get(k)) for k in ('p50', 'p90', 'max')))
+             if row.get('booked') else '0'),
+            _count(row['refused']),
             100 * row['refused'] / row['attempts'] if row['attempts'] else 0,
             ' / '.join(_fmt(wait.get(k)) for k in ('p10', 'p50', 'p90', 'p99', 'max')) if wait else 'n/a',
             json.dumps(row['scopes']) if row['scopes'] else 'none',
-            _ms((row['callSecondsAdmitted'] or {}).get('p50')), _ms((row['callSecondsRefused'] or {}).get('p50'))))
+            _ms((row.get('callSecondsAdmittedUnbooked') or {}).get('p50')),
+            _ms((row.get('callSecondsAdmittedBooked') or {}).get('p50')),
+            _ms((row['callSecondsRefused'] or {}).get('p50'))))
     lines.append('')
     lines.append('Attempts a read step needed (a run of attempts at one route by one process until it was admitted or the provider gave up): '
                  + '; '.join('%s: %s' % (kind, ', '.join('%s %s' % (k, _count(v)) for k, v in sorted(counts.items())))
                              for kind, counts in sorted(stats['readSteps'].items())) + '.')
+    lines.append('')
+    return lines
+
+
+def _samples_of(values):
+    return _spread([v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)])
+
+
+def health_summary(samples):
+    """The health payload (`GET /api/ops/discord/health`, the route an operator reads) as the harness sampled it during the
+    run, one reduced reading a minute (health-samples.jsonl). From each reading: coordinator.booking (status, bookAheadSeconds,
+    aheadNow, horizonSeconds, bookedReads60s, bookedReadWaitSeconds60s, meanBookedReadWaitSeconds60s,
+    maxBookedReadWaitSeconds60s), coordinator.guards.policy (the application row: remaining, limit, remainingRatio,
+    resetSeconds; with booking `remaining` is the number of slots bookings may still fill and `resetSeconds` when a booking is
+    possible again, not "the window is nearly spent") and coordinator.traffic.admissions60s.
+
+    The spreads are taken over the busy readings only (admissions60s at least half of the largest reading), so the idle ends of
+    a run do not dilute them; every reading is counted in 'readings'. A tree without the route answers 404: said so."""
+    if not samples:
+        return None
+    statuses = Counter(str(s.get('status')) if s.get('status') is not None else 'exception' for s in samples)
+    usable = [s for s in samples if s.get('status') == 200 and isinstance(s.get('coordinator'), dict)]
+    out = {'readings': len(samples), 'statuses': dict(statuses), 'usable': len(usable),
+           'exceptions': [str(s['exception'])[:160] for s in samples if s.get('exception')][:3],
+           'sectionErrors': dict(Counter(e.get('section') for s in samples for e in (s.get('errors') or []) if isinstance(e, dict))),
+           'wallSeconds': _spread([s['wallSeconds'] for s in samples if isinstance(s.get('wallSeconds'), (int, float))]),
+           'elapsedMs': _samples_of([s.get('elapsedMs') for s in usable])}
+    if not usable:
+        return out
+    traffic = lambda s: ((s.get('coordinator') or {}).get('traffic') or {})
+    admitted = [traffic(s).get('admissions60s') for s in usable if isinstance(traffic(s).get('admissions60s'), (int, float))]
+    peak = max(admitted, default=0)
+    busy = [s for s in usable if peak and isinstance(traffic(s).get('admissions60s'), (int, float))
+            and traffic(s)['admissions60s'] >= 0.5 * peak] or usable
+    booking = lambda s: ((s.get('coordinator') or {}).get('booking') or {})
+    policy = lambda s: (((s.get('coordinator') or {}).get('guards') or {}).get('policy') or {})
+    observed = [s for s in busy if booking(s).get('status') == 'observed']
+    ahead = next((booking(s).get('bookAheadSeconds') for s in observed), None)
+    out.update(
+        busyReadings=len(busy), peakAdmissions60s=peak,
+        admissions60s=_samples_of([traffic(s).get('admissions60s') for s in busy]),
+        bookingStatuses=dict(Counter(booking(s).get('status', 'missing') for s in usable)),
+        bookAheadSeconds=ahead, bookingReadings=len(observed),
+        aheadNow=_samples_of([booking(s).get('aheadNow') for s in observed]),
+        horizonSeconds=_samples_of([booking(s).get('horizonSeconds') for s in observed]),
+        horizonFullReadings=sum(1 for s in observed if ahead and isinstance(booking(s).get('horizonSeconds'), (int, float))
+                                and booking(s)['horizonSeconds'] >= ahead - 0.1),
+        bookedReads60s=_samples_of([booking(s).get('bookedReads60s') for s in observed]),
+        bookedReadWaitSeconds60s=_samples_of([booking(s).get('bookedReadWaitSeconds60s') for s in observed]),
+        meanBookedReadWaitSeconds60s=_samples_of([booking(s).get('meanBookedReadWaitSeconds60s') for s in observed]),
+        maxBookedReadWaitSeconds60s=_samples_of([booking(s).get('maxBookedReadWaitSeconds60s') for s in observed]),
+        policyRemaining=_samples_of([policy(s).get('remaining') for s in busy]),
+        policyLimit=next((policy(s).get('limit') for s in busy if policy(s).get('limit') is not None), None),
+        policyRemainingRatio=_samples_of([policy(s).get('remainingRatio') for s in busy]),
+        policyResetSeconds=_samples_of([policy(s).get('resetSeconds') for s in busy]),
+        policyRemainingZeroReadings=sum(1 for s in busy if policy(s).get('remaining') == 0),
+        policyHoldOrEmbargo=sum(1 for s in usable if policy(s).get('hold') or policy(s).get('blocked') or policy(s).get('circuit')),
+        responses429=_samples_of([traffic(s).get('responses429') for s in busy]),
+        lastReading={k: v for k, v in (usable[-1].get('coordinator') or {}).items() if k in ('booking', 'traffic')})
+    return out
+
+
+def booking_summary(lane_counters, created_posts, admissions, attempts, health):
+    """Booking (rate_limits.booking: a lane caller that finds the application window full books the next free slot and sleeps
+    in the call until it comes) from four independent sources, so each can be checked against the others:
+    the lane's own counters (bookedWaits, bookedSeconds), the coordinator's admissions (a read stored `sent` at a wire time later
+    than its reservation was booked; the difference is its wait; a create's booked wait is not stored, its reserved_at is its
+    slot), the attempt log (booked and slept seconds per call) and the health payload. Returns None when nothing shows booking."""
+    counters = lane_counters or {}
+    booked_waits, booked_seconds = counters.get('bookedWaits'), counters.get('bookedSeconds')
+    reads = [r for r in admissions or [] if len(r) > 8 and not r[8] and r[2] is not None and r[0] is not None]
+    waits = [r[2] - r[0] for r in reads if r[2] - r[0] > BOOKED_MIN]
+    if booked_waits is None and not waits and not (attempts or {}).get('booked') and not health:
+        return None
+    created = created_posts or 0
+    out = {'laneBookedWaits': booked_waits, 'laneBookedSeconds': booked_seconds,
+           'laneMeanBookedSeconds': (booked_seconds / booked_waits) if booked_waits else None,
+           'laneBookedWaitsPerCreatedPost': (booked_waits / created) if booked_waits is not None and created else None,
+           'laneBookedSecondsPerCreatedPost': (booked_seconds / created) if booked_seconds is not None and created else None,
+           'laneCounters': {k: counters.get(k) for k in ('rateDelayed', 'permitWaits', 'rateWaits', 'steps', 'positionsKept',
+                                                          'claimed', 'posted', 'verified') if k in counters},
+           'admittedReads': len(reads), 'bookedReads': len(waits),
+           'bookedReadShare': (len(waits) / len(reads)) if reads else None, 'bookedReadWait': _spread(waits),
+           'bookedReadSeconds': sum(waits),
+           'attempts': {k: (attempts or {}).get(k) for k in ('withBookingColumns', 'booked', 'bookedByOperation',
+                                                              'bookedPlannedSeconds', 'bookedSleptSeconds', 'bookedPlanned',
+                                                              'bookedSlept', 'refusedWithRoomToBook')} if attempts else None,
+           'health': health}
+    return out
+
+
+def booking_lines(result):
+    """Markdown lines for the receipt: the booking figures and the health payload's reading of them."""
+    b = result.get('booking')
+    if not b:
+        return []
+    lines = ['## Booking (the limiter\'s "book the next free slot")', '']
+    c = b.get('laneCounters') or {}
+    lines.append('- **Lane counters** (sum over the lane invocations; the application\'s own claims): bookedWaits %s (%s per created '
+                 'post), bookedSeconds %s (mean %s s a booking, %s s per created post); rateDelayed (releases) %s, permitWaits %s, '
+                 'rateWaits %s, steps %s, positionsKept %s.' % (
+                     _count(b.get('laneBookedWaits')), _fmt(b.get('laneBookedWaitsPerCreatedPost')), _fmt(b.get('laneBookedSeconds')),
+                     _fmt(b.get('laneMeanBookedSeconds')), _fmt(b.get('laneBookedSecondsPerCreatedPost')), _count(c.get('rateDelayed')),
+                     _count(c.get('permitWaits')), _count(c.get('rateWaits')), _count(c.get('steps')), _count(c.get('positionsKept'))))
+    w = b.get('bookedReadWait')
+    lines.append('- **Reads booked, from the coordinator\'s admissions** (a read stored `sent` at a wire time more than 5 ms after its '
+                 'reservation): %s of %s admitted reads (%.1f%%); the wait p50 / p90 / p99 / max %s s; %s s in all. Creates are not '
+                 'in this count: a booked create permit is stored reserved at its slot.' % (
+                     _count(b.get('bookedReads')), _count(b.get('admittedReads')), 100 * (b.get('bookedReadShare') or 0),
+                     ' / '.join(_fmt((w or {}).get(k)) for k in ('p50', 'p90', 'p99', 'max')), _fmt(b.get('bookedReadSeconds'))))
+    a = b.get('attempts')
+    if a and a.get('withBookingColumns'):
+        lines.append('- **Booked calls, from the attempt log:** %s (by operation %s); planned wait p50 / p90 / max %s s, seconds '
+                     'slept in the call (the wait for the slot and the gate after it) p50 / p90 / max %s s; %s planned and %s slept '
+                     'in all. A refused call that still had room to book: %s (the booked horizon was full, or the caller\'s own '
+                     'deadline too near).' % (
+                         _count(a.get('booked')), json.dumps(a.get('bookedByOperation') or {}, sort_keys=True),
+                         ' / '.join(_fmt((a.get('bookedPlanned') or {}).get(k)) for k in ('p50', 'p90', 'max')),
+                         ' / '.join(_fmt((a.get('bookedSlept') or {}).get(k)) for k in ('p50', 'p90', 'max')),
+                         _fmt(a.get('bookedPlannedSeconds')), _fmt(a.get('bookedSleptSeconds')), _count(a.get('refusedWithRoomToBook'))))
+    h = b.get('health')
+    if not h:
+        lines.append('- Health payload: not sampled in this directory (no health-samples.jsonl).')
+    elif not h.get('usable'):
+        lines.append('- **Health payload** (`GET /api/ops/discord/health`): %s readings, none usable (statuses %s%s); a tree without the '
+                     'route answers 404, which says nothing about its limiter.' % (
+                         h['readings'], json.dumps(h['statuses'], sort_keys=True),
+                         ('; ' + '; '.join(h['exceptions'])) if h.get('exceptions') else ''))
+    else:
+        sp = lambda key, keys=('p50', 'p90', 'max'), digits=2: ' / '.join(
+            ('n/a' if (h.get(key) or {}).get(k) is None else ('%.*f' % (digits, h[key][k]))) for k in keys)
+        lines.append(
+            '- **Health payload** (`GET /api/ops/discord/health`, %s readings a minute apart, %s usable, %s of them busy: '
+            'admissions60s at least half of the largest, %s; section errors %s). Spreads p50 / p90 / max over the busy readings. '
+            '`coordinator.booking` (status %s; bookAheadSeconds %s): aheadNow %s; horizonSeconds %s (at or within 0.1 s of '
+            'bookAheadSeconds in %s of %s readings); bookedReads60s %s; bookedReadWaitSeconds60s %s; meanBookedReadWaitSeconds60s '
+            '%s; maxBookedReadWaitSeconds60s %s.' % (
+                h['readings'], h['usable'], h['busyReadings'], _fmt(h['peakAdmissions60s']),
+                json.dumps(h['sectionErrors'], sort_keys=True) or '{}', json.dumps(h['bookingStatuses'], sort_keys=True),
+                _fmt(h['bookAheadSeconds']), sp('aheadNow', digits=0), sp('horizonSeconds', digits=3), h['horizonFullReadings'],
+                h['bookingReadings'], sp('bookedReads60s', digits=0), sp('bookedReadWaitSeconds60s', digits=1),
+                sp('meanBookedReadWaitSeconds60s', digits=3), sp('maxBookedReadWaitSeconds60s', digits=3)))
+        lines.append(
+            '- **Application row, `coordinator.guards.policy`, under booking** (limit %s): `remaining` %s, `remainingRatio` %s, '
+            '`resetSeconds` %s; `remaining` was 0 in %s of the %s busy readings. **With booking `remaining` is the number of slots '
+            'bookings may still fill and `resetSeconds` when a booking is possible again, so a busy lane keeps it high and it reaches '
+            '0 only when the booked horizon is full and callers are refused again: it no longer reads "the window is nearly spent"** '
+            '(rate_limits.py, OPEN-QUESTIONS Q19). `coordinator.traffic.admissions60s` %s (a minute at the 22.7 a second the guard '
+            'allows is 1,362; the most a saturated lane sends is 21.8 a second = 1,308); holds, embargoes or open circuits on the '
+            'policy row in %s readings; 429 responses in the last minute %s. Reading took %s ms (server), %s s (process, cold).' % (
+                _fmt(h.get('policyLimit')), sp('policyRemaining', digits=0), sp('policyRemainingRatio', digits=2),
+                sp('policyResetSeconds', digits=1), h['policyRemainingZeroReadings'], h['busyReadings'],
+                sp('admissions60s', digits=0), h['policyHoldOrEmbargo'], sp('responses429', digits=0),
+                ' / '.join(_fmt((h.get('elapsedMs') or {}).get(k)) for k in ('p50', 'max')),
+                ' / '.join(_fmt((h.get('wallSeconds') or {}).get(k)) for k in ('p50', 'max'))))
     lines.append('')
     return lines
 
@@ -838,8 +1038,9 @@ def analyse(run_dir):
     jitter = wire_jitter(window, admissions)
     permits = permit_stats(admissions)
     passes_summary = preflight_passes(window, admissions)
-    attempts_summary = attempt_statistics(load_jsonl(os.path.join(run_dir, 'attempts.jsonl')),
-                                          sum(1 for p in posts.values() if p['createdAt'] is not None))
+    created_count = sum(1 for p in posts.values() if p['createdAt'] is not None)
+    attempts_summary = attempt_statistics(load_jsonl(os.path.join(run_dir, 'attempts.jsonl')), created_count)
+    health = health_summary(load_jsonl(os.path.join(run_dir, 'health-samples.jsonl')))
     hot = hot_channel(posts, window, T) if config.get('hotPosts') else None
     channel_items = max((r.get('items') or 0 for r in window), default=0) or None
     refreshes = sum(1 for r in window if r.get('route') == 'POST /oauth2/token')
@@ -924,11 +1125,13 @@ def analyse(run_dir):
         steps = lane_counters['steps']
         totals = extra.get('statementTotals')
         latency = (config.get('settings') or {}).get('db_latency_ms')
-        busy = max(0.0, sum(handler_seconds) - waited['rate'] - waited['idle'])
+        # A booked wait sleeps inside the coordinator's reserve (lane counter bookedSeconds): waiting, not busy.
+        busy = max(0.0, sum(handler_seconds) - waited['rate'] - waited['idle'] - (lane_counters.get('bookedSeconds') or 0.0))
         server_ms = 1000 * totals['execSeconds'] / steps if totals else None
         trip_ms = (totals['calls'] * latency / steps) if totals and latency is not None else None
         step_timing = {'steps': steps, 'loopSeconds': sum(handler_seconds), 'waitedRateSeconds': waited['rate'],
-                       'waitedIdleSeconds': waited['idle'], 'busySecondsPerStep': busy / steps,
+                       'waitedIdleSeconds': waited['idle'], 'waitedBookedSeconds': lane_counters.get('bookedSeconds') or 0.0,
+                       'busySecondsPerStep': busy / steps,
                        'statementsPerStep': (totals['calls'] / steps) if totals else None, 'serverMsPerStep': server_ms,
                        'dbLatencyMs': latency, 'roundTripMsPerStep': trip_ms,
                        'otherMsPerStep': (1000 * busy / steps - server_ms - trip_ms) if server_ms is not None and trip_ms is not None else None}
@@ -1020,7 +1223,9 @@ def analyse(run_dir):
                     'busiest300sPerSecond': busiest_window([r['processed'] for r in window], 300.0) / 300.0,
                     'coordinatorAdmissions': extra.get('admissionWindow')},
         'ledger': ledger, 'grantCustody': custody, 'pacing': paced, 'witnessAge': witness, 'wireJitter': jitter,
-        'permits': permits, 'preflightPasses': passes_summary, 'attempts': attempts_summary, 'stepTiming': step_timing, 'hotChannel': hot, 'largestChannelList': channel_items,
+        'permits': permits, 'preflightPasses': passes_summary, 'attempts': attempts_summary,
+        'booking': booking_summary(dict(lane_counters), created_count, admissions, attempts_summary, health),
+        'health': health, 'stepTiming': step_timing, 'hotChannel': hot, 'largestChannelList': channel_items,
         'tokenRefreshRequests': refreshes, 'nonLaneDiscordRequests': non_lane,
         'invocationResultsPresent': os.path.isdir(folder) or bool(invocations),
         'requests': {'total': len(window), 'perVerifiedPost': requests_per_verified, 'byRoute': dict(routes),
@@ -1484,15 +1689,31 @@ def evidence_lines(result):
     st = result.get('stepTiming')
     if st:
         lines.append(
-            '- **Per lane step** (%s steps over %s loop-seconds, of which %s s waiting for the budget and %s s idle): busy time '
+            '- **Per lane step** (%s steps over %s loop-seconds, of which %s s waiting for the budget, %s s idle and %s s asleep in '
+            'booked waits inside the coordinator): busy time '
             '%s per step. Database (every statement after seeding, the minute worker\'s included): %s statements per step, '
             'each a round trip; server execution %s per step; emulated network %s per step (%s statements x %s ms); the '
             'remaining %s per step is Python, the HTTP call to the mock, lock and pool waits (inference).' % (
                 _count(st['steps']), _count(st['loopSeconds']), _count(st['waitedRateSeconds']), _count(st['waitedIdleSeconds']),
+                _count(st.get('waitedBookedSeconds')),
                 _ms(st['busySecondsPerStep']), _fmt(st['statementsPerStep']), _ms(None if st['serverMsPerStep'] is None else st['serverMsPerStep'] / 1000),
                 _ms(None if st['roundTripMsPerStep'] is None else st['roundTripMsPerStep'] / 1000), _fmt(st['statementsPerStep']),
                 _fmt(st['dbLatencyMs']),
                 _ms(None if st['otherMsPerStep'] is None else st['otherMsPerStep'] / 1000)))
+    locks = d.get('lockStatements')
+    if locks:
+        created = (result.get('outcomes') or {}).get('sentAtMock') or None
+        per = lambda calls: _fmt(calls / created) if created else 'n/a'
+        ex, sh, sd = locks.get('exclusive') or {}, locks.get('shared') or {}, locks.get('seed') or {}
+        lines.append(
+            '- **Reservation lock statements** (pg_stat_statements; the coordinator\'s `_locked`, which every reservation attempt '
+            'runs and an observation runs only when it cannot share the lock). Exclusive form (`FOR UPDATE` on the scope rows): %s '
+            'calls = **%s per created post**, mean %s ms, max %s ms. Shared form (`FOR SHARE` guards, a GET observation that can '
+            'share): %s calls = %s per created post, mean %s ms, max %s ms. Seeding statement (`scope_seed`): %s calls, mean %s ms. '
+            'The mean is the time the statement ran, a wait for the row locks included.' % (
+                _count(ex.get('calls')), per(ex.get('calls') or 0), _fmt(ex.get('meanMs')), _fmt(ex.get('maxMs')),
+                _count(sh.get('calls')), per(sh.get('calls') or 0), _fmt(sh.get('meanMs')), _fmt(sh.get('maxMs')),
+                _count(sd.get('calls')), _fmt(sd.get('meanMs'))))
     heavy = d.get('heaviestStatements')
     if heavy:
         total = (d.get('statementTotals') or {}).get('execSeconds') or sum(h['totalSeconds'] for h in heavy) or 1.0
@@ -1725,10 +1946,15 @@ def receipt(result, verdicts, config, differences, expectations=()):
                  'requests in any calendar second at the mock %s.%s' % (
                      c.get('peakCalendarSecondAll'),
                      (' The coordinator\'s own admission table (database clock, rows reserved during the run: %s; by '
-                      'credential %s): most in any trailing second %s, in any calendar second %s.%s' % (
+                      'credential %s): most in any trailing second %s, in any calendar second %s, counted by RESERVATION instant.%s%s' % (
                           admissions.get('count'), json.dumps(admissions.get('byCredential'), sort_keys=True),
                           admissions.get('peakTrailingSecond'), admissions.get('peakCalendarSecond'),
-                          (' Admission to observation (d): mean %s s, median %s s, p95 %s s; an admission still in '
+                          ((' By WIRE time (`sent_at`, the instant a request may leave: with booking a booked read is stored at its '
+                            'slot, after its reservation; %s requests stored with a wire time): most in any trailing second %s, in '
+                            'any calendar second %s. This is the series the ceiling is kept on.' % (
+                                admissions['wire']['count'], admissions['wire']['peakTrailingSecond'],
+                                admissions['wire']['peakCalendarSecond'])) if admissions.get('wire') else ''),
+                          (' Wire time (or reservation, where none) to observation (d): mean %s s, median %s s, p95 %s s; an admission still in '
                            'flight at a window restart is charged again, so the usable rate is about 25/(1 + d) = %s '
                            'per second (inference, docs/w02/REQUEST-BUDGET.md section 1).' % (
                                _fmt(admissions['admissionToOutcomeSeconds']['mean']),
@@ -1816,6 +2042,7 @@ def receipt(result, verdicts, config, differences, expectations=()):
         lines.append('')
     lines.extend(evidence_lines(result))
     lines.extend(attempt_lines(result.get('attempts')))
+    lines.extend(booking_lines(result))
     d = result['database']
     lines.append('## Database')
     lines.append('')

@@ -55,6 +55,8 @@ import discord_lane_cap_mock as mock_tools  # noqa: E402
 STANDARD = HARNESS / 'docs/w02/capacity-standard.json'
 ACTIVE = []
 PRESPAWN_SECONDS = 8.0
+HEALTH_ROUTE = '/api/ops/discord/health'  # the operator's health payload (a tree before it answers 404)
+HEALTH_LOCK = threading.Lock()
 
 # --- scenarios -----------------------------------------------------------------------------------------------------
 # Times in injections, stalls and kills are minutes (or seconds where named) relative to the due time T.
@@ -68,11 +70,12 @@ BASE = dict(workspaces=2000, posts=5000, hot_posts=0, per_minute=0, minutes=0, d
             lead_seconds=90, max_run_minutes=75, fixed_run_minutes=None, stall_detect_minutes=10,
             stall=None, flag_off=None, kills=None, kill_at_create=0, lock_injection=None, misroute_every=0,
             expiry_in_minutes=None, injections=None, seed_processes=4, judge_as=None, pinned=(),
-            budget_probe_delay_seconds=90, expect=())
+            budget_probe_delay_seconds=90, health_period_seconds=60, expect=())
 
 SCENARIOS = {
     'smoke': dict(workspaces=10, posts=30, cron_period=20, lane_max_seconds=15, shards=4, lead_seconds=10,
                   max_run_minutes=4, seed_processes=1, stall_detect_minutes=2, budget_probe_delay_seconds=None,
+                  health_period_seconds=15,
                   description='Tiny end-to-end check of the harness itself: 30 posts in 10 workspaces, 20-second '
                               'cron period, 4 shards. Not a capacity measurement.',
                   expect=('all_verified', 'no_duplicates', 'no_late_sends', 'isolation', 'clean_workers')),
@@ -993,6 +996,59 @@ class Harness:
         if db is not None:
             db.close()
 
+    def health_probe(self, phase):
+        """One reading of the health payload (`GET /api/ops/discord/health`, the route an operator reads), served by the real
+        WSGI entry in a short process of its own at a low priority, like a cron invocation but not counted as one. Returns the
+        reduced reading that goes into health-samples.jsonl: the coordinator section (booking, guards, traffic), the queue,
+        deliveries and progress sections, the sections that failed and the time it took. A failure is recorded in the reading,
+        never raised; a tree without the route answers 404, which the reading records as it is."""
+        folder = self.dir / 'health'
+        folder.mkdir(exist_ok=True)
+        started = time.time()
+        out = folder / ('%d-%s.json' % (int(started), phase))
+        argv = [sys.executable, '-I', '-B', str(self.scripts / 'discord_lane_cap_invoke.py'), '--source-tree', str(self.tree),
+                '--path', HEALTH_ROUTE, '--env', str(self.env_run), '--mock-port', str(self.mock_port), '--out', str(out),
+                '--nice', '10']
+        env = dict(os.environ)
+        env['PYTHONDONTWRITEBYTECODE'] = '1'
+        env['CAP_SPAWNED_AT'] = repr(started)
+        reading = {'at': started, 'sinceStart': round(started - (self.config.get('runStartedAt') or started), 1), 'phase': phase}
+        try:
+            subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, cwd='/tmp', timeout=90)
+            result = json.loads(out.read_text())
+            body = result.get('body') if isinstance(result.get('body'), dict) else {}
+            reading.update(status=result.get('status'), exception=result.get('exception'),
+                           wallSeconds=round(time.time() - started, 3), elapsedMs=body.get('elapsedMs'), errors=body.get('errors'),
+                           coordinator=body.get('coordinator'), queue=body.get('queue'), deliveries=body.get('deliveries'),
+                           progress=body.get('progress'))
+            if result.get('status') != 200:
+                reading['answer'] = {k: body.get(k) for k in ('error', 'message', 'code', 'raw')}
+        except Exception as error:
+            reading['exception'] = '%s: %s' % (type(error).__name__, str(error)[:200])
+        finally:
+            try:
+                out.unlink()
+            except OSError:
+                pass
+        return reading
+
+    def health_sampler(self):
+        """A reading of the health payload every `health_period_seconds` while the run lasts (the first after half a period);
+        the last one is taken by run() after the children stopped. 0 turns it off. Evidence for the booking figures an
+        operator would see (coordinator.booking, the application row's `remaining`), not part of the system under test."""
+        period = float(self.s.get('health_period_seconds') or 0)
+        if period <= 0:
+            return
+        wait = period / 2
+        while not self.stop.wait(wait):
+            wait = period
+            self.append_health(self.health_probe('run'))
+
+    def append_health(self, reading):
+        with HEALTH_LOCK:
+            with open(self.dir / 'health-samples.jsonl', 'a') as handle:
+                handle.write(json.dumps(reading, default=str) + '\n')
+
     def pgbouncer_pools(self):
         """SHOW POOLS on a PgBouncer admin console (simple query protocol): client and server counts, longest wait."""
         try:
@@ -1155,7 +1211,7 @@ class Harness:
                     row = json.loads(line)
                 except ValueError:
                     continue  # the tail of a killed process's log
-                if isinstance(row, list) and len(row) == 13:
+                if isinstance(row, list) and len(row) in (13, 16):  # 13: before booking; 16: with booked, slept, room
                     rows.append((row[0], line))
         rows.sort()
         (self.dir / 'attempts.jsonl').write_text(''.join(line + '\n' for _, line in rows))
@@ -1184,6 +1240,7 @@ class Harness:
         rows = []
         with self.admin() as db:
             slow, heavy, writes, statements = [], [], [], None
+            lock_statements = {}
             if self.config.get('pgStatStatements'):
                 try:
                     # The harness's own recurring statements carry a /*cap-harness*/ comment and are left out.
@@ -1203,6 +1260,20 @@ class Harness:
                     statements = {'calls': int(calls), 'execSeconds': float(total_ms) / 1000.0}
                 except Exception:
                     slow, heavy, writes, statements = [], [], [], None
+                # The coordinator's scope-lock statements (SharedPostgresBudget._locked): the exclusive form runs once per
+                # reservation attempt (and per observation that cannot share), the shared form for a GET observation that
+                # can, the seeding statement before them. Counted from the statement texts, not inferred.
+                try:
+                    for form, pattern in (('exclusive', "query LIKE 'WITH scope_lock AS MATERIALIZED%' AND query NOT LIKE '%FOR SHARE%'"),
+                                          ('shared', "query LIKE 'WITH scope_lock AS MATERIALIZED%' AND query LIKE '%FOR SHARE%'"),
+                                          ('seed', "query LIKE 'WITH scope_seed%'")):
+                        found = db.execute("SELECT coalesce(sum(calls),0),coalesce(sum(total_exec_time),0),coalesce(max(max_exec_time),0) "
+                                           "FROM pg_stat_statements WHERE " + pattern + " AND " + mine).fetchone()
+                        if int(found[0]):
+                            lock_statements[form] = {'calls': int(found[0]), 'meanMs': float(found[1]) / int(found[0]),
+                                                     'maxMs': float(found[2]), 'totalSeconds': float(found[1]) / 1000.0}
+                except Exception:
+                    lock_statements = {}
             jobs = db.execute("""SELECT j->>'id',j->>'state',(j#>'{discordWorker,deadLetter}') IS NOT NULL,
                     coalesce((j->>'checks')::int,0),j->>'nextAction',coalesce(jsonb_array_length(j->'discordDispatchIntents'),0)
                 FROM public.pr_workspaces w CROSS JOIN LATERAL jsonb_array_elements(coalesce(w.state#>'{phase2,jobs}','[]'::jsonb)) j
@@ -1244,13 +1315,22 @@ class Harness:
             # Admission to observation (d): while a request is in flight its admission stays pending, and a window
             # restart charges it again (cap - pending), so the usable rate is about cap / (1 + mean d).
             held = [float(d) for (d,) in db.execute(
-                """SELECT extract(epoch from outcome_at - reserved_at)::double precision
+                """SELECT extract(epoch from outcome_at - coalesce(sent_at, reserved_at))::double precision
                    FROM public.pr_discord_request_admissions
                    WHERE reserved_at >= to_timestamp(%s) AND outcome_at IS NOT NULL AND state = 'observed'""",
-                (start,)).fetchall()]  # answered requests only: a blocked permit was never in flight
+                (start,)).fetchall()]  # answered requests only: a blocked permit was never in flight; from the wire time
+            # The ceiling is kept on wire times: sent_at is the instant a request may leave. A read booked ahead is stored at
+            # its slot, after its reservation, so the same rows give a second series by wire time (rows with no wire time,
+            # permits that never left, are not on it).
+            wire = [float(t) for (t,) in db.execute(
+                """SELECT extract(epoch from sent_at)::double precision FROM public.pr_discord_request_admissions
+                   WHERE sent_at IS NOT NULL AND reserved_at >= to_timestamp(%s) AND reserved_at < to_timestamp(%s) ORDER BY 1""",
+                (start, stop)).fetchall()]
             admission_window = {'count': len(admitted), 'byCredential': by_kind,
                                 'peakTrailingSecond': analysis.peak_trailing(admitted, 1.0),
                                 'peakCalendarSecond': analysis.peak_calendar_second(admitted),
+                                'wire': {'count': len(wire), 'peakTrailingSecond': analysis.peak_trailing(wire, 1.0),
+                                         'peakCalendarSecond': analysis.peak_calendar_second(wire)},
                                 'admissionToOutcomeSeconds': analysis.describe(held) if held else None}
             # Every admission of the run, compact, for the analysis (jitter against the mock's arrivals, permit timing).
             with open(self.dir / 'admissions.jsonl', 'w') as handle:
@@ -1291,7 +1371,7 @@ class Harness:
             else '1 to 6 days' if h < 144 else '6 to 7 days' if h < 168 else '7 days or more' for h in identity_hours)
         extra = {'admissionsByState': admissions, 'rateStateHolds': [
             {'kind': k, 'manualHold': h, 'blocked': b, 'circuit': c, 'rows': n} for k, h, b, c, n in holds],
-            'slowestStatements': slow, 'heaviestStatements': heavy, 'workspaceWrites': writes,
+            'slowestStatements': slow, 'heaviestStatements': heavy, 'workspaceWrites': writes, 'lockStatements': lock_statements,
             'statementTotals': statements, 'logErrorsBySqlstate': log_errors, 'statementsOverOneSecond': slow_lines,
             'lockInjections': self.lock_windows, 'kills': self.kills, 'admissionWindow': admission_window,
             'openAdmissions': open_admissions, 'permitFates': permit_fates, 'jobRetries': job_retries,
@@ -1310,6 +1390,10 @@ class Harness:
             item['process'].kill()
             self.event(event='killed', name=name, reason='end_of_run', at=time.time())
         self.reap()
+        if float(self.s.get('health_period_seconds') or 0) > 0:
+            # The last reading of the health payload: the lane is over, so what was booked ahead and the 60-second figures have
+            # drained; the pooler and the database still answer (they stop below).
+            self.append_health(self.health_probe('end'))
         if getattr(self, 'mock_process', None) and self.mock_process.poll() is None:
             try:
                 import urllib.request
@@ -1372,7 +1456,7 @@ class Harness:
             self.start_mock()
             self.config['runStartedAt'] = time.time()
             (self.dir / 'config.json').write_text(json.dumps(self.config, indent=1, default=str))
-            for target in [self.sampler, self.cron] + ([self.crash_injector] if (self.s['kills'] or self.s['kill_at_create']) else []) + \
+            for target in [self.sampler, self.cron, self.health_sampler] + ([self.crash_injector] if (self.s['kills'] or self.s['kill_at_create']) else []) + \
                     ([self.lock_injector] if self.s['lock_injection'] else []):
                 thread = threading.Thread(target=target, name=target.__name__, daemon=True)
                 thread.start()
@@ -1382,7 +1466,7 @@ class Harness:
             self.config['childrenStoppedAt'] = time.time()
             self.stop.set()
             for thread in threads:
-                thread.join(timeout=30)
+                thread.join(timeout=120)  # the health sampler may be inside a reading
             self.collect()
             self.write_invocation_summary()
             self.merge_attempt_logs()

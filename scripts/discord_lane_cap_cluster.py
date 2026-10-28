@@ -34,7 +34,8 @@ def free_port():
 
 def migration_paths(source_tree):
     folder = Path(source_tree) / 'migrations/postriff'
-    paths = sorted(folder.glob('[0-9][0-9][0-9]_*.sql'))
+    # A rollback script (142_*.rollback.sql) shares its migration's number and is never part of the set applied forward.
+    paths = sorted(p for p in folder.glob('[0-9][0-9][0-9]_*.sql') if not p.name.endswith('.rollback.sql'))
     numbers = [p.name.split('_')[0] for p in paths]
     if len(numbers) != len(set(numbers)):
         raise RuntimeError('duplicate migration numbers in ' + str(folder))
