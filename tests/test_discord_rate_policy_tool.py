@@ -83,6 +83,16 @@ class Judged(unittest.TestCase):
         self.assertNotIn('FAIL', levels(findings).values())
         self.assertEqual(levels(findings).get('app_straddle'), 'WARN')
 
+    def test_a_budget_too_small_for_the_lane_s_shards_warns_and_the_reviewed_one_does_not(self):
+        from postriff_phase2.discord import lane
+        self.assertEqual(tool.LANE_SHARDS, lane.SHARDS)
+        for capacity, warned in ((10, True), (17, True), (18, False), (25, False)):
+            _, findings = tool.judge(tool.build(NOW, app_capacity=capacity), NOW)
+            self.assertEqual(levels(findings).get('lane_booking') == 'WARN', warned, capacity)
+            self.assertNotIn('FAIL', levels(findings).values(), capacity)
+        _, findings = tool.judge(tool.build(NOW, app_capacity=120, app_window_seconds=10), NOW)   # 12 a second: by the rate, not the count
+        self.assertEqual(levels(findings).get('lane_booking'), 'WARN')
+
     def test_the_parser_rejection_wins_over_every_other_finding(self):
         bad = tool.build(NOW)
         bad['permit_ttl_seconds'] = 11

@@ -260,10 +260,20 @@ What to know before relying on it.
   second). At 7.0 requests and 22.7 a second the floor is 194 posts a minute, so 2,500 posts take 12.9 minutes at best: booking
   takes the lane from the lottery to that floor's neighbourhood, not below it. Its gains stack with a smaller guard (Q18) and with
   not charging the bearer call: each is a separate decision.
-- **The horizon holds about (cap - 1) / 1.1 loops** (one booking each): 21 at the reviewed 25, so 12 loops fit and 24 are at the
-  edge. A caller beyond the horizon is refused and polls as before booking, plus the cost of the refusal; with a cap of 10 for 12
-  loops (measured) that is a little worse than before. Raising the shard count past 12 needs a cap to match; the shard count stays
-  12.
+- **The horizon holds about (cap - 1) / 1.1 loops** (one booking each, fewer while create permits are outstanding): 21 at the
+  reviewed 25, so 12 loops fit with room and 24 are at the edge. Below it the lane does not degrade a little. A pass is a run of
+  requests, each of which can be refused at the horizon; a pass refused part-way is released, its reads are wasted, and the next
+  pass books them again. Posts a minute before / after booking with 12 loops (the thread model on PostgreSQL, one run each, two
+  at 14 and 18): cap 8 33 / 12.5, cap 10 54 / 36, cap 12 56 / 83, cap 14 74 / 107, cap 16 71 / 119, cap 18 102 / 137. Booking
+  wins from a budget of 12 (a horizon of 10 for 12 loops) and loses below 10; at cap 8 it made 22 requests and 12.7 passes for
+  each post that polling made in 12.5 and 5.6. With few loops the same edge: 4 loops at a cap of 4 (horizon 2.7) took 216 s for
+  12 posts, polling 60 s; 3 loops at a cap of 4 finished 4 posts in 295 s at 202 requests each; 4 loops at a cap of 5 took 63 s
+  against 36 s, at 6 22 s against 24 s, at 8 15.5 s against 18.4 s. The ceiling is exact in all of them (never above the cap at
+  the mock, nothing posted twice): the loss is posts, not safety. The reviewed 25 with 12 shards has twice the room. Guards:
+  `scripts/discord_rate_policy.py` warns (`lane_booking`) when the budget is under 1.5 a second for each shard (18), M8 shows a
+  full horizon, and the lane flag off or a build with `BOOK_AHEAD_SECONDS = 0` returns to polling. Raising the shard count past 12
+  needs a cap to match; the shard count stays 12. Not built: a lane that stops booking by itself when its own passes keep being
+  refused at the horizon.
 - **The evidence behind a create grows older.** The permission reads come first in a pass and each may wait up to a second, so the
   create leaves later [simulated, median age of the reads at the create: 1.3 s to 2.3 s at 12 loops, 2.2 s to 5.7 s at 24; no
   bound in code]. The approval, the lease and the fences are rechecked at the seal as before.

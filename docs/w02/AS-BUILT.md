@@ -743,8 +743,11 @@ refused again), `bookedReads60s`, `bookedReadWaitSeconds60s`, `meanBookedReadWai
 Reads only: a create's booked wait is not recorded (`aheadNow` counts creates).
 
 *Limits.* A horizon of one second holds about (`cap` - 1) / 1.1 bookers, one for each loop in a booked wait: about 21 at the
-reviewed 25, comfortably 12 loops, 24 at the edge; a caller beyond the horizon is refused and asks again, as before booking
-(and with a cap of 10 for 12 loops, measured, a little worse than before). The evidence behind a create grows older: its
+reviewed 25, comfortably 12 loops, 24 at the edge. A caller beyond the horizon is refused and asks again, and a pass refused
+part-way is released with its reads wasted: with 12 loops booking makes more posts than polling from a budget of 12 a second up
+(34 to 66 percent more) and fewer below 10 (at a budget of 8, 12.5 posts a minute against 33), with few loops the same edge (3
+loops at a budget of 4 finished 4 of 12 posts in 295 s); the ceiling stays exact throughout (Q19 has the numbers). The policy tool
+warns (`lane_booking`) under 1.5 a second for each shard, 18. The evidence behind a create grows older: its
 permission reads come first in a pass and each may now wait up to a second [simulated: median 1.3 to 2.3 s at 12 loops, 2.2
 to 5.7 s at 24; no bound in the code]; what the send rests on besides them (approval, lease, fences) is rechecked at the seal
 and consume as before. A gated or abandoned booked read still spent its slot.

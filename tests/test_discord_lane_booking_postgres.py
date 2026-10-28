@@ -6,9 +6,12 @@ the wire stays within the cap, and what can happen while a booked read waits doe
 that ends, a loop that dies, a pause. The seal-to-consume interval (F5) never contains a sleep.
 
 Capacity. The capacity of the shared box limits what is *reachable* here (twelve loops and the coordinator in one Python process);
-the cap of these tests is chosen so that the window, not the lock, binds. A booked horizon holds about 0.9 x cap callers (each
-loop holds one booking at a time and a slot is a window plus its headroom, 1.1 s): beyond that, callers are refused at the horizon
-and poll again as before. At the owner's cap of 25 that is about 22 loops; the lane keeps 12 shards.
+the cap of these tests is chosen so that the window, not the lock, binds, and so that the loops fit the booked horizon. The horizon
+holds about (cap - 1) / 1.1 callers (each loop holds one booking at a time and a slot is a window plus its headroom, 1.1 s), fewer
+while create permits are outstanding. Beyond that the lane does not degrade a little: its passes are refused at the horizon, released
+and repeated, and almost nothing is created (4 loops at a cap of 4 took 216 s for 12 posts, 3 loops at a cap of 4 made 202 requests
+for each post they finished; polling took 60 s). OPEN-QUESTIONS Q19 has the measured edge. At the owner's cap of 25 the horizon
+holds about 22 loops; the lane keeps 12 shards.
 
 Runs where POSTRIFF_PG_BIN names the PostgreSQL server binaries; synthetic tenants only, no network.
 """
@@ -142,11 +145,11 @@ class LaneBookingOnPostgres(unittest.TestCase):
 
     def test_a_loop_killed_inside_a_booked_sleep_sends_nothing_and_a_later_claim_sends_once(self):
         tenants = [F.Tenant(n) for n in range(3)]
-        self.start(tenants, 1, capacity=3, latency=.02)
-        for number in range(3):                                   # a full window: the first read must wait for its slot
+        self.start(tenants, 1, capacity=6, latency=.02)
+        for number in range(6):                                   # a full window: the first read must wait for its slot
             permit = self.limiter.reserve_read('GET', '/guilds/%d' % (710000000000000500 + number), identity=self.hosted.providers['discord']._rate_identity('bot'))
             self.limiter.observe(permit, {'status': 200, 'headers': {}})
-            time.sleep(.1)
+            time.sleep(.05)
         died = []
 
         def die(seconds):
@@ -168,7 +171,7 @@ class LaneBookingOnPostgres(unittest.TestCase):
 
     def test_no_sleep_happens_between_the_seal_and_the_consume(self):
         tenants = [F.Tenant(n) for n in range(6)]
-        self.start(tenants, 2, capacity=4, latency=.02)
+        self.start(tenants, 2, capacity=8, latency=.02)             # four loops fit the horizon of a cap of 8 (about 6)
         state = threading.local()
         violations, seals, consumes = [], [], []
         seal, consume, sleep = SharedPostgresBudget.seal, SharedPostgresBudget.consume, self.limiter._sleep
@@ -201,7 +204,7 @@ class LaneBookingOnPostgres(unittest.TestCase):
 
     def test_a_pause_while_reads_wait_for_their_slots_claims_nothing_new_and_leaves_every_post_as_it_was(self):
         tenants = [F.Tenant(n) for n in range(16)]
-        self.start(tenants, 2, capacity=3, latency=.05)
+        self.start(tenants, 2, capacity=8, latency=.05)
         provider = self.hosted.providers['discord']
         claims, paused_at = [], []
         from postriff_phase2.discord import lane
@@ -225,14 +228,33 @@ class LaneBookingOnPostgres(unittest.TestCase):
         self.assertEqual({r['stoppedBy'] for r in results}, {'discord_paused'})
         late = [at for at in claims if at > paused_at[0] + .5]
         self.assertEqual(late, [], 'nothing new was claimed after the pause')
-        for job in F.jobs(self.cluster).values():
+        held = set()
+        for key, job in F.jobs(self.cluster).items():
+            if job['state'] == 'held':
+                held.add(key)
+                continue
             self.assertIn(job['state'], ('scheduled', 'provider_accepted', 'verified'), 'a pause is a wait, not a verdict about a post')
+        # The one thing a pause can still do to a post (the existing rule for the kill switch, AS-BUILT "A paused Discord is a wait"):
+        # it lands after a loop has sealed its intent and the create is refused at the transport. That post is held with nothing
+        # posted, and there can be at most one for each loop.
+        self.assertLessEqual(len(held), 4)
+        for key in held:
+            job = F.jobs(self.cluster)[key]
+            self.assertEqual(job['events'][-1]['message'], 'Discord transport is unavailable. Nothing was posted.')
+            self.assertEqual(self.wire.creates.get(F.nonce(job), []), [], 'and nothing was posted')
         self.assertEqual(self.wire.duplicates(), 0)
         provider.execution_enabled = True                         # and when it is lifted everything goes through, once
         self.make_due()                                           # (the step each loop had in flight was released with a cooldown)
         self.drain(4, seconds=45)
-        self.verified_once(32)
-
+        found = F.jobs(self.cluster)
+        self.assertEqual(len(found), 32)
+        for key, job in found.items():
+            if key in held:
+                self.assertEqual(job['state'], 'held', 'a held post needs a new approval; the pause lifting does not send it')
+                continue
+            self.assertEqual(job['state'], 'verified')
+            self.assertEqual(len(self.wire.creates[F.nonce(job)]), 1, 'one create per approval')
+        self.assertEqual(self.wire.duplicates(), 0)
 
 if __name__ == '__main__':
     unittest.main()
