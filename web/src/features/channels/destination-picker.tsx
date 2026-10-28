@@ -50,9 +50,9 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
     try {
       await api.chooseChannelDestination(workspaceId, channelId, id);
       setItems((current) => current?.map((item) => ({ ...item, selected: item.id === id, ...(item.id === id && platform === 'Discord' ? { authorizedId: item.stableId } : {}) })) ?? null);
-      toast.success(platform === 'Discord' ? 'Channel authorized and set as the default. Existing approvals keep their frozen destination.' : `${label} selected. Publishing requires its own permission and approval.`);
+      toast.success(platform === 'Discord' ? 'Channel authorized and set as the default. Existing approvals keep their frozen destination.' : label === 'Location' ? 'Business Profile location selected' : 'Rafii will post in this channel');
       void client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
-      void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+      if (platform === 'Discord') void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     } catch (err) {
       toast.error(reason(err));
     } finally {
@@ -80,14 +80,14 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
     <>
       <Button variant='quiet' className={CONTROL_44} disabled={disabled} onClick={() => void load()}>
         <Icons.send className='size-4' aria-hidden />
-        {platform === 'Discord' ? 'Authorize Discord channel' : label === 'Page' ? 'Choose Facebook Page' : label === 'Channel' ? 'Posting channel' : `Posting ${label}`}
+        {platform === 'Discord' ? 'Authorize Discord channel' : label === 'Channel' ? 'Posting channel' : `Posting ${label}`}
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side={isMobile ? 'bottom' : 'right'} className={cn(SHEET_ELEVATED, 'data-[side=bottom]:max-h-[80dvh] data-[side=right]:sm:max-w-md')}>
           <SheetHeader className='gap-1.5 px-5 pt-5 pr-14 pb-4'>
             <SheetTitle className='text-xl font-medium tracking-tight'>{label === 'Location' ? 'Choose a business location' : 'Where Rafii posts'}</SheetTitle>
             <SheetDescription>
-              {platform === 'Discord' ? 'Authorize individual server channels here, then choose the exact destination on each post. Changing the default keeps existing approvals on their original channel.' : label === 'Page' ? 'Select the Page for this connection. Publishing, comments and analytics each need their own permissions.' : label === 'Location' ? 'Choose the exact Business Profile location for this connection.' : `Rafii posts on ${platform} only in the ${label === 'Channel' ? 'channel' : label} you choose.`}
+              {platform === 'Discord' ? 'Authorize individual server channels here, then choose the exact destination on each post. Changing the default keeps existing approvals on their original channel.' : label === 'Location' ? 'Choose the exact Business Profile location for this connection.' : `Rafii posts on ${platform} only in the ${label === 'Channel' ? 'channel' : label} you choose.`}
             </SheetDescription>
           </SheetHeader>
           <div className='flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-5 pb-[max(1rem,env(safe-area-inset-bottom))]'>

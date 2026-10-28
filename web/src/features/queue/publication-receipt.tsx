@@ -3,10 +3,8 @@ import type { Job } from '@/lib/api/types';
 
 function receiptUrl(job: Job) {
   const verified = job.state === 'verified' && job.verification?.method === 'provider_lookup';
-  const acceptedLinkedIn = job.manifest.platform === 'LinkedIn' && job.state === 'provider_accepted'
-    && job.url === `https://www.linkedin.com/feed/update/${job.providerReference}/`;
   const acceptedDiscord = job.manifest.platform === 'Discord' && job.state === 'provider_accepted';
-  if ((!verified && !acceptedLinkedIn && !acceptedDiscord) || !job.url) return null;
+  if ((!verified && !acceptedDiscord) || !job.url) return null;
   try {
     const url = new URL(job.url);
     if (job.manifest.platform === 'Discord') {
@@ -49,9 +47,9 @@ export function PublicationReceipt({ job, referenceAction }: { job: Job; referen
   const url = receiptUrl(job);
   const discord = job.manifest.platform === 'Discord';
   const acceptedDiscord = discord && job.state === 'provider_accepted';
-  const ownerCheck = job.manifest.platform === 'LinkedIn' && job.state === 'provider_accepted';
-  const verifiedAt = job.state === 'verified' && job.verification
-    && (!discord || (url && job.verification.method === 'provider_lookup'
+  // Every other platform renders exactly as on the live build; only Discord requires a bound, verified receipt.
+  const verifiedAt = job.verification
+    && (!discord || (job.state === 'verified' && url && job.verification.method === 'provider_lookup'
       && Number.isFinite(job.verification.at) && Math.abs(job.verification.at) <= 8.64e12))
     ? new Date(job.verification.at * 1000) : null;
   return (
@@ -77,11 +75,10 @@ export function PublicationReceipt({ job, referenceAction }: { job: Job; referen
             Verified · {job.verification.method.replace(/_/g, ' ')} · {verifiedAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
           </time>
         ) : (
-          acceptedDiscord ? 'Accepted by Discord. Verification is pending. Do not resubmit.'
-            : ownerCheck ? 'Accepted by LinkedIn. Publication is not API verified; confirm it on LinkedIn. Do not resubmit.' : 'Not verified yet'
+          acceptedDiscord ? 'Accepted by Discord. Verification is pending. Do not resubmit.' : 'Not verified yet'
         )}
       </p>
-      {url && <a href={url} target='_blank' rel='noreferrer' className='text-primary rounded underline underline-offset-4 outline-none focus-visible:ring-2'>{discord ? 'Open Discord message' : ownerCheck ? 'Open post to confirm' : 'Open verified post'}</a>}
+      {url && <a href={url} target='_blank' rel='noreferrer' className='text-primary rounded underline underline-offset-4 outline-none focus-visible:ring-2'>{discord ? 'Open Discord message' : 'Open verified post'}</a>}
     </div>
   );
 }

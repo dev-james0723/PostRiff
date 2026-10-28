@@ -212,7 +212,7 @@ Findings:
    `previewDispatchPending`, `_invalidate_owned`, `execute_job`, the `/jobs/<id>/execute` route, the web "Publish
    approved post" button) was carried without its `hosted_app.py` wiring, so `worker_binding` is never set: dormant.
    Visible traces: `workerBinding: null` in every workspace read (inventory API-1), the execute route answers only
-   Discord jobs (API-6), Facebook/Business Profile destination-picker wording (UI-8). Its `_capabilities` Page checks
+   Discord jobs (API-6), Facebook/Business Profile destination-picker wording (UI-8; stripped on 2026-10-28). Its `_capabilities` Page checks
    and Facebook adapter changes were not carried (consistent with live).
 3. `6037ff7c` (2026-10-05, official social workflows): `nativeScheduleAt` readers carried (the approval's `nextAt`,
    the worker's `native_scheduled` branch and an extra `!= 'native_scheduled'` condition) without the writer: dead code
@@ -223,7 +223,7 @@ Findings:
    half not. The status text "Accepted by LinkedIn. Publication is not API verified; confirm it on LinkedIn. Do not
    resubmit." shows for a LinkedIn post while it is `provider_accepted` (live writes that state at submit and the next
    worker step reconciles it, usually to `uncertain` without `r_member_social`): observable for about a minute per post,
-   a correction to the inventory's UI-21. Not changed (SC-1 list below).
+   a correction to the inventory's UI-21. Stripped on 2026-10-28 (owner reply 17): the text and the link no longer show.
 6. `6d6346f8` (founder unlimited entitlements): only TypeScript type fields carried; no runtime effect.
 7. `7d803d40`, `afda8f51` (public connection review gate): `connection_review.py` carried, called only by the Discord
    connect path; its Facebook branch never runs. Inert.
@@ -267,7 +267,7 @@ Options (d) and (e) (crons only once the flag is on; fewer shards when idle) wer
 it in `820d8c7d` (merged here in `45352b92`); measured by the impact suite: an idle shard now opens 1 connection for 1
 statement (its pin updated in this branch).
 
-**SC-1 (non-Discord changes riding in the candidate).** For the owner; sizes are the lines a strip would touch.
+**SC-1 (non-Discord changes riding in the candidate).** Sizes are the lines a strip would touch. Decided by the owner on 2026-10-28 (reply 17): strip UI-8 and UI-21 (done on this branch), accept the capped "Save as draft" (UI-12/API-9), API-8 and UI-10; the other rows ship.
 
 | Item | Origin | Recommendation | Strip size |
 |---|---|---|---|
@@ -280,15 +280,15 @@ statement (its pin updated in this branch).
 | DEP-6 pypdf 6.21.1 | `0bce18dd` (four advisories) | ship | 1 line, reopens the advisories |
 | DEP-7 psycopg-pool 3.3.3 | pool (inert while off) | ship | 1 line plus the pool module |
 | API-1 `workerBinding: null` in workspace reads | `381ac2d0` machinery | ship (inert) | about 10 lines in `hosted.py` (estimate) and the dormant preview code it feeds |
-| UI-12 / API-9 "Save as draft" (`manual_draft_create`) | `edcdf286`, `4fdc09c3` | owner decision: a new feature every editor sees | about 170 lines (`manual_drafts.py` 100, `hosted.py` about 8 (estimate), `permissions.py` 1, `home-view.tsx` 47, API types) plus `tests/test_manual_drafts.py` |
-| API-8 review preparation without the publishing entitlement | `ea59babb` | owner decision (a workspace without a plan now meets the refusal at approval, not at review) | 1 line plus `tests/test_passive_review_billing.py` (152) |
-| UI-10 schedule dialog native selects, UTC line, one-second clock, option text | `06f4f13c` (a Discord P0 fix) | owner decision; entangled with the Discord destination select and the P0 browser test | revert of about 80 lines in `schedule-dialog.tsx` and 24 in `discord-p0-browser.cjs`, then redo the Discord select |
-| UI-8 Facebook/Business Profile picker wording | `381ac2d0` via `1791d6d1` | strip for exact parity (or accept) | 3 to 4 lines in `destination-picker.tsx` (the strings sit in ternaries shared with Discord) |
-| UI-21 LinkedIn accepted-receipt text | web half of `4e69d899` | strip (its server half was never carried; the text claims a state live does not keep) | about 6 lines in `publication-receipt.tsx` (estimate) |
+| UI-12 / API-9 "Save as draft" (`manual_draft_create`) | `edcdf286`, `4fdc09c3` | **accepted** (owner reply 17, 2026-10-28; the caps come from the G2a branch): a new feature every editor sees | about 170 lines (`manual_drafts.py` 100, `hosted.py` about 8 (estimate), `permissions.py` 1, `home-view.tsx` 47, API types) plus `tests/test_manual_drafts.py` |
+| API-8 review preparation without the publishing entitlement | `ea59babb` | **accepted** (owner reply 17, 2026-10-28): a workspace without a plan now meets the refusal at approval, not at review | 1 line plus `tests/test_passive_review_billing.py` (152) |
+| UI-10 schedule dialog native selects, UTC line, one-second clock, option text | `06f4f13c` (a Discord P0 fix) | **accepted** (owner reply 17, 2026-10-28); entangled with the Discord destination select and the P0 browser test | revert of about 80 lines in `schedule-dialog.tsx` and 24 in `discord-p0-browser.cjs`, then redo the Discord select |
+| UI-8 Facebook/Business Profile picker wording | `381ac2d0` via `1791d6d1` | **stripped** (owner reply 17, 2026-10-28): the picker strings, the toast and the snapshot refetch equal live for Facebook and Business Profile | 3 to 4 lines in `destination-picker.tsx` (the strings sit in ternaries shared with Discord) |
+| UI-21 LinkedIn accepted-receipt text | web half of `4e69d899` | **stripped** (owner reply 17, 2026-10-28; its server half was never carried): LinkedIn receipts render as on live | about 6 lines in `publication-receipt.tsx` (estimate) |
 
 ## Not changed, and why
 
-- BG-1 (accepted LOW), RC2-1 (W-02 owner), WB-1 (a Production setting; owner), SC-1 items (owner's list), the dormant
+- BG-1 (accepted LOW), RC2-1 (W-02 owner), WB-1 (a Production setting; owner), SC-1 items other than UI-8 and UI-21 (accepted by the owner, reply 17), the dormant
   preview-dispatch machinery (inert in Production; removing it touches the worker claim code the Discord lane shares).
 - `/api/cron/worker` runtime-before-authentication (reported only, as asked).
 - The PR-1 scheme caveat with the feature on (unknown; verify on the staged build before turning user install on).
@@ -320,3 +320,19 @@ PR-1 and ENV-1 offline tests (`all-offline-base-150ab4fa*.log`, `env1-base-150ab
 (`cron-guard-base-150ab4fa.log`; with the run-time cron values of `60ca222d`:
 `cron-guard-runtime-credentials-base-and-live.log`, the same 2 of 3 tests and 7 failures), and the 404 tests on the 401
 head `651e1899` (`pr1-404-on-651e1899.log`).
+
+## SC-1 strip: test runs (2026-10-28, owner reply 17)
+
+UI-8 and UI-21 are stripped on the commit that follows `d85c8a47`. Node 22, no network; `web/node_modules` was borrowed
+from another worktree of the same session through a symlink that was removed afterwards.
+
+| Run | Command | Result |
+|---|---|---|
+| Web unit tests | `cd web && node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs` | 997 tests, 996 pass; the one failure is `tests/visual-analysis.test.cjs`, which runs Python and needs the package `psycopg` (absent in this scratch environment, unrelated to the two files) |
+| Fails before the strip | `tests/receipt.test.mjs` against the pre-strip `publication-receipt.tsx`; `tests/destination-picker-parity.test.mjs` against the pre-strip `destination-picker.tsx` | receipt: 1 of 13 fails (the LinkedIn parity test); picker pin: 2 of 2 fail |
+| Typecheck and lint | `tsc --noEmit`; `oxlint` on the two files | 0 errors; 0 warnings and 0 errors |
+| Offline source secret scan | `PYTHONPATH=src:tests python scripts/consumer_ready_secrets.py` | PASS: 3,384 files, 965 findings, 0 unexpected; the new test file, created after the scan started, scanned on its own: 0 findings |
+
+What the strip leaves different from live in these two files: the Discord branches only (button, sheet text, toast,
+`remove`, the snapshot refetch, the Discord receipt rules). For every other platform the strings, the toast and the
+refetch are the live ones; a receipt shows a stored verification time for a non-Discord post exactly as on live.
