@@ -149,6 +149,44 @@ class IsolatedDrills(unittest.TestCase):
         alerts = drills.check.evaluate(snapshot, drills.THRESHOLDS, now=lab.cluster.now(), phase='open')
         self.assertNotIn('SILENT_HALT_HEALTH_UNANSWERED', {a['id'] for a in alerts})
 
+    def test_n9_a_discord_outage_warns_on_discords_side_and_a_failure_on_ours_still_pages(self):
+        """Second review N-9 (exp_503), on the real payload: Discord answering 503 to creates paged
+        DELIVERY_SYSTEM_FAILURES (P0) as a reason on our side. 5xx answers are now rejectedUpstream and raise
+        DELIVERY_DISCORD_5XX (warn, P2) only; 400 answers (a request we built wrong) still page."""
+        lab = self.lab
+        answers = {503: {'message': 'Service Unavailable', 'code': 0},
+                   400: {'message': 'Invalid Form Body', 'code': 50035}}
+        for status, body in answers.items():
+            with self.subTest(status=status):
+                lab.fresh([F.Tenant(n) for n in range(10)], 3)
+
+                def fail(method, path, status=status, body=body):
+                    if method == 'POST' and path.startswith('/channels/') and path.endswith('/messages'):
+                        return {'status': status, 'headers': {}, 'body': body}
+                lab.wire.fail = fail
+                try:
+                    lab.drain(loops=3, seconds=20)
+                finally:
+                    lab.wire.fail = None
+                snapshot, alerts = lab.look(phase='open')
+                raised = {alert['id']: alert['severity'] for alert in alerts}
+                deliveries = snapshot['deliveries']
+                counts = {key: deliveries[key] for key in ('accepted', 'rejectedSystem', 'rejectedUpstream', 'uncertain')}
+                if status == 503:
+                    self.assertGreaterEqual(deliveries['rejectedUpstream'], 20, counts)
+                    self.assertEqual(deliveries['rejectedSystem'], 0, counts)
+                    self.assertNotIn('DELIVERY_SYSTEM_FAILURES', raised, counts)
+                    self.assertEqual(raised.get('DELIVERY_DISCORD_5XX'), 'warn', raised)
+                    twin = lab.sql_twin()
+                    self.assertEqual((twin['deliveries']['rejectedUpstream'], twin['deliveries']['rejectedSystem']),
+                                     (deliveries['rejectedUpstream'], 0), 'the SQL twin counts the same')
+                    self.assertNotIn('DELIVERY_SYSTEM_FAILURES', {alert['id'] for alert in drills.check.evaluate(
+                        twin, drills.THRESHOLDS, now=lab.cluster.now(), phase='open')})
+                else:
+                    self.assertGreaterEqual(deliveries['rejectedSystem'], 20, counts)
+                    self.assertEqual(deliveries['rejectedUpstream'], 0, counts)
+                    self.assertEqual(raised.get('DELIVERY_SYSTEM_FAILURES'), 'page', raised)
+
     def test_c1_the_drain_check_is_complete_above_five_thousand_workspaces(self):
         """Review C1 (exp_drain): with 5,201 workspaces carrying phase2 state and the one holding a live lease and a sealed
         post last by id, the sampled statement reported (0, 0, 0). The complete one reads the projection."""

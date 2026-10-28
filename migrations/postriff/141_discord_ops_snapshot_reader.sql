@@ -70,7 +70,9 @@ queue AS (
                               AND s.state = 'observed' AND s.status_code IN (403, 404)) AS customer,
            count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - interval '900 seconds'
                               AND s.state = 'observed' AND s.status_code NOT BETWEEN 200 AND 299
-                              AND s.status_code NOT IN (403, 404, 429)) AS system,
+                              AND s.status_code NOT IN (403, 404, 429) AND s.status_code < 500) AS system,
+           count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - interval '900 seconds'
+                              AND s.state = 'observed' AND s.status_code >= 500) AS upstream,
            count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - interval '900 seconds'
                               AND s.state = 'observed' AND s.status_code = 429) AS limited,
            count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - interval '900 seconds'
@@ -161,6 +163,7 @@ SELECT jsonb_build_object(
         'status', 'observed', 'windowSeconds', 900, 'sampled', l.sampled, 'sampleLimit', 20000,
         'windowCovered', l.sampled < 20000 OR o.epoch - l.oldest >= 900,
         'creates', l.creates, 'accepted', l.accepted, 'rejectedCustomer', l.customer, 'rejectedSystem', l.system,
+        'rejectedUpstream', l.upstream,
         'rateLimited', l.limited, 'uncertain', l.uncertain, 'blocked', l.blocked, 'inFlight', l.in_flight,
         'stuckSent', l.stuck_new, 'stuckSentTotal', l.stuck_all),
     'unresolved', jsonb_build_object(

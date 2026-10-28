@@ -67,10 +67,10 @@ P0 means "wake someone at 3 a.m.": it is dangerous to continue, or every custome
 | CROSS_TENANT_DISCORD_4XX | P2 | | a superset of refusals; tune first |
 | DELIVERY_UNCERTAIN | P1 | **P0** | duplicate or unknown sends (stop condition at 3) |
 | DELIVERY_UNAUTHORIZED | | **P0** | bot token rejected or leaked |
-| DELIVERY_SYSTEM_FAILURES | P1 | **P0** | many posts failing on our side |
+| DELIVERY_SYSTEM_FAILURES | P1 | **P0** | many posts failing on our side (uncertain, stuck, or refused for a reason of ours such as a 400; since the second review, N-9, Discord's 5xx answers no longer count here) |
 | DELIVERY_STUCK_SENT | P1 | | needs reconciliation |
 | DELIVERY_CUSTOMER_FAILURES | P2 | | the customers' server set-up |
-| DELIVERY_DISCORD_5XX | P2 | | Discord outage; nothing destructive to do |
+| DELIVERY_DISCORD_5XX | P2 | | Discord outage (5xx to any request, or to creates); nothing destructive to do; never pages |
 | DELIVERY_HELD_GROWTH | P1 | | approvals ran out: customers must approve again |
 | DELIVERY_FAILED_GROWTH | P1 | | more posts failing than before |
 | RATE_CREDENTIAL_HOLD | | **P0** | every Discord request refused |

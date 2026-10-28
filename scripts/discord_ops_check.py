@@ -163,12 +163,16 @@ def delivery(snapshot, t, out, memory=None):
     open_uncertain = int(unresolved.get('uncertainPublishes') or 0)
     open_stuck = int(unresolved.get('stuckSentPublishes') or 0)
     t = t['delivery']
+    attempts = upstream = 0
     if d:
         uncertain = int(d.get('uncertain') or 0)
         stuck = int(d.get('stuckSent') or 0)
+        # 5xx answers to creates are Discord's side (or something between us and Discord), counted apart from ours
+        # (second review N-9); a payload without the field counts them in rejectedSystem, as before.
+        upstream = int(d.get('rejectedUpstream') or 0)
         system = int(d.get('rejectedSystem') or 0) + uncertain + stuck
         customer = int(d.get('rejectedCustomer') or 0)
-        attempts = (int(d.get('accepted') or 0) + customer + int(d.get('rejectedSystem') or 0)
+        attempts = (int(d.get('accepted') or 0) + customer + int(d.get('rejectedSystem') or 0) + upstream
                     + int(d.get('rateLimited') or 0) + uncertain + stuck)
         partial = None if d.get('windowCovered', True) else 'the sample did not reach back 15 minutes: counts are lower bounds'
         level = _over(uncertain, t['uncertain_warn'], t['uncertain_page'])
@@ -189,9 +193,11 @@ def delivery(snapshot, t, out, memory=None):
             level = 'warn'
         if level:
             out.append(_alert('DELIVERY_SYSTEM_FAILURES', 'DELIVERY', level,
-                              '%d of %d Discord create attempts in 15 minutes failed for a reason on our side (%.1f%%).'
-                              % (system, attempts, 100 * share), systemFailures=system, attempts=attempts,
-                              share=round(share, 4), rejectedSystem=d.get('rejectedSystem'), uncertain=uncertain,
+                              '%d of %d Discord create attempts in 15 minutes failed for a reason on our side (%.1f%%)%s.'
+                              % (system, attempts, 100 * share, '; Discord\'s own 5xx answers are counted apart (%d, '
+                                 'DELIVERY_DISCORD_5XX)' % upstream if upstream else ''),
+                              systemFailures=system, attempts=attempts, share=round(share, 4),
+                              rejectedSystem=d.get('rejectedSystem'), rejectedUpstream=upstream or None, uncertain=uncertain,
                               stuckSent=stuck, note=partial))
         if attempts >= t['min_attempts_for_share'] and customer / attempts >= t['customer_share_warn']:
             out.append(_alert('DELIVERY_CUSTOMER_FAILURES', 'DELIVERY', 'warn',
@@ -231,14 +237,23 @@ def delivery(snapshot, t, out, memory=None):
                               'Discord answered 401 to %d requests in 15 minutes: the bot token may have been reset or '
                               'leaked. The coordinator holds that credential, so Discord work stops (RUNBOOK-INCIDENT 4.D).'
                               % unauthorized, unauthorized=unauthorized))
+    responses = errors = 0
+    if isinstance(traffic, dict) and traffic.get('status', 'observed') != 'unavailable':
         responses, errors = int(traffic.get('responses5m') or 0), int(traffic.get('serverErrors5m') or 0)
-        if responses >= t['min_responses_for_server_errors'] and errors / responses > t['server_error_share_warn']:
-            out.append(_alert('DELIVERY_DISCORD_5XX', 'DELIVERY', 'warn',
-                              'Server errors are %.1f%% of %d responses in 5 minutes: Discord answered 5xx, or a request '
-                              'failed before an answer (the coordinator records a failed read as 503). A Discord outage if '
-                              'discordstatus.com shows one, otherwise our side or the network; either way do not roll back '
-                              'for this alone (RUNBOOK-INCIDENT 4.A).' % (100 * errors / responses, responses),
-                              serverErrors=errors, responses=responses))
+    by_traffic = responses >= t['min_responses_for_server_errors'] and errors / responses > t['server_error_share_warn']
+    by_creates = attempts >= t['min_attempts_for_share'] and upstream / attempts > t['server_error_share_warn']
+    if by_traffic or by_creates:
+        out.append(_alert('DELIVERY_DISCORD_5XX', 'DELIVERY', 'warn',
+                          'Server errors: %s. Discord answered 5xx, or a request failed before an answer (the coordinator '
+                          'records a failed read as 503). A Discord outage if discordstatus.com shows one, otherwise our '
+                          'side or the network; either way do not roll back for this alone, and it does not page '
+                          '(RUNBOOK-INCIDENT 4.A).' % '; '.join(
+                              part for part in (('%.1f%% of %d responses in 5 minutes' % (100 * errors / responses, responses))
+                                                if by_traffic else '',
+                                                ('%d of %d create attempts in 15 minutes answered 5xx' % (upstream, attempts))
+                                                if by_creates else '') if part),
+                          serverErrors=errors if responses else None, responses=responses or None,
+                          createsAnswered5xx=upstream or None, createAttempts=attempts or None))
 
 
 def rate_limit(snapshot, t, out):

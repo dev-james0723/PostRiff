@@ -191,7 +191,7 @@ SELECT count(*),
                           AND s.state = 'observed' AND s.status_code IN (403, 404)),
        count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - make_interval(secs => %(window)s)
                           AND s.state = 'observed' AND s.status_code NOT BETWEEN 200 AND 299
-                          AND s.status_code NOT IN (403, 404, 429)),
+                          AND s.status_code NOT IN (403, 404, 429) AND s.status_code < 500),
        count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - make_interval(secs => %(window)s)
                           AND s.state = 'observed' AND s.status_code = 429),
        count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - make_interval(secs => %(window)s)
@@ -219,7 +219,9 @@ SELECT count(*),
        extract(epoch FROM max(s.outcome_at) FILTER (WHERE s.is_publish AND s.state = 'observed'
                                                       AND s.status_code BETWEEN 200 AND 299))::double precision,
        extract(epoch FROM max(s.outcome_at) FILTER (WHERE s.route_key = %(readback)s AND s.state = 'observed'
-                                                      AND s.status_code BETWEEN 200 AND 299))::double precision
+                                                      AND s.status_code BETWEEN 200 AND 299))::double precision,
+       count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - make_interval(secs => %(window)s)
+                          AND s.state = 'observed' AND s.status_code >= 500)
 FROM sample s CROSS JOIN observed o'''
 
 
@@ -229,7 +231,7 @@ def read_ledger(cur, now, context):
                           'readback': READBACK_ROUTE_KEY})
     (sampled, oldest, newest, creates, accepted, customer, system, limited, uncertain, blocked, in_flight,
      stuck_new, stuck_all, r429, r429_global, invalid, responses, server_errors, admitted, uncertain_reads,
-     unauthorized, last_accepted, last_readback) = cur.fetchone()
+     unauthorized, last_accepted, last_readback, upstream) = cur.fetchone()
     sampled = int(sampled)
     span = _age(now, oldest) if sampled else None
     # The sample is the newest SAMPLE_LIMIT rows: a window is fully seen when the sample is not full or reaches back.
@@ -239,7 +241,9 @@ def read_ledger(cur, now, context):
         return not full or (span is not None and span >= seconds)
     deliveries = {'status': 'observed', 'windowSeconds': DELIVERY_WINDOW, 'windowCovered': covered(DELIVERY_WINDOW),
                   'sampled': sampled, 'sampleLimit': SAMPLE_LIMIT, 'creates': int(creates), 'accepted': int(accepted),
-                  'rejectedCustomer': int(customer), 'rejectedSystem': int(system), 'rateLimited': int(limited),
+                  'rejectedCustomer': int(customer), 'rejectedSystem': int(system),
+                  # 5xx answers to creates: Discord's side (or something between us and Discord), apart from ours (N-9)
+                  'rejectedUpstream': int(upstream), 'rateLimited': int(limited),
                   'uncertain': int(uncertain), 'blocked': int(blocked), 'inFlight': int(in_flight),
                   'stuckSent': int(stuck_new), 'stuckSentTotal': int(stuck_all)}
     traffic = {'responses429': int(r429), 'responses429Global': int(r429_global), 'invalid10m': int(invalid),

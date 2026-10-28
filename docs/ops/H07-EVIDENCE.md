@@ -48,14 +48,14 @@ Today: BLOCKED, reasons `night_cover_not_declared` and `roster:{primary,backup}_
 
 | Evidence | Result |
 |---|---|
-| `tests/test_discord_ops_check.py` (the 42 alert rules, thresholds, command line, fetch) | 81 tests OK, 2 skipped on this branch (they compare with constants only the limiter and W-02 heads have; both pass on the scratch merge); 27 of the first 63 fail on the reviewed evaluator (section 5), the new ones before their fix (section 4a) |
-| `tests/test_discord_ops_health.py` (the route and payload) | 19 OK (20 on the scratch merge, with the limiter's retention test) |
+| `tests/test_discord_ops_check.py` (the 42 alert rules, thresholds, command line, fetch) | 82 tests OK, 2 skipped on this branch (they compare with constants only the limiter and W-02 heads have; both pass on the scratch merge); 27 of the first 63 fail on the reviewed evaluator (section 5), the new ones before their fix (section 4a) |
+| `tests/test_discord_ops_health.py` (the route and payload) | 20 OK on this branch (the scratch merge `d995ff13` added the limiter's retention test) |
 | `tests/test_security_signals.py` (the denial signal) | 12 OK |
 | `tests/test_oncall_policy.py` (policy, duty hours across both 2026 New York transitions, rosters, the rule-to-priority table) | 17 OK |
-| `tests/test_oncall_engine.py` (engine, providers, store in memory, automatic hold logic, readiness) | 36 OK |
-| `tests/test_discord_ops_drills_postgres.py` offline part (runbook statements, the hold statements of the engine, migration 141 against the twin) | 4 OK |
-| `tests/test_discord_ops_drills_postgres.py` on PostgreSQL 16 (9 drills, `DRAIN_CHECK` at 5,201 workspaces, migration 141 applied twice) | 15 OK on the scratch merge (section 4a; 11 need PostgreSQL); receipt `DRILL-RECEIPT-ISOLATED.md`: 9 drills, 99 checks, 0 failed (source: the scratch merge `d995ff13`, its composition in the receipt; 98 checks at `b193adce`) |
-| `tests/oncall_drills.py` / `tests/test_oncall_drills_postgres.py` (15 policy rows) | receipt `ONCALL-DRILL-RECEIPT.md`: 15 rows, 41 checks, 0 failed (source `b193adce`; not regenerated: the engine has not changed since, only two priority rows were added); the wrapper's 13 tests pass on the scratch merge |
+| `tests/test_oncall_engine.py` (engine, providers, store in memory, automatic hold logic, readiness) | 38 OK |
+| `tests/test_discord_ops_drills_postgres.py` offline part (runbook statements, the hold statements of the engine, migration 141 against the twin, its search_path and ACL) | 5 OK |
+| `tests/test_discord_ops_drills_postgres.py` on PostgreSQL 16 (9 drills, `DRAIN_CHECK` at 5,201 workspaces, migration 141 applied twice) | 17 OK on this branch after the second review's fixes (12 need PostgreSQL, the new one is N-9's real-payload test); 15 OK on the scratch merge before them (section 4a); receipt `DRILL-RECEIPT-ISOLATED.md`: 9 drills, 99 checks, 0 failed (source: the scratch merge `d995ff13`, its composition in the receipt; 98 checks at `b193adce`) |
+| `tests/oncall_drills.py` / `tests/test_oncall_drills_postgres.py` (15 policy rows) | receipt `ONCALL-DRILL-RECEIPT.md`: 15 rows, 41 checks, 0 failed (source `b193adce`; not regenerated: the engine code has not changed since; the policy gained two priority rows and `SILENT_HALT_SECTION` as a no-data rule); the wrapper's 13 tests pass on this branch and on the scratch merge |
 
 The thresholds file holds 49 values for the 42 alert ids (45 for 40 at `e79df41d`; the reviewed head had 41 for 36). The repository's secret scan (`scripts/consumer_ready_secrets.py`, rule P2-SEC-CI-04) on `828192e8`: FAIL with 8 unexpected findings, all in five test files of other lanes that are unchanged since the base `5a94b4f2` (the same 8 as at `e79df41d`); none in this lane's files.
 
@@ -81,6 +81,21 @@ Requested by the Release Captain on 2026-10-28. Every change below was written t
 **What moved in the receipt.** D3's budget step: a single loop admitted 122 with 116 in the last minute of the nominal 120 (`b193adce`, no limiter); now three loops admitted 110 with 106 in the last minute of the 109.1 the coordinator can grant, guard 0.1 s read from the build, saturation 0.972, plus the new check that the injection reached 95%. D3's 403 step also shows `RATE_ROUTE_CIRCUITS` warn (the limiter's 403 circuits), which outlasts the invalid window; D3 does not check it. O2's note follows what was observed: no read-back burned a check, and this build's read under a hold waits. The other drills raise the same alerts with the same checks; counts and timings vary by run. The reviewer's E1 on the scratch merge: no park (section 5, H1).
 
 **What still depends on another branch.** This branch alone serves none of the new fields, and every rule reads them only when present: the guard (`SLOT_GUARD_SECONDS`), the read wait (`HOLD_WAIT_SECONDS`), the retention section and its log lines come from the limiter; the lag split, the quarantine event and counters and the `discord_paused` stop from W-02. Two tests skip here and pass on the scratch merge. When the lines meet, `src/postriff_phase2/discord/ops.py` (the section loop and `config_section`) and `tests/test_discord_ops_health.py` conflict with the limiter; the scratch merge resolves them by keeping both sides (loop: queue, ledger, unresolved, coordinator, retention, servers, platform, requests).
+
+## 4b. The second independent review (of `762551f0`): the fixes named before merge
+
+Verdict: MERGE-READY AFTER NAMED FIXES; 19 earlier findings closed, M9, L4 and L8 open by nature (section 5). The named fixes, each with its evidence in `REVIEW-8E76AFDD-EVIDENCE.md` section 5 (or section 2 for E5):
+
+| Fix | Finding | Status | Evidence |
+|---|---|---|---|
+| F1 | N-1 (HIGH): the Discord-paused build was called a stop that strands nothing | CLOSED in the docs; **code open** (the limiter lane: a missing or degraded coordinator must defer the read of an existing receipt, never mark it uncertain) | probe E5 re-run on `762551f0`: uncertain at the first claim, parked 86,400 s at the fifth, still parked when the coordinator returns; `PHONE-RUNBOOK.md` lever 2, rollback alternative, restore note, the drill-clock "25 s"; section 3 above; `H07-OPTIONS.md` D2 |
+| F2 | N-3 (HIGH): "cannot be marked by hand" | CLOSED (claim changed); the design for inputs that cannot be written by hand is recorded, not built (section 8) | `readiness.py` docstring, the status paragraph at the top |
+| F3 | N-5 (MEDIUM): `CROSS_TENANT_PROBE_FAILED` has no producer | CLOSED in the docs; the producer (the Q-05 hosted run) does not exist yet | evaluator comment and alert text, `PHONE-RUNBOOK.md` row 1, R15 note above, policy map, `autohold.py`; a tripwire test fails when a producer lands |
+| F4 | N-10 (LOW): untested 141 ACL and search_path; readiness `reference` | CLOSED | mutations N7a, N7b and N1b now caught (5.1, 5.2) |
+| N-4 | (MEDIUM) a blind evaluator auto-resolved a P0 | CLOSED | `SILENT_HALT_SECTION` is a no-data rule; engine test fails before (5.3) |
+| N-9 | (MEDIUM) a Discord outage paged P0 as "our side" | CLOSED | 5xx answers to creates are `deliveries.rejectedUpstream` and raise `DELIVERY_DISCORD_5XX` (warn) only; a 400 still pages; the reviewer's `exp_503` before and after, and a PostgreSQL test on the real payload (5.4) |
+
+Listed for later, with their ids (section 8): N-2, N-6, N-7, N-8, N-11, N-12, N-13, N-14, N-15. H-07 stays **BLOCKED**.
 
 ## 5. The independent review of `8e76afdd`: each finding
 

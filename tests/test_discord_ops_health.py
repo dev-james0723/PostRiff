@@ -92,7 +92,7 @@ class FakeDatabase:
             self.result = [(1, 0, 2, NOW - 4000)]
         elif 'pr_discord_request_admissions' in sql:
             self.result = [(120, NOW - 700, NOW - 2, 40, 33, 2, 1, 1, 2, 1, 0, 0, 0, 3, 0, 9, 60, 1, 80, 0, 0,
-                            NOW - 3, NOW - 1)]
+                            NOW - 3, NOW - 1, 4)]
         elif 'WHERE scope_key = ANY' in sql:
             keys = sorted(ops.guard_keys(self.adapter))
             kinds = [ops.GUARDS[key[:3]] for key in keys]
@@ -260,6 +260,7 @@ class Payload(unittest.TestCase):
         deliveries = payload['deliveries']
         self.assertEqual((deliveries['creates'], deliveries['accepted'], deliveries['rejectedCustomer'],
                           deliveries['rejectedSystem'], deliveries['uncertain']), (40, 33, 2, 1, 2))
+        self.assertEqual(deliveries['rejectedUpstream'], 4, 'answers 5xx to creates: Discord\'s side (second review N-9)')
         self.assertTrue(deliveries['windowCovered'])
         guards = payload['coordinator']['guards']
         self.assertEqual(sorted(guards), ['credential', 'global', 'invalid', 'policy'])

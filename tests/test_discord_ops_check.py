@@ -152,6 +152,20 @@ class Delivery(unittest.TestCase):
                 self.assertEqual(found(self.deliveries(accepted=accepted, rejectedSystem=system),
                                        'DELIVERY_SYSTEM_FAILURES'), expected)
 
+    def test_discord_5xx_on_creates_is_discords_side_and_never_pages(self):
+        """Second review N-9 (exp_503): Discord answering 503 to 29 of 30 creates paged DELIVERY_SYSTEM_FAILURES (P0) as a
+        reason on our side. 5xx answers to creates are counted apart (rejectedUpstream): a warning on Discord's side, while
+        a failure on our side (a 400, a request we built wrong) still pages."""
+        outage = self.deliveries(accepted=1, rejectedUpstream=29)
+        raised = {a['id']: a for a in alerts(outage)}
+        self.assertNotIn('DELIVERY_SYSTEM_FAILURES', raised)
+        self.assertEqual(raised['DELIVERY_DISCORD_5XX']['severity'], 'warn')
+        self.assertEqual(raised['DELIVERY_DISCORD_5XX']['evidence'].get('createsAnswered5xx'), 29)
+        self.assertEqual(found(self.deliveries(accepted=1, rejectedSystem=29), 'DELIVERY_SYSTEM_FAILURES'), 'page')
+        mixed = self.deliveries(accepted=81, rejectedUpstream=10, rejectedSystem=9)   # 9 of 100 (not of 90): warn, not page
+        alert = [a for a in alerts(mixed) if a['id'] == 'DELIVERY_SYSTEM_FAILURES'][0]
+        self.assertEqual((alert['severity'], alert['evidence']['attempts']), ('warn', 100), 'upstream counts in the attempts')
+
     def test_uncertain_and_stuck_creates_count_as_system_failures(self):
         alert = [a for a in alerts(self.deliveries(accepted=10, uncertain=1, stuckSent=2)) if a['id'] == 'DELIVERY_SYSTEM_FAILURES']
         self.assertEqual(alert[0]['evidence']['systemFailures'], 3)

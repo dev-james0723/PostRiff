@@ -26,6 +26,7 @@
     "customer_share_warn": 0.5,
     "stuck_sent_warn": 1,
     "server_error_share_warn": 0.02,
+    "_upstream": "Second review N-9: 5xx answers to creates are deliveries.rejectedUpstream, Discord's side, apart from rejectedSystem (ours: refused for another reason than 403, 404 or 429, uncertain, stuck). DELIVERY_SYSTEM_FAILURES counts them in its attempts but not as failures; DELIVERY_DISCORD_5XX (warn) fires when they exceed server_error_share_warn of at least min_attempts_for_share creates, or when server errors exceed it among the responses of 5 minutes.",
     "min_responses_for_server_errors": 20,
     "held_growth_warn": 1,
     "failed_growth_warn": 3,

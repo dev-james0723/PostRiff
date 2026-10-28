@@ -302,3 +302,43 @@ Ran 1 test in 0.023s
 FAILED (failures=1)
 ```
 
+### 5.4 N-9: a Discord outage paged P0 as "our side"
+
+The payload counted every non-2xx answer to a create other than 403, 404 and 429 as `rejectedSystem`, Discord's 5xx included, so a Discord outage paged `DELIVERY_SYSTEM_FAILURES` (P0). 5xx answers to creates are now `deliveries.rejectedUpstream` (route payload, SQL twin and migration 141 alike), counted in the attempts but not as our failures, and they raise `DELIVERY_DISCORD_5XX` (warn, P2, never pages). A failure on our side (a 400) still pages.
+
+The reviewer's probe `exp_503.py` (Discord answers 503 to every create; real route payload and evaluator), unchanged, on `d2f0759b` and then with the change:
+
+```
+before:
+Discord answers 503 to creates: deliveries {'creates': 35, 'accepted': 1, 'rejectedSystem': 29, 'rejectedCustomer': 0, 'uncertain': 0}
+alerts: [('DELIVERY_DISCORD_5XX', 'warn'), ('DELIVERY_SYSTEM_FAILURES', 'page'), ('RATE_ROUTE_CIRCUITS', 'warn')]
+after:
+Discord answers 503 to creates: deliveries {'creates': 30, 'accepted': 1, 'rejectedSystem': 0, 'rejectedCustomer': 0, 'uncertain': 0}
+alerts: [('DELIVERY_DISCORD_5XX', 'warn'), ('RATE_ROUTE_CIRCUITS', 'warn')]
+```
+
+The new tests, run before the change (the payload test fails because the ledger row gained a column):
+
+```
+ERROR: test_discord_5xx_on_creates_is_discords_side_and_never_pages (tests.test_discord_ops_check.Delivery.test_discord_5xx_on_creates_is_discords_side_and_never_pages)
+KeyError: 'DELIVERY_DISCORD_5XX'
+FAIL: test_queue_progress_deliveries_and_coordinator_sections
+AssertionError: None != 2.0
+FAIL: test_the_payload_carries_counts_ages_booleans_and_codes_only (path='deliveries.status')
+AssertionError: False is not true : unavailable
+FAIL: test_the_payload_carries_counts_ages_booleans_and_codes_only (path='deliveries.error')
+AssertionError: False is not true : ValueError
+FAIL: test_the_payload_carries_counts_ages_booleans_and_codes_only (path='progress.status')
+AssertionError: False is not true : partial
+FAIL: test_the_payload_carries_counts_ages_booleans_and_codes_only (path='coordinator.traffic.status')
+AssertionError: False is not true : unavailable
+FAIL: test_the_payload_carries_counts_ages_booleans_and_codes_only (path='errors.section')
+AssertionError: False is not true : ledger
+FAIL: test_the_payload_carries_counts_ages_booleans_and_codes_only (path='errors.error')
+AssertionError: False is not true : ValueError
+Ran 21 tests in 0.028s
+FAILED (failures=7, errors=1)
+```
+
+And on PostgreSQL: `IsolatedDrills.test_n9_a_discord_outage_warns_on_discords_side_and_a_failure_on_ours_still_pages` (503 to creates: `rejectedUpstream` at least 20, `rejectedSystem` 0, no `DELIVERY_SYSTEM_FAILURES`, `DELIVERY_DISCORD_5XX` warn, the SQL twin counts the same; 400 to creates: `DELIVERY_SYSTEM_FAILURES` page).
+
