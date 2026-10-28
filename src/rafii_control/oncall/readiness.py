@@ -1,4 +1,12 @@
-"""The H-07 status as a function of facts, so nobody can mark it by hand (docs/ops/H07-EVIDENCE.md):
+"""The H-07 status computed from its inputs (docs/ops/H07-EVIDENCE.md).
+
+It checks the shape of its inputs, not their truth. The evidence file, the roster and the night-cover answer are handed
+to it, so hand-written entries, an invented roster and --night-cover yes print VERIFIED (second review, N-3). A VERIFIED
+result counts only after a person has traced every entry to its receipt: the owner's rule is "no paper pass". Design
+for inputs that cannot be written by hand (not built): each entry names the oncall_events ids of its real deliveries and
+acknowledgement, which this reader looks up and checks, and night cover and the roster come from a committed owner
+declaration, not from command-line flags.
+
 
 - BLOCKED: there is no real 24/7 P0 cover: the owner has not declared that a named Primary and Backup cover nights,
   weekends and holidays, or the roster cannot carry P0 (a gap, a missing Primary or Backup, a person without push,

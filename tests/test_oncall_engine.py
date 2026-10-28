@@ -461,5 +461,18 @@ class Readiness(unittest.TestCase):
         self.assertEqual(readiness.status(POLICY, evidence, night_cover=True, roster=no_backup)['status'], 'BLOCKED')
 
 
+    def test_a_real_entry_without_its_time_or_receipt_reference_does_not_count(self):
+        """Second review N-10 (mutation N1b): dropping the reference requirement left every test green."""
+        evidence = [self.real(name) for name, _ in readiness.REQUIREMENTS]
+        for field in ('reference', 'at'):
+            for value in (None, ''):
+                with self.subTest(field=field, value=value):
+                    paper = copy.deepcopy(evidence)
+                    paper[0][field] = value
+                    report = readiness.status(POLICY, paper, night_cover=True, roster=roster())
+                    self.assertEqual(report['status'], 'NOT_VERIFIED')
+                    self.assertEqual(report['missingRealTests'], [paper[0]['requirement']])
+
+
 if __name__ == '__main__':
     unittest.main()

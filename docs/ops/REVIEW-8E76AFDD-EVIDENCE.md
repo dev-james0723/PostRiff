@@ -248,3 +248,23 @@ AssertionError: '403' not found in '16 Discord routes have a short circuit open 
 Ran 1 test in 0.002s
 FAILED (failures=1)
 ```
+
+## 5. Second review of `762551f0`: the named fixes
+
+The second independent review (notes and probes in the coordinator's scratchpad `review-ops2/`) asked for F1 to F4, N-4 and N-9 before merge. Each test below was run against the code before its fix, or against the reviewer's mutation where the code was already right.
+
+### 5.1 N-10: readiness without the receipt reference (mutation N1b)
+
+The reviewer's mutation removes `bool(entry.get('reference'))` from `readiness._real_pass`; all 36 engine tests stayed green. With the new `Readiness.test_a_real_entry_without_its_time_or_receipt_reference_does_not_count`, the same mutation:
+
+```
+FAIL: test_a_real_entry_without_its_time_or_receipt_reference_does_not_count (field='reference', value=None)
+AssertionError: 'VERIFIED' != 'NOT_VERIFIED'
+FAIL: test_a_real_entry_without_its_time_or_receipt_reference_does_not_count (field='reference', value='')
+AssertionError: 'VERIFIED' != 'NOT_VERIFIED'
+Ran 4 tests in 0.017s
+FAILED (failures=2)
+```
+
+Unmutated: the test passes.
+
