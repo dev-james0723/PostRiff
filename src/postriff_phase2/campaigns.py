@@ -771,7 +771,8 @@ def _decide(state: dict, root: dict, payload: dict, actor: str, now: float) -> d
         item["decision"] = {"decision": "approve", "by": actor, "at": now, "note": note, "variantRevision": variant["revision"], "textDigest": digest(variant.get("text", "")),
                             "excludedUnknowns": list(variant.get("unknowns", [])), "acknowledgedWarnings": list(variant.get("warnings") or []), "sourceUse": uses}
         if item['platform'] == 'Discord' and item.get('publishAt') is not None:
-            from .discord.authorization import campaign_binding, destination as discord_destination
+            from .discord.authorization import (assert_workspace_hourly_ceiling, campaign_binding, destination as discord_destination,
+                                                reserved_campaign_times)
             channel = next((c for c in state['phase2']['channels'] if c['id'] == item.get('channelId') and c['platform'] == 'Discord'), None)
             if channel is None or payload.get('publishAt') != item['publishAt']:
                 raise AlphaError('Review the exact Discord destination and publication time.', 409)
@@ -782,6 +783,9 @@ def _decide(state: dict, root: dict, payload: dict, actor: str, now: float) -> d
             if resource.get('senderKind') == 'webhook' and payload.get('discordSenderName') != channel.get('discordSenderName'):
                 raise AlphaError('The webhook sender name changed. Review it again.', 409)
             binding = campaign_binding(state, channel, variant, selected_id, item['publishAt'], task['schedule']['timeZone'], now)
+            # The job is made later, so the person is told now when the hour is already full: posts approved earlier whose job
+            # is not made yet hold their place. Queue commit counts the jobs themselves again when it makes this one.
+            assert_workspace_hourly_ceiling(state, binding['timing']['timestamp'], also=reserved_campaign_times(root, item))
             item['destinationId'] = selected_id
             item['decision'].update(discord=binding['discord'], timing=binding['timing'])
             if resource.get('senderKind') == 'webhook':
