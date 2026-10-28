@@ -571,7 +571,7 @@ class Lives(unittest.TestCase):
     def run_seed(self, seed):
         rng = random.Random(seed)
         capacity, window = rng.choice((2, 3, 5, 8)), rng.choice((1, 1, .5, 2))
-        guard = rng.choice((0.0, .1, .1, .2))
+        guard = rng.choice((0.0, .05, .05, .1, .2))      # none, the production headroom (D-16), the one it replaced, and a wide one
         reserve = rng.choice((0, 1, 1))
         with patch.object(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', guard), patch.object(SharedPostgresBudget, 'IMMEDIATE_RESERVE', reserve):
             db = MemoryLedger(now=T0)

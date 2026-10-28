@@ -386,15 +386,18 @@ class SharedPostgresBudget:
     # was used) and the moment it reaches Discord, which differs from request to request (the commit, a thread waking,
     # the connection, a busy machine). Wire times are exact on the database clock; two requests a window apart can still
     # arrive less than a window apart when the earlier one is the slower by more than the slack between them. A slot
-    # frees this long after the window (at most a tenth of it): arrivals never exceed the cap in any window while the
-    # spread of that delay is at most this much, and the sustained rate is cap x window / (window + guard) (22.7 of 25 a
-    # second). Chosen over pacing at the wire (a send time on the permit and a wait in the transport) because it needs no
-    # field in the Permit (the sender claim rebuilds it), no sleep in the request path and no change to the transport, and
-    # costs nothing while demand is below the cap. Measured with the probe tests/discord_ceiling_probe.py (24 threads, a
-    # mock Discord, real PostgreSQL), arrivals above 25 in a trailing second at the mock: with 100 ms of added delay
-    # between admission and mock, none at 0.05 and at 0.1 s; with 300 ms, 3 to 6 at 0.05, 0.1 and 0.2 s (it takes 0.3 s,
-    # 19 a second). The capacity harness reports the real spread (wire jitter p99.9): set this to it.
-    SLOT_GUARD_SECONDS = 0.1
+    # frees this long after the window (at most a tenth of it). The owner's reading of "25 requests a second" (D-16): the
+    # coordinator never admits more than 25 stamped requests in any sliding second (exact, pinned by the randomized
+    # brute-force and the 24-thread tests), arrival at Discord is REPORTED (the probe's peak and share of windows) and not a
+    # failure, and stays far under Discord's real limit of 50; so the headroom is 0.05 s, not the 0.1 s that also kept
+    # arrivals under 25 against a slow tail. The sustained rate is cap x window / (window + guard): 23.8 of 25 a second.
+    # Chosen over pacing at the wire (a send time on the permit and a wait in the transport) because it needs no field in the
+    # Permit (the sender claim rebuilds it), no sleep in the request path and no change to the transport, and costs nothing
+    # while demand is below the cap. Measured with the probe tests/discord_ceiling_probe.py (24 threads, a mock Discord, real
+    # PostgreSQL), arrivals in a trailing second at the mock: with no added delay and with 50 and 100 ms of it (wire delay
+    # p99.9 up to 127 ms) none above 25, peak 25; with 300 ms 1 to 3 of about 190 (0.5 to 1.6 percent), peak 26, at 0.05 as at
+    # 0.1 s. The capacity harness reports the real spread (wire jitter p99.9): the guard is the constant to set from it.
+    SLOT_GUARD_SECONDS = 0.05
     # Booking (docs/w02/OPEN-QUESTIONS.md, Q19). A caller inside booking() that finds the window full is not refused and left to
     # ask again: it is given the earliest slot that is exact (_booking_slot), if that is at most the caller's book-ahead away
     # (never more than BOOK_AHEAD_SECONDS), and reserve/reserve_read return when the slot has come, with no lock held. The

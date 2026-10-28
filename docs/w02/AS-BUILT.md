@@ -629,10 +629,12 @@ document should know:
 - **The 25 per second is exact and counts wire times.** The application row admits when the admissions occupying a slot
   plus those held are fewer than the cap. An admission occupies a slot from its wire time (`sent_at`: a read when it is
   admitted, a create when its permit is consumed; else its reservation) for one span, the window plus
-  `SLOT_GUARD_SECONDS` (0.1 s). A permit not used yet, and a request sent but never answered, keep a slot as well
-  (`held`). So no closed second of wire times holds more than the cap, and arrivals at Discord stay within it while the
-  admission-to-wire spread is at most 100 ms; the cost is 22.7 of 25 a second at the ceiling and nothing below it. The
-  capacity harness reports the real spread (wire jitter p99.9): the guard is the one constant to set from it. With booking a
+  `SLOT_GUARD_SECONDS` (0.05 s since the owner's D-16; it was 0.1 s). A permit not used yet, and a request sent but never
+  answered, keep a slot as well (`held`). So no closed second of wire times holds more than the cap: that is the guarantee,
+  exact and pinned. Arrivals at Discord stay within it while the admission-to-wire spread is at most 50 ms, and are reported
+  (the probe's peak and share of arrivals above 25), not a failure, when it is more; the cost is 23.8 of 25 a second at the
+  ceiling and nothing below it (22.7 with 0.1 s). The capacity harness reports the real spread (wire jitter p99.9): the guard
+  is the one constant to set from it. With booking a
   wire time may also lie up to one second ahead of the database clock (a booked slot); the rule, `_fits`, is the same.
 - **A permit lives `permit_ttl_seconds`** (5 in the reviewed policy), the lease and the approval, not its window: a
   window that ends while a permit is unused refills its row counting the permit as pending, and the application window
@@ -744,8 +746,8 @@ path, the shard count (12).
 refused again), `bookedReads60s`, `bookedReadWaitSeconds60s`, `meanBookedReadWaitSeconds60s`, `maxBookedReadWaitSeconds60s`.
 Reads only: a create's booked wait is not recorded (`aheadNow` counts creates).
 
-*Limits.* A horizon of one second holds about (`cap` - 1) / 1.1 bookers, one for each loop in a booked wait: about 21 at the
-reviewed 25, comfortably 12 loops, 24 at the edge. A caller beyond the horizon is refused and asks again, and a pass refused
+*Limits.* A horizon of one second holds about (`cap` - 1) / 1.05 bookers (1.1 with the guard of 0.1 s that preceded D-16), one for
+each loop in a booked wait: about 22 at the reviewed 25, comfortably 12 loops, 24 at the edge. A caller beyond the horizon is refused and asks again, and a pass refused
 part-way is released with its reads wasted: with 12 loops booking makes more posts than polling from a budget of 12 a second up
 (34 to 66 percent more) and fewer below 10 (at a budget of 8, 12.5 posts a minute against 33), with few loops the same edge (3
 loops at a budget of 4 finished 4 of 12 posts in 295 s); the ceiling stays exact throughout (Q19 has the numbers). The policy tool
@@ -776,7 +778,7 @@ count and nothing else:
 - **What goes.** Reads (`NOT is_publish`) in state `observed` or `blocked` reserved more than `PURGE_READ_SECONDS` (3,600) ago;
   publications the same after `PURGE_PUBLICATION_SECONDS` (172,800, two days: the owner's approved window); a row that settled in
   the last `PURGE_SETTLE_GRACE_SECONDS` (600) stays whatever its age. The coordinator counts a row for one span after its wire time
-  (1.1 s) and an unanswered one for the horizon (31 s); the health payload's windows are at most 15 minutes and a sender-name claim
+  (1.05 s) and an unanswered one for the horizon (31 s); the health payload's windows are at most 15 minutes and a sender-name claim
   ends 15 minutes after its permit; nothing reads a created post's row again after its approval's hour, and two days let a person
   read the incident of the day before yesterday.
 - **What never goes.** An unresolved row (`reserved`, `sealed`, `sent`, `uncertain`), an expired unused permit included: it is the

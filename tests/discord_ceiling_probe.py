@@ -4,7 +4,8 @@ The real SharedPostgresBudget on a disposable PostgreSQL (tests/discord_lane_fix
 reads, the in-process mock Discord, K worker threads that keep asking for more than the ceiling allows. Each cell of the
 grid is one run; it reports what the capacity harness reports:
 
-  over25      requests the mock's own trailing second saw above the ceiling (the owner's strict measure), and its peak
+  over25      requests the mock's own trailing second saw above the ceiling (arrival at Discord: reported, not a failure, since the
+              owner's D-16 reading of 25 a second is the stamps the coordinator admits), its share of all arrivals, and its peak
   admissions  per second while the workers were busy, and the share of the ceiling that is
   jitter     admission-to-wire delay (the coordinator's wire stamp to the mock's arrival), p50 / p99 / p99.9 / max
   creates    permits reserved, how many died before they could be used (permit expiry rate)
@@ -158,6 +159,7 @@ def run_cell(tree, F, cluster, *, capacity, jitter, guard, threads, seconds, cre
     return {'tree': str(tree), 'book': bool(book), 'capacity': capacity, 'jitterMs': int(jitter * 1000), 'guard': guard_used, 'threads': threads,
             'seconds': round(elapsed, 1), 'admissions': len(wires), 'admissionsPerSecond': round(rate, 1),
             'shareOfCeiling': round(rate / capacity, 3), 'over25AtMock': wire.over_ceiling, 'peakTrailingSecondAtMock': wire.peak_second,
+            'arrivalsAtMock': len(wire.calls), 'shareOfArrivalsOverCeilingAtMock': round(wire.over_ceiling / max(1, len(wire.calls)), 4),
             'busiestClosedSecondOfWireStamps': busiest_closed(sent, 1.0), 'route429': wire.route429,
             'wireDelayMs': {k: round(1000 * percentile(delays, q), 1) for k, q in (('p50', .5), ('p99', .99), ('p999', .999), ('max', 1.0))} if delays else None,
             'creates': counts['creates'], 'permitsExpiredUnused': counts['expired'],

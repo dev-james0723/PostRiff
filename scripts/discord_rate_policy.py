@@ -23,7 +23,7 @@ APP_SHARE_CEILING = 0.8
 INVALID_SHARE_CEILING = 0.5
 RENEW_LEAD_DAYS = 7
 # The lane (discord/lane.py SHARDS, pinned by a test) runs this many loops, and its requests are booked a place in line, which
-# holds about (budget - 1) / 1.1 of them. Measured with 12 loops: booking makes 34 to 66 percent more posts than polling from a
+# holds about (budget - 1) / 1.05 of them (1.1 before the guard went to 0.05 s). Measured with 12 loops: booking makes 34 to 66 percent more posts than polling from a
 # budget of 12 a second up and fewer below it (docs/w02/OPEN-QUESTIONS.md, Q19). Under 1.5 a shard is a warning.
 LANE_SHARDS = 12
 LANE_MIN_RATE = 1.5 * LANE_SHARDS
@@ -94,7 +94,7 @@ def judge(raw, at, require_days=14):
         findings.append(('WARN', 'app_straddle', 'two adjacent windows can briefly admit twice the app budget, above the bot limit'))
     if app_rate < LANE_MIN_RATE:
         findings.append(('WARN', 'lane_booking', 'app budget %.1f/s is under %.0f/s (1.5 for each of the lane\'s %d shards): the lane\'s '
-                         'requests are booked a place in line, which holds about (budget - 1) / 1.1 loops; with fewer, loops are '
+                         'requests are booked a place in line, which holds about (budget - 1) / 1.05 loops; with fewer, loops are '
                          'refused at the booked horizon and the lane makes fewer posts than polling would (OPEN-QUESTIONS Q19)'
                          % (app_rate, LANE_MIN_RATE, LANE_SHARDS)))
     if invalid_rate * 600 > invalid_ceiling or policy['invalid_capacity'] > invalid_ceiling:

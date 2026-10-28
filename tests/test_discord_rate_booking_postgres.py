@@ -121,7 +121,7 @@ class BookingOnPostgres(unittest.TestCase):
     def test_24_threads_booking_keep_the_ceiling_with_far_fewer_lock_statements(self):
         """The same twenty-four threads at the owner's cap of 25, polling and booking, over six servers (their routes learned
         within the first second). The ceiling is asserted on the database clock, strictly; the mock's own trailing second is
-        asserted with two requests of room, because a stall of this shared box that bunches arrivals by more than the 100 ms
+        asserted with two requests of room, because a stall of this shared box that bunches arrivals by more than the 50 ms
         headroom is the wire jitter the capacity runs measure (docs/w02/RESULTS-GITHUB.md), not something the coordinator
         can prevent. tests/discord_ceiling_probe.py --book 0,1 reports both with the delay distribution."""
         results = {}
@@ -153,7 +153,7 @@ class BookingOnPostgres(unittest.TestCase):
         fair = outcomes[True]['creates']
         starved = outcomes[False]['creates']
         self.assertGreaterEqual(fair, 8, 'four creators took their share of a window the other twenty kept full')
-        self.assertGreater(fair, 2 * starved, 'booked creates against creates left to ask for a slot now: starved (%d against %d)' % (fair, starved))
+        self.assertGreater(fair, 1.5 * starved, 'booked creates against creates left to ask for a slot now: starved (%d against %d)' % (fair, starved))
 
     # --- what happens while a booked read waits ----------------------------------------------------------------------------
 

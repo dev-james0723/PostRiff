@@ -118,9 +118,9 @@ workspaces with `last_claimed_at = 0` is an exact create lag for workspaces the 
 row to `pr_discord_request_admissions` (the permit, then its outcome) and nothing deleted any. First measured on PostgreSQL 16 with
 the real coordinator (1,500 reads, before any vacuum): 3.7 to 6.5 KB a request with its indexes. Vacuumed, the sizes are smaller
 (the rows built as the real code builds them, indexes included): a read 2.4 KB (1.0 heap, 1.4 indexes), a publication 3.4 KB (1.6
-and 1.7). At the sustained 22.7 requests a second that is 1.96 million rows and about 5 GB a day, 150 GB over the policy's 31 days;
-at the nominal 25, 2.16 million and 5.5 GB (the unvacuumed figures would say 8 to 14 GB). The coordinator needs a read's row only
-until it is answered and its slot has freed (the window and 0.1 s, or 30 s more if it was never answered); the ops snapshot reads
+and 1.7). At the 23.8 requests a second the reviewed 25 sustains with the guard of 0.05 s that is 2.06 million rows and about 5.2 GB
+a day, 160 GB over the policy's 31 days; at the nominal 25, 2.16 million and 5.5 GB (the unvacuumed figures would say 8 to 14 GB). The coordinator needs a read's row only
+until it is answered and its slot has freed (the window and 0.05 s, or 30 s more if it was never answered); the ops snapshot reads
 the newest 20,000; a publication's row is the audit trail for two days (the owner's approved window; first drafted as one).
 
 Built: `SharedPostgresBudget.purge_settled()` deletes, a bounded batch at a time, what the coordinator can no longer count and
@@ -143,7 +143,7 @@ Sizes with retention (measured; rows updated when they settle and deleted when t
 4.4 to 8.6 KB for each live read and 5.6 to 12.8 KB for each live publication, the dead versions that updates and deletes leave
 until vacuum included (the low end with frequent vacuums, the high end with one every three batches of a fifth of the table). The table then
 holds the last hour of reads and the last two days of publications. At 100 posts a minute (6 reads and a publication a post) that
-is 36,000 reads and 288,000 publications, 1.8 to 4.0 GB; at the ceiling of 22.7 a second (3.2 posts) 70,000 and 560,000, 3.4 to 7.8
+is 36,000 reads and 288,000 publications, 1.8 to 4.0 GB; at the ceiling of 23.8 a second (3.4 posts) 73,000 and 587,000, 3.6 to 8.1
 GB; nine tenths of it is the publications, so `PURGE_PUBLICATION_SECONDS` is the knob (each day costs 0.8 to 1.8 GB at 100 posts a
 minute; with one day the figures were 1.0 to 2.2 GB and 1.9 to 4.2 GB). One million synthetic rows (84 percent reads, 14 percent publications, half of each past its retention, 2 percent
 unresolved; 2,468 MB with indexes): a call, three rounds of 2,000 reads, takes 0.21 s (71 ms a round) against the 5 s statement
@@ -182,17 +182,23 @@ move only in what they record: 15 drills, only D3 fails, before and after (the g
 read-backs are parked for 24 hours when a Discord-claiming worker runs under the hold, and the lift being "at once" for that
 reason, describes the old behaviour.
 
-**Q18. Giving back part of the guard's 9 percent (not built).** The slot headroom (`SLOT_GUARD_SECONDS`, 0.1 s) caps steady
-admissions at 25 / 1.1 = 22.7 a second. At about 7.1 requests a post the median line of the 5,000-post run (2,500 posts in 12
-minutes) needs about 24.8 a second with perfect packing, so the guard alone costs 9 percent against a modelled margin of 3 to
-6. What it buys: no closed second of ARRIVALS above 25 while the admission-to-wire spread stays inside it. Two facts frame
-every option. A guard g costs g/(1+g) of the ceiling (0.06 s: 5.7 percent, 0.03 s: 2.9, 0.02 s: 2.0). And 24.8 sustained under a
-ceiling of 25 leaves 0.8 percent, about 8 ms of spread: no guard meets both "24.8 sustained" and "never above 25 in a closed
-second"; only a smaller spread (pacing) or a higher cap can. (A side effect to know: the ops alert RATE_APP_BUDGET_SPENT fires at
-95 percent of the nominal ceiling over a minute (`saturation_warn` 0.95), and a saturated application now reaches 90.9 percent, so
-it can never fire and the drill D3 of the alerts branch fails. That branch must divide by the achievable ceiling, capacity x 60
-/ (window + min(guard, window / 10)), or lower the threshold to 0.85, which turns the drill green; it belongs to that branch.)
-The options, cheapest first, with the risk of each:
+**Q18. The slot guard (the owner's D-16: 0.05 s; built).** The slot headroom (`SLOT_GUARD_SECONDS`) was 0.1 s. It capped steady
+admissions at 25 / 1.1 = 22.7 a second, 9.1 percent under the 25, against a median line (2,500 posts in 12 minutes at about 7.1
+requests a post) that needs about 24.8 a second with perfect packing. The owner's reading of "25 requests a second" (D-16): the
+coordinator never admits more than 25 stamped requests in any sliding second (exact, pinned by the randomized brute-force count
+and the 24-thread tests), arrival at Discord is REPORTED (the probe's peak and share of arrivals above 25 in their trailing
+second, the capacity harness's wire jitter) and is not a failure, and stays far under Discord's real limit of 50. The guard is now
+0.05 s. A guard g costs g/(1+g) of the ceiling: 4.8 percent, 23.8 a second sustained (22.9 with the web slot kept back, Q19), where
+0.1 s cost 9.1. Measured with the 24-thread probe on the new guard (cap 25, the mock answers in 100 ms): the busiest closed second
+of wire stamps is 25 (24 when the lane books), exactly the cap, with no added delay and with 50, 100 and 300 ms of it; at the mock,
+with up to 100 ms of added delay (wire delay p99.9 up to 127 ms) no arrival saw more than 25 in its trailing second (peak 25, 24
+when booking), with 300 ms 1 to 3 of about 190 did (0.5 to 1.6 percent, peak 26), as at 0.1 s. What 24.8 sustained under a ceiling
+of 25 would leave is 0.8 percent, about 8 ms of spread: no guard meets both "24.8 sustained" and "never above 25 in a closed second
+at Discord"; only a smaller spread (pacing, option 4) or a higher cap (option 3) can. (The ops alert RATE_APP_BUDGET_SPENT fires at
+95 percent of the nominal ceiling over a minute (`saturation_warn` 0.95); a saturated application reaches 95.2 percent without the
+web slot kept back and 91.4 with the lane booking, so it has to divide by the achievable ceiling, capacity x 60 / (window +
+min(guard, window / 10)); the alerts branch reads the guard from the build, so nothing there changes with this constant.)
+The options as they were put to the owner, cheapest first (1 is what was chosen), with the risk of each:
 
 1. A guard sized from the measured spread. The capacity harness reports the admission-to-arrival wire jitter on the hosted runner
    (p99.9). Set the guard to about twice what it shows: one constant and its pin (`ShippedConstants`), no schema, no `Permit`
@@ -220,8 +226,8 @@ The options, cheapest first, with the risk of each:
    database's stamps against the process's); and it does not bound bunching: a process that stalls and then sends several late
    requests at once arrives above the ceiling anyway unless it also holds a local token bucket. Not before 1 to 3 are measured.
 
-Suggested order: measure the spread on the hosted runner; warm the connection if it is the handshake (2); set the guard from the
-new spread (1); only if the median line still needs more, the owner decides on the cap (3).
+Suggested order, as it stands: the guard from the spread (1) is done at 0.05 s; measure the spread on the hosted runner and warm the
+connection if it is the handshake (2); only if the median line still needs more, the owner decides on the cap (3).
 
 **Q19. Booking: a place in line instead of a lottery for the freed slot (built, P2: ca106be8, 9c35bda1, cdab6c98).** The hosted
 S1 run of 3dac3ccf (5,000 posts, 12 shards, 25 a second) was slower than every earlier estimate: median 19.77, p95 37.87 and
@@ -269,8 +275,11 @@ The hosted S1 shape (12 shards, 25 a second, claim 0.8 s: the model's calibratio
 
 The expected column applies the model's ratio (1.21 in posts a minute) to the measurement: median line 16.3 minutes, p95 31, longest
 about 36, against 19.77, 37.87 and 43.52 and a plan of 12, 25 and 40; the 56-second duty cycle (`POSTRIFF_DISCORD_PARALLEL_WORKER_MAX_SECONDS`
-50 to 56) would add 12 percent of loop time to that again. With 24 shards the model gives 96 posts a minute, 45 attempts and 6.2 releases a post
-for polling, and 182, 7.1 and 0 for booking. On this box the thread model at 24 threads is bound by its own lock queue and Python
+50 to 56) would add 12 percent of loop time to that again. With the guard at 0.05 s (D-16) the model gives, for 12 shards: polling
+155 posts a minute, 8.5 requests, 15.2 attempts, 0.93 releases; booking 179, 7.0, 7.0, 0. The expectation for S1 from booking and
+the new guard together is the model's ratio 179 / 143.6 = 1.25 on the measured 126.5: 157 posts a minute, median line 15.9 minutes,
+p95 30, longest about 35 (the floor at 7 requests and 23.8 a second is 12.3 minutes). With 24 shards the model gives, at 0.1 s, 96
+posts a minute, 45 attempts and 6.2 releases a post for polling, and 182, 7.1 and 0 for booking (at 0.05 s: 104 and 192). On this box the thread model at 24 threads is bound by its own lock queue and Python
 process, not by the window (caps 26 and 36: 163 to 173 posts a minute and 18 to 19.5 requests a second, almost no refusals, in both trees), so
 it cannot show the difference; the measurement that counts at 24 is the capacity run. (Its first attempts failed for a reason worth
 knowing: every synthetic tenant of `discord_lane_fixture.py` shares one Discord user id, so the identity read of every tenant takes
@@ -286,12 +295,13 @@ and 24 callers against a horizon of about 21 that refuses the rest).
 
 What to know before relying on it.
 
-- **What it does not change.** The requests per post (about 7 on the bot path: Q2), the guard (0.1 s: Q18) and the ceiling (22.7 a
-  second). At 7.0 requests and 22.7 a second the floor is 194 posts a minute, so 2,500 posts take 12.9 minutes at best: booking
-  takes the lane from the lottery to that floor's neighbourhood, not below it. Its gains stack with a smaller guard (Q18) and with
-  not charging the bearer call: each is a separate decision.
-- **The horizon holds about (cap - 1) / 1.1 loops** (one booking each, fewer while create permits are outstanding): 21 at the
-  reviewed 25, so 12 loops fit with room and 24 are at the edge. Below it the lane does not degrade a little. A pass is a run of
+- **What it does not change.** The requests per post (about 7 on the bot path: Q2) and the ceiling: 23.8 a second with the guard
+  of 0.05 s (the owner's D-16, Q18; the measurements and model runs below were made with the 0.1 s that preceded it, 22.7 a second,
+  and the S1 expectation was recomputed for 0.05 s). At 7.0 requests and 23.8 a second the floor is 204 posts a minute, so 2,500
+  posts take 12.3 minutes at best: booking takes the lane from the lottery to that floor's neighbourhood, not below it. Its
+  gains stack with the smaller guard (done) and with not charging the bearer call (a separate class, below in AS-BUILT).
+- **The horizon holds about (cap - 1) / 1.05 loops** (1.1 with the former guard; one booking each, fewer while create permits are
+  outstanding): 22 at the reviewed 25, so 12 loops fit with room and 24 are at the edge. Below it the lane does not degrade a little. A pass is a run of
   requests, each of which can be refused at the horizon; a pass refused part-way is released, its reads are wasted, and the next
   pass books them again. Posts a minute before / after booking with 12 loops (the thread model on PostgreSQL, one run each, two
   at 14 and 18): cap 8 33 / 12.5, cap 10 54 / 36, cap 12 56 / 83, cap 14 74 / 107, cap 16 71 / 119, cap 18 102 / 137. Booking
@@ -321,7 +331,7 @@ What to know before relying on it.
   possible again, so with a busy lane it stays high and falls to 0 only when the horizon is full and callers are refused again;
   `lane.outlook` is unchanged and waits only then. Any reading of the row's `remainingRatio` or `resetSeconds` as
   "the window is nearly spent" is now wrong: use `coordinator.booking` (below). The most a saturated lane sends is (cap - 1) /
-  1.1 a second, 21.8 of 25 (87 percent of the nominal ceiling, 96 of the 22.7 that the guard alone allows); the alert on a spent
+  1.05 a second, 22.9 of 25 (91 percent of the nominal ceiling, 96 of the 23.8 that the guard alone allows); the alert on a spent
   budget (`saturation_warn`, Q18) must divide by that.
 - **Fields.** The lane's `bookedWaits` (bookings) and `bookedSeconds` (their total wait) in the invocation result and the
   `discord.lane.completed` line; the health payload's `coordinator.booking`: `bookAheadSeconds`, `aheadNow`, `horizonSeconds`,

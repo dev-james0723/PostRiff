@@ -24,7 +24,7 @@ T0 = 1000
 EPS = 1e-6      # one tick of the database clock: the margin by which a slot frees AFTER a whole window
 # Written out here, not read from the implementation, so a change of the margin must change this file too.
 MARGIN = 30.0
-GUARD = .1      # the production headroom between a slot's window and its freeing (SLOT_GUARD_SECONDS), written out here
+GUARD = .05     # the production headroom between a slot's window and its freeing (SLOT_GUARD_SECONDS), written out here (the owner's D-16: 0.05 s, was 0.1 s)
 OK = {'status': 200, 'headers': {}}
 
 
@@ -242,7 +242,7 @@ class ExactCeilingArithmetic(Base):
 
 
 class DefaultHeadroom(Base):
-    """The production headroom (SLOT_GUARD_SECONDS, 100 ms on a one-second window): a slot frees that long after the window,
+    """The production headroom (SLOT_GUARD_SECONDS, 50 ms on a one-second window): a slot frees that long after the window,
     so two requests admitted a window apart arrive a window apart even when the earlier one is the slower."""
     guard = GUARD
 
@@ -264,7 +264,7 @@ class DefaultHeadroom(Base):
         self.assertAlmostEqual(self.denied().retry_after_seconds, .1 + .01 + EPS, places=9)
 
     def test_the_headroom_costs_a_known_share_of_the_rate(self):
-        """cap x window / (window + headroom): 25 per second becomes 22.7, which is 91% of the ceiling."""
+        """cap x window / (window + headroom): 25 per second becomes 23.8, which is 95% of the ceiling."""
         self.make(25, 1)
         for second in range(4):
             granted = 0
@@ -276,7 +276,7 @@ class DefaultHeadroom(Base):
                 except RateDelayed:
                     break
             self.assertEqual(granted, 25)
-        self.assertAlmostEqual(25 / (1 + GUARD), 22.73, places=2)
+        self.assertAlmostEqual(25 / (1 + GUARD), 23.81, places=2)
 
 
 class ShippedConstants(unittest.TestCase):
