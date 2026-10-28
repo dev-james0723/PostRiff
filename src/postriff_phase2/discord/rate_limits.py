@@ -422,7 +422,7 @@ class SharedPostgresBudget:
     # hour (the health payload's windows are at most 15 minutes, a sender-name claim ends 15 minutes after its permit), a
     # publication a day: nothing reads a created post's row again after its approval's hour (the unique intent and binding
     # indexes only have to outlast a stale worker, whose lease and approval are long over), the read-back that follows is a new
-    # row, and a day lets a person read yesterday's incident; each further day costs about a third of a gigabyte at 100 posts a
+    # row, and a day lets a person read yesterday's incident; each further day costs 0.8 to 1.8 GB at 100 posts a
     # minute (docs/w02/OPEN-QUESTIONS.md, Q16). An unresolved row (sent, uncertain, reserved, sealed) is never deleted: it is
     # the evidence a person reviews.
     PURGE_BATCH = 2000                    # rows one statement deletes at most
