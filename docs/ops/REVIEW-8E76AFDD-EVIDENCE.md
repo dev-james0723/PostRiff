@@ -354,3 +354,51 @@ FAILED (failures=7, errors=1)
 
 And on PostgreSQL: `IsolatedDrills.test_n9_a_discord_outage_warns_on_discords_side_and_a_failure_on_ours_still_pages` (503 to creates: `rejectedUpstream` at least 20, `rejectedSystem` 0, no `DELIVERY_SYSTEM_FAILURES`, `DELIVERY_DISCORD_5XX` warn, the SQL twin counts the same; 400 to creates: `DELIVERY_SYSTEM_FAILURES` page).
 
+## 6. Round 3 (the final coordinator): the new tests before their code
+
+Each set was run against the code just before it was written: the merged branch `87286623` for 6.1, then with 6.1 in place for 6.2 and 6.3. All pass on `125e55af` (and on `9fcfa476`, the receipts' head).
+
+### 6.1 Bookings and their reserve, the bearer budget, the booked horizon, busy and degraded
+
+```
+ERROR: test_a_bearer_embargo_is_reported_with_the_others
+ERROR: test_repeated_coordinator_busy_delays_in_five_minutes
+KeyError: 'coordinatorBusy'
+ERROR: test_the_budget_divides_by_what_bookings_can_take
+KeyError: 'bookable60s'
+ERROR: test_the_payload_reports_the_reserve_bookings_leave
+KeyError: 'immediateReserve'
+FAIL: test_a_degraded_coordinator_in_a_lane_process_is_its_own_alert
+FAIL: test_a_full_booked_horizon_means_callers_are_refused
+FAIL: test_the_bearer_budget_is_read_against_its_own_cap
+FAIL: test_the_budget_divides_by_what_bookings_can_take (admitted=1303)
+Ran 11 tests in 0.007s
+FAILED (failures=4, errors=4)
+```
+
+### 6.2 The round trip in the payload (a fake clock and a fake connection)
+
+```
+ERROR: test_a_failure_is_an_unavailable_section_never_a_failed_snapshot
+AttributeError: module 'postriff_phase2.discord.ops' has no attribute 'read_round_trip'
+ERROR: test_five_selects_and_a_commit_through_a_new_connection_with_a_fake_clock
+AttributeError: module 'postriff_phase2.discord.ops' has no attribute 'read_round_trip'
+ERROR: test_the_payload_measures_through_the_coordinators_own_connection_path
+KeyError: 'roundTrip'
+Ran 3 tests in 0.003s
+FAILED (errors=3)
+```
+
+The third test was then rewritten as `test_the_payload_opens_a_new_connection_to_the_applications_own_url`, when the measurement moved from the coordinator's factory (an in-process pool may hand back an open connection) to a new connection on `POSTRIFF_DATABASE_URL`, so that `connectMs` includes the connection setup and TLS.
+
+### 6.3 COORD_LOCK_BOUND and the round trip's failure as no blind spot
+
+```
+ERROR: test_the_lock_bound_from_the_measured_round_trip
+FAIL: test_a_round_trip_that_could_not_be_measured_does_not_blind_the_evaluator
+Ran 4 tests in 0.002s
+FAILED (failures=1, errors=1)
+```
+
+D3 after the change, on the merged branch: 57 bot and 57 bearer admissions in the last minute against 57.1 each (saturation 0.998), `RATE_APP_BUDGET_SPENT` and `RATE_BEARER_BUDGET_SPENT` at warn.
+
