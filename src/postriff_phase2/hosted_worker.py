@@ -110,6 +110,22 @@ class DisabledHostedSocial:
         return {"state": "uncertain", "confirmed": "Provider reconciliation is unavailable; do not resubmit"}
 
 
+_DISCORD_HOLD_TEXT = {
+    'discord_sender_names_disabled': 'Discord custom sender names are switched off; nothing was posted.',
+    'discord_bot_nickname_changed': 'The Rafii bot\u2019s server nickname is no longer the one this post was approved under; nothing was posted. Review the post again.',
+}
+
+
+def discord_hold(error):
+    """(English text, stable reason code or None) of the held event for a Discord preflight failure. The two sender-name holds carry
+    their code (also the `code` of the error that raised them) so a page can branch on it; every other failure keeps the generic
+    wording and no code."""
+    code = getattr(error, 'code', None)
+    if code in _DISCORD_HOLD_TEXT:
+        return _DISCORD_HOLD_TEXT[code], code
+    return 'Discord destination, grant, media or rollout verification is unavailable. Nothing was posted.', None
+
+
 class PostgresWorker:
     def __init__(self, connection_factory, social=None, clock=time.time, worker_id=None, on_verified=None, youtube_maintenance=None, worker_binding=None, discord_workers=None):
         self.connection_factory = connection_factory
@@ -129,10 +145,11 @@ class PostgresWorker:
         self.discord_stats = dict.fromkeys(('claims', 'claimMisses', 'renewals', 'recoveries', 'leaseLost', 'contention',
                                           'retries', 'rateDelays', 'held', 'uncertain', 'deadLetters', 'shutdownReleased'), 0)
 
-    def _event(self, job, state, message, *, at=None):
+    def _event(self, job, state, message, *, at=None, reason=None):
         previous = job.get('state')
         job["state"] = state
-        job.setdefault("events", []).append({"at": self.clock() if at is None else at, "state": state, "message": message, "execution": "hosted-worker"})
+        job.setdefault("events", []).append({"at": self.clock() if at is None else at, "state": state, "message": message, "execution": "hosted-worker",
+                                             **({"reason": reason} if reason else {})})
         if (state in ('held', 'uncertain') and previous != state and job.get('manifest', {}).get('platform') == 'Discord'
                 and (self.discord_workers or discord_worker.managed(job))):
             self.discord_stats[state] += 1
@@ -806,7 +823,7 @@ class PostgresWorker:
                     if result.get('discordReadAdmissionDenied') is True:
                         job['checks'] = max(0, job.get('checks', 0) - 1)
                     job['discordReadDeferrals'] = job.get('discordReadDeferrals', 0) + 1
-                self._event(job, result["state"], result["confirmed"], at=now)
+                self._event(job, result["state"], result["confirmed"], at=now, reason=result.get("reason"))
                 if discord_worker.managed(job):
                     job[discord_worker.KEY]['stage'] = 'done'
                     if (result['state'] == 'held' and result.get('discordDeliveryEvidence') in ('not_sent', 'rejected')
@@ -1227,10 +1244,9 @@ class PostgresWorker:
                 if managed and discord_worker.transient_preflight(error):
                     self.release_discord_unsent(claimed, reason='preflight_transient')
                     return True
-                reason = {'discord_sender_names_disabled': 'Discord custom sender names are switched off; nothing was posted.',
-                          'discord_bot_nickname_changed': 'The Rafii bot\u2019s server nickname is no longer the one this post was approved under; nothing was posted. Review the post again.'
-                          }.get(getattr(error, 'code', None), 'Discord destination, grant, media or rollout verification is unavailable. Nothing was posted.')
-                self.complete(claimed, {'state': 'held', 'confirmed': reason, 'discordDeliveryEvidence': 'not_sent'})
+                message, hold_reason = discord_hold(error)
+                self.complete(claimed, {'state': 'held', 'confirmed': message, 'discordDeliveryEvidence': 'not_sent',
+                                        **({'reason': hold_reason} if hold_reason else {})})
                 return True
         if claimed.get('linkedinForward'):
             try:

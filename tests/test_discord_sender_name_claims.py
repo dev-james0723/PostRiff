@@ -722,7 +722,9 @@ class Shapes(RouteBase):
         self.assertEqual((profile['editable'], profile['unavailable']), (True, []))
         self.assertEqual(self.save(self.ta, self.A, self.wa, 'Alpha Daily')['savedName'], 'Alpha Daily')
 
-    def test_the_channels_card_shows_a_webhook_name_and_never_a_bot_nickname_or_an_internal_claim(self):
+    def test_the_channels_card_shows_the_value_a_review_would_freeze_and_never_an_internal_claim(self):
+        """What the page echoes in an automation approval (see test_discord_sender_name_approval.py): the webhook name and the bot
+        nickname a review would record now, as plain values. The observation record and the edit claim stay internal."""
         from postriff_phase2.channels import customer_view, unsupported_matrix
         bot = self.w.channel(self.A, self.ia.connection)
         bot.update(discordSenderName='Our Bot', discordBotNickname={'value': 'Our Bot', 'observedAt': 1.0},
@@ -730,11 +732,15 @@ class Shapes(RouteBase):
         webhook_view = customer_view(self.w.channel(self.A, self.wa.connection), unsupported_matrix(), self.w.now)
         bot_view = customer_view(bot, unsupported_matrix(), self.w.now)
         self.assertEqual(webhook_view['discordSenderName'], 'Alpha Weekly')
+        self.assertNotIn('discordBotNickname', webhook_view)
         self.assertIsNone(bot_view['discordSenderName'])
+        self.assertEqual(bot_view['discordBotNickname'], 'Our Bot', 'a plain string, not the observation record')
         for view in (webhook_view, bot_view):
             text = json.dumps(view, default=str)
-            for internal in ('discordSenderEdit', 'discordBotNickname', 'rateAdmissionId', 'admission-1', 'claim-1'):
+            for internal in ('discordSenderEdit', 'discordSenderRevision', 'observedAt', 'rateAdmissionId', 'admission-1', 'claim-1'):
                 self.assertNotIn(internal, text)
+        with patch.dict(os.environ, {'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED': 'false'}):
+            self.assertNotIn('discordBotNickname', customer_view(bot, unsupported_matrix(), self.w.now), 'nothing is frozen while the capability is off')
 
     def test_a_form_loaded_by_one_member_cannot_be_saved_by_another(self):
         other = self.w.member(self.A, self.w.user(3), 'admin')

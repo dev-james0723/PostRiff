@@ -451,7 +451,8 @@ class HostedSocial:
         try:
             assert_sendable(manifest)
         except AlphaError:
-            return {'state': 'held', 'confirmed': 'Discord custom sender names are switched off; nothing was posted.', 'discordDeliveryEvidence': 'not_sent'}
+            return {'state': 'held', 'confirmed': 'Discord custom sender names are switched off; nothing was posted.', 'discordDeliveryEvidence': 'not_sent',
+                    'reason': 'discord_sender_names_disabled'}
         wire = wire_content(manifest)
         # Discord dedupes nonces only over a recent window. Durable Rafii intents
         # block a fresh POST after an ambiguous result, including beyond that window.

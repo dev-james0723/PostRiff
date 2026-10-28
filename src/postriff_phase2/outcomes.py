@@ -105,6 +105,9 @@ def normalize_result(result, job, reconciliation=False):
         normalized['discordDeliveryEvidence'] = delivery
         if result.get('discordRateLimited') is True and result['state'] == 'held' and delivery == 'rejected':
             normalized['discordRateLimited'] = True
+        from .discord.sender_names import HOLD_REASONS
+        if result['state'] == 'held' and delivery == 'not_sent' and result.get('reason') in HOLD_REASONS:
+            normalized['reason'] = result['reason']      # a stable code for a page to branch on; never free text
     if 'retryAfterSeconds' in result:
         delay = result['retryAfterSeconds']
         discord_read = (job.get('manifest', {}).get('platform') == 'Discord' and reconciliation

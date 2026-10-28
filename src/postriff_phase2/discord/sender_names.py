@@ -49,6 +49,9 @@ PERSON_BOUND = frozenset({'not_authorizing_member', 'person_missing_manage_nickn
 _WORKSPACE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
 _CONNECTION = re.compile(r'^[A-Za-z0-9_.:-]{8,80}$')
 ALLOWED_BODY = frozenset({'name', 'fingerprint', 'confirmed', 'sharedServerConfirmed', 'reset'})
+# The stable codes of the two dispatch holds. A held post's event carries the code in `reason` next to its English text, so a page
+# can branch on it instead of on the wording.
+HOLD_REASONS = ('discord_sender_names_disabled', 'discord_bot_nickname_changed')
 
 
 def _values(values):
@@ -119,6 +122,25 @@ def frozen_bot_nickname(channel, values=None):
     if not isinstance(seen, dict) or 'value' not in seen or not (seen['value'] is None or isinstance(seen['value'], str)):
         return None
     return (seen['value'],)
+
+
+def sender_name_in_view(channel, values=None):
+    """The webhook name a review of this connection would freeze right now, for the channels list and the approval dialogs (None:
+    a review would freeze none, because the connection has no name or the feature is off). It is the very function a campaign
+    approval compares the page's echo with, so the page and the check cannot disagree. Never raises: a stored name that no longer
+    validates is shown as no name and the review or the approval says why."""
+    try:
+        return frozen_webhook_name(channel, values)
+    except AlphaError:
+        return None
+
+
+def bot_nickname_in_view(channel, values=None):
+    """{'discordBotNickname': value} when a review of this bot installation would record a nickname now (the capability is on and
+    the connection has observed one: a string, or None for "the bot has no nickname"), else {}. Only the value, for the page that
+    shows it and echoes it in an approval: not when it was observed, and nothing of an edit claim."""
+    seen = frozen_bot_nickname(channel, values)
+    return {} if seen is None else {'discordBotNickname': seen[0]}
 
 
 def assert_nickname_unchanged(manifest, evidence):
@@ -671,9 +693,10 @@ class SenderNames:
         return RATE_LIMIT_FALLBACK_SECONDS
 
     def audit_reason(self, guild):
-        """X-Audit-Log-Reason for the nickname PATCH: Discord shows it in the server's audit log, so a server admin can
-        see that Rafii (not a person) changed the nickname and which opaque reference to quote to Rafii. A one-way
-        digest of workspace and server: it names no workspace, member or customer text."""
+        """X-Audit-Log-Reason for the nickname PATCH: meant to let a server admin reading the server's audit log see that Rafii
+        (not a person) changed the nickname and which opaque reference to quote to Rafii. Whether Discord writes an audit entry
+        for a member changing its own nickname, and whether it shows this reason, has not been observed. A one-way digest of
+        workspace and server: it names no workspace, member or customer text."""
         reference = hashlib.sha256(f'rafii-nickname:{self.s.adapter.client_id}:{guild}:{self.workspace}'.encode()).hexdigest()[:16]
         return f'Rafii shared bot nickname change (ref {reference})'
 

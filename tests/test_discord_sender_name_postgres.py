@@ -859,6 +859,7 @@ class LaneAndWorkerOnPostgres(unittest.TestCase):
         for tenant in tenants[1:]:
             job = by_workspace[tenant.workspace]
             self.assertIn('no longer the one this post was approved under', job['events'][-1]['message'])
+            self.assertEqual(job['events'][-1].get('reason'), 'discord_bot_nickname_changed', 'a stable code next to the English text')
             self.assertEqual(job.get('discordDispatchIntents') or [], [], 'no intent was sealed for a post that could not be sent')
             self.assertNotIn('providerReference', job)
         sent_to = {entry[1] for created in wire.creates.values() for entry in created}      # (time, channel, wall clock) per create
@@ -879,6 +880,7 @@ class LaneAndWorkerOnPostgres(unittest.TestCase):
         self.assertEqual(len(held), 3)
         for job in held:
             self.assertIn('switched off', job['events'][-1]['message'])
+            self.assertEqual(job['events'][-1].get('reason'), 'discord_sender_names_disabled', 'a stable code next to the English text')
             self.assertEqual(job.get('discordDispatchIntents') or [], [], 'no intent was sealed for a post that could not be sent')
             self.assertNotIn('providerReference', job)
         named_hooks = {t.hook for t in tenants if t.kind == 'webhook' and t.name}
