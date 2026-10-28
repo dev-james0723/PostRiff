@@ -104,6 +104,38 @@ class MockCounters(unittest.TestCase):
         self.assertEqual(record['guild'], 1)
 
 
+    def test_an_injected_route_429_names_a_valid_bucket_id(self):
+        """The coordinator holds a route whose 429 names an invalid bucket as a manual hold nobody releases (reviewed
+        design); the first injected id carried the template's braces and left five F429 posts scheduled."""
+        rules = [{'kind': 'route429', 'route': 'GET /guilds/{id}', 'count': 2, 'retryAfter': 3},
+                 {'kind': 'route429', 'route': 'POST /channels/{id}/messages', 'count': 2, 'retryAfter': 3}]
+        world = mock.World(workspaces=10, injections=rules)
+        auth = {'authorization': 'Bot ' + mock.BOT_TOKEN}
+        status, read_headers, body, record = world.handle('GET', '/guilds/%s' % mock.guild_id(1), auth, None)
+        self.assertEqual((status, record['injected'], body['global']), (429, 'route429', False))
+        status, create_headers, _, _ = create(world, 1, 'w1-p0', 'n-1')
+        self.assertEqual(status, 429)
+        for headers in (read_headers, create_headers):
+            self.assertRegex(headers['x-ratelimit-bucket'], r'^[A-Za-z0-9_-]{1,128}$')
+            self.assertTrue(mock.BUCKET_ID.fullmatch(headers['x-ratelimit-bucket']))
+            self.assertNotIn('{', headers['x-ratelimit-bucket'])
+            self.assertEqual(headers['x-ratelimit-scope'], 'user', 'a route limit, not the global one')
+            self.assertEqual(headers['retry-after'], '3.000')
+        self.assertNotEqual(read_headers['x-ratelimit-bucket'], create_headers['x-ratelimit-bucket'],
+                            'two routes, two buckets')
+        # The same route always answers with the same bucket (the coordinator learns it once).
+        _, again, _, _ = world.handle('GET', '/guilds/%s' % mock.guild_id(2), auth, None)
+        self.assertEqual(again['x-ratelimit-bucket'], read_headers['x-ratelimit-bucket'])
+        self.assertEqual(read_headers['x-ratelimit-bucket'], 'injected-guilds-id')
+        self.assertEqual(create_headers['x-ratelimit-bucket'], 'injected-channels-id-messages')
+
+    def test_the_injected_bucket_id_stays_valid_for_any_route_template(self):
+        for route in ('GET /guilds/{id}', 'GET /guilds/{id}/members/{id}', 'POST /channels/{id}/messages',
+                      'PATCH /webhooks/{id}/{token}/messages/{id}', 'GET /users/@me/guilds', 'GET /x/' + 'y' * 300):
+            bucket = mock.injected_bucket_id(route)
+            self.assertTrue(mock.BUCKET_ID.fullmatch(bucket), (route, bucket))
+
+
 class LatenessComesFromTheMock(unittest.TestCase):
     def test_lateness_uses_the_mock_create_time_not_the_application_record(self):
         manifest = [{'index': 0, 'workspace': 'w0', 'post': 'w0-p0', 'nonce': 'a', 'due': 100.0, 'expiresAt': 3700.0},

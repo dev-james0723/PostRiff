@@ -295,7 +295,7 @@ class World:
         record['injected'] = rule['kind']
         if rule['kind'] == 'route429':
             retry = float(rule.get('retryAfter', 3))
-            return 429, {'x-ratelimit-bucket': 'injected-' + route.split()[1].replace('/', '-').strip('-'),
+            return 429, {'x-ratelimit-bucket': injected_bucket_id(route),
                          'x-ratelimit-limit': '5', 'x-ratelimit-remaining': '0',
                          'x-ratelimit-reset-after': '%.3f' % retry, 'x-ratelimit-scope': 'user',
                          'retry-after': '%.3f' % retry}, {'message': 'You are being rate limited.',
@@ -445,6 +445,21 @@ class World:
 def route_class(method, path):
     """The route template with ids masked, e.g. GET /guilds/{id}/members/{id}."""
     return method + ' ' + '/'.join('{id}' if _SNOWFLAKE.match(part) else part for part in path.split('/'))
+
+
+# What the coordinator accepts as a bucket id (rate_limits.SharedPostgresBudget.observe: re.fullmatch on this pattern).
+BUCKET_ID = re.compile(r'[A-Za-z0-9_-]{1,128}')
+
+
+def injected_bucket_id(route):
+    """The x-ratelimit-bucket id of an injected route 429, always a valid bucket id.
+
+    A route template carries braces ("GET /guilds/{id}"), which are not allowed in a bucket id. The coordinator, by
+    reviewed design, holds a route whose 429 names an invalid bucket as a manual hold that only an operator releases;
+    the first injected id ("injected-guilds-{id}") did exactly that and left five posts of F429 scheduled. The
+    braces are dropped ("injected-guilds-id"), so the answer looks like the provider's, which names a valid bucket."""
+    name = re.sub(r'[^A-Za-z0-9_-]+', '', route.split()[-1].replace('/', '-')).strip('-')
+    return ('injected-' + name)[:128]
 
 
 class InProcessTransport:
