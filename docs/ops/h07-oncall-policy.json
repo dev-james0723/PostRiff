@@ -117,7 +117,7 @@
     "maintenance": [],
     "reopenWithinSeconds": 600,
     "resolveAfterClearEvaluations": 2,
-    "noDataRules": ["SILENT_HALT_HEALTH_UNANSWERED", "SILENT_HALT_DATABASE"],
+    "noDataRules": ["SILENT_HALT_HEALTH_UNANSWERED", "SILENT_HALT_DATABASE", "SILENT_HALT_SECTION"],
     "storm": {"windowSeconds": 600, "limits": {"push": 6, "email": 10, "phone": 2}}
   },
   "fallback": {

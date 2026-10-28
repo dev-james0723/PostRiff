@@ -150,7 +150,8 @@ def validate(raw):
         'neverSuppress': never, 'inhibit': inhibit, 'maintenance': maintenance,
         'reopenWithinSeconds': _number(suppression.get('reopenWithinSeconds', 600), 'reopenWithinSeconds'),
         'resolveAfterClearEvaluations': clear_after,
-        'noDataRules': _rules(suppression.get('noDataRules', ['SILENT_HALT_HEALTH_UNANSWERED', 'SILENT_HALT_DATABASE']), 'noDataRules'),
+        'noDataRules': _rules(suppression.get('noDataRules', ['SILENT_HALT_HEALTH_UNANSWERED', 'SILENT_HALT_DATABASE',
+                                                            'SILENT_HALT_SECTION']), 'noDataRules'),
         'storm': {'windowSeconds': _number(storm.get('windowSeconds', 600), 'windowSeconds', minimum=1), 'limits': dict(limits)}}
     fallback = _clean(raw.get('fallback', {}))
     policy['fallback'] = {'escalateNowWhenFirstChannelFails': bool(fallback.get('escalateNowWhenFirstChannelFails', True))}

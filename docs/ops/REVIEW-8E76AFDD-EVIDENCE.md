@@ -291,3 +291,14 @@ FAILED (failures=2)
 
 Unmutated: both pass.
 
+### 5.3 N-4: a blind evaluator resolved a P0
+
+The reviewer's PE4: with the ledger and unresolved sections unreadable, the real evaluator raises `SILENT_HALT_SECTION` instead of `DELIVERY_UNCERTAIN`, and the engine resolved the P0 at the second evaluation and mailed "recovered". `SILENT_HALT_SECTION` is now a no-data rule (`h07-oncall-policy.json` `noDataRules`, and the default in `policy.py`). Before the change:
+
+```
+FAIL: test_a_blind_evaluator_does_not_resolve_what_it_can_no_longer_see
+AssertionError: 'resolved' != 'open'
+Ran 1 test in 0.023s
+FAILED (failures=1)
+```
+

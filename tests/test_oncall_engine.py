@@ -266,6 +266,16 @@ class DedupeSuppressionAndFlapping(unittest.TestCase):
             rig.engine.process([alert('SILENT_HALT_HEALTH_UNANSWERED')], TUESDAY_10AM + 60 * minute)
         self.assertEqual(rig.incident('RATE_429')['state'], 'open')
 
+    def test_a_blind_evaluator_does_not_resolve_what_it_can_no_longer_see(self):
+        """Second review N-4 (PE4): with the ledger and unresolved sections unreadable, the real evaluator raises
+        SILENT_HALT_SECTION instead of DELIVERY_UNCERTAIN; the P0 must stay open, not resolve and mail 'recovered'."""
+        rig = Rig()
+        rig.engine.process([alert('DELIVERY_UNCERTAIN')], TUESDAY_10AM)
+        for minute in range(1, 5):
+            rig.engine.process([alert('SILENT_HALT_SECTION', 'warn', scope='ledger'),
+                                alert('SILENT_HALT_SECTION', 'warn', scope='unresolved')], TUESDAY_10AM + 60 * minute)
+        self.assertEqual(rig.incident('DELIVERY_UNCERTAIN')['state'], 'open')
+
     def test_the_engines_own_alerts_are_resolved_by_a_person(self):
         rig = Rig()
         rig.engine.observe(alert('ONCALL_DELIVERY_FAILED'), 'P0', SATURDAY_3AM)
