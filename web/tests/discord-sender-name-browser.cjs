@@ -294,6 +294,9 @@ const STATE_SCENARIOS = [
           const evidencePath = join(evidenceDir, `${combo}-${name}.png`);
           const box = target.getByRole('dialog');
           if (around) {
+            // Centred in the viewport, so the phone's fixed navigation bar does not cover the strip.
+            await around.evaluate(element => element.scrollIntoView({block: 'center'}));
+            await sleep(150);
             const at = await around.boundingBox();
             await target.screenshot({path: evidencePath, clip: {x: 0, y: Math.max(0, at.y - 200), width, height: 440}});
           } else if (await box.count()) await box.screenshot({path: evidencePath});
@@ -554,7 +557,9 @@ const STATE_SCENARIOS = [
         await nameBox.fill('');
         assert.equal(squash(await preview.locator('[data-preview-author]').innerText()), copy.previewEmptyName);
         assert.equal(await preview.locator('[data-preview-author]').getAttribute('data-placeholder'), 'true');
-        await nameBox.fill('Acme Weekly');
+        // The pictures below show a custom name typed in the field, not the webhook's own name.
+        await nameBox.fill('Spring Gala Updates');
+        assert.equal(squash(await preview.locator('[data-preview-author]').innerText()), 'Spring Gala Updates');
         pass('preview-live-update');
         // Light and dark, with contrast measured on what the browser drew.
         const measure = () => preview.evaluate((section) => {
