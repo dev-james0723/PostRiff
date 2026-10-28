@@ -340,6 +340,23 @@ class Switches(Base):
             profile = self.w.get(self.A, self.ta, self.ia.connection)
             self.assertEqual([r['code'] for r in profile['unavailable']], ['bot_nickname_disabled'])
 
+    def test_default_master_switch_is_off_without_the_environment_variable_whatever_the_environment_label(self):
+        """SNR2-3: unset means off in every environment, including a preview and a mislabelled production."""
+        for label in ({}, {'VERCEL_ENV': 'preview'}, {'POSTRIFF_ENVIRONMENT': 'prod'}, {'VERCEL_ENV': 'development'}):
+            with self.subTest(label=label), patch.dict(os.environ, label):
+                os.environ.pop('POSTRIFF_DISCORD_SENDER_NAMES_ENABLED', None)
+                for ids in (self.wa, self.ia):
+                    calls, before = len(self.w.hooks.calls), self.w.snapshot()
+                    profile = self.w.get(self.A, self.ta, ids.connection)
+                    self.assertEqual([r['code'] for r in profile['unavailable']], ['sender_names_disabled'])
+                    self.assertEqual((profile['editable'], profile['feature']['senderNames']), (False, False))
+                    outcome = self.w.attempt(self.w.post, self.A, self.ta, ids.connection,
+                                             {'name': 'Unset Weekly', 'fingerprint': profile['fingerprint'], **BODY})
+                    self.assertEqual(outcome[:2], (409, 'discord_sender_name_unavailable'))
+                    self.assertEqual(len(self.w.hooks.calls), calls)
+                    self.assertEqual(self.w.snapshot(), before)
+                    self.w.now += 601        # one throttle window per attempt
+
     def test_reads_are_throttled_per_connection_and_a_throttled_read_makes_no_discord_request(self):
         for _ in range(12):
             self.w.get(self.A, self.ta, self.wa.connection)

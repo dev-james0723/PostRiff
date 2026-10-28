@@ -24,8 +24,8 @@ written; where it conflicts with this section, this section is right. Full per-f
    reports another one.
 5. **Several workspaces can hold one server.** The bot nickname is one value per server. Rafii writes it from a workspace only while that
    workspace is the server's only live Rafii installation; with two, neither can (`nickname_authority_other_workspace`). The capability is
-   OFF by default (`POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED`), and the whole feature is OFF by default on hosted production
-   (`POSTRIFF_DISCORD_SENDER_NAMES_ENABLED` unset).
+   OFF by default (`POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED`), and the whole feature is OFF by default in every environment
+   (`POSTRIFF_DISCORD_SENDER_NAMES_ENABLED` unset; only the exact string `true` turns it on, whatever the environment label says).
 6. **PostgreSQL.** "Local PostgreSQL binaries were unavailable" described the upstream machine. On this branch the PostgreSQL suites
    (`tests/test_discord_sender_name_postgres.py`) run against a disposable PostgreSQL 16 cluster, including the real request coordinator,
    the W-02 lane and the minute-tick worker. The owned cloud qualification (CI uses PostgreSQL 17) has still not been run for this change.

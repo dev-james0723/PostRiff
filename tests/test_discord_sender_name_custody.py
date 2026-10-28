@@ -210,7 +210,8 @@ class Harnessed(unittest.TestCase):
     def test_audit_entry_records_scope_and_server_never_the_name(self):
         h = SettingsHarness(); current = h.call(self, 'sender_profile')
         with patch('postriff_phase2.hosted.audit') as audit, patch('postriff_phase2.hosted.throttle'), \
-                patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True, create=True):
+                patch('postriff_phase2.discord.sender_names.provider_ready', return_value=True, create=True), \
+                patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'}):
             h.s.set_sender_name(WORKSPACE, 'synthetic-session', h.channel['id'],
                                 {'name': 'Secret Brand', 'fingerprint': current['fingerprint'], 'confirmed': True})
         kinds = [c.args[3] for c in audit.call_args_list]

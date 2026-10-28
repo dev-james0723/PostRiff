@@ -65,7 +65,8 @@ part that cannot be called passing as a whole (section 11).
 ### 4.2 Freezing
 
 `freeze_manifest` copies the name of THAT connection's record into the manifest at review, validated, and only while the
-master switch is on. The name becomes part of `wire_content` (field `username`), therefore of `wireDigest`,
+master switch is on (`POSTRIFF_DISCORD_SENDER_NAMES_ENABLED` is exactly the string `true`; unset is off in every environment, no
+environment label such as `VERCEL_ENV` or `POSTRIFF_ENVIRONMENT` can turn it on: delta review SNR2-3). The name becomes part of `wire_content` (field `username`), therefore of `wireDigest`,
 `deliveryDigest`, `operationDigest`, the publication id and the approval digest. Approving a review keeps the name the
 review showed even if the setting changes in between (`test_discord_sender_name_wire.py::test_an_approval_keeps_the_name_its_review_showed`).
 Automation items bind the name inside the original human decision (`campaigns._decide`), and the queue commit re-freezes

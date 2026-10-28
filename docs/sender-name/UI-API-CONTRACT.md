@@ -12,7 +12,7 @@ the upstream error code `discord_sender_edit_pending` keep their meaning. v2 onl
 **Wave 1 reality.** The webhook route (`POSTRIFF_DISCORD_WEBHOOK_V1_ENABLED` / `_QUALIFIED`) is off at opening, so no webhook
 connection can be created and the webhook name ships dark. The bot nickname capability is its own switch and is OFF by default
 (`POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED`): until it is turned on a bot nickname is not editable. A webhook name additionally needs the master
-switch (`POSTRIFF_DISCORD_SENDER_NAMES_ENABLED`, off by default on hosted production) and the webhook route. Show the control only when the provider
+switch (`POSTRIFF_DISCORD_SENDER_NAMES_ENABLED`, on only for the exact string `true`, unset is off in every environment) and the webhook route. Show the control only when the provider
 view says it is available (next section).
 
 ## Is the feature available at all? (provider view)
@@ -94,7 +94,7 @@ POST /api/workspaces/{workspace}/channels/{connection}/discord-sender-name
 
 | code | applies to | meaning | UI |
 | --- | --- | --- | --- |
-| `sender_names_disabled` | both | the server-side master switch is off (it is also the default on hosted production until the release enables it) | read-only; say names are not available yet |
+| `sender_names_disabled` | both | the server-side master switch is off (it is the default in every environment: only the exact string `true` turns it on, whatever `VERCEL_ENV` or `POSTRIFF_ENVIRONMENT` say) | read-only; say names are not available yet |
 | `bot_nickname_disabled` | bot | the nickname capability is isolated by its own switch (default off everywhere); the master switch may be on | read-only; say server nicknames are not available yet |
 | `provider_unavailable` | both | the shared Discord request coordinator cannot admit a request right now (not configured, degraded, or - webhook - the webhook route is off) | read-only; "temporarily unavailable"; do not retry in a loop |
 | `not_authorizing_member` | bot | you are not the member who installed the bot in this server; only that member can change the nickname | read-only; name the rule, not the person |

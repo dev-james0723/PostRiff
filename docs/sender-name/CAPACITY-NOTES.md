@@ -68,7 +68,7 @@ The harness in `tests/discord_lane_fixture.py` builds bot installations only, an
 1. **Schema**: apply `migrations/postriff/131_discord_interactions.sql` (and 098 for the authorization generation column) to the disposable
    cluster. Without 131 the coordinator's CHECK constraint refuses every webhook admission (`credential_kind` must allow `'webhook'`) and
    the lane reports the posts as `rate_delayed` releases forever. This is how it showed up here: 20 of 20 webhook jobs stayed `scheduled`.
-2. **Flags** (read at request time): `POSTRIFF_DISCORD_SENDER_NAMES_ENABLED=true` (default is OFF on hosted production), for nickname runs
+2. **Flags** (read at request time): `POSTRIFF_DISCORD_SENDER_NAMES_ENABLED=true` (unset is OFF in every environment), for nickname runs
    `POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED=true`; on the provider object `webhook_v1_enabled = True` besides the usual v2 and rate flags.
 3. **Mock Discord**, following `WebhookDiscord` in `tests/test_discord_sender_name_postgres.py`:
    * `POST /webhooks/{id}/{token}?wait=true` (strip the query string before routing) answers a message with `id`, `channel_id`, `webhook_id`,

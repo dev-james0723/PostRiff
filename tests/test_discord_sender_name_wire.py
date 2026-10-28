@@ -90,7 +90,8 @@ class PerSendWire(unittest.TestCase):
         """Even a caller that skips the preflight (the final guard inside the create) cannot send it."""
         tenant, job = self.named_job()
         world = F.World([tenant])
-        prepared = world.social.prepare_discord_dispatch(job['manifest'])
+        with switch(True):
+            prepared = world.social.prepare_discord_dispatch(job['manifest'])
         prepared['intent'] = {'id': 'synthetic-lease', 'manifestDigest': auth.digest(job['manifest']),
                               'publicationId': job['id']}
         with switch(False):
@@ -339,15 +340,15 @@ class PerSendWire(unittest.TestCase):
         def run(tenant):
             try:
                 barrier.wait()
-                with switch(True):
-                    results[tenant.workspace] = world.dispatch(jobs[tenant.workspace], lease=f'lease-{tenant.index}')
+                results[tenant.workspace] = world.dispatch(jobs[tenant.workspace], lease=f'lease-{tenant.index}')
             except BaseException as error:
                 failures.append((tenant.index, error))
         threads = [threading.Thread(target=run, args=(t,)) for t in tenants]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join(timeout=120)
+        with switch(True):      # once, around all threads: the environment is process-wide, per-thread patches would race
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=120)
         self.assertEqual(failures, [])
         self.assertEqual({r['state'] for r in results.values()}, {'provider_accepted'})
         self.assertEqual(len(world.wire.posts), len(tenants))

@@ -22,6 +22,12 @@ from test_discord_publish_authorization import (
 
 
 class FrozenWebhookName(unittest.TestCase):
+    def setUp(self):
+        # The master switch is on only for the exact string "true" (SNR2-3); these upstream cases are about the ON feature.
+        patcher = patch.dict(os.environ, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_customer_name_is_visible_in_review_and_frozen_wire(self):
         engine, state, channel, variant = webhook_fixture()
         channel['discordSenderName'] = 'D Festival 公告'

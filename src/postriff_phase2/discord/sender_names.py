@@ -5,9 +5,10 @@ checked again at the transport boundary.
 
 Server-side switches, read at request time and never cached (exact string "true", like the other Discord flags):
 
-* POSTRIFF_DISCORD_SENDER_NAMES_ENABLED, the master switch for the whole feature. Unset: off on hosted production
-  (VERCEL_ENV or POSTRIFF_ENVIRONMENT is "production"), on everywhere else so development and CI exercise it. Any value
-  other than "true" is off. Off means: nothing is read from Discord or changed by the routes; a new review freezes no
+* POSTRIFF_DISCORD_SENDER_NAMES_ENABLED, the master switch for the whole feature. Unset, or any value other than the
+  exact string "true", is off in every environment (it does not depend on VERCEL_ENV, POSTRIFF_ENVIRONMENT or any other
+  label of where the code runs: a preview or a mislabelled production deployment must not turn the feature on by
+  accident). Off means: nothing is read from Discord or changed by the routes; a new review freezes no
   custom name (the webhook's own name is used, as in RC1); an already approved post that carries a frozen custom name is
   HELD at dispatch with nothing sent (never sent under a different name); posts without a custom name and every receipt
   reconciliation are unaffected.
@@ -52,13 +53,8 @@ def _values(values):
 
 
 def names_enabled(values=None):
-    """The master switch. Unset is off on hosted production and on elsewhere; only the exact string "true" turns it on."""
-    values = _values(values)
-    raw = values.get(ENV_SENDER_NAMES)
-    if raw is None:
-        from .launch_gate import hosted_production
-        return not hosted_production(values)
-    return raw == 'true'
+    """The master switch: on only for the exact string "true", in every environment. Unset is off."""
+    return _values(values).get(ENV_SENDER_NAMES) == 'true'
 
 
 def nickname_enabled(values=None):

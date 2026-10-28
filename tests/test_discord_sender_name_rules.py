@@ -104,17 +104,32 @@ class Refused(unittest.TestCase):
 
 
 class Switches(unittest.TestCase):
-    def test_master_switch_default_depends_on_the_environment_and_only_exact_true_enables(self):
-        cases = [({}, True), ({'VERCEL_ENV': 'development'}, True), ({'VERCEL_ENV': 'production'}, False),
-                 ({'POSTRIFF_ENVIRONMENT': ' Production '}, False), ({'VERCEL_ENV': 'preview'}, True),
-                 ({'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'}, True), ({names.ENV_SENDER_NAMES: 'true', 'VERCEL_ENV': 'production'}, True),
-                 ({names.ENV_SENDER_NAMES: 'TRUE'}, False), ({names.ENV_SENDER_NAMES: '1'}, False),
-                 ({names.ENV_SENDER_NAMES: 'yes'}, False), ({names.ENV_SENDER_NAMES: ''}, False),
-                 ({names.ENV_SENDER_NAMES: 'false'}, False), ({names.ENV_SENDER_NAMES: ' true'}, False),
-                 ({names.ENV_SENDER_NAMES: 'false', 'VERCEL_ENV': 'preview'}, False)]
-        for values, expected in cases:
-            with self.subTest(values=values):
-                self.assertIs(names.names_enabled(values), expected)
+    def test_master_switch_is_on_only_for_the_exact_string_true_whatever_the_environment_label(self):
+        """Unset is off everywhere. No label of where the code runs (a preview, a mislabelled production, a staging
+        name) can turn the feature on by itself (SNR2-3)."""
+        labels = [{}, {'VERCEL_ENV': 'development'}, {'VERCEL_ENV': 'preview'}, {'VERCEL_ENV': 'production'},
+                  {'POSTRIFF_ENVIRONMENT': 'prod'}, {'POSTRIFF_ENVIRONMENT': ' Production '}, {'POSTRIFF_ENVIRONMENT': 'staging'},
+                  {'POSTRIFF_ENVIRONMENT': 'development', 'VERCEL_ENV': 'preview'}]
+        for label in labels:
+            with self.subTest(label=label, switch='unset'):
+                self.assertIs(names.names_enabled(dict(label)), False)
+            with self.subTest(label=label, switch='true'):
+                self.assertIs(names.names_enabled({**label, names.ENV_SENDER_NAMES: 'true'}), True)
+            for raw in ('TRUE', 'True', '1', 'yes', 'on', '', 'false', ' true', 'true ', 'truee'):
+                with self.subTest(label=label, switch=raw):
+                    self.assertIs(names.names_enabled({**label, names.ENV_SENDER_NAMES: raw}), False)
+
+    def test_the_master_switch_does_not_read_the_launch_gate_labels(self):
+        """A regression guard for the above: the decision is the one variable, nothing else is consulted."""
+        class OnlyThatKey(dict):
+            def get(self, key, default=None):
+                assert key == names.ENV_SENDER_NAMES, f'unexpected read of {key}'
+                return super().get(key, default)
+        self.assertIs(names.names_enabled(OnlyThatKey()), False)
+        self.assertIs(names.names_enabled(OnlyThatKey({names.ENV_SENDER_NAMES: 'true'})), True)
+        with patch.dict(os.environ, {'VERCEL_ENV': 'preview', 'POSTRIFF_ENVIRONMENT': 'prod'}):
+            os.environ.pop(names.ENV_SENDER_NAMES, None)
+            self.assertIs(names.names_enabled(), False)
 
     def test_nickname_switch_is_off_everywhere_unless_exactly_true(self):
         for values, expected in [({}, False), ({'VERCEL_ENV': 'development'}, False), ({'VERCEL_ENV': 'production'}, False),
@@ -144,6 +159,7 @@ class FrozenName(unittest.TestCase):
         on, off = {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'}, {names.ENV_SENDER_NAMES: 'false'}
         self.assertEqual(names.frozen_webhook_name(self.channel(discordSenderName='Acme Weekly'), on), 'Acme Weekly')
         self.assertIsNone(names.frozen_webhook_name(self.channel(discordSenderName='Acme Weekly'), off))
+        self.assertIsNone(names.frozen_webhook_name(self.channel(discordSenderName='Acme Weekly'), {}), 'unset is off')
         self.assertIsNone(names.frozen_webhook_name(self.channel(), on))
         self.assertIsNone(names.frozen_webhook_name({'discordConnectionKind': 'installation', 'discordSenderName': 'Acme Weekly'}, on))
         for bad in ('', 'Discord', None, 5):
@@ -153,12 +169,13 @@ class FrozenName(unittest.TestCase):
         self.assertIsNone(names.frozen_webhook_name(self.channel(discordSenderName='Discord'), off))
 
     def test_dispatch_gate_holds_only_a_named_webhook_manifest_while_off(self):
-        off = {names.ENV_SENDER_NAMES: 'false'}
-        with self.assertRaises(AlphaError) as raised:
-            names.assert_sendable({'senderKind': 'webhook', 'discordSenderName': 'Acme Weekly'}, off)
-        self.assertEqual((raised.exception.status, raised.exception.code), (409, 'discord_sender_names_disabled'))
-        for manifest in ({'senderKind': 'webhook'}, {'senderKind': 'bot'}, {}):
-            names.assert_sendable(manifest, off)
+        for off in ({names.ENV_SENDER_NAMES: 'false'}, {}, {'VERCEL_ENV': 'preview'}):      # explicitly off, and merely unset
+            with self.subTest(off=off):
+                with self.assertRaises(AlphaError) as raised:
+                    names.assert_sendable({'senderKind': 'webhook', 'discordSenderName': 'Acme Weekly'}, off)
+                self.assertEqual((raised.exception.status, raised.exception.code), (409, 'discord_sender_names_disabled'))
+                for manifest in ({'senderKind': 'webhook'}, {'senderKind': 'bot'}, {}):
+                    names.assert_sendable(manifest, off)
         names.assert_sendable({'senderKind': 'webhook', 'discordSenderName': 'Acme Weekly'}, {'POSTRIFF_DISCORD_SENDER_NAMES_ENABLED': 'true'})
 
 
