@@ -27,7 +27,7 @@ CHANGE_NICKNAME = 1 << 26
 MANAGE_NICKNAMES = 1 << 27
 
 
-def make_wire(LifecycleWire, APP, BOT, GUILD):
+def make_wire(LifecycleWire, APP, BOT, GUILD, USER=None):
     class Q05Wire(LifecycleWire):
         def __init__(self, nickname_bits=True):
             super().__init__()
@@ -40,6 +40,10 @@ def make_wire(LifecycleWire, APP, BOT, GUILD):
             self.hook_codes = {}         # OAuth code -> webhook id
             self.nick = {}               # guild id -> the shared bot member's nickname (None = unset)
             self.sent = []               # executed webhook messages, in order
+            self.bot_sent = []           # bot channel messages created, in order (channel, message, nick at send)
+            self.bot_messages = {}       # message id -> message (for the receipt read-back)
+            self.patches = []            # nickname PATCHes: (guild, nick, audit-log reason header)
+            self.on_request = None       # scenario hook: called once with (method, path) before answering
             self._message_seq = 0
 
         # -- setup ------------------------------------------------------------- #
@@ -91,6 +95,11 @@ def make_wire(LifecycleWire, APP, BOT, GUILD):
             path = parts.path.removeprefix('/api/v10')
             with self.q05_lock:
                 self.q05_calls.append((method, path))
+                hook, self.on_request = self.on_request, None
+            if hook is not None and not hook(method, path):
+                with self.q05_lock:          # not the request the hook waits for: re-arm it
+                    if self.on_request is None:
+                        self.on_request = hook
             form = kwargs.get('form') or {}
             if path == '/oauth2/token' and str(form.get('code', '')).startswith('webhook-'):
                 return self._webhook_token(method, path, form)
@@ -99,10 +108,15 @@ def make_wire(LifecycleWire, APP, BOT, GUILD):
             if method == 'PATCH' and path.startswith('/guilds/') and path.endswith('/members/@me'):
                 guild = path.split('/')[2]
                 nick = (kwargs.get('body') or {}).get('nick')
+                reason = next((v for k, v in (kwargs.get('headers') or {}).items()
+                               if str(k).lower() == 'x-audit-log-reason'), None)
                 with self.q05_lock:
                     self.nick[guild] = nick
+                    self.patches.append((guild, nick, reason))
                 return {'status': 200, 'headers': {},
                         'body': {'user': {'id': BOT, 'bot': True, 'username': 'Rafii'}, 'nick': nick, 'roles': []}}
+            if self.nickname_bits and path.startswith('/channels/') and '/messages' in path:
+                return self._bot_message(method, path, kwargs)
             result = super().__call__(method, url, **kwargs)
             body = result.get('body') if isinstance(result, dict) else None
             if method == 'GET' and isinstance(body, dict):
@@ -112,6 +126,8 @@ def make_wire(LifecycleWire, APP, BOT, GUILD):
                     for role in body['roles']:
                         if isinstance(role, dict) and str(role.get('permissions', '')).isdigit():
                             role['permissions'] = str(int(role['permissions']) | CHANGE_NICKNAME | MANAGE_NICKNAMES)
+                    if USER is not None:
+                        body['owner_id'] = USER     # the installing person owns the server (above the bot)
                 if (self.nickname_bits and len(segs) == 5 and segs[1] == 'guilds' and segs[3] == 'members'
                         and segs[4] == BOT):
                     with self.q05_lock:
@@ -153,13 +169,36 @@ def make_wire(LifecycleWire, APP, BOT, GUILD):
                                'flags': body.get('flags', 0)}
                     hook['messages'][mid] = message
                     self.sent.append({'hook': hook_id, 'channel': hook['channel'], 'username': body.get('username'),
-                                      'content': body.get('content'), 'query': query, 'message': mid,
-                                      'thread': threading.current_thread().name})
+                                      'content': body.get('content'), 'keys': sorted(body), 'query': query,
+                                      'message': mid, 'thread': threading.current_thread().name})
                 return {'status': 200, 'headers': {}, 'body': copy.deepcopy(message)}
             if method == 'GET' and len(segs) == 6 and segs[4] == 'messages':
                 with self.q05_lock:
                     message = hook['messages'].get(segs[5])
                 if message is None:
+                    return {'status': 404, 'headers': {}, 'body': {'message': 'Unknown Message', 'code': 10008}}
+                return {'status': 200, 'headers': {}, 'body': copy.deepcopy(message)}
+            return {'status': 405, 'headers': {}, 'body': {'message': '405: Method Not Allowed'}}
+
+        def _bot_message(self, method, path, kwargs):
+            segs = path.split('/')            # ['', 'channels', channel, 'messages', (id)]
+            if method == 'POST' and len(segs) == 4:
+                body = kwargs.get('body') or {}
+                with self.q05_lock:
+                    self._message_seq += 1
+                    mid = str(990000000000 + self._message_seq)
+                    message = {'id': mid, 'channel_id': segs[2], 'content': body.get('content'),
+                               'author': {'id': BOT, 'bot': True, 'username': 'Rafii'}, 'mentions': [],
+                               'mention_roles': [], 'mention_everyone': False, 'attachments': [], 'embeds': [],
+                               'flags': body.get('flags', 0)}
+                    self.bot_messages[mid] = message
+                    self.bot_sent.append({'channel': segs[2], 'message': mid, 'nick': self.nick.get(GUILD),
+                                          'content': body.get('content'), 'thread': threading.current_thread().name})
+                return {'status': 200, 'headers': {}, 'body': copy.deepcopy(message)}
+            if method == 'GET' and len(segs) == 5:
+                with self.q05_lock:
+                    message = self.bot_messages.get(segs[4])
+                if message is None or message['channel_id'] != segs[2]:
                     return {'status': 404, 'headers': {}, 'body': {'message': 'Unknown Message', 'code': 10008}}
                 return {'status': 200, 'headers': {}, 'body': copy.deepcopy(message)}
             return {'status': 405, 'headers': {}, 'body': {'message': '405: Method Not Allowed'}}

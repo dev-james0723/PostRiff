@@ -6,6 +6,7 @@ written reason, in the exclusion list (EXCLUDED_FAMILIES). This is the tripwire 
 asks for: a new `/api/workspaces/<id>/<thing>` route cannot be added without someone either
 giving the probe a case for it or consciously excluding it with a reason.
 """
+import os
 import re
 import sys
 import types
@@ -21,7 +22,9 @@ import q05_tenant_probe as probe  # noqa: E402
 
 def extract_hosted_families():
     """Workspace-scoped first-segment families referenced by the hosted router and sub-routers."""
-    src = (REPO / "src/postriff_phase2/hosted_app.py").read_text()
+    # the checkout under test (Q05_TARGET_ROOT, as for the harness), else this repository
+    root = Path(os.environ.get("Q05_TARGET_ROOT") or REPO)
+    src = (root / "src/postriff_phase2/hosted_app.py").read_text()
     fams = set()
     for m in re.finditer(r'parts\[3\]\s*==\s*["\']([a-z0-9-]+)["\']', src):
         fams.add(m.group(1))

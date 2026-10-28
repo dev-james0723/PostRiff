@@ -288,7 +288,7 @@ class Backend:
         from postriff_phase2.social_connectors import DiscordProvider
         from postriff_phase2.discord import authorization as dauth
         from test_discord_oauth_lifecycle import LifecycleWire
-        from test_discord_publish_authorization import APP, BOT, GUILD, FIRST, SECOND, fixture as pub_fixture
+        from test_discord_publish_authorization import APP, BOT, GUILD, FIRST, SECOND, USER, fixture as pub_fixture
         from q05_sender_wire import make_wire
 
         with self.connect() as db:
@@ -307,17 +307,17 @@ class Backend:
 
         # The customer sender-name feature (RC2): webhook connections, sender names, role members.
         self.sender = sender_feature()
-        self.wire = make_wire(LifecycleWire, APP, BOT, GUILD)(nickname_bits=self.sender)
+        self.wire = make_wire(LifecycleWire, APP, BOT, GUILD, USER if self.sender else None)(nickname_bits=self.sender)
         provider = DiscordProvider(APP, "synthetic-secret", "synthetic-bot",
                                    "https://rafii.example.invalid", transport=self.wire,
                                    production_reviewed=True)
         provider.authorization_v2_enabled = provider.connections_v2_enabled = True
         if self.sender:
-            # Contract v2 reads two server-side switches from the environment at request time: the master
-            # switch (unset = on outside hosted production) and the bot-nickname capability (default OFF).
-            # Both on here, so the nickname-authority rules are exercised; v1 ignores them.
-            os.environ.setdefault("POSTRIFF_DISCORD_SENDER_NAMES_ENABLED", "true")
-            os.environ.setdefault("POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED", "true")
+            # Contract v2 reads two server-side switches from the environment at request time, each on ONLY for
+            # the exact string "true" (unset is off in every environment): the master switch and the bot-nickname
+            # capability. Set explicitly (never inherited), so the nickname-authority rules are exercised.
+            os.environ["POSTRIFF_DISCORD_SENDER_NAMES_ENABLED"] = "true"
+            os.environ["POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED"] = "true"
             # The production wiring for this line: incoming webhooks on and the shared, durable admission
             # coordinator (P4). As in production (POSTRIFF_DISCORD_RATE_POLICY), the service itself attaches
             # SharedPostgresBudget over its own connection factory with this policy; the checkout's own builder.
@@ -325,7 +325,8 @@ class Backend:
             provider.rate_v1_enabled = True
             provider.rate_policy_raw = rate_policy(now)
         self.provider = provider
-        self.constants = {"APP": APP, "BOT": BOT, "GUILD": GUILD, "FIRST": FIRST, "SECOND": SECOND}
+        self.constants = {"APP": APP, "BOT": BOT, "GUILD": GUILD, "FIRST": FIRST, "SECOND": SECOND, "USER": USER}
+        self.dauth, self.sender_names = dauth, dict(SENDER_NAMES)
 
         connect = self.connect
         service = HostedWorkspaceService(connect, verify, clock=lambda: now,
@@ -356,6 +357,7 @@ class Backend:
 
             # a scheduled Discord job (p2_review + p2_approve), through the app's own code
             _, _, _, variant = pub_fixture()
+            self.variant_template = copy.deepcopy(variant)
             with self.connect() as db:
                 state = db.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (ws,)).fetchone()[0]
                 state["variants"].append(copy.deepcopy(variant))
@@ -412,7 +414,7 @@ class Backend:
         self.tenants["B"] = make_tenant("b")
 
         app = HostedApplication(service=service, worker=worker,
-                                public_auth={"provider": "supabase"}, cron_secret="q05-cron-secret-abcdefgh")
+                                public_auth={"provider": "supabase"}, cron_secret=secrets.token_urlsafe(24))
         # Per-request provider attribution + attack-phase markers (local harness only).
         app = ProviderAttribution(app, self)
         self.httpd = make_server("127.0.0.1", 0, app, server_class=_QuietServer)
@@ -494,6 +496,8 @@ def main(argv=None):
     parser.add_argument("--allow-writes", action="store_true")
     parser.add_argument("--allow-send-risk", action="store_true")
     parser.add_argument("--victim-is-synthetic", action="store_true")
+    # mutation tests of the send-level guards need only the scenarios (they run after the probe otherwise)
+    parser.add_argument("--skip-probe", action="store_true")
     args = parser.parse_args(argv)
 
     if not pg_available():
@@ -510,9 +514,22 @@ def main(argv=None):
         try:
             before = {k: db_snapshot(backend.connect, backend.tenants[k]["ws"]) for k in ("A", "B")}
             sends_before = backend.message_sends()
-            rc, records, summary, stderr = run_probe(backend, args)
+            if backend.sender:
+                # The setup saved each webhook's sender name through the app a moment ago; the probe models a session
+                # that starts later (the fixed 10-minute sender-name throttle windows have passed).
+                with backend.connect() as db:
+                    db.execute("DELETE FROM public.pr_auth_throttle")
+            if args.skip_probe:
+                rc, records, summary, stderr = None, [], None, ""
+            else:
+                rc, records, summary, stderr = run_probe(backend, args)
             after = {k: db_snapshot(backend.connect, backend.tenants[k]["ws"]) for k in ("A", "B")}
             sends_after = backend.message_sends()
+            # send-level and same-server scenarios (sender-name builds), after the probe's own accounting
+            scenarios = None
+            if backend.sender and args.allow_writes:
+                from q05_sender_scenarios import run_scenarios
+                scenarios = run_scenarios(backend)
             whole_run = {k: side_effect_report(before[k], after[k]) for k in ("A", "B")}
             start, end = backend.phase.get("attack-start"), backend.phase.get("attack-end")
             attack = None
@@ -541,6 +558,8 @@ def main(argv=None):
                 "dbWholeRun": whole_run,
                 "attackPhase": attack,
                 "messageSendsDuringRun": sends_after - sends_before,
+                "scenarios": scenarios,
+                "scenariosOk": None if scenarios is None else all(v["ok"] for v in scenarios.values()),
                 "probeStderr": stderr[-2000:],
             }
         finally:

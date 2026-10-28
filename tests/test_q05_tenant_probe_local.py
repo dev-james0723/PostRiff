@@ -67,6 +67,24 @@ class Q05LocalHarness(unittest.TestCase):
             self.assertTrue(result["dbSideEffect"][key]["ok"],
                             f"DB-level side effect on tenant {key}: {result['dbSideEffect'][key]}")
 
+        if result.get("senderNames"):
+            # Customer sender names (RC2): the probe marks its attack phase, and in EXACTLY that phase nothing
+            # changed in either tenant and the mock Discord saw no request at all.
+            attack = result["attackPhase"]
+            self.assertIsNotNone(attack, "the probe did not mark its attack phase")
+            self.assertEqual((attack["providerCalls"], attack["providerWrites"], attack["messageSends"],
+                              attack["nicknameChanged"]), (0, 0, 0, False), attack)
+            for key in ("A", "B"):
+                self.assertEqual(attack["dbSideEffect"][key]["revisionDelta"], 0, attack["dbSideEffect"][key])
+            self.assertGreaterEqual(summary["sender_cases"], 70)
+            self.assertEqual(summary["sender_passed"], summary["sender_cases"])
+            # send-level and same-server scenarios through the real app and worker against the mock Discord
+            self.assertTrue(result["scenariosOk"],
+                            {k: [c for c, ok in v["checks"].items() if not ok] or v["detail"]
+                             for k, v in result["scenarios"].items() if not v["ok"]})
+            self.assertEqual(set(result["scenarios"]),
+                             {"name_pollution", "switch_off", "nickname_authority", "nickname_hold"})
+
     def test_default_readonly_plan_cannot_send(self):
         # With no --allow-writes the write cases are gated off and nothing can reach Discord.
         result = run_backend()
