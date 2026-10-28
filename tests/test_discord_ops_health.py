@@ -44,12 +44,13 @@ def call(app, path, authorization='', method='GET'):
     return result
 
 
-def provider(*, policy_at=NOW, rate_limits=True, reviewed=True):
+def provider(*, policy_at=NOW, rate_limits=True, reviewed=True, bearer=True):
     adapter = DiscordProvider(APP, 'synthetic-secret', 'synthetic-bot-token', 'https://rafii.example.invalid',
                               production_reviewed=reviewed)
     adapter.connections_v2_enabled = adapter.authorization_v2_enabled = True
     adapter.rate_v1_enabled = rate_limits
-    adapter.rate_limiter = (SharedPostgresBudget(lambda: None, APP, policy=json.dumps(POLICY_TOOL.build(policy_at, days=10)))
+    no_bearer = {} if bearer else {'bearer_capacity': None, 'bearer_window_seconds': None}
+    adapter.rate_limiter = (SharedPostgresBudget(lambda: None, APP, policy=json.dumps(POLICY_TOOL.build(policy_at, days=10, **no_bearer)))
                             if policy_at is not None else None)
     return adapter
 
@@ -60,6 +61,7 @@ class FakeDatabase:
     def __init__(self, adapter, *, fail=(), raise_on_connect=False):
         self.adapter, self.fail, self.raise_on_connect = adapter, set(fail), raise_on_connect
         self.statements = []
+        self.parameters = []
 
     def __call__(self):
         if self.raise_on_connect:
@@ -77,7 +79,18 @@ class FakeDatabase:
 
     def execute(self, sql, params=None):
         self.statements.append(sql)
+        self.parameters.append(params)
         self.result = None
+        if 'pg_stat_user_tables' in sql:   # the retention section: the two oldest settled rows and the table's statistics
+            if 'retention' in self.fail:
+                raise RuntimeError('synthetic failure')
+            self.result = [(NOW - 5 * 3600, NOW - 60 * 3600, 5400, 12, 880, NOW - 120)]
+            return
+        if 'coalesce(sent_at, reserved_at) AS wire' in sql:   # the booking section: wires still to come, and what the reads booked waited
+            if 'booking' in self.fail:
+                raise RuntimeError('synthetic failure')
+            self.result = [(6, NOW + .4, 40, 18.0, .9, NOW)]
+            return
         for name, marker in (('queue', 'pr_discord_worker_projection'), ('ledger', 'ORDER BY request_seq DESC LIMIT'),
                              ('unresolved', "state = 'uncertain' AND is_publish"),
                              ('coordinator', 'pr_discord_rate_state'), ('servers', 'pr_encrypted_credentials'),
@@ -92,14 +105,15 @@ class FakeDatabase:
             self.result = [(1, 0, 2, NOW - 4000)]
         elif 'pr_discord_request_admissions' in sql:
             self.result = [(120, NOW - 700, NOW - 2, 40, 33, 2, 1, 1, 2, 1, 0, 0, 0, 3, 0, 9, 60, 1, 80, 0, 0,
-                            NOW - 3, NOW - 1, 4)]
+                            NOW - 3, NOW - 1, 4, 25)]
         elif 'WHERE scope_key = ANY' in sql:
             keys = sorted(ops.guard_keys(self.adapter))
             kinds = [ops.GUARDS[key[:3]] for key in keys]
-            self.result = [(key, kind, False, 2000 if kind == 'invalid' else 25 if kind == 'policy' else None,
-                            1500 if kind == 'invalid' else 20 if kind == 'policy' else None, NOW + 300, None, None,
-                            NOW - 10, NOW + 86400 * 9, 600.0 if kind == 'invalid' else 1.0 if kind == 'policy' else None)
-                           for key, kind in zip(keys, kinds)]
+            self.result = [(key, 'policy' if kind == 'bearer' else kind, False,
+                            2000 if kind == 'invalid' else 25 if kind == 'policy' else 10 if kind == 'bearer' else None,
+                            1500 if kind == 'invalid' else 20 if kind == 'policy' else 8 if kind == 'bearer' else None, NOW + 300, None, None,
+                            NOW - 10, NOW + 86400 * 9, 600.0 if kind == 'invalid' else 1.0 if kind in ('policy', 'bearer') else None)
+                           for key, kind in zip(keys, kinds)]   # the bearer budget's row is a policy row of its own cap
         elif 'pr_discord_rate_state' in sql:
             self.result = [('route', 0, 1, 3, 2, 0)]
         elif 'pr_encrypted_credentials' in sql:
@@ -263,11 +277,20 @@ class Payload(unittest.TestCase):
         self.assertEqual(deliveries['rejectedUpstream'], 4, 'answers 5xx to creates: Discord\'s side (second review N-9)')
         self.assertTrue(deliveries['windowCovered'])
         guards = payload['coordinator']['guards']
-        self.assertEqual(sorted(guards), ['credential', 'global', 'invalid', 'policy'])
+        self.assertEqual(sorted(guards), ['bearer', 'credential', 'global', 'invalid', 'policy'])
         self.assertEqual(guards['invalid']['remainingRatio'], 0.75)
+        self.assertEqual((guards['bearer']['limit'], guards['bearer']['remaining'], guards['policy']['limit']), (10, 8, 25))
         self.assertEqual(payload['coordinator']['kinds'], {'route': {'holds': 0, 'blocks': 1, 'circuits': 3,
                                                                      'persistentCircuits': 2, 'openOver5Min': 0}})
         self.assertEqual(payload['coordinator']['traffic']['admissions60s'], 80)
+        self.assertEqual(payload['coordinator']['traffic']['bearerAdmissions60s'], 25)
+        self.assertEqual(payload['coordinator']['retention'], {
+            'status': 'observed', 'retentionSeconds': {'reads': 3600, 'publications': 172800},
+            'oldestSettledReadAgeSeconds': 18000.0, 'oldestSettledPublicationAgeSeconds': 216000.0,
+            'liveRowsEstimate': 5400, 'deadRowsEstimate': 12, 'rowsDeletedTotal': 880, 'lastVacuumAgeSeconds': 120.0})
+        self.assertEqual(payload['coordinator']['booking'], {
+            'status': 'observed', 'bookAheadSeconds': 1.0, 'aheadNow': 6, 'horizonSeconds': 0.4, 'bookedReads60s': 40,
+            'bookedReadWaitSeconds60s': 18.0, 'meanBookedReadWaitSeconds60s': 0.45, 'maxBookedReadWaitSeconds60s': 0.9})
         self.assertEqual(payload['security']['responses4xx'], {'status': 'observed', 'windowSeconds': 900,
                                                                'workspace': 7, 'connections': 5, 'discord': 3, 'other': 1})
         self.assertEqual(payload['platform']['queueDelayed'], 4)
@@ -286,6 +309,22 @@ class Payload(unittest.TestCase):
         self.assertEqual(payload['progress']['status'], 'partial')
         self.assertEqual(payload['errors'], [{'section': 'ledger', 'error': 'RuntimeError'}])
 
+    def test_a_failing_retention_section_answers_unavailable_alone(self):
+        adapter = provider()
+        payload, _ = self.snapshot(adapter, FakeDatabase(adapter, fail={'retention'}))
+        self.assertEqual(payload['coordinator']['retention'], {'status': 'unavailable', 'error': 'RuntimeError'})
+        self.assertEqual(payload['coordinator']['traffic']['admissions60s'], 80, 'the traffic section is unaffected')
+        self.assertEqual(payload['deliveries']['status'], 'observed')
+        self.assertEqual(payload['errors'], [{'section': 'retention', 'error': 'RuntimeError'}])
+
+    def test_a_failing_booking_section_answers_unavailable_alone(self):
+        adapter = provider()
+        payload, _ = self.snapshot(adapter, FakeDatabase(adapter, fail={'booking'}))
+        self.assertEqual(payload['coordinator']['booking'], {'status': 'unavailable', 'error': 'RuntimeError'})
+        self.assertEqual(payload['coordinator']['retention']['status'], 'observed')
+        self.assertEqual(payload['coordinator']['traffic']['admissions60s'], 80)
+        self.assertEqual(payload['errors'], [{'section': 'booking', 'error': 'RuntimeError'}])
+
     def test_an_unreachable_database_still_answers_the_process_view(self):
         adapter = provider()
         payload, _ = self.snapshot(adapter, FakeDatabase(adapter, raise_on_connect=True))
@@ -296,6 +335,25 @@ class Payload(unittest.TestCase):
         self.assertEqual(payload['errors'], [{'section': 'database', 'error': 'OSError'}])
         self.assertEqual(payload['config']['gate']['mode'], 'open')
         self.assertTrue(payload['lane']['enabled'])
+
+    def test_the_bearer_budget_is_in_the_configuration_its_guard_and_its_own_admissions_count(self):
+        adapter = provider()
+        payload, database = self.snapshot(adapter)
+        policy = payload['config']['policy']
+        self.assertEqual((policy['appCapacity'], policy['bearerCapacity'], policy['bearerWindowSeconds']), (25, 10, 1))
+        ledger = next(params for sql, params in zip(database.statements, database.parameters) if 'pr_discord_request_admissions' in sql
+                      and isinstance(params, dict) and 'saturation' in params)
+        self.assertIs(ledger['bearer'], True, 'the application budget counts the bot\'s class alone, the bearer budget the others')
+
+    def test_a_policy_without_the_bearer_budget_has_the_four_guards_and_counts_every_admission_as_before(self):
+        adapter = provider(bearer=False)
+        payload, database = self.snapshot(adapter)
+        self.assertEqual(sorted(payload['coordinator']['guards']), ['credential', 'global', 'invalid', 'policy'])
+        policy = payload['config']['policy']
+        self.assertEqual((policy['appCapacity'], policy['bearerCapacity'], policy['bearerWindowSeconds']), (25, None, None))
+        ledger = next(params for sql, params in zip(database.statements, database.parameters) if isinstance(params, dict)
+                      and 'saturation' in params)
+        self.assertIs(ledger['bearer'], False)
 
     def test_without_a_coordinator_the_guard_rows_are_not_read(self):
         adapter = provider(policy_at=None)
@@ -343,10 +401,13 @@ class Constants(unittest.TestCase):
         self.assertIn(launch_gate._IN_FLIGHT, ops._SERVERS)
         self.assertIn("provider='discord' AND 'bot' = ANY(scopes)", ops._SERVERS)
 
-    def test_guard_keys_are_the_four_application_wide_rows_the_lane_reads(self):
+    def test_guard_keys_are_the_application_wide_rows_the_lane_reads(self):
         keys = ops.guard_keys(provider())
-        self.assertEqual(sorted(keys.values()), ['credential', 'global', 'invalid', 'policy'])
+        self.assertEqual(sorted(keys.values()), ['bearer', 'credential', 'global', 'invalid', 'policy'])
         self.assertEqual(sorted(key[:3] for key in keys), sorted(lane._GUARDS))
+        without = ops.guard_keys(provider(bearer=False))
+        self.assertEqual(sorted(without.values()), ['credential', 'global', 'invalid', 'policy'])
+        self.assertEqual(sorted(key[:3] for key in without), sorted(set(lane._GUARDS) - {'01:'}))
 
     def test_route_families_of_masked_request_patterns(self):
         for pattern, family in (('GET /api/workspaces/:id/discord/identities/:id/guilds', 'discord'),

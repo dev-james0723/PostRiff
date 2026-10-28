@@ -121,11 +121,36 @@ def validate_discord_lane(values):
     return _result("discord-parallel-lane", "pass", "lane on with rate limits and the worker lease protocol; judge the policy with scripts/discord_rate_policy.py and confirm 12 discord.lane.completed lines a minute after promotion")
 
 
+# Every setting that turns a Discord feature on. Authorization v2 is what makes a Discord post carry the fenced worker
+# protocol's manifest; the others are the features around it. None of them is a build that can do without the worker flag.
+DISCORD_FEATURE_FLAGS = (
+    "POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED", "POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED",
+    "POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED", "POSTRIFF_DISCORD_WEBHOOK_V1_ENABLED",
+    "POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED", "POSTRIFF_DISCORD_ENGAGEMENT_V1_ENABLED",
+    "POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED")
+
+
+def validate_discord_worker_protocol(values):
+    """With any Discord feature on, the worker flag must be set (1 or true, as the worker reads it).
+
+    Migration 128's guard trigger (installed in production) refuses a claim of a Discord post by a worker without the
+    fenced lease protocol: CheckViolation 'Discord requires the current fenced worker protocol before dispatch.' The
+    minute worker's claim transaction then aborts on every attempt while such a post is due, and no later workspace in
+    that claim, of any provider, is processed. An unset or mistyped flag is exactly that worker."""
+    on = [name for name in DISCORD_FEATURE_FLAGS if values.get(name) == "true"]
+    if not on:
+        return _result("discord-worker-protocol", "pass", "no Discord feature flag is on")
+    if values.get("POSTRIFF_DISCORD_WORKER_V1_ENABLED", "").lower() not in ("1", "true"):
+        return _result("discord-worker-protocol", "fail", "%s on without POSTRIFF_DISCORD_WORKER_V1_ENABLED set to 1 or true: the minute worker would claim a due Discord post without the fenced lease protocol, the database guard (migration 128) refuses that claim, and the claim aborts on every attempt for every provider" % ", ".join(on))
+    return _result("discord-worker-protocol", "pass", "the worker lease protocol is on with the Discord features")
+
+
 def validate_environment(values):
     checks = []
     missing = [key for key in REQUIRED_ENV if not values.get(key) or any(marker in values.get(key, "") for marker in PLACEHOLDERS)]
     checks.append(_result("required-environment", "pass" if not missing else "pending", "all required names are populated" if not missing else "missing or placeholder: " + ", ".join(missing)))
     checks.append(validate_discord_lane(values))
+    checks.append(validate_discord_worker_protocol(values))
     if missing:
         return checks
 

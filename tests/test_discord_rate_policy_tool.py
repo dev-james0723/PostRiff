@@ -83,6 +83,16 @@ class Judged(unittest.TestCase):
         self.assertNotIn('FAIL', levels(findings).values())
         self.assertEqual(levels(findings).get('app_straddle'), 'WARN')
 
+    def test_a_budget_too_small_for_the_lane_s_shards_warns_and_the_reviewed_one_does_not(self):
+        from postriff_phase2.discord import lane
+        self.assertEqual(tool.LANE_SHARDS, lane.SHARDS)
+        for capacity, warned in ((10, True), (17, True), (18, False), (25, False)):
+            _, findings = tool.judge(tool.build(NOW, app_capacity=capacity), NOW)
+            self.assertEqual(levels(findings).get('lane_booking') == 'WARN', warned, capacity)
+            self.assertNotIn('FAIL', levels(findings).values(), capacity)
+        _, findings = tool.judge(tool.build(NOW, app_capacity=120, app_window_seconds=10), NOW)   # 12 a second: by the rate, not the count
+        self.assertEqual(levels(findings).get('lane_booking'), 'WARN')
+
     def test_the_parser_rejection_wins_over_every_other_finding(self):
         bad = tool.build(NOW)
         bad['permit_ttl_seconds'] = 11
@@ -114,6 +124,43 @@ class Judged(unittest.TestCase):
         self.assertEqual(levels(findings), {'too_short': 'FAIL'})
 
 
+class Bearer(unittest.TestCase):
+    """The person's own bearer calls have a budget of their own (the owner's D-2 option 1): the tool carries it and refuses a raise."""
+    def test_the_default_policy_carries_the_reviewed_bearer_budget_and_is_judged_clean(self):
+        policy = tool.build(NOW)
+        parsed = SafetyPolicy.parse(json.dumps(policy, separators=(',', ':')))
+        self.assertEqual((parsed.bearer_capacity, parsed.bearer_window_seconds), (10, 1))
+        summary, findings = tool.judge(policy, NOW)
+        self.assertEqual(findings, [])
+        self.assertEqual(summary['bearerRequestsPerSecond'], 10)
+
+    def test_a_raise_above_the_reviewed_budget_fails_whatever_the_window(self):
+        for setting in ({'bearer_capacity': 11}, {'bearer_capacity': 100, 'bearer_window_seconds': 10},
+                        {'bearer_capacity': 20, 'bearer_window_seconds': 2}):
+            with self.subTest(setting=setting):
+                _, findings = tool.judge(tool.build(NOW, **setting), NOW)
+                self.assertEqual(levels(findings).get('bearer_ceiling'), 'FAIL')
+
+    def test_the_two_budgets_together_over_the_bot_limit_warn(self):
+        _, findings = tool.judge(tool.build(NOW, app_capacity=40, invalid_capacity=5000), NOW)
+        self.assertEqual(levels(findings).get('bearer_sum'), 'WARN')
+        self.assertNotIn('FAIL', levels(findings).values())
+
+    def test_a_budget_too_small_for_the_lane_s_grant_checks_warns_and_the_reviewed_one_does_not(self):
+        for capacity, warned in ((10, False), (8, False), (7, True), (5, True)):
+            _, findings = tool.judge(tool.build(NOW, bearer_capacity=capacity), NOW)
+            self.assertEqual(levels(findings).get('lane_bearer') == 'WARN', warned, capacity)
+            self.assertNotIn('FAIL', levels(findings).values(), capacity)
+
+    def test_a_policy_without_the_pair_is_valid_and_says_what_it_leaves_out(self):
+        policy = tool.build(NOW, bearer_capacity=None, bearer_window_seconds=None)
+        self.assertNotIn('bearer_capacity', policy)
+        self.assertEqual(SafetyPolicy.parse(policy).bearer_capacity, 0)
+        summary, findings = tool.judge(policy, NOW)
+        self.assertEqual(levels(findings), {'no_bearer_budget': 'WARN'})
+        self.assertIsNone(summary['bearerRequestsPerSecond'])
+
+
 class CommandLine(unittest.TestCase):
     def run_tool(self, *argv, stdin=''):
         out, err = StringIO(), StringIO()
@@ -133,6 +180,16 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(out, '')
         self.assertIn('app_ceiling', err)
+
+    def test_generate_carries_the_bearer_budget_unless_told_not_to_and_refuses_a_raise(self):
+        _, line, _ = self.run_tool('generate', '--now', str(NOW))
+        self.assertEqual(json.loads(line)['bearer_capacity'], 10)
+        _, line, _ = self.run_tool('generate', '--now', str(NOW), '--no-bearer')
+        self.assertNotIn('bearer_capacity', json.loads(line))
+        self.assertEqual(SafetyPolicy.parse(line.strip()).bearer_capacity, 0)
+        code, out, err = self.run_tool('generate', '--now', str(NOW), '--bearer-capacity', '11')
+        self.assertEqual((code, out), (1, ''))
+        self.assertIn('bearer_ceiling', err)
 
     def test_check_accepts_what_generate_prints_from_standard_input(self):
         _, line, _ = self.run_tool('generate', '--now', str(NOW))

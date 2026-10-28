@@ -7,7 +7,8 @@
 -- - public.pr_discord_ops_snapshot() returns the SQL twin of the health payload (docs/ops/discord-ops-snapshot.sql, the
 --   same statement; a test keeps them identical): counts, ages, booleans and kinds, never an identifier or a token.
 -- - It runs as SECURITY DEFINER with an empty search_path, owned by rafii_discord_ops_projection: NOLOGIN, no BYPASSRLS,
---   SELECT on the listed columns only (no ciphertext, no workspace state), through read-only policies of its own.
+--   SELECT on the listed columns only (no ciphertext, no workspace state; scope keys only to tell the bearer budget's
+--   row, never returned), through read-only policies of its own.
 -- - rafii_discord_ops_reader (NOLOGIN) has EXECUTE on that one function and nothing else: no table SELECT.
 -- - The login itself is a deployment step for the owner, not this file (a password is a secret):
 --     CREATE ROLE rafii_discord_ops_monitor LOGIN PASSWORD '<generated, kept in the monitor's secret store>'
@@ -29,10 +30,10 @@ DO $roles$ BEGIN
 END $roles$;
 GRANT USAGE ON SCHEMA public TO rafii_discord_ops_projection, rafii_discord_ops_reader;
 GRANT SELECT (workspace_id, next_at, last_claimed_at) ON public.pr_discord_worker_projection TO rafii_discord_ops_projection;
-GRANT SELECT (request_seq, is_publish, state, status_code, rate_scope, route_key, reserved_at, sent_at, outcome_at, expires_at)
-  ON public.pr_discord_request_admissions TO rafii_discord_ops_projection;
-GRANT SELECT (kind, manual_hold, blocked_until, circuit_until, remaining, limit_count, window_seconds, reset_at, updated_at,
-              policy_expires_at) ON public.pr_discord_rate_state TO rafii_discord_ops_projection;
+GRANT SELECT (request_seq, is_publish, state, status_code, rate_scope, route_key, reserved_at, sent_at, outcome_at, expires_at,
+              credential_kind) ON public.pr_discord_request_admissions TO rafii_discord_ops_projection;
+GRANT SELECT (scope_key, kind, manual_hold, blocked_until, circuit_until, remaining, limit_count, window_seconds, reset_at,
+              updated_at, policy_expires_at) ON public.pr_discord_rate_state TO rafii_discord_ops_projection;
 GRANT SELECT (provider, provider_account_id, scopes) ON public.pr_encrypted_credentials TO rafii_discord_ops_projection;
 GRANT SELECT (provider, scopes, consumed_at, expires_at, outcome) ON public.pr_oauth_transactions TO rafii_discord_ops_projection;
 DO $policies$ DECLARE t text; BEGIN
@@ -56,9 +57,13 @@ queue AS (
     FROM observed o LEFT JOIN public.pr_discord_worker_projection p ON true
     GROUP BY o.epoch
 ), sample AS MATERIALIZED (
-    SELECT is_publish, state, status_code, rate_scope, route_key, reserved_at, sent_at, outcome_at,
+    SELECT is_publish, state, status_code, rate_scope, route_key, reserved_at, sent_at, outcome_at, credential_kind,
            coalesce(outcome_at, sent_at, reserved_at) AS last_at
     FROM public.pr_discord_request_admissions ORDER BY request_seq DESC LIMIT 20000
+), budgets AS (
+    -- the bearer budget (OPEN-QUESTIONS Q21) has a row of its own, scope key 01:, once the person's bearer has been used under a
+    -- policy that carries it; with it the application budget counts the other credentials alone
+    SELECT EXISTS (SELECT 1 FROM public.pr_discord_rate_state WHERE scope_key LIKE '01:%') AS bearer
 ), ledger AS (
     SELECT count(*) AS sampled,
            extract(epoch FROM min(s.reserved_at))::double precision AS oldest,
@@ -92,7 +97,10 @@ queue AS (
                                    OR (s.status_code = 429 AND coalesce(s.rate_scope, 'unknown') <> 'shared'))) AS invalid,
            count(*) FILTER (WHERE s.outcome_at > o.at - interval '300 seconds' AND s.status_code IS NOT NULL) AS responses,
            count(*) FILTER (WHERE s.outcome_at > o.at - interval '300 seconds' AND s.status_code >= 500) AS server_errors,
-           count(*) FILTER (WHERE s.reserved_at > o.at - interval '60 seconds') AS admitted,
+           count(*) FILTER (WHERE s.reserved_at > o.at - interval '60 seconds'
+                              AND NOT (b.bearer AND s.credential_kind = 'user')) AS admitted,
+           count(*) FILTER (WHERE b.bearer AND s.credential_kind = 'user'
+                              AND s.reserved_at > o.at - interval '60 seconds') AS bearer_admitted,
            count(*) FILTER (WHERE NOT s.is_publish AND s.state = 'uncertain'
                               AND s.last_at > o.at - interval '900 seconds') AS uncertain_reads,
            count(*) FILTER (WHERE s.status_code = 401 AND s.last_at > o.at - interval '900 seconds') AS unauthorized,
@@ -101,7 +109,7 @@ queue AS (
            -- the reconciliation read-back route, stored as the SHA-256 of its template (ops.READBACK_ROUTE_KEY)
            extract(epoch FROM max(s.outcome_at) FILTER (WHERE s.route_key = encode(sha256(convert_to('GET:/channels/{id}/messages/{id}', 'UTF8')), 'hex')
                                                           AND s.state = 'observed' AND s.status_code BETWEEN 200 AND 299))::double precision AS last_readback
-    FROM sample s CROSS JOIN observed o
+    FROM sample s CROSS JOIN observed o CROSS JOIN budgets b
 ), unresolved AS (
     SELECT (SELECT count(*) FROM public.pr_discord_request_admissions WHERE state = 'uncertain' AND is_publish) AS uncertain,
            (SELECT count(*) FROM public.pr_discord_request_admissions
@@ -113,7 +121,7 @@ queue AS (
              WHERE is_publish AND (state = 'uncertain'
                                    OR state = 'sent' AND sent_at <= clock_timestamp() - interval '120 seconds')) AS oldest
 ), guard_rows AS (
-    SELECT DISTINCT ON (r.kind) r.kind,
+    SELECT DISTINCT ON (name) CASE WHEN r.scope_key LIKE '01:%' THEN 'bearer' ELSE r.kind END AS name,
            jsonb_build_object(
                'present', true, 'hold', r.manual_hold,
                'blocked', coalesce(r.blocked_until > o.at, false), 'circuit', coalesce(r.circuit_until > o.at, false),
@@ -127,7 +135,7 @@ queue AS (
                'policyDaysLeft', round((extract(epoch FROM r.policy_expires_at - o.at) / 86400)::numeric, 2)) AS guard
     FROM public.pr_discord_rate_state r CROSS JOIN observed o
     WHERE r.kind IN ('policy', 'invalid')
-    ORDER BY r.kind, r.updated_at DESC
+    ORDER BY name, r.updated_at DESC
 ), kinds AS (
     SELECT r.kind,
            jsonb_build_object('holds', count(*) FILTER (WHERE r.manual_hold),
@@ -171,12 +179,13 @@ SELECT jsonb_build_object(
         'oldestUnresolvedAgeSeconds', CASE WHEN u.oldest > 0 THEN round(greatest(0, o.epoch - u.oldest)::numeric, 1) END),
     'coordinator', jsonb_build_object(
         'status', 'observed_by_kind',
-        'guards', coalesce((SELECT jsonb_object_agg(g.kind, g.guard) FROM guard_rows g), '{}'::jsonb),
+        'guards', coalesce((SELECT jsonb_object_agg(g.name, g.guard) FROM guard_rows g), '{}'::jsonb),
         'kinds', coalesce((SELECT jsonb_object_agg(k.kind, k.counts) FROM kinds k), '{}'::jsonb),
         'traffic', jsonb_build_object(
             'responses429', l.r429, 'responses429Global', l.r429_global, 'invalid10m', l.invalid,
             'invalidWindowCovered', l.sampled < 20000 OR o.epoch - l.oldest >= 600,
             'responses5m', l.responses, 'serverErrors5m', l.server_errors, 'admissions60s', l.admitted,
+            'bearerAdmissions60s', l.bearer_admitted,
             'uncertainReads', l.uncertain_reads, 'unauthorized', l.unauthorized)),
     'servers', jsonb_build_object('status', 'observed', 'counted', sv.counted, 'inFlight', sv.in_flight,
                                   'used', sv.counted + sv.in_flight),

@@ -22,6 +22,16 @@ class _NoRedirect(HTTPRedirectHandler):
         raise AlphaError("Provider redirects are not allowed.", 502)
 
 
+class ProviderResponseLimit(AlphaError):
+    """The provider answered, but its body was over the response cap, so the body was refused unread.
+
+    The exchange happened: `response` carries what arrived before the refusal, the status and the headers, so a caller
+    that meters requests can record the outcome it saw instead of treating the request as lost."""
+    def __init__(self, status, headers):
+        super().__init__("Provider response limit exceeded.", 502)
+        self.response = {"status": status, "headers": {k.lower(): v for k, v in headers.items()}, "body": None}
+
+
 def http_transport(method, url, headers=None, form=None, body=None, data=None):
     """Bounded HTTPS transport: 20 s timeout, no redirects, 256 KB response cap; JSON, form or raw bytes.
 
@@ -49,7 +59,7 @@ def http_transport(method, url, headers=None, form=None, body=None, data=None):
     except (URLError, TimeoutError, OSError) as error:
         raise AlphaError("The provider is temporarily unreachable.", 503) from error
     if len(raw) > 262144:
-        raise AlphaError("Provider response limit exceeded.", 502)
+        raise ProviderResponseLimit(status, response_headers)
     try:
         parsed = json.loads(raw) if raw else {}
     except ValueError:

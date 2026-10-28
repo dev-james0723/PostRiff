@@ -20,11 +20,12 @@ import os
 import threading
 import time
 import unittest
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import discord_lane_fixture as F
 from postriff_phase2.discord import worker as discord_worker
-from postriff_phase2.discord.rate_limits import SharedPostgresBudget
+from postriff_phase2.discord.rate_limits import RateDelayed, SharedPostgresBudget
 
 SETTLED = ('verified', 'held', 'uncertain', 'failed', 'canceled')  # nothing more happens without a person
 FROZEN_SOURCE = F.ROOT / 'tests/phase2/fixtures/hosted_worker_2a5a523d.py.txt'
@@ -304,13 +305,15 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         straddle two and count six slots)."""
         tenants = [F.Tenant(0)]
         self.wire = F.MockDiscord(tenants)
-        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=3, app_window_seconds=3)
+        # A permit lives its permit lifetime, not its window (it used to end with the window): 1.5 s here, so the three
+        # permits of a dead loop are free again once the window's span (3.1 s) has also passed.
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=3, app_window_seconds=3, permit_ttl_seconds=1.5)
         return 3
 
     def test_permits_of_a_dead_loop_that_were_never_used_free_their_slots(self):
         window = self.three_per_window()
         self.assertEqual(self.admissions('reserve', 4), 3)  # a dead loop's three permits fill the window
-        time.sleep(window + .2)  # they were never consumed, so the next window does not count them
+        time.sleep(window + .2)  # they were never consumed and expired, and their span is over: they count no more
         self.assertEqual(self.admissions('reserve', 4, offset=10), 3)
 
     def test_a_read_whose_process_died_after_admission_keeps_its_slot_until_reviewed(self):
@@ -359,9 +362,10 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         # Each claim moves its workspace to the back of the due order, also when the attempt is then deferred, and
         # a workspace with a post never attempted is due. So one loop's first fourteen claims are two rounds over
         # all seven workspaces in id order: every small tenant's two posts are attempted while the busy one's
-        # thirty have had two attempts. This is the selection's order, whatever the runner's speed.
+        # thirty have had two attempts. This is the selection's order, whatever the runner's speed. A post released
+        # because of the shared budget and claimed again at once (F2) is the same turn, so it counts once.
         ids = [tenant.id for tenant in tenants]
-        self.assertEqual([workspace for workspace, _ in claims[:14]], ids + ids, 'two full rounds come first')
+        self.assertEqual([workspace for workspace, _ in self.turns(claims)[:14]], ids + ids, 'two full rounds come first')
 
     def assert_busy_first(self, tenants, claims):
         # Ordered by id alone, one loop takes the lowest-id workspace while it has a due post, and a post never
@@ -748,18 +752,21 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         return [destination.get('status') for (state,) in rows for channel in state['phase2']['channels']
                 for destination in channel.get('discordDestinations', []) if destination.get('status') != 'authorized']
 
-    def recovery(self, cause):
-        """Six due posts, three of whose approvals end in 20 s. The lane cannot run (`cause`): the shards claim
-        nothing and the minute cron keeps the frozen path. Then the configuration is repaired and the lane drains.
-        Returns the jobs after the frozen minute, the jobs at the end, and the short-approval workspaces."""
+    def recovery(self, cause, approval=20):
+        """Six due posts, three of whose approvals end in `approval` seconds. The lane cannot run (`cause`): the shards
+        claim nothing and the minute cron keeps the frozen path. Then the configuration is repaired and the lane
+        drains; when the cause paused Discord the cron touched nothing, so the repair waits until those approvals
+        have ended. Returns the jobs after the frozen minute, the jobs at the end, and the short-approval workspaces."""
         tenants = [F.Tenant(n) for n in range(6)]
-        at = self.cluster.now() + 20 - 3600  # an approval lives one hour after its scheduled time
+        ends = self.cluster.now() + approval
+        at = ends - 3600  # an approval lives one hour after its scheduled time
         F.seed(self.cluster, tenants[:3], 1, now=at - 300, at=at)
         F.seed(self.cluster, tenants[3:], 1)
         self.wire = F.MockDiscord(tenants)
         self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
         worker = F.base_worker(self.cluster, self.hosted)
         self.unable(cause)
+        self.seeded = F.jobs(self.cluster)  # for the causes that pause Discord: the cron must leave these as they are
         results, failures = F.run_lanes(worker, 3, seconds=10)
         self.assertEqual(failures, [])
         self.assertEqual([r['stoppedBy'] for r in results], ['coordinator_unavailable'] * 3)
@@ -770,6 +777,8 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                          (False, 'coordinator_unavailable'))
         frozen = F.jobs(self.cluster)
         self.assertEqual(self.wire.calls, [], 'nothing reached Discord while the lane could not run')
+        if F.discord_lane.paused(self.hosted):  # the cron left the posts alone: let the short approvals really end
+            time.sleep(max(0.0, ends + 1 - self.cluster.now()))
         self.repair()
         self.skip_push_back()
         tick = self.minute(worker)
@@ -778,31 +787,30 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual(failures, [])
         return frozen, F.jobs(self.cluster), {tenant.id for tenant in tenants[:3]}
 
-    def assert_frozen_holds(self, frozen, final):
-        """Without Discord authorization the frozen path holds each post it claims and asks for its destination to be
-        verified again; the repaired lane then has nothing due, and never sends a held post."""
-        for job in frozen.values():
-            self.assertEqual((job['state'], job['events'][-1]['message']),
-                             ('held', 'Discord destination, grant, media or rollout verification is unavailable. '
-                                      'Nothing was posted.'))
-        self.assertEqual(self.destinations(), ['verification_required'] * 6)
-        self.assertEqual({job['state'] for job in final.values()}, {'held'})
-        self.assertEqual(self.wire.requests(method='POST'), [])
+    def test_recovery_after_rate_limits_were_off_waits_and_then_drains_exactly_once(self):
+        """The hosted runtime turns Discord authorization off without rate limits: Discord is paused. The frozen minute
+        cron used to hold every post it claimed and ask for its destination to be verified again (K1), then to claim
+        it again every minute; now it leaves the posts exactly as they were, no destination is touched, and the
+        repaired lane sends what is still inside its approval."""
+        recovered = self.recovery('rate limits off', approval=5)
+        self.assert_recovered_after_the_push_back(*recovered, untouched=self.seeded)
+        self.assertEqual(self.destinations(), [], 'no destination was demoted')
 
-    def test_recovery_after_rate_limits_were_off_keeps_the_frozen_holds(self):
-        """Recorded: the hosted runtime turns Discord authorization off without rate limits."""
-        self.assert_frozen_holds(*self.recovery('rate limits off')[:2])
+    def test_recovery_after_the_coordinator_was_missing_waits_and_then_drains_exactly_once(self):
+        """Rate limits on but no coordinator (no policy, or one that does not parse) is reachable only with Discord
+        authorization off (runtime_from_environment): paused, as with rate limits off."""
+        recovered = self.recovery('no coordinator', approval=5)
+        self.assert_recovered_after_the_push_back(*recovered, untouched=self.seeded)
+        self.assertEqual(self.destinations(), [], 'no destination was demoted')
 
-    def test_recovery_after_the_coordinator_was_missing_keeps_the_frozen_holds(self):
-        """Recorded: rate limits on but no coordinator (no policy, or one that does not parse) is reachable only with
-        Discord authorization off (runtime_from_environment), so the frozen path holds as with rate limits off."""
-        self.assert_frozen_holds(*self.recovery('no coordinator')[:2])
-
-    def assert_recovered_after_the_push_back(self, frozen, final, short):
+    def assert_recovered_after_the_push_back(self, frozen, final, short, cooldown=300, untouched=None):
+        if untouched is not None:  # Discord was paused: the frozen minute claimed nothing, so nothing was pushed back
+            self.assertEqual(frozen, untouched, 'the minute cron left every post as it was')
+            frozen = {}
         for (workspace, _), job in frozen.items():
             operation = job['discordWorker']
             self.assertEqual(operation['releaseReason'], 'rate_delayed')
-            self.assertAlmostEqual(operation['rateDelayedUntil'] - operation['releasedAt'], 300, delta=1)
+            self.assertAlmostEqual(operation['rateDelayedUntil'] - operation['releasedAt'], cooldown, delta=1)
             self.assertEqual((job['state'], job['nextAction']),
                              ('held', 'Discord rate wait outlasts approval; review the frozen destination and approve again')
                              if workspace in short else
@@ -841,16 +849,36 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         tick, warnings = self.lagging(worker)
         self.assertEqual(warnings, [], 'quiet once drained')
 
+    def expire_after_the_first_create(self, provider, seconds):
+        """The reviewed policy ends `seconds` after the first create reaches Discord, whatever the runner's start-up
+        time (a policy that ends a fixed time after the test builds it can end before the loops have sent
+        anything). The policy in force is long-lived; the first create's answer replaces it, once, by a short one
+        built at that instant, as a deployment whose policy runs out mid-run. Returns the list that receives that
+        policy's expiry (empty until the first create)."""
+        ended, lock = [], threading.Lock()
+
+        def after(method, path, answer):
+            if method == 'POST' and path.endswith('/messages'):
+                with lock:
+                    if not ended:
+                        raw, expires = short_policy(self.cluster.now(), seconds)
+                        provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP, policy=raw)
+                        ended.append(expires)
+        self.wire.after = after
+        return ended
+
     def test_a_policy_that_expires_mid_run_stops_every_loop_and_renewal_resumes(self):
         tenants = [F.Tenant(n) for n in range(48)]
         worker = self.start(tenants, 1, latency=.1)
         provider = self.hosted.providers['discord']
-        raw, expires = short_policy(self.cluster.now(), 4)
-        provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP, policy=raw)
+        ended = self.expire_after_the_first_create(provider, 4)
         results, failures = F.run_lanes(worker, 4, seconds=60)
         self.assertEqual(failures, [])
         self.assertEqual([r['stoppedBy'] for r in results], ['coordinator_unavailable'] * 4, 'every loop stopped')
         self.assertEqual({r['status']['blocker'] for r in results}, {'coordinator_unavailable'})
+        self.assertEqual(len(ended), 1, 'a first create went out, which started the short policy')
+        expires = ended[0]
+        self.wire.after = None
         found = F.jobs(self.cluster)
         claims = [event['at'] for job in found.values() for event in job.get('events', []) if event['state'] == 'claimed']
         self.assertTrue(claims and min(claims) < expires)
@@ -860,8 +888,11 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         released = [sent for times in self.released_creates().values() for sent in times]
         self.assertEqual(len(released), sum(len(times) for times in self.wire.creates.values()))
         self.assertTrue(0 < len(released) < len(tenants), 'the policy expired mid-run')
-        self.assertLessEqual(max(end for ends in self.permit_ends.values() for end in ends), expires + 1e-6,
-                             'no permit outlived the policy')
+        # A permit lives its own lifetime (5 s), and one a loop reserved under the long policy just before the swap may
+        # outlast the short policy's end by up to that; consume() refuses it once the policy in force has ended, which
+        # the next assertion shows from the other side: no create was released after the expiry.
+        self.assertLessEqual(max(end for ends in self.permit_ends.values() for end in ends), expires + 5.0 + 1e-6,
+                             'no permit outlived the policy by more than one permit lifetime')
         self.assertLess(max(released), expires + self.RELEASE_SLACK, 'no create was released after the expiry')
         # Renewal (a new deployment with a renewed policy): the lane resumes.
         provider.rate_limiter = SharedPostgresBudget(self.cluster.factory(), F.APP,
@@ -1045,7 +1076,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
         result, counted = self.shard()
         self.assertEqual((result['stoppedBy'], counted.connections, len(counted.statements)), ('idle', 1, 1))
-        self.assertEqual(counted.statements, [F.discord_lane._SOONEST])
+        self.assertEqual(counted.statements, [F.discord_lane._CLAIMABLE])
         self.assertEqual((result['counters']['steps'], result['counters']['claimed']), (0, 0))
         self.assertEqual(self.wire.calls, [])
         # Idle by the loop's own rule: the soonest due work lies beyond the idle horizon.
@@ -1058,7 +1089,7 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.start(tenants, 1)
         result, counted = self.shard()
         # The due probe in place of the schema check, then the loop: its coordinator read before the first claim.
-        self.assertEqual(counted.statements[0], F.discord_lane._SOONEST)
+        self.assertEqual(counted.statements[0], F.discord_lane._CLAIMABLE)
         self.assertIn('pr_discord_rate_state', counted.statements[1])
         self.assertEqual((result['counters']['posted'], result['counters']['verified']), (2, 2))
         self.assert_each_created_once_and_verified(2)
@@ -1257,6 +1288,48 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual((warning['projection'], warning['report'], warning['laneOwnsDiscord']), ('read', 'sample', True))
         self.assertEqual(self.wire.calls, [], 'the tick itself still leaves Discord to the lane')
 
+    def test_read_backs_deferred_behind_creates_keep_the_lag_warning_off_until_an_hour_but_late_creates_do_not(self):
+        """M5: a post created long ago whose read-back still waits is deferred by design (creates are claimed first);
+        it must not keep the five-minute warning on. The report tells creates from read-backs; the old field is the
+        mixed lag as before."""
+        tenants = [F.Tenant(n) for n in range(2)]
+        now = self.cluster.now()
+        F.seed(self.cluster, tenants[:1], 1)
+        F.seed(self.cluster, tenants[1:], 1)  # the second workspace's create; park_create moves its due time
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
+        worker = F.base_worker(self.cluster, self.hosted)
+        late = tenants[1].id
+
+        def read_back(age):  # the first workspace's post was created `age` seconds ago; its read-back waits
+            self.corrupt(tenants[0].id, lambda job: job.update(state='provider_accepted', nextAt=self.cluster.now() - age))
+
+        def park_create(parked):  # the second workspace's create: due long ago, or not due for an hour
+            when = self.cluster.now() - 400 if not parked else self.cluster.now() + 3600
+            self.corrupt(late, lambda job: job.update(nextAt=when))
+        park_create(True)
+        read_back(1500)
+        tick, warnings = self.lagging(worker)
+        queue = tick['discordWorker']['queue']
+        self.assertAlmostEqual(queue['oldestEligibleReadbackLagSeconds'], 1500, delta=30)
+        self.assertEqual(queue['oldestEligibleCreateLagSeconds'], 0.0)
+        self.assertAlmostEqual(queue['oldestEligibleLagSeconds'], 1500, delta=30, msg='the old field is the mixed lag')
+        self.assertEqual(warnings, [], 'only a deferred read-back waits: no warning, as the burst needs')
+        # A create due 400 s ago is late whatever the read-back does.
+        park_create(False)
+        tick, warnings = self.lagging(worker)
+        (warning,) = warnings
+        self.assertEqual(warning['lateKinds'], ['creates', 'projection'])
+        self.assertAlmostEqual(warning['oldestEligibleCreateLagSeconds'], 400, delta=30)
+        self.assertAlmostEqual(warning['oldestEligibleReadbackLagSeconds'], 1500, delta=30)
+        # A read-back that waits more than an hour is late too.
+        park_create(True)
+        read_back(3700)
+        tick, warnings = self.lagging(worker)
+        (warning,) = warnings
+        self.assertEqual(warning['lateKinds'], ['readbacks', 'projection'])
+        self.assertEqual(self.wire.calls, [], 'the tick itself still leaves Discord to the lane')
+
     def test_a_queue_report_that_fails_is_a_warning(self):
         self.start([F.Tenant(0)], 1)  # due now: nothing lags
         broken = Counted(self.cluster, refuse=lambda sql: sql.lstrip().startswith('WITH sample AS MATERIALIZED'))
@@ -1285,6 +1358,500 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         (warning,) = warnings
         self.assertGreater(warning['oldestEligibleLagSeconds'], 600)
         self.assertEqual((warning['laneOwnsDiscord'], warning['laneBlocker']), (True, None))
+
+    # (m) a document the claim cannot read stops only its own workspace (G2E-C-10) ----------------------------------
+
+    def corrupt(self, workspace, damage, *, job=0):
+        """Damage one job of a workspace's stored document, the way a bad write or an old migration could."""
+        with self.cluster.connect() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (workspace,)).fetchone()[0]
+            damage(state['phase2']['jobs'][job])
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
+                       (json.dumps(state), workspace))
+
+    def poisoned(self, damage, *, workspaces=4, bad_posts=2):
+        """The workspace first in the claim order (the lowest id, never served) has `bad_posts` due posts, the first
+        damaged; the others have one each. Returns (bad tenant, healthy tenants, the damaged post's nonce, worker)."""
+        tenants = sorted((F.Tenant(n) for n in range(workspaces)), key=lambda tenant: tenant.id)
+        bad, healthy = tenants[0], tenants[1:]
+        states = F.seed(self.cluster, [bad], bad_posts)
+        F.seed(self.cluster, healthy, 1)
+        nonce = F.nonce(states[bad.id]['phase2']['jobs'][0])
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire)
+        self.corrupt(bad.id, damage)
+        return bad, healthy, nonce, F.base_worker(self.cluster, self.hosted)
+
+    def quarantine_lines(self, logged):
+        return [json.loads(record.getMessage()) for record in logged.records
+                if 'discord.lane.quarantined' in record.getMessage()]
+
+    def assert_healthy_workspaces_created_once(self, healthy):
+        found = F.jobs(self.cluster)
+        for tenant in healthy:
+            (job,) = [job for (workspace, _), job in found.items() if workspace == tenant.id]
+            self.assertEqual(job['state'], 'verified', 'a healthy workspace is served')
+            self.assertEqual(len(self.wire.creates[F.nonce(job)]), 1)
+        self.assertEqual(self.wire.duplicates(), 0)
+
+    def test_a_job_document_the_claim_cannot_read_stops_only_its_own_workspace(self):
+        """Before: a job with `events: null` raised in every claim, and the workspace stayed first in the claim order,
+        so the healthy workspaces' due posts were never claimed (G2E-C-10)."""
+        bad, healthy, damaged, worker = self.poisoned(lambda job: job.__setitem__('events', None))
+        before = F.discord_lane.quarantined()
+        with self.assertLogs('postriff.request', 'WARNING') as logged:
+            results = self.drain(worker, 1, seconds=30)  # failures, if any, are asserted by drain
+        self.assertNotIn('error', {result['stoppedBy'] for result in results}, 'the loop was not stopped by the document')
+        self.assert_healthy_workspaces_created_once(healthy)
+        self.assertEqual(self.wire.creates.get(damaged, []), [], 'the damaged post was not sent')
+        # Counted, and logged as one line with the exception class only.
+        self.assertEqual(sum(result['counters']['quarantined'] for result in results), 1)
+        (line,) = self.quarantine_lines(logged)
+        self.assertEqual(line, {'event': 'discord.lane.quarantined', 'error': 'AttributeError',
+                                'quarantineSeconds': F.discord_lane.QUARANTINE_SECONDS})
+        raw = '\n'.join(record.getMessage() for record in logged.records)
+        found = F.jobs(self.cluster)
+        for private in (bad.id, bad.guild, bad.channel, damaged, *[job['id'] for job in found.values()]):
+            self.assertNotIn(private, raw, 'no identifier is logged')
+        self.assertEqual(F.discord_lane.quarantined() - before, 1)
+        self.assertEqual(F.discord_lane.status(self.hosted, time.time())['quarantined'], F.discord_lane.quarantined())
+        # Only its rotation cursor changed: dated ahead, behind every other workspace.
+        with self.cluster.connect(autocommit=True) as db:
+            state, projected = db.execute(
+                'SELECT w.state,p.last_claimed_at FROM public.pr_workspaces w JOIN public.pr_discord_worker_projection p '
+                'ON p.workspace_id=w.id WHERE w.id=%s', (bad.id,)).fetchone()
+        cursor = state['phase2'][discord_worker.CURSOR]
+        self.assertGreater(cursor['quarantinedUntil'], self.cluster.now() + F.discord_lane.QUARANTINE_SECONDS - 60)
+        self.assertEqual((cursor['lastClaimedAt'], projected), (cursor['quarantinedUntil'], cursor['quarantinedUntil']))
+        self.assertEqual([job['state'] for job in state['phase2']['jobs']], ['scheduled', 'scheduled'])
+        self.assertIsNone(state['phase2']['jobs'][0]['events'], 'the damaged document is left for a person to repair')
+
+    def test_a_workspace_set_aside_is_skipped_until_its_window_ends_and_a_repaired_document_is_claimed_again(self):
+        bad, healthy, damaged, worker = self.poisoned(lambda job: job.__setitem__('attempts', None))
+        results = self.drain(worker, 1, seconds=30)
+        self.assertEqual(sum(result['counters']['quarantined'] for result in results), 1)
+        self.assert_healthy_workspaces_created_once(healthy)
+        calls = len(self.wire.calls)
+        # Inside the window nothing is read, claimed, counted or logged again, and an idle shard stops at its first look.
+        with self.assertNoLogs('postriff.request', 'WARNING'):
+            results, failures = F.run_lanes(worker, 2, seconds=30)
+        self.assertEqual(failures, [])
+        self.assertEqual({r['stoppedBy'] for r in results}, {'idle'})
+        self.assertEqual((sum(r['counters']['quarantined'] for r in results), sum(r['counters']['steps'] for r in results)),
+                         (0, 0))
+        self.assertEqual(len(self.wire.calls), calls, 'no request for the workspace set aside')
+        # Repaired, and its window over: the same workspace is claimed again, with no restart or manual step.
+        now = self.cluster.now()
+        self.corrupt(bad.id, lambda job: job.__setitem__('attempts', []))
+        with self.cluster.connect() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (bad.id,)).fetchone()[0]
+            state['phase2'][discord_worker.CURSOR].update(quarantinedUntil=now - 1, lastClaimedAt=now - 1)
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
+                       (json.dumps(state), bad.id))
+        self.drain(worker, 1, seconds=30)
+        found = F.jobs(self.cluster)
+        self.assertEqual(sorted({job['state'] for job in found.values()}), ['verified'])
+        self.assertEqual(len(self.wire.creates[damaged]), 1)
+        self.assertEqual(self.wire.duplicates(), 0)
+
+    def test_the_malformed_shapes_the_claim_already_handles_never_reach_the_guard(self):
+        """The review found six other shapes the existing checks hold or skip without raising. They still do, with
+        healthy workspaces claimed after them, and the guard is not involved (nothing is set aside)."""
+        shapes = {
+            'manifest.discord removed': lambda job: job['manifest'].pop('discord'),
+            'manifest.channelId points nowhere': lambda job: job['manifest'].__setitem__('channelId', 'no-such-channel'),
+            'manifest removed': lambda job: job.pop('manifest'),
+            'nextAt is a string': lambda job: job.__setitem__('nextAt', 'soon'),
+            'approvalDigest missing': lambda job: job.pop('approvalDigest'),
+            'discordAuthorization removed': lambda job: job.pop('discordAuthorization'),
+        }
+        for name, damage in shapes.items():
+            with self.subTest(name):
+                self.cluster.reset()
+                bad, healthy, damaged, worker = self.poisoned(damage)
+                with self.assertNoLogs('postriff.request', 'WARNING'):
+                    results, failures = F.run_lanes(worker, 1, seconds=30)
+                self.assertEqual(failures, [])
+                self.assertEqual(results[0]['counters']['quarantined'], 0)
+                self.assert_healthy_workspaces_created_once(healthy)
+                self.assertEqual(self.wire.creates.get(damaged, []), [], 'the damaged post was not sent')
+
+    def test_a_failure_in_every_workspace_is_the_claim_code_not_a_document_and_still_raises(self):
+        """Two workspaces are set aside, the third failure in the same claim is raised: a defect that hits every
+        workspace is loud (as before), not a queue quietly set aside."""
+        tenants = sorted((F.Tenant(n) for n in range(4)), key=lambda tenant: tenant.id)
+        F.seed(self.cluster, tenants, 1)
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire)
+        for tenant in tenants:
+            self.corrupt(tenant.id, lambda job: job.__setitem__('events', None))
+        lane_worker = F.discord_lane.LaneWorker(F.base_worker(self.cluster, self.hosted), 0)
+        with F.no_billing(), self.assertRaises(AttributeError):
+            lane_worker.claim(discord_only=True)
+        self.assertEqual(lane_worker.discord_stats['quarantined'], F.discord_lane.MAX_QUARANTINES_PER_CLAIM)
+        self.assertEqual(self.wire.calls, [])
+
+    # (n) a release the shared budget caused keeps the post's queue position (F2) ------------------------------------
+
+    # One-minute application windows and a three-second permit life: only the releases a test injects are caused by
+    # the shared budget. With the reviewed one-second window a permit also ends by itself between the reserve and the
+    # seal now and then, which F2 treats the same way and a fixed claim order would have to allow for.
+    SLOW_BUDGET = dict(capacity=2000, app_window_seconds=60, permit_ttl_seconds=3)
+
+    def queue_of_three(self):
+        """Three workspaces in claim order, one loop: the first has two due posts (A1, A2), the others one each (B1,
+        C1). Returns the tenants, the posts' ids as a dict and the worker."""
+        tenants = sorted((F.Tenant(n) for n in range(3)), key=lambda tenant: tenant.id)
+        states = F.seed(self.cluster, tenants[:1], 2)
+        F.seed(self.cluster, tenants[1:], 1)
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, **self.SLOW_BUDGET)
+        a1, a2 = (job['id'] for job in states[tenants[0].id]['phase2']['jobs'])
+        (b1,), (c1,) = ([job_id for (ws, job_id) in F.jobs(self.cluster) if ws == tenant.id] for tenant in tenants[1:])
+        return {'A1': a1, 'A2': a2, 'B1': b1, 'C1': c1}, F.base_worker(self.cluster, self.hosted)
+
+    @contextmanager
+    def refusing(self, where, post, error, *, times=1):
+        """The post's first `times` attempts are refused at `where` the way the shared budget refuses them: a create
+        permit it cannot get (reserve), a permit that ended before its intent was sealed (seal) or before it was used
+        (consume: the step is slow, the permit's life ends, and the coordinator's own check refuses)."""
+        left = [times]
+
+        def now(job_id):
+            if job_id == post and left[0] > 0:
+                left[0] -= 1
+                return True
+            return False
+        if where == 'reserve':
+            real = self.hosted.reserve_discord_send
+
+            def reserve(manifest, **kwargs):
+                if now(kwargs['job']['id']):
+                    raise error
+                return real(manifest, **kwargs)
+            with patch.object(self.hosted, 'reserve_discord_send', reserve):
+                yield
+        elif where == 'seal':
+            real = SharedPostgresBudget.seal
+
+            def seal(limiter, cur, permit, binding, intent_id, valid_until):
+                if now(binding['publicationId']):
+                    raise error
+                return real(limiter, cur, permit, binding, intent_id, valid_until)
+            with patch.object(SharedPostgresBudget, 'seal', seal):
+                yield
+        else:
+            assert where == 'consume', where
+            real = SharedPostgresBudget.consume
+
+            def consume(limiter, permit, method, path, *, binding=None, intent_id=None, authorize=None):
+                if now(binding['publicationId']):
+                    time.sleep(self.SLOW_BUDGET['permit_ttl_seconds'] + .3)
+                return real(limiter, permit, method, path, binding=binding, intent_id=intent_id, authorize=authorize)
+            with patch.object(SharedPostgresBudget, 'consume', consume):
+                yield
+
+    @staticmethod
+    def turns(claims):
+        """The claims with each immediate repeat of the same post taken out: a retry that kept its place is the same
+        turn again, so what is left is the order in which workspaces were served."""
+        return [claim for index, claim in enumerate(claims) if index == 0 or claim != claims[index - 1]]
+
+    def post(self, post_id):
+        return next(job for (_, job_id), job in F.jobs(self.cluster).items() if job_id == post_id)
+
+    def test_a_post_the_shared_budget_released_is_claimed_again_before_anything_else(self):
+        """The 5,000-post run: a create permit that ended unused sent its post behind its never-claimed sibling and its
+        workspace to the back of the round (median re-claim delay 729 s). Now the retry is the very next claim."""
+        for where, error in (('reserve', RateDelayed(2.0, scope='application')),
+                             ('seal', RateDelayed(.05, cause='permit_expired')),
+                             ('consume', None)):
+            with self.subTest(where):
+                self.cluster.reset()
+                posts, worker = self.queue_of_three()
+                with self.refusing(where, posts['A1'], error):
+                    self.drain(worker, 1, seconds=90)
+                claims = [job_id for _, job_id in self.claim_order()]
+                self.assertEqual(claims[:2], [posts['A1']] * 2, 'A1 again at once')
+                self.assertEqual([self.names(posts, job_id) for job_id in self.turns(claims)[:4]], ['A1', 'B1', 'C1', 'A2'],
+                                 'and the round goes on in order')
+                self.assertEqual(self.post(posts['A1'])['discordPositionRestores'], 1)
+                self.assertEqual(sorted({job['state'] for job in F.jobs(self.cluster).values()}), ['verified'])
+                self.assertEqual(self.wire.duplicates(), 0)
+                self.assertEqual(len(self.wire.creates[F.nonce(self.post(posts['A1']))]), 1, 'sent once, after the retry')
+
+    @staticmethod
+    def names(posts, job_id):
+        return next(name for name, wanted in posts.items() if wanted == job_id)
+
+    def test_control_the_old_penalty_sends_the_released_post_behind_its_sibling_and_the_round(self):
+        # What the same release did before: the claim's stamps stayed, so the retry waits for the round and for A2.
+        posts, worker = self.queue_of_three()
+        with patch.object(F.discord_lane.LaneWorker, '_discord_rate_released', lambda *args, **kwargs: None):
+            with self.refusing('reserve', posts['A1'], RateDelayed(2.0, scope='application')):
+                self.drain(worker, 1, seconds=90)
+        claims = [job_id for _, job_id in self.claim_order()]
+        self.assertEqual([self.names(posts, job_id) for job_id in claims[:5]], ['A1', 'B1', 'C1', 'A2', 'A1'])
+        self.assertNotIn('discordPositionRestores', self.post(posts['A1']))
+
+    def test_a_release_caused_by_one_tenants_resource_keeps_its_penalty(self):
+        """Otherwise workspaces sharing a full channel could take their turn over and over."""
+        causes = (('a learned channel window', 'reserve', RateDelayed(.2, scope='learned_route')),
+                  ('an unknown route', 'reserve', RateDelayed(.2, scope='unknown_route')),
+                  ('the cold-route probe', 'reserve', RateDelayed(.2, scope='discovery')),
+                  ('a guild-scoped embargo', 'reserve', RateDelayed(.2, scope='embargo')),
+                  ('a provider 429', 'reserve', RateDelayed(.2, cause='provider_429')),
+                  ('a window about to end', 'reserve', RateDelayed(.2, cause='window_expiring', scope='permit')),
+                  ('an embargo that blocked the permit', 'seal', RateDelayed(.2, cause='permit_blocked', scope='embargo')))
+        for name, where, error in causes:
+            with self.subTest(name):
+                self.cluster.reset()
+                posts, worker = self.queue_of_three()
+                with self.refusing(where, posts['A1'], error):
+                    self.drain(worker, 1, seconds=90)
+                claims = [job_id for _, job_id in self.claim_order()]
+                self.assertNotEqual(claims[1], posts['A1'], 'not claimed again at once')
+                self.assertEqual([self.names(posts, job_id) for job_id in claims[:4]], ['A1', 'B1', 'C1', 'A2'],
+                                 'the penalty: behind the round and its sibling')
+                self.assertNotIn('discordPositionRestores', self.post(posts['A1']))
+                self.assertEqual(sorted({job['state'] for job in F.jobs(self.cluster).values()}), ['verified'])
+
+    def test_a_transient_preflight_failure_keeps_its_penalty(self):
+        posts, worker = self.queue_of_three()
+        real, seen = self.hosted.prepare_discord_dispatch, []
+
+        def prepare(manifest, **kwargs):
+            if manifest['discord']['publicationId'] == posts['A1'] and not seen:
+                seen.append(1)
+                raise TimeoutError('synthetic preflight timeout')
+            return real(manifest, **kwargs)
+        with patch.object(self.hosted, 'prepare_discord_dispatch', prepare):
+            self.drain(worker, 1, seconds=90)
+        claims = [job_id for _, job_id in self.claim_order()]
+        self.assertEqual([self.names(posts, job_id) for job_id in claims[:5]], ['A1', 'B1', 'C1', 'A2', 'A1'])
+        self.assertNotIn('discordPositionRestores', self.post(posts['A1']))
+
+    def test_the_position_is_kept_three_times_for_one_post_and_then_the_penalty_applies(self):
+        posts, worker = self.queue_of_three()
+        with self.refusing('reserve', posts['A1'], RateDelayed(2.0, scope='application'), times=4):
+            self.drain(worker, 1, seconds=90)
+        claims = [job_id for _, job_id in self.claim_order()]
+        self.assertEqual([self.names(posts, job_id) for job_id in claims[:8]], ['A1', 'A1', 'A1', 'A1', 'B1', 'C1', 'A2', 'A1'],
+                         'three retries kept the place; the fourth release cost the turn')
+        self.assertEqual(self.post(posts['A1'])['discordPositionRestores'], 3)
+        self.assertEqual(sorted({job['state'] for job in F.jobs(self.cluster).values()}), ['verified'])
+
+    def fair_queue(self):
+        """The fairness queue with a smaller busy workspace (8 posts, first by id) and six of two posts each."""
+        tenants = sorted((F.Tenant(n) for n in range(7)), key=lambda tenant: tenant.id)
+        F.seed(self.cluster, tenants[:1], 8)
+        F.seed(self.cluster, tenants[1:], 2)
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, **self.SLOW_BUDGET)
+        return tenants, F.base_worker(self.cluster, self.hosted)
+
+    def expire_every_fourth_permit(self, injected):
+        real = SharedPostgresBudget.seal
+        count = [0]
+
+        def seal(limiter, cur, permit, binding, intent_id, valid_until):
+            count[0] += 1
+            if count[0] % 4 == 0:
+                injected.append((binding['publicationId'], len(self.claim_order())))
+                raise RateDelayed(.05, cause='permit_expired')
+            return real(limiter, cur, permit, binding, intent_id, valid_until)
+        return patch.object(SharedPostgresBudget, 'seal', seal)
+
+    def test_permit_expiries_do_not_change_the_rotation_or_any_workspaces_share_of_the_work(self):
+        """The busy-workspace fairness run with every fourth create permit ending unused. Each such release is
+        retried at once, and taking those retries out leaves the round-robin order untouched: a restored turn is
+        the same claim again, not an extra one, so no tenant completes more work than without the expiries."""
+        tenants, worker = self.fair_queue()
+        injected = []
+        with self.expire_every_fourth_permit(injected):
+            self.drain(worker, 1, seconds=90)
+        claims = self.claim_order()
+        self.assertGreaterEqual(len(injected), 4, 'the expiries happened')
+        for post, claimed_so_far in injected:
+            self.assertEqual(claims[claimed_so_far][1], post, 'the retry is the very next claim')
+        self.assert_rotation(tenants, claims)
+        self.assertEqual(sorted({job['state'] for job in F.jobs(self.cluster).values()}), ['verified'])
+        self.assertEqual(self.wire.duplicates(), 0)
+        shares = {tenant.id: sum(1 for creates in self.wire.creates.values() if creates and creates[0][1] == tenant.channel)
+                  for tenant in tenants}
+        self.assertEqual(shares, {tenants[0].id: 8, **{tenant.id: 2 for tenant in tenants[1:]}})
+
+    def test_control_without_the_restore_the_same_expiries_cost_every_released_post_its_turn(self):
+        tenants, worker = self.fair_queue()
+        injected = []
+        with patch.object(F.discord_lane.LaneWorker, '_discord_rate_released', lambda *args, **kwargs: None):
+            with self.expire_every_fourth_permit(injected):
+                self.drain(worker, 1, seconds=90)
+        claims = self.claim_order()
+        early = [(post, claimed_so_far) for post, claimed_so_far in injected if claimed_so_far < 12]  # others still due
+        self.assertGreaterEqual(len(early), 2)
+        for post, claimed_so_far in early:
+            self.assertNotEqual(claims[claimed_so_far][1], post, 'the retry waits behind the other workspaces')
+
+    # (o) no second lease renewal after the seal (F5) --------------------------------------------------------------
+
+    RENEWED = 'Hosted worker renewed the same Discord fence'
+
+    def change_between_seal_and_create(self, change):
+        """One post, one loop. `change(job)` is applied to the stored post after its intent was sealed and just before
+        its create permit is consumed, the window the second lease renewal used to cover. Returns the post, the lane
+        results and the states of the request admissions."""
+        tenant = F.Tenant(0)
+        worker = self.start([tenant], 1)
+        real = SharedPostgresBudget.consume
+
+        def consume(limiter, permit, method, path, *, binding=None, intent_id=None, authorize=None):
+            self.corrupt(tenant.id, change)
+            return real(limiter, permit, method, path, binding=binding, intent_id=intent_id, authorize=authorize)
+        with patch.object(SharedPostgresBudget, 'consume', consume):
+            results = self.drain(worker, 1, seconds=30)
+        (job,) = F.jobs(self.cluster).values()
+        with self.cluster.connect(autocommit=True) as db:
+            admissions = [state for (state,) in db.execute('SELECT state FROM public.pr_discord_request_admissions WHERE is_publish')]
+        return job, results, admissions
+
+    def assert_sealed_unsent_and_renewed_once(self, job, admissions):
+        self.assertEqual(self.wire.requests(method='POST'), [], 'no POST started')
+        self.assertEqual(len(job['discordDispatchIntents']), 1, 'the sealed intent is kept')
+        self.assertEqual(admissions, ['sealed'], 'the permit was never consumed')
+        self.assertEqual(sum(event['message'] == self.RENEWED for event in job['events']), 1,
+                         'renewed once, after the preflight; not again after the seal')
+        self.assertEqual(job['state'], 'uncertain')
+
+    def test_a_withdrawal_after_the_seal_is_caught_by_the_consume_guard_not_a_second_renewal(self):
+        job, results, admissions = self.change_between_seal_and_create(lambda job: job.__setitem__('cancelRequested', True))
+        self.assert_sealed_unsent_and_renewed_once(job, admissions)
+        first = next(event for event in job['events'] if event['state'] == 'uncertain')
+        self.assertEqual(first['message'], 'Discord delivery is uncertain. Reconcile before any further publication.',
+                         'the guard refused the create; before, the renewal ended the step "authority changed during renewal"')
+        self.assertEqual(sum(r['counters']['uncertainCreates'] for r in results), 1)
+        self.assertEqual(sum(r['counters']['leaseLost'] for r in results), 0)
+
+    def test_a_lease_lost_after_the_seal_ends_uncertain_without_a_post_and_keeps_the_intent(self):
+        job, results, admissions = self.change_between_seal_and_create(lambda job: job.__setitem__('leaseUntil', time.time() - 5))
+        self.assert_sealed_unsent_and_renewed_once(job, admissions)
+        first = next(event for event in job['events'] if event['state'] == 'uncertain')
+        self.assertEqual(first['message'], 'Expired Discord intent requires reconciliation; never repost',
+                         'the guard refused the create; the expiry recovery of the next claim records it')
+        self.assertEqual(sum(r['counters']['uncertainCreates'] for r in results), 1, 'the guard refusal is counted')
+        self.assertEqual(self.wire.duplicates(), 0)
+
+    def test_the_minute_workers_step_still_renews_after_the_seal(self):
+        # F5 is the lane worker's alone: the base worker (the minute cron's frozen path) renews twice, as before.
+        tenant = F.Tenant(0)
+        worker = self.start([tenant], 1)
+        with F.no_billing():
+            while worker.step(discord_only=True):
+                pass
+        (job,) = F.jobs(self.cluster).values()
+        self.assertEqual(sum(event['message'] == self.RENEWED for event in job['events']), 2)
+        self.assertEqual(len(self.wire.creates[F.nonce(job)]), 1, 'created once; its read-back is not due yet')
+
+    # (p) a paused Discord is a wait, not a verdict about a post (K1) ---------------------------------------------
+
+    def pause(self, how):
+        provider = self.hosted.providers['discord']
+        if how == 'execution disabled':  # POSTRIFF_OAUTH_DISCORD_DISABLED, the abort ladder's kill switch
+            provider.execution_enabled = False
+        else:
+            provider.authorization_v2_enabled = False
+
+    def unpause(self):
+        provider = self.hosted.providers['discord']
+        provider.execution_enabled = provider.authorization_v2_enabled = True
+
+    def paused_queue(self, how):
+        tenants = [F.Tenant(n) for n in range(4)]
+        worker = self.start(tenants, 2)
+        self.pause(how)
+        return tenants, worker
+
+    def assert_waiting_untouched(self):
+        found = F.jobs(self.cluster)
+        self.assertEqual(sorted({job['state'] for job in found.values()}), ['scheduled'])
+        self.assertEqual(self.destinations(), [], 'no destination was demoted')
+        self.assertEqual(self.wire.calls, [], 'nothing reached Discord')
+
+    def assert_all_created_once_after_the_pause(self, worker, count):
+        self.unpause()
+        self.skip_push_back()
+        self.drain(worker, 2, seconds=60)
+        self.assert_each_created_once_and_verified(count)
+        self.assertEqual(self.destinations(), [])
+
+    def test_a_paused_discord_is_not_claimed_by_the_lane_and_nothing_is_lost(self):
+        """Before: with the kill switch on, the lane claimed every due post, the preflight refused with a pause, and
+        each post was held with its destination demoted: after the switch was off again nothing posted and every
+        customer had to authorize again (4 of 4 destinations, 8 of 8 posts in the review's run)."""
+        for how in ('execution disabled', 'authorization off'):
+            with self.subTest(how):
+                self.cluster.reset()
+                tenants, worker = self.paused_queue(how)
+                results, failures = F.run_lanes(worker, 2, seconds=30)
+                self.assertEqual(failures, [])
+                self.assertEqual({result['stoppedBy'] for result in results}, {'discord_paused'})
+                self.assertEqual(sum(result['counters']['claimed'] for result in results), 0, 'nothing was claimed')
+                self.assert_waiting_untouched()
+                self.assert_all_created_once_after_the_pause(worker, 8)
+
+    def test_a_paused_discord_leaves_the_minute_crons_posts_untouched_however_long_the_pause(self):
+        """K1 churn. The frozen minute cron (lane flag off, which is today's production, or the lane unable to run)
+        claimed every due post again each minute of a pause: a claim and a submitting event, an attempt, a release
+        event and two rewrites of the workspace document, every time. A day's kill switch would have added some 4,300
+        events and 1,400 attempts to every post, in a document every later claim rewrites. It now leaves Discord alone
+        while the provider is paused, as the lane's loops do: the posts wait untouched, never held, no destination
+        demoted, and once the pause is over they are claimed at once and created once."""
+        for how in ('execution disabled', 'authorization off'):
+            for path, flag, unable in (('lane flag off', False, None), ('lane on but unable to run', True, 'policy expired')):
+                with self.subTest(pause=how, path=path):
+                    self.cluster.reset()
+                    tenants, worker = self.paused_queue(how)
+                    if unable:
+                        self.unable(unable)
+                    before = F.jobs(self.cluster)
+                    for _ in range(5):  # five minutes of the pause
+                        self.skip_push_back()  # whatever a cron had released a minute ago is due again now
+                        revisions = self.revisions()
+                        tick = self.minute(worker, flag=flag)
+                        self.assertEqual(tick['processed'], 0, 'the cron claimed nothing')
+                        self.assertEqual(self.revisions(), revisions, 'the cron rewrote no workspace document')
+                    for key, job in F.jobs(self.cluster).items():
+                        was = before[key]
+                        self.assertEqual((len(job['events']), len(job.get('attempts', [])), job.get('lastDispatchedAt')),
+                                         (len(was['events']), len(was.get('attempts', [])), was.get('lastDispatchedAt')),
+                                         'no event, no attempt, no claim stamp was added')
+                    self.assert_waiting_untouched()
+                    if unable:
+                        self.repair()
+                    self.unpause()
+                    if not flag:  # the next minute, with no help from the test: every post is claimed at once
+                        tick = self.minute(worker, flag=False)
+                        self.assertGreaterEqual(tick['processed'], 8, 'all eight posts were due: none waited a back-off')
+                    self.drain(worker, 2, seconds=60)
+                    self.assert_each_created_once_and_verified(8)
+                    self.assertEqual(self.destinations(), [])
+
+    def test_a_revoked_connection_still_holds_the_post_and_asks_for_the_destination_again(self):
+        """Only a pause became a wait: a real revocation or a missing permission is another error and holds as before."""
+        tenants = [F.Tenant(n) for n in range(2)]
+        worker = self.start(tenants, 1)
+        revoked, real = tenants[0].id, self.hosted.oauth.discord_grant_for_worker
+
+        def grant(workspace, connection, *, cur=None):
+            if workspace == revoked:
+                raise F.P.AlphaError('Discord authorization was revoked.', 409)
+            return real(workspace, connection, cur=cur)
+        with patch.object(self.hosted.oauth, 'discord_grant_for_worker', grant):
+            self.drain(worker, 1, seconds=30)
+        found = F.jobs(self.cluster)
+        self.assertEqual({workspace: job['state'] for (workspace, _), job in found.items()},
+                         {revoked: 'held', tenants[1].id: 'verified'})
+        self.assertEqual(self.destinations(), ['verification_required'])
 
 
 if __name__ == '__main__':

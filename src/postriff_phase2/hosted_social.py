@@ -364,7 +364,7 @@ class HostedSocial:
         from .discord.authorization import grant_matches, wire_content, digest
         provider = self._provider(manifest)
         if provider is None or not getattr(provider, 'authorization_v2_enabled', False):
-            raise AlphaError('Discord publishing is paused pending authorization and rollout validation.', 409)
+            raise AlphaError('Discord publishing is paused pending authorization and rollout validation.', 409, code='discord_paused')
         grant = self.oauth.discord_grant_for_worker(manifest['workspaceId'], manifest['channelId'])
         if not grant_matches(manifest, grant, provider.session(grant['accessToken'])):
             raise AlphaError('Discord was reconnected or changed. Review the post again.', 409)
@@ -410,7 +410,7 @@ class HostedSocial:
                 raise AlphaError('Discord webhook grant changed.', 409)
             return provider.rate_limiter.reserve('POST', path(session, execute=True),
                 identity=provider._rate_identity('webhook', session['secret']), binding=binding,
-                valid_until=min(job['leaseUntil'], manifest['expiresAt']))
+                valid_until=min(job['leaseUntil'], manifest['expiresAt']), **provider._book_ahead())
         return provider.admit_bot_request('POST', f'/channels/{channel}/messages', binding=binding,
                                          valid_until=min(job['leaseUntil'],manifest['expiresAt']))
 
@@ -518,7 +518,7 @@ class HostedSocial:
     def reconcile_discord(self, manifest, job, *, read_authorize=None):
         """Only GET a known message in the original channel; never use the default."""
         from .discord.authorization import SCHEMA, wire_content, digest, snowflake
-        from .discord.rate_limits import RateDelayed, ReadAdmissionDelayed
+        from .discord.rate_limits import COORDINATOR_WAIT_SECONDS, RateCoordinatorUnavailable, RateDelayed, ReadAdmissionDelayed
         frozen = manifest.get('discord') or {}
         target = frozen.get('target') or {}
         reference = job.get('providerReference')
@@ -585,6 +585,16 @@ class HostedSocial:
                     'discordDeliveryEvidence': 'accepted', 'discordReadDeferred': True,
                     'discordReadAdmissionDenied': isinstance(error, ReadAdmissionDelayed),
                     'retryAfterSeconds': max(1, math.ceil(error.retry_after_seconds))}
+        except RateCoordinatorUnavailable:
+            # The coordinator cannot admit any request now: none is attached (the reviewed policy does not parse, the paused
+            # build), it is degraded, its policy ended or its database is down. That says nothing about this post, whose receipt
+            # is intact, so it is a wait for this exact lookup, like a refused read: never `uncertain`, never a spent check (the
+            # read was refused before it was built or, if only its observation failed, is asked again). Creates are not here: the
+            # preflight and the permit stay fail-closed. (The ops review's N-1: five claims used to park the post for a day.)
+            return {'state': 'provider_accepted', 'reference': reference,
+                    'confirmed': 'Discord message receipt retained; request coordination is unavailable for the exact read-back. Do not resubmit.',
+                    'discordDeliveryEvidence': 'accepted', 'discordReadDeferred': True, 'discordReadAdmissionDenied': True,
+                    'retryAfterSeconds': int(COORDINATOR_WAIT_SECONDS)}
         except (AlphaError, KeyError, TypeError, ValueError):
             return _uncertain('Discord receipt lookup is unavailable. Keep the original message ID; do not resubmit.')
 
