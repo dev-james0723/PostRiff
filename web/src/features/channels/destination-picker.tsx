@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ApiError } from '@/lib/api/client';
+import { discordCopy } from '@/lib/channels/discord-copy';
+import { discordRefusal } from '@/lib/channels/discord-refusal';
+import { usePreferences } from '@/lib/preferences';
 import { keys } from '@/lib/api/hooks';
 import type { ChannelDestination } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -23,6 +26,9 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const isMobile = useIsMobile();
+  const dc = discordCopy(usePreferences().locale);
+  // Discord requests here can be refused by the shared request coordinator: say it in the person's language.
+  const reason = (err: unknown) => (err instanceof ApiError ? (platform === 'Discord' ? discordRefusal(err, dc) : err.message) : 'Try again in a moment.');
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<ChannelDestination[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +41,7 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
     try {
       setItems((await api.channelDestinations(workspaceId, channelId)).destinations);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Try again in a moment.');
+      setError(reason(err));
     }
   }
 
@@ -43,11 +49,28 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
     setSaving(id);
     try {
       await api.chooseChannelDestination(workspaceId, channelId, id);
-      setItems((current) => current?.map((item) => ({ ...item, selected: item.id === id })) ?? null);
-      toast.success(label === 'Location' ? 'Business Profile location selected' : 'Rafii will post in this channel');
+      setItems((current) => current?.map((item) => ({ ...item, selected: item.id === id, ...(item.id === id && platform === 'Discord' ? { authorizedId: item.stableId } : {}) })) ?? null);
+      toast.success(platform === 'Discord' ? 'Channel authorized and set as the default. Existing approvals keep their frozen destination.' : label === 'Location' ? 'Business Profile location selected' : 'Rafii will post in this channel');
       void client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
+      if (platform === 'Discord') void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Try again in a moment.');
+      toast.error(reason(err));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function remove(item: ChannelDestination) {
+    if (!item.authorizedId) return;
+    setSaving(item.id);
+    try {
+      await api.removeDiscordDestination(workspaceId, channelId, item.authorizedId);
+      setItems((current) => current?.map((destination) => destination.id === item.id ? { ...destination, authorizedId: undefined, selected: false } : destination) ?? null);
+      toast.success('Channel authorization removed. Pending posts to this channel are held.');
+      void client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
+      void client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+    } catch (err) {
+      toast.error(reason(err));
     } finally {
       setSaving(null);
     }
@@ -57,14 +80,14 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
     <>
       <Button variant='quiet' className={CONTROL_44} disabled={disabled} onClick={() => void load()}>
         <Icons.send className='size-4' aria-hidden />
-        {label === 'Channel' ? 'Posting channel' : `Posting ${label}`}
+        {platform === 'Discord' ? 'Authorize Discord channel' : label === 'Channel' ? 'Posting channel' : `Posting ${label}`}
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side={isMobile ? 'bottom' : 'right'} className={cn(SHEET_ELEVATED, 'data-[side=bottom]:max-h-[80dvh] data-[side=right]:sm:max-w-md')}>
           <SheetHeader className='gap-1.5 px-5 pt-5 pr-14 pb-4'>
             <SheetTitle className='text-xl font-medium tracking-tight'>{label === 'Location' ? 'Choose a business location' : 'Where Rafii posts'}</SheetTitle>
             <SheetDescription>
-              {label === 'Location' ? 'Choose the exact Business Profile location for this connection.' : `Rafii posts on ${platform} only in the ${label === 'Channel' ? 'channel' : label} you choose.`}
+              {platform === 'Discord' ? 'Authorize individual server channels here, then choose the exact destination on each post. Changing the default keeps existing approvals on their original channel.' : label === 'Location' ? 'Choose the exact Business Profile location for this connection.' : `Rafii posts on ${platform} only in the ${label === 'Channel' ? 'channel' : label} you choose.`}
             </SheetDescription>
           </SheetHeader>
           <div className='flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-5 pb-[max(1rem,env(safe-area-inset-bottom))]'>
@@ -74,8 +97,8 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
               <StateMessage kind='empty' layout='inline' title={label === 'Location' ? 'No Business Profile locations available to this Google account.' : label === 'Page' ? 'No Pages you can post to.' : 'No text channels the bot can post in.'} />
             )}
             {items?.map((item) => (
+              <div key={item.id} className='flex flex-col gap-1'>
               <Button
-                key={item.id}
                 variant={item.selected ? 'action' : 'glass'}
                 className={cn(CONTROL_44, 'justify-between')}
                 disabled={saving !== null}
@@ -83,11 +106,13 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
                 onClick={() => void choose(item.id)}
               >
                 <span className='truncate'>
-                  {item.name}
+                  {platform === 'Discord' ? `${item.guildName} · ${item.name} (${item.id})` : item.name}
                   {item.kind === 'announcement' ? ' · announcements' : ''}
                 </span>
                 {item.selected && <Icons.check className='size-4 shrink-0' aria-hidden />}
               </Button>
+              {platform === 'Discord' && item.authorizedId && <Button variant='quiet' className={CONTROL_44} disabled={saving !== null} onClick={() => void remove(item)}>Remove channel authorization</Button>}
+              </div>
             ))}
           </div>
         </SheetContent>

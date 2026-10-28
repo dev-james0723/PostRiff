@@ -13,8 +13,12 @@ env:
 jobs:
   local-gates:
     runs-on: ubuntu-24.04
-    # About 21 minutes of work on a typical runner; 25 left no room for runner variance and cancelled a passing run.
-    timeout-minutes: 40
+    # The expanded ordinary catalog plus the bounded15m Discord runner and
+    # remaining build/browser steps need an explicit CI execution budget.
+    # This changes no capacity workload, traffic duration or latency target.
+    # RC2: the Python step alone takes about 35 minutes (the lane, booking and coordinator tests run on PostgreSQL;
+    # RC1 took 6), and the steps after it about 30, so 75 left no margin.
+    timeout-minutes: 100
     env:
       PYTHONPATH: src:tests
       POSTRIFF_RESEARCH: '0'
@@ -52,7 +56,15 @@ jobs:
       - name: Python domain and security contracts
         run: python scripts/consumer_ready_check.py ci-python python -m unittest discover -s tests -p 'test_*.py'
       - name: Disposable DB integration, migrations and restore
+        env:
+          # The Mastodon management and automation fixtures refuse to prepare their synthetic schema unless the runner
+          # opts in (tests/mastodon_after134_fixture.py). This step is that runner: a disposable cluster on the
+          # loopback port with a consumer-pg- directory, on Linux CI, which the fixture re-checks before it touches
+          # anything. Without the opt-in these scripts fail here on any tree that contains the Mastodon lane.
+          POSTRIFF_MASTODON_AFTER134_FIXTURE: '1'
         run: python scripts/consumer_ready_check.py ci-postgres python scripts/postriff_pg_suite.py
+      - name: Discord P0-P4 in the guarded owned PostgreSQL runner
+        run: python scripts/consumer_ready_check.py ci-discord-p0-p4 timeout --signal=TERM --kill-after=60s 15m bash scripts/discord-p4-validation-cloud.sh
       - name: Web contracts and locale checks
         run: |
           python scripts/consumer_ready_check.py ci-web node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs

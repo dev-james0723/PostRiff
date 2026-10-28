@@ -1,8 +1,9 @@
-Pillow==12.3.0
-pypdf==6.19.0
+Pillow==13.0.0
+pypdf==6.21.2
 pypdfium2==5.14.0
 Markdown==3.11
 psycopg[binary]==3.3.5
+psycopg-pool==3.3.3
 cryptography==50.0.1
 # Rafii Control v2 embedded in the consumer API (src/rafii_control): contract validation for its catalog pack.
 jsonschema==4.26.0

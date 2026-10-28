@@ -37,6 +37,16 @@ const SESSIONS = {
   ]
 };
 const iso = (t) => new Date(t * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+// Focus moves in an effect after the dialog is already visible, and back to the trigger after it has closed: read it until it
+// settles instead of once (CI run 864 on c252a2ba failed RAP-118 "focus moves into the dialog" on 2 of 3 attempts).
+const settles = async (read, ms = 5000) => {
+  const end = Date.now() + ms;
+  for (;;) {
+    if (await read()) return true;
+    if (Date.now() > end) return false;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+};
 const DEVICES = {
   devices: [
     { deviceId: '11111111-1111-4111-8111-111111111111', label: 'Safari on iPhone', state: 'observed', surface: 'web', firstSeen: iso(now - 86400), lastSeen: iso(now), revokedAt: null, revokeReason: null, current: true, sessions: 2, activeSessions: 2 }
@@ -135,12 +145,12 @@ async function shot(page, name) {
       const dialogText = await dialog.innerText();
       check('RAP-126', 'the dialog states the exact number of active other sessions (2, not the revoked one)', /2 other devices will be signed out/.test(dialogText), dialogText);
       check('RAP-126', 'explicit confirm and cancel buttons', (await dialog.getByRole('button', { name: 'Sign out others' }).count()) === 1 && (await dialog.getByRole('button', { name: 'Keep them' }).count()) === 1, dialogText);
-      const inside = await page.evaluate(() => Boolean(document.activeElement?.closest('[role="alertdialog"]')));
+      const inside = await settles(() => page.evaluate(() => Boolean(document.activeElement?.closest('[role="alertdialog"]'))));
       check('RAP-118', 'focus moves into the dialog', inside);
       await shot(page, 'desktop-revoke-others-dialog');
       await page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'hidden', timeout: 10000 });
-      const back = await trigger.evaluate((el) => document.activeElement === el);
+      const back = await settles(() => trigger.evaluate((el) => document.activeElement === el));
       check('RAP-118', 'Escape cancels and focus returns to the trigger', back);
       // Every action in the section is a real, labelled control reachable by Tab (no hover-only or hidden actions).
       const controls = await section.locator('button:visible').evaluateAll((els) => els.map((el) => ({ name: (el.getAttribute('aria-label') || el.innerText).trim(), tabbable: el.tabIndex >= 0 })));

@@ -39,17 +39,57 @@ from .content_types import formats, public_catalog, public_packs
 from . import account_protection, agent_observability, device_trust, security_gate, tools
 from .agent_runtime import FixtureAgentRuntime
 
+_POOL_SETTINGS_WARNED = []
 
-def postgres_factory(dsn):
+
+def pool_settings(values):
+    """(pooled, max_size, max_waiting) for postgres_factory from the environment (ENV-1).
+
+    A pool limit that is not a whole number in its range never takes the API down: the pool stays off, so each
+    transaction opens its own connection as it does without the pool, and one WARNING per process names the
+    variables, never their values. Unset limits keep their defaults; a valid setting is used exactly as before.
+    """
+    from .postgres_pool import MAX_SIZE_RANGE, MAX_WAITING_RANGE
+    requested = values.get('POSTRIFF_DB_POOL_ENABLED') == 'true'
+    limits, invalid = [], []
+    for name, default, (low, high) in (('POSTRIFF_DB_POOL_MAX_CONNECTIONS', 20, MAX_SIZE_RANGE),
+                                       ('POSTRIFF_DB_POOL_MAX_WAITING', 64, MAX_WAITING_RANGE)):
+        raw = values.get(name, str(default))
+        try:
+            number = int(raw)
+        except (TypeError, ValueError):
+            number = None
+        if number is None or not low <= number <= high:
+            invalid.append(name)
+        limits.append(number)
+    if not invalid:
+        return requested, limits[0], limits[1]
+    if not _POOL_SETTINGS_WARNED:
+        _POOL_SETTINGS_WARNED.append(True)
+        logging.getLogger('postriff.request').warning(json.dumps({
+            'event': 'database.pool_settings_invalid', 'variables': invalid, 'poolRequested': requested, 'pool': 'off'}))
+    return False, 20, 64
+
+
+def postgres_factory(dsn, *, pooled=False, max_size=20, max_waiting=64, timeout=8, options=None, observer=None):
     if not isinstance(dsn, str) or not dsn.strip():
         raise ValueError("POSTRIFF_DATABASE_URL is required.")
+    if pooled:
+        from .postgres_pool import PooledPostgresFactory
+        return PooledPostgresFactory(dsn, max_size=max_size, max_waiting=max_waiting, timeout=timeout,
+                                     options=options, observer=observer)
     try:
         import psycopg
     except ImportError as error:
         raise RuntimeError("Install the pinned hosted PostgreSQL dependency.") from error
     # Supabase transaction-mode pooling does not support prepared statements.
     # Each invocation gets one bounded connection and TLS is enforced by the DSN.
-    return lambda: psycopg.connect(dsn, client_encoding="utf8", prepare_threshold=None, connect_timeout=8)
+    def factory():
+        return psycopg.connect(dsn, client_encoding="utf8", prepare_threshold=None, connect_timeout=8)
+    # A separate bounded checkout of the same DB, never a new queue or service.
+    factory.bounded = lambda _timeout: psycopg.connect(dsn, client_encoding="utf8", prepare_threshold=None,
+        connect_timeout=2, options="-c statement_timeout=300 -c lock_timeout=100")
+    return factory
 
 
 def supabase_verifier(project_url, publishable_key, connection_factory=None, get_user=None):
@@ -287,7 +327,8 @@ def chat_media_from_environment(values):
 def runtime_from_environment(environ=None):
     from .deployment import isolated_environment
     values = isolated_environment(os.environ if environ is None else environ)
-    database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"))
+    pooled, max_size, max_waiting = pool_settings(values)
+    database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"), pooled=pooled, max_size=max_size, max_waiting=max_waiting)
     project_url = values.get("POSTRIFF_SUPABASE_URL")
     publishable = values.get("POSTRIFF_SUPABASE_PUBLISHABLE_KEY")
     secret = values.get("POSTRIFF_SUPABASE_SECRET_KEY")
@@ -301,6 +342,19 @@ def runtime_from_environment(environ=None):
     # Adapters mount only with client credentials; live execution only when a provider is
     # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
+    # P4's coordination spans tenants and process replicas of one bot. Never
+    # activate the P3 Discord sender without a durable, shared admission store.
+    discord = providers.get('discord')
+    if discord is not None:
+        if getattr(discord, 'rate_v1_enabled', False):
+            from .discord.rate_limits import SharedPostgresBudget, RateCoordinatorUnavailable
+            try:
+                discord.rate_limiter = SharedPostgresBudget(database, discord.client_id)
+            except RateCoordinatorUnavailable:
+                discord.authorization_v2_enabled = False
+        elif getattr(discord, 'authorization_v2_enabled', False):
+            # Also fence manually triggered Discord worker actions; not just cron.
+            discord.authorization_v2_enabled = False  # other providers unaffected
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
     service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
@@ -577,6 +631,10 @@ class HostedApplication:
         device_binding = device_trust.bind(environ)
         # RAP-016/076: the sign-in details a first sighting may record (RAFII_SIGN_IN_DETAILS; nothing while off).
         details_binding = account_protection.bind_request(environ)
+        # What kind of process this request is (the lane, the minute cron, the web), for the one line a failure of the request
+        # coordinator leaves when a process stops asking it (DiscordProvider._coordinator_failed). Nothing but the kind is kept.
+        from .discord.rate_limits import bind_process_kind, process_kind_of, release_process_kind
+        kind_binding = bind_process_kind(process_kind_of(environ.get('PATH_INFO', '/')))
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -599,7 +657,7 @@ class HostedApplication:
                 'event':'request.completed', 'requestId':request_id,
                 'method':method if method in ('GET','POST','PUT','PATCH','DELETE','OPTIONS','HEAD') else 'OTHER',
                 'status':status_code, 'durationMs':round((time.monotonic()-started)*1000,2),
-                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' or environ.get('PATH_INFO','').startswith('/api/cron/youtube/') else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
+                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' or environ.get('PATH_INFO','').startswith(('/api/cron/youtube/','/api/cron/discord-worker/')) else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
             **environ.get('postriff.failure', {})
             }))
             # Founder reliability metrics (CONTRACTS §8.D): one in-memory count per minute x route pattern x status class,
@@ -613,6 +671,7 @@ class HostedApplication:
             _REQUEST_LABEL.reset(label_binding)
             device_trust.reset(device_binding)
             account_protection.reset_request(details_binding)
+            release_process_kind(kind_binding)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -644,6 +703,60 @@ class HostedApplication:
                 service = self._runtime()
                 from .youtube.fleet import run_lane
                 return self._json(start_response, 200, run_lane(service, self.worker, lanes[suffix]))
+            if path.startswith('/api/cron/discord-worker/'):
+                # W-02 shards. Same authority as the YouTube lanes: the cron secret, checked before the runtime,
+                # database or provider clients start. The flag is read per request; off answers without them.
+                started = time.monotonic()
+                from .discord import lane as discord_lane
+                number = discord_lane.shard(path.removeprefix('/api/cron/discord-worker/'))
+                if method != 'GET' or number is None:
+                    raise AlphaError('This hosted route is unavailable.', 404)
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get('CRON_SECRET', '')
+                supplied = environ.get('HTTP_AUTHORIZATION', '')
+                if (not isinstance(expected, str) or len(expected) < 16 or not expected.isascii()
+                        or not isinstance(supplied, str) or not supplied.isascii()
+                        or not hmac.compare_digest(supplied, 'Bearer ' + expected)):
+                    raise AlphaError('Cron authorization failed.', 401)
+                if not discord_lane.enabled():
+                    return self._json(start_response, 200, discord_lane.disabled(number))
+                self._runtime()
+                return self._json(start_response, 200, discord_lane.run(self.worker, number, started=started,
+                                                                         request_id=environ.get('postriff.request_id')))
+            if path.startswith('/api/ops/discord/'):
+                # H-07 operations health: read-only aggregates behind the shard route's cron-secret check, which runs
+                # before the runtime, database or provider clients start; the same 404 and 401 answers.
+                from .discord import ops as discord_ops
+                return discord_ops.answer(self, environ, start_response, method, path)
+            if path == '/api/discord/interactions':
+                from .discord import interactions as discord_interactions
+                # Feature off (the user-install flag unset, Discord not mounted, or its kill switch on): the route does
+                # not exist, a 404 for any method, scheme or body, decided before the runtime, a key, the body or the
+                # database is touched (PR-1). A cold process reads the flag as the provider registry does.
+                running = getattr(getattr(self.service, 'oauth', None), 'providers', None) if self.service is not None else None
+                if not (discord_interactions.enabled(running.get('discord')) if running is not None
+                        else os.environ.get('POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED') == 'true'):
+                    discord_interactions.route_unavailable()
+                if method != 'POST':
+                    raise AlphaError('Discord interaction route unavailable.', 404)
+                if environ.get('wsgi.url_scheme') != 'https':
+                    raise AlphaError('Discord interactions require HTTPS.', 400)
+                if environ.get('CONTENT_TYPE', '').split(';')[0].strip().lower() != 'application/json':
+                    raise AlphaError('Discord interaction content type invalid.', 415)
+                try:
+                    length = int(environ.get('CONTENT_LENGTH') or '0')
+                except (TypeError, ValueError):
+                    raise AlphaError('Discord interaction body size invalid.', 413) from None
+                if not 0 < length <= 65536:
+                    raise AlphaError('Discord interaction body size invalid.', 413)
+                service = self._runtime()
+                from .discord.interactions import DiscordInteractions
+                oauth = service.oauth
+                endpoint = DiscordInteractions(oauth.providers.get('discord'), oauth.repository.connection_factory, oauth.public_base_url)
+                raw = environ['wsgi.input'].read(length)
+                if len(raw) != length:
+                    raise AlphaError('Discord interaction body incomplete.', 400)
+                return self._json(start_response, 200, endpoint.receive(raw,
+                    environ.get('HTTP_X_SIGNATURE_TIMESTAMP', ''), environ.get('HTTP_X_SIGNATURE_ED25519', '')))
             bearer = environ.get("HTTP_AUTHORIZATION", "")
             api_bearer = bearer.startswith("Bearer prt_")
             if api_bearer:
@@ -769,7 +882,10 @@ class HostedApplication:
             if path == "/api/cron/agent-tasks" and method == "GET":
                 expected = self.cron_secret if self.cron_secret is not None else os.environ.get("CRON_SECRET", "")
                 supplied = environ.get("HTTP_AUTHORIZATION", "")
-                if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
+                # compare_digest raises TypeError on non-ASCII str: such a header is refused, never a 500 (as the shards).
+                if (not isinstance(expected, str) or len(expected) < 16 or not expected.isascii()
+                        or not isinstance(supplied, str) or not supplied.isascii()
+                        or not hmac.compare_digest(supplied, "Bearer " + expected)):
                     raise AlphaError("Cron authorization failed.", 401)
                 from .agent_runtime_v2.task_engine import cron as task_cron
                 return self._json(start_response, 200, task_cron.tick(self._runtime()))
@@ -777,7 +893,10 @@ class HostedApplication:
                 service = self._runtime()
                 expected = self.cron_secret or ""
                 supplied = environ.get("HTTP_AUTHORIZATION", "")
-                if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
+                # compare_digest raises TypeError on non-ASCII str: such a header is refused, never a 500 (as the shards).
+                if (not isinstance(expected, str) or len(expected) < 16 or not expected.isascii()
+                        or not isinstance(supplied, str) or not supplied.isascii()
+                        or not hmac.compare_digest(supplied, "Bearer " + expected)):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
                 sign_in_alerts = getattr(service, 'deliver_sign_in_alerts', None)
@@ -1017,6 +1136,14 @@ class HostedApplication:
                 return phone_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] in coworker_http.RESOURCES:
                 return coworker_http.handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) == 6 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'jobs' and parts[5] == 'execute' and method == 'POST':
+                body = self._body(environ)
+                if set(body) != {'approvalDigest'}:
+                    raise AlphaError('Send only the exact stored approval for this post.')
+                if self.worker is None:
+                    raise AlphaError('The publishing worker is unavailable. Reload the post status before continuing.', 503)
+                return self._json(start_response, 202, self.worker.execute_job(service.repository, parts[2], token,
+                                                                             parts[4], body.get('approvalDigest')))
             if len(parts) >= 4 and parts[:2] == ['api','workspaces'] and parts[3]=='growth':
                 return growth_http.handle(self,environ,start_response,service,token,method,parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":
@@ -1080,8 +1207,45 @@ class HostedApplication:
                 from . import connection_health
                 if connection_health.deployment_enabled(connection_health.environment(service)):
                     return self._json(start_response, 200, connection_health.ConnectionHealth(service).read(parts[2], token))
+            if (len(parts) == 6 and parts[:2] == ['api', 'workspaces']
+                    and parts[3:5] == ['discord', 'private-review'] and method == 'GET'):
+                from .discord.interactions import DiscordInteractions
+                oauth = service.oauth
+                endpoint = DiscordInteractions(oauth.providers.get('discord'), oauth.repository.connection_factory, oauth.public_base_url)
+                return self._json(start_response, 200, endpoint.review_entry(oauth.discord_connections, parts[2], token, parts[5]))
+            if (len(parts) == 7 and parts[:2] == ['api', 'workspaces']
+                    and parts[3:5] == ['discord', 'interaction-links'] and method == 'POST' and parts[6] in ('bind', 'remove')):
+                from .discord.interactions import DiscordInteractions
+                oauth = service.oauth
+                endpoint = DiscordInteractions(oauth.providers.get('discord'), oauth.repository.connection_factory, oauth.public_base_url)
+                return self._json(start_response, 200, endpoint.bind(oauth.discord_connections, parts[2], token, parts[5], remove=parts[6] == 'remove'))
+            if len(parts) == 7 and parts[:2] == ['api', 'workspaces'] and parts[3:5] == ['discord', 'identities']:
+                discord = service.oauth.discord_connections
+                if parts[6] == 'guilds' and method == 'GET':
+                    return self._json(start_response, 200, discord.guilds(parts[2], token, parts[5]))
+                if parts[6] == 'disconnect' and method == 'POST':
+                    return self._json(start_response, 200, discord.disconnect_identity(parts[2], token, parts[5]))
+            if (len(parts) in (6, 7) and parts[:2] == ['api', 'workspaces']
+                    and parts[3] == 'channels' and parts[5] == 'discord-engagement'):
+                engagement = service.discord_engagement
+                if len(parts) == 6 and method == 'GET':
+                    return self._json(start_response, 200, engagement.status(parts[2], token, parts[4]))
+                operations = {'consent': engagement.consent, 'read': engagement.read,
+                              'preview': engagement.preview, 'approve': engagement.approve, 'cancel': engagement.cancel}
+                if len(parts) == 7 and method == 'POST' and parts[6] in operations:
+                    return self._json(start_response, 200, operations[parts[6]](parts[2], token, parts[4], self._body(environ)))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
+                # The four calls below make several reads of Discord in a row (a server's channel list, a re-check, the last step of
+                # a connection). Booked, they wait their turn behind the lane's saturation instead of being refused after the first
+                # read or two (rate_limits.web_reads). Calls that make one read stay immediate.
+                from .discord.rate_limits import web_booked
+                if len(parts) == 6 and parts[5] == 'discord-sender-name':
+                    discord = oauth.discord_connections
+                    if method == 'GET':
+                        return self._json(start_response, 200, discord.sender_profile(parts[2], token, parts[4]))
+                    if method == 'POST':
+                        return self._json(start_response, 200, discord.set_sender_name(parts[2], token, parts[4], self._body(environ)))
                 if len(parts) >= 7 and parts[5] == 'mastodon':
                     from .mastodon_management import handle as mastodon_handle
                     return mastodon_handle(self, environ, start_response, service, token, method, parts)
@@ -1095,15 +1259,17 @@ class HostedApplication:
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "complete" and method == "POST":
                     body = self._body(environ)
                     extra = {"iss": body["iss"]} if body.get("iss") is not None else {}
-                    return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
+                    return self._json(start_response, 200, web_booked(oauth.complete, parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
                 if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
                     board_id = self._query_str(environ, 'boardId')
-                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4], board_id=board_id))
+                    return self._json(start_response, 200, web_booked(oauth.destinations, parts[2], token, parts[4], board_id=board_id))
+                if len(parts) == 7 and parts[5] == 'destinations' and method == 'DELETE':
+                    return self._json(start_response, 200, oauth.remove_discord_destination(parts[2], token, parts[4], parts[6]))
                 if len(parts) == 6 and parts[5] == "creator-info" and method == "GET":
                     return self._json(start_response, 200, oauth.creator_info(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "destination" and method == "POST":
                     body = self._body(environ)
-                    return self._json(start_response, 200, oauth.choose_destination(parts[2], token, parts[4], body.get("destinationId")))
+                    return self._json(start_response, 200, web_booked(oauth.choose_destination, parts[2], token, parts[4], body.get("destinationId")))
                 if len(parts) == 6 and parts[5] == 'posts' and method == 'POST':
                     return self._json(start_response, 200, oauth.history.preview(parts[2], token, parts[4], self._body(environ)))
                 if len(parts) == 7 and parts[5:] == ['posts', 'import'] and method == 'POST':
@@ -1121,7 +1287,7 @@ class HostedApplication:
                     return self._json(start_response, 200, oauth.refresh_pinterest_authorization(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
-                    return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))
+                    return self._json(start_response, 200, web_booked(oauth.verify, parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "insights-canary" and method == "POST":
                     probe = getattr(service, "metric_probe", None)
                     if probe is None:
@@ -1298,7 +1464,7 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith('/api/cron/youtube/'):
+            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith(('/api/cron/youtube/', '/api/cron/discord-worker/')):
                 # Source locations only: never format exception text, source lines, locals or payloads.
                 frame = error.__traceback__
                 while frame is not None:

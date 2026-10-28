@@ -58,10 +58,40 @@ async function api(method, url, body) {
     await dialog.getByText(/300 posts and 12 pages/).waitFor();
     await dialog.getByText(/Caption text and caption hashes/).waitFor();
     assert.equal(posts,0);await shot('review-desktop');
-    await confirm.check();await dialog.getByRole('button',{name:'Confirm import',exact:true}).click();
-    await dialog.getByText('Import queued',{exact:true}).waitFor();assert.equal(posts,1);
-    assert.equal((await api('GET',endpoint)).status,'pending');
-    checks.push('opening/review does not POST; unchecked explicit metadata/analytics consent; real 202 request and queued status');
+    // Hold only this POST before it reaches the real disposable API. A sending request is not queue confirmation.
+    const importUrl = new URL(endpoint,base).href;
+    let releasePost;let forwardPost=false;
+    const heldPost = new Promise(resolve=>{releasePost=resolve;});
+    const holdImport = async route => {
+      if(route.request().method()!=='POST')return route.continue();
+      assert.deepEqual(route.request().postDataJSON(),{confirmed:true});
+      await heldPost;
+      return forwardPost?route.continue():route.abort('failed');
+    };
+    await page.route(importUrl,holdImport);
+    try {
+      await confirm.check();
+      const sending=page.waitForRequest(request=>request.url()===importUrl && request.method()==='POST');
+      await dialog.getByRole('button',{name:'Confirm import',exact:true}).click();await sending;
+      const requesting=dialog.getByRole('button',{name:'Requesting import…',exact:true});
+      await requesting.waitFor();assert.equal(await requesting.isDisabled(),true);
+      assert.equal(await confirm.isDisabled(),true);
+      assert.equal(posts,1);
+      assert.equal(await dialog.getByText('Import queued',{exact:true}).count(),0,'An in-flight request cannot claim that an import was queued.');
+      assert.equal((await api('GET',endpoint)).status,'none','No import exists while the POST has not reached the API.');
+      const queuedResponse=page.waitForResponse(response=>response.url()===importUrl && response.request().method()==='POST');
+      forwardPost=true;releasePost();
+      const response=await queuedResponse;assert.equal(response.status(),202);
+      const queued=await response.json();assert.equal(queued.status,'pending');assert.equal(queued.connectionId,conn);
+      assert.ok(typeof queued.importId==='string' && queued.importId.length>0);
+      await dialog.getByText('Import queued',{exact:true}).waitFor();assert.equal(posts,1);
+      const persisted=await api('GET',endpoint);
+      console.log('RAFII_HISTORY_IMPORT_COMMIT_RECEIPT '+JSON.stringify({postHttp:response.status(),postStatus:queued.status,getStatus:persisted.status,connectionMatches:queued.connectionId===conn && persisted.connectionId===conn,importMatches:queued.importId===persisted.importId}));
+      assert.equal(persisted.status,'pending');assert.equal(persisted.connectionId,conn);assert.equal(persisted.importId,queued.importId);
+    } finally {
+      releasePost();await page.unroute(importUrl,holdImport);
+    }
+    checks.push('opening/review does not POST; explicit consent sends once; in-flight request never claims queued; real 202 and exact persisted pending import');
     fixture('retry');await dialog.getByRole('button',{name:'Refresh status',exact:true}).click();
     await dialog.getByText('Rafii will retry automatically with the same progress.',{exact:true}).waitFor();
     assert.equal(await dialog.getByRole('button',{name:'Confirm import',exact:true}).count(),0);assert.equal(posts,1);

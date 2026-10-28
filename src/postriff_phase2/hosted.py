@@ -4,6 +4,7 @@ The caller supplies a connection factory and a server-side verified Auth princip
 No browser may supply the principal. No service key or profile metadata is accepted.
 """
 from contextlib import contextmanager
+from urllib.parse import urlsplit
 import copy
 import hashlib
 import io
@@ -22,7 +23,7 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state, with_youtube_credential_status, youtube_credential_status
-from . import account_protection, brand_brain, campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
+from . import account_protection, brand_brain, campaigns, locales, manual_drafts, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
 
@@ -152,6 +153,8 @@ class PostgresWorkspaceRepository:
                 row = cur.fetchone()
                 if not row:
                     # Same status and message whether the workspace is foreign or nonexistent.
+                    from .security_signals import cross_tenant_denied
+                    cross_tenant_denied(principal)  # H-07: one capped, id-free log line; never raises
                     raise AlphaError("Workspace unavailable.", 403)
                 state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
                 if state.get('accountDeletion') and not (allow_deleting and row[2] == 'owner'):
@@ -221,9 +224,15 @@ class PostgresWorkspaceRepository:
             audit_event = lambda state: ("connector.egress_decided", "cloud", {"cloud": productivity_connectors.egress_decision(state).get("cloud") is True})
         if action == writer_defaults.ACTION:
             audit_event = lambda state: ("writer.default_decided", "writer", {"model": writer_defaults.settings(state)["model"]})
+        if action == manual_drafts.ACTION:
+            audit_event = lambda state: ("draft.manual_saved", payload["requestId"], {
+                "draftCount": sum(v.get("manualRequestId") == payload["requestId"] for v in state.get("variants", []))})
         if action.startswith(('voice_sample', 'brand_brain_')) or action == 'voice_profile_analyze':
             audit_event = lambda state: ('voice.' + action, payload.get('sourceId', ''), {'requestId': payload.get('requestId'), 'activeRevision': state.get('speaker', {}).get('activeRevision')})
         after, before = None, None
+        if action == manual_drafts.ACTION:
+            # A person saves a handful of drafts a minute; the same transaction that saves them counts them (G2E-C-03).
+            before = lambda cur, state, principal: throttle(cur, f'manual-draft:{workspace_id}', 30, 60)
         if action == 'p2_review':
             from .mastodon_media import prepare_library
             payload = copy.deepcopy(payload)
@@ -238,7 +247,9 @@ class PostgresWorkspaceRepository:
                 if media_consent.decision(state).get("cloud") is not True:
                     from .media_notes import purge_workspace
                     purge_workspace(cur, workspace_id)
-        if action in ("p2_review", "p2_approve", "p2_approve_many", "raffi_run_commit"):
+        # Preparing a frozen needs_review record is passive. Approval/commit and
+        # worker dispatch still require a live publishing entitlement.
+        if action in ("p2_approve", "p2_approve_many", "raffi_run_commit"):
             from .billing import require_publishing
             after = lambda cur, state, principal: require_publishing(cur, workspace_id, self.clock())
         return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event, after=after, before=before)
@@ -259,12 +270,20 @@ class HostedPhase2Commands:
     # against it). A worker or test that builds these commands alone has none, so it can only clear the default.
     writers = None
 
-    def __init__(self, clock=time.time):
+    def __init__(self, clock=time.time, worker_binding=None):
         self.clock = clock
+        if worker_binding is not None:
+            if not isinstance(worker_binding, dict) or set(worker_binding) != {'environment', 'origin'}:
+                raise ValueError('Preview worker binding requires one fixed HTTPS origin.')
+            parsed = urlsplit(worker_binding.get('origin', ''))
+            if (worker_binding['environment'] != 'preview' or parsed.scheme != 'https' or not parsed.hostname
+                    or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password):
+                raise ValueError('Preview worker binding requires one fixed HTTPS origin.')
         # The processors a photo or frame would go to now ({id, label}); the hosted service sets it (never the client).
         self.media_processors = lambda: ()
         self.engine = Phase2Store.__new__(Phase2Store)
         self.engine.clock = clock
+        self.engine.worker_binding = copy.deepcopy(worker_binding)
         # Hosted entitlement checks use live SQL, including paid plans after the original trial ends.
         self.engine.hosted_entitlements = True
         self.engine.social = FixtureSocial()
@@ -273,6 +292,7 @@ class HostedPhase2Commands:
     def present(self, state, revision):
         shown = self.engine._present(state, revision)
         shown['state']['brandBrain'] = brand_brain.projection(state)
+        shown['workerBinding'] = copy.deepcopy(self.engine.worker_binding)
         return shown
 
     def __call__(self, state, principal, action, payload):
@@ -280,6 +300,10 @@ class HostedPhase2Commands:
             raise AlphaError("Expected a structured command.")
         if state.get("workspace", {}).get("sample"):
             raise AlphaError("Hosted sample workspaces are read-only.", 403)
+        if action == "manual_draft_create":
+            # Saving author text must not run a writer, change the shared brief,
+            # or invalidate existing research drafts, approvals or scheduled jobs.
+            return manual_drafts.create(state, principal, payload, self.clock())
         ensure_content_state(state)
         previous_jobs = {job["id"] for job in state.get("phase2", {}).get("jobs", [])}
         if source_policy.apply_policy_action(state, action, payload, principal, self.clock()):
@@ -409,7 +433,7 @@ class HostedPhase2Commands:
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
         required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
         # `language` is optional: records from before per-channel languages still carry it (languages plan §6).
-        if set(channel) - {"language", "refreshBindingRequired", "authorizationLane", "youtubeIdentityIngestedAt"} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
+        if set(channel) - {"language", "refreshBindingRequired", "authorizationLane", "youtubeIdentityIngestedAt", 'enabledPermissionGroups', 'destinationId', 'discordAuthorizationGeneration'} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
             raise AlphaError("A complete server-verified channel record is required.")
         if channel.get("authorizationLane", "standard") not in ("standard", "agentic"):
             raise AlphaError("A server-bound YouTube authorization lane is required.")
@@ -419,6 +443,16 @@ class HostedPhase2Commands:
         saved.update({"configured": True, "identityVerified": True, "capabilityVerified": bool(capability_verified), "revoked": False, "qualification": "server_verified", "evidenceSource": "live_provider", "scenario": None})
         existing = next((item for item in state["phase2"]["channels"] if item["id"] == saved["id"]), None)
         if existing:
+            if saved['platform'] == 'Discord':
+                # Keep destination history, but new consent never inherits approval.
+                saved['discordDestinations'] = copy.deepcopy(existing.get('discordDestinations', []))
+                for destination in saved['discordDestinations']:
+                    destination['status'] = 'reauthorization_required'
+                # The sender record is Rafii-side, and a pending bot-nickname edit claim points at a rate admission that
+                # only the claim can resolve: a reconnect must not wipe either (the nickname itself lives on in Discord).
+                for key in ('discordSenderName', 'discordSenderRevision', 'discordSenderEdit', 'discordBotNickname'):
+                    if key in existing:
+                        saved[key] = copy.deepcopy(existing[key])
             existing.clear()
             existing.update(saved)
         else:
@@ -429,12 +463,12 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False, youtube_public_base_url=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False, youtube_public_base_url=None, worker_binding=None):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
         self.assets = assets
-        self.commands = HostedPhase2Commands(clock)
+        self.commands = HostedPhase2Commands(clock, worker_binding=worker_binding)
         self.repository = PostgresWorkspaceRepository(connection_factory, verify_session, self.commands, clock)
         self.clock = clock
         self.identity = identity
@@ -475,6 +509,8 @@ class HostedWorkspaceService:
         self.data_requests = DataRequests(self.repository, clock)
         self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport, reply_sender_enabled=reply_sender_enabled)
         self.audience._service = self   # reply suggestions are written by the drafting service's managed writer
+        from .discord.engagement import DiscordEngagementService
+        self.discord_engagement = DiscordEngagementService(self.repository, self.oauth, self.commands, clock)
         from .youtube.service import YouTubeCreatorService
         self.youtube = YouTubeCreatorService(self)
         self.commands.youtube_capacity = self.youtube.capacity
@@ -913,6 +949,18 @@ class HostedWorkspaceService:
                 rows = cur.fetchall()
         return {"workspaces": [{"workspaceId": row[0], "membership": Membership.from_row(*row[1:6]).summary(), "createdAt": float(row[6]), **workspace_summary(*row[7:13])} for row in rows]}
 
+    def _drop_member_discord(self, cur, row, workspace_id, member):
+        """G2E-A-03. A member who is gone, or can no longer manage connections, must not leave a live personal Discord
+        credential behind that nobody can delete. Same transaction as the membership change (the workspace row is
+        already locked); no Discord request. A workspace with no Discord state does nothing."""
+        phase2 = (row[1] if isinstance(row[1], dict) else json.loads(row[1])).get("phase2") or {}
+        if not phase2.get("discordIdentityLinks") and not any(c.get("discordAuthorizedBy") for c in phase2.get("channels") or [] if isinstance(c, dict)):
+            return
+        state = json.loads(row[1]) if isinstance(row[1], str) else copy.deepcopy(row[1])
+        discord = self.oauth.discord_connections
+        if discord.disconnect_member(cur, workspace_id, state, member):
+            discord.save_state(cur, workspace_id, state)
+
     def leave_workspace(self, workspace_id, token):
         """A member removes their own access. The owner cannot leave: ownership moves first."""
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
@@ -923,6 +971,7 @@ class HostedWorkspaceService:
                 raise AlphaError("Workspace unavailable.", 403)
             from .agent_runtime_v2 import agent_permissions, authz
             agent_permissions.on_membership_ended(cur, workspace_id, principal, actor=principal, now=self.clock(), mode=authz.mode_for(authz.runtime_config_for(self), workspace_id))
+            self._drop_member_discord(cur, row, workspace_id, principal)
             audit(cur, workspace_id, principal, "member.left")
         return {"workspaceId": workspace_id, "status": "left"}
 
@@ -1138,6 +1187,8 @@ class HostedWorkspaceService:
             if current[0] == "owner":
                 raise AlphaError("Ownership transfer is a separate step-up action.", 409)
             cur.execute("UPDATE public.pr_memberships SET role=%s,can_publish=%s,can_reply=%s,can_moderate=%s,can_manage_connections=%s,updated_at=now() WHERE workspace_id=%s AND user_id=%s", (role, granted["can_publish"], granted["can_reply"], granted["can_moderate"], granted["can_manage_connections"], workspace_id, user_id))
+            if not Membership(role, granted).allows("manage_connections"):
+                self._drop_member_discord(cur, row, workspace_id, user_id)
             audit(cur, workspace_id, principal, "member.updated", user_id, {"role": role, **granted})
             return {"userId": user_id, "role": role, **granted}
 
@@ -1176,6 +1227,7 @@ class HostedWorkspaceService:
             cur.execute("UPDATE public.pr_memberships SET status='revoked',updated_at=now() WHERE workspace_id=%s AND user_id=%s", (workspace_id, user_id))
             from .agent_runtime_v2 import agent_permissions, authz
             agent_permissions.on_membership_ended(cur, workspace_id, user_id, actor=principal, now=self.clock(), mode=authz.mode_for(authz.runtime_config_for(self), workspace_id))
+            self._drop_member_discord(cur, row, workspace_id, user_id)
             audit(cur, workspace_id, principal, "member.removed", user_id)
             return {"userId": user_id, "status": "revoked", "note": "Jobs this member approved are held at the next worker claim until re-approved."}
 

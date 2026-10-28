@@ -161,7 +161,43 @@ export interface RunContentType {
   contentSkillRouteIds?: string[];
 }
 
+export interface WorkerBinding { environment: 'preview'; origin: string }
+
+export interface DiscordModes {
+  identity?: { senderKind: 'none'; canPublish: false };
+  bot?: { senderKind: 'bot'; nickname?: { enabled: boolean } };
+  webhook: { senderKind?: 'webhook'; enabled: boolean; status?: string; payloadTypes?: string[]; senderName?: { enabled: boolean } };
+  userInstall: { senderKind?: 'interaction'; enabled: boolean; status?: string; installUrl?: string; canPublish?: false; canSchedule?: false };
+}
+
+export interface DiscordDestination {
+  id: string;
+  workspaceId: string;
+  connectionId: string;
+  applicationId: string;
+  botUserId?: string;
+  webhookId?: string;
+  senderKind?: 'bot' | 'webhook';
+  credentialKind?: 'webhook';
+  linkedUserId: string;
+  guildId: string;
+  channelId: string;
+  guildName: string;
+  channelName: string;
+  kind: string;
+  authorizationGeneration: string;
+  resourceGeneration: string;
+  status?: 'authorized' | 'revoked' | 'reauthorization_required';
+}
+
 export interface Manifest {
+  senderKind?: 'bot' | 'webhook';
+  discordSenderName?: string;
+  /** Bot posts: the server nickname recorded when the post was approved (null: the bot had none). Absent: nothing was recorded. */
+  discordBotNickname?: string | null;
+  destinationId?: string;
+  discord?: { schema: 'rafii.discord.publish.v2'; target: DiscordDestination; wireDigest: string; deliveryDigest: string; operationDigest: string; publicationId: string };
+  workerBinding?: WorkerBinding;
   workspaceId: string;
   actor: string;
   /** The connection this post goes out through (a `ChannelView.id`). */
@@ -208,6 +244,12 @@ export interface Job {
   nextAction?: string;
   cancelRequested: boolean;
   verification?: { method: string; at: number } | null;
+  workerBinding?: WorkerBinding;
+  previewDispatchPending?: boolean;
+  leaseUntil?: number;
+  providerUpload?: unknown;
+  providerAssets?: unknown;
+  providerThread?: unknown;
 }
 
 export interface Review {
@@ -249,6 +291,8 @@ export interface VariantFeedback {
 }
 
 export interface SnapshotVariant {
+  /** Retry identity for an original-text save; no model or publication authority. */
+  manualRequestId?: string;
   postDoctorGoal?: 'conversation' | 'shareability' | 'authority' | 'reach' | 'general';
   /** Post media recorded when the draft was written (chat-context SPEC §5.10). */
   media?: RunMedia[];
@@ -390,7 +434,7 @@ export interface ChannelFolder {
 export interface Phase2State {
   execution: string;
   trial: Trial;
-  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean }[];
+  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[]; discordConnectionKind?: 'installation' | 'webhook'; discordSenderName?: string; discordBotNickname?: string | null }[];
   assets: Asset[];
   reviews: Review[];
   jobs: Job[];
@@ -644,6 +688,10 @@ export interface RunSkill {
 }
 
 export interface RunItemDecision {
+  discord?: Manifest['discord'];
+  discordSenderName?: string | null;
+  discordBotNickname?: string | null;
+  timing?: Manifest['timing'];
   decision: 'approve' | 'reject' | 'revise' | string;
   by: string;
   at: number;
@@ -657,6 +705,7 @@ export interface RunItemDecision {
 
 /** One destination of a run (orchestration §2). */
 export interface RunItem {
+  destinationId?: string | null;
   /** `<platform>|<channelId or ''>|<language>`. */
   key: string;
   platform: string;
@@ -773,6 +822,7 @@ export interface Snapshot {
   state: SnapshotState;
   membership?: Membership;
   runtimeResult?: Record<string, unknown>;
+  workerBinding?: WorkerBinding | null;
 }
 
 export interface Bootstrap extends Snapshot {
@@ -1422,6 +1472,7 @@ export interface ResearchEgress {
 export type CapabilityLevel = 'Direct' | 'Assisted' | 'Bridge' | 'Unsupported';
 
 export interface Capability {
+  availability?: 'scoped' | 'consent_required';
   level: CapabilityLevel;
   evidence: string;
   verifiedAt: number | null;
@@ -1429,6 +1480,21 @@ export interface Capability {
 }
 
 export interface ChannelView {
+  discordSenderName?: string | null;
+  /**
+   * Bot installations: the nickname a review would record now (what Discord last reported for the bot, `null` when it
+   * has none). Absent when nothing would be recorded (the nickname capability is off, or nothing has been observed).
+   * An approval of a bot post has to carry this value back (docs/sender-name/UI-NEEDS.md, R1).
+   */
+  discordBotNickname?: string | null;
+  discordEngagement?: { implemented: boolean; enabled: boolean };
+  defaultDestinationId?: string | null;
+  discordDestinations?: DiscordDestination[];
+  discordIdentityConnectionId?: string;
+  discordConnectionKind?: 'installation' | 'webhook';
+  providerAccountId?: string;
+  /** Server-recorded identity read; independent of operation approval/evidence times. */
+  identityVerifiedAt?: number | null;
   id: string;
   platform: string;
   account: string;
@@ -1450,7 +1516,71 @@ export interface ChannelView {
   pictureDigest?: string | null;
 }
 
+/** One reason a sender name cannot be changed now (`unavailable` on a GET, `reasons` on a refused POST). */
+export interface DiscordSenderReason {
+  code: string;
+  /** Seconds until a held change or a throttle can be checked again. */
+  retryAfterSeconds?: number;
+}
+
+export interface DiscordSenderRules {
+  minLength: number;
+  maxLength: number;
+  lengthUnit: string;
+  surroundingSpace: boolean;
+  forbiddenCharacters: string[];
+  reservedWords: boolean;
+  singleSpacesOnly: boolean;
+}
+
+/**
+ * `GET`/`POST /channels/{id}/discord-sender-name` (contract v2, docs/sender-name/UI-API-CONTRACT.md). Every field after
+ * `state` is optional here so a v1 body, which has only the first eight, still reads as an editable profile.
+ */
+export interface DiscordSenderProfile {
+  connectionId: string;
+  senderKind: 'bot' | 'webhook';
+  scope: 'server' | 'connection';
+  guildId: string;
+  /** What Discord shows for the next message (the effective name), or '' when it is not known. */
+  name: string;
+  maxLength: number;
+  fingerprint: string;
+  state: 'verified';
+  contractVersion?: number;
+  rules?: DiscordSenderRules;
+  effectiveName?: string | null;
+  nameSource?: 'saved_override' | 'webhook_default' | 'observed_nickname' | 'bot_username' | 'none';
+  /** Webhook: the override Rafii freezes into future reviews. Bot: the nickname Rafii last set. */
+  savedName?: string | null;
+  /** What Discord itself reported at `observedAt` (epoch seconds); null when no Discord read was made. */
+  observedName?: string | null;
+  observedAt?: number | null;
+  /** Bot only: the nickname in Discord differs from the one Rafii last set. */
+  externalChange?: boolean;
+  feature?: { senderNames: boolean; botNickname: boolean };
+  editable?: boolean;
+  /** Empty exactly when `editable` is true. */
+  unavailable?: DiscordSenderReason[];
+  preview?: {
+    currentDisplayName: string | null;
+    badge: string;
+    audience: 'this_connection' | 'everyone_in_server';
+    queuedPostsKeepApprovedName: boolean;
+    /** Bot: an approved post is held at dispatch, and nothing is sent, when Discord shows another nickname than the recorded one. */
+    queuedBotPostsHoldIfNicknameChanges: boolean;
+  };
+  /** Present and true on the body of a successful POST. */
+  saved?: boolean;
+  /** Present and true on the body of a successful reset (the custom webhook name was removed). */
+  reset?: boolean;
+}
+
 export interface ProviderView {
+  discordConnectionsV2?: boolean;
+  discordModes?: DiscordModes;
+  /** Whether THIS workspace may start a Discord connection (launch gate); existing connections are unaffected. */
+  discordAccess?: { status: 'open' | 'closed'; reason?: string; capped?: boolean };
   /** Restricted server-side Pinterest pilot; never a public release gate. */
   trialReadonly?: boolean;
   configurationState?: string;
@@ -1503,6 +1633,11 @@ export interface ProviderView {
 }
 
 export interface ChannelDestination {
+  guildName?: string;
+  guildId?: string;
+  channelId?: string;
+  stableId?: string;
+  authorizedId?: string | null;
   id: string;
   name: string;
   kind: 'text' | 'announcement' | 'page' | 'board' | 'section';
@@ -1560,6 +1695,7 @@ export interface OAuthStart {
 }
 
 export interface OAuthComplete {
+  discordPurpose?: 'identity' | 'installation' | 'webhook';
   connectionId?: string;
   connected: boolean;
   /** Bot-code connections before the code has been seen in a channel. */
@@ -1575,15 +1711,17 @@ export interface OAuthComplete {
 /* ---------- usage & billing ---------- */
 
 export interface Entitlement {
-  planTermsId: string;
-  writingBatchesRemaining: number;
-  mediaCreditsRemaining: number;
-  connectedAccounts: number;
-  members: number;
-  storageMb: number;
+  planTermsId: string | null;
+  writingBatchesRemaining: number | null;
+  mediaCreditsRemaining: number | null;
+  connectedAccounts: number | null;
+  members: number | null;
+  storageMb: number | null;
   resetsAt: number | null;
   source: string;
   version: number;
+  /** Existing internal operations use budgets instead of customer plan allowances. */
+  unlimited?: boolean;
 }
 
 export interface SubscriptionView {
@@ -2078,3 +2216,19 @@ export interface WorkspaceApiToken {
   revokedAt: number | null; createdBy: string;
 }
 export interface ApiTokenCreated { item: WorkspaceApiToken; secret: string }
+/** Server-owned Discord identity references; credentials never enter this model. */
+export interface DiscordIdentity {
+  privateDraftsLinked?: boolean;
+  /** A stored local mapping may still be removed after its live grant expires. */
+  privateDraftsConfigured?: boolean;
+  id: string; account: string; userId: string;
+  status: 'linked' | 'reconnect_required' | 'disconnected';
+  expiresAt: number; discoverGuilds: boolean;
+  /** Identity linking never grants publication authority. Optional for older API responses. */
+  connectionKind?: 'identity';
+  senderKind?: 'none';
+  canPublish?: false;
+  canSchedule?: false;
+  postAsPersonalUser?: false;
+  capabilityReason?: 'discord_identity_only';
+}

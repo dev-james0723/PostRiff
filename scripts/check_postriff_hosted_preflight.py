@@ -87,7 +87,7 @@ def validate_structure(root=ROOT):
     checks.append(_result("source-upload-boundary", "pass" if upload_boundary else "fail", "explicit blocklist excludes credentials, hidden broker state, caches, private modules, tests and evidence from source upload"))
 
     dependencies = set((root / "requirements.txt").read_text().splitlines())
-    pinned = "Pillow==12.3.0" in dependencies and "psycopg[binary]==3.3.5" in dependencies
+    pinned = "Pillow==13.0.0" in dependencies and "psycopg[binary]==3.3.5" in dependencies
     checks.append(_result("python-runtime", "pass" if pinned and (root / ".python-version").read_text().strip() == "3.12" else "fail", "Python 3.12 with pinned Pillow and psycopg binary wheels"))
 
     ignored = (root / ".gitignore").read_text().splitlines()
@@ -102,16 +102,55 @@ def validate_structure(root=ROOT):
     leaked = re.search(r"(?:sb_secret_|sk-proj-)[A-Za-z0-9_-]{16,}", samples)
     checks.append(_result("environment-template", "fail" if leaked else "pass", "placeholder-only contract; no secret-shaped literal found"))
     crons = config.get("crons", [])
-    exact_cron = crons == [{"path": "/api/cron/worker", "schedule": "* * * * *"}]
+    # The worker, then the reviewed W-02 Discord lane shards (each answers without the runtime while its flag is off).
+    exact_cron = crons == [{"path": "/api/cron/worker", "schedule": "* * * * *"}] + [
+        {"path": "/api/cron/discord-worker/%d" % shard, "schedule": "* * * * *"} for shard in range(12)]
     checks.append(_result("production-cron-candidate", "pass" if exact_cron else "pending", "one-minute authenticated worker candidate" if exact_cron else "add the reviewed production cadence before promotion"))
     checks.append(_result("vercel-project-link", "pass" if (root / ".vercel/project.json").is_file() else "pending", "linked" if (root / ".vercel/project.json").is_file() else "no Vercel project selected"))
     return checks
+
+
+def validate_discord_lane(values):
+    """W-02: the parallel Discord lane flag is only meaningful with the coordinator and lease protocol it runs on."""
+    if values.get("POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED") != "true":
+        return _result("discord-parallel-lane", "pass", "W-02 parallel Discord lane off")
+    if values.get("POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED") != "true":
+        return _result("discord-parallel-lane", "fail", "lane flag on without POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED=true: the lane cannot run (the minute worker keeps Discord, and without rate limits the hosted runtime pauses Discord publishing)")
+    if values.get("POSTRIFF_DISCORD_WORKER_V1_ENABLED", "").lower() not in ("1", "true"):
+        return _result("discord-parallel-lane", "fail", "lane flag on without POSTRIFF_DISCORD_WORKER_V1_ENABLED: the flag has no effect")
+    return _result("discord-parallel-lane", "pass", "lane on with rate limits and the worker lease protocol; judge the policy with scripts/discord_rate_policy.py and confirm 12 discord.lane.completed lines a minute after promotion")
+
+
+# Every setting that turns a Discord feature on. Authorization v2 is what makes a Discord post carry the fenced worker
+# protocol's manifest; the others are the features around it. None of them is a build that can do without the worker flag.
+DISCORD_FEATURE_FLAGS = (
+    "POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED", "POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED",
+    "POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED", "POSTRIFF_DISCORD_WEBHOOK_V1_ENABLED",
+    "POSTRIFF_DISCORD_USER_INSTALL_V1_ENABLED", "POSTRIFF_DISCORD_ENGAGEMENT_V1_ENABLED",
+    "POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED")
+
+
+def validate_discord_worker_protocol(values):
+    """With any Discord feature on, the worker flag must be set (1 or true, as the worker reads it).
+
+    Migration 128's guard trigger (installed in production) refuses a claim of a Discord post by a worker without the
+    fenced lease protocol: CheckViolation 'Discord requires the current fenced worker protocol before dispatch.' The
+    minute worker's claim transaction then aborts on every attempt while such a post is due, and no later workspace in
+    that claim, of any provider, is processed. An unset or mistyped flag is exactly that worker."""
+    on = [name for name in DISCORD_FEATURE_FLAGS if values.get(name) == "true"]
+    if not on:
+        return _result("discord-worker-protocol", "pass", "no Discord feature flag is on")
+    if values.get("POSTRIFF_DISCORD_WORKER_V1_ENABLED", "").lower() not in ("1", "true"):
+        return _result("discord-worker-protocol", "fail", "%s on without POSTRIFF_DISCORD_WORKER_V1_ENABLED set to 1 or true: the minute worker would claim a due Discord post without the fenced lease protocol, the database guard (migration 128) refuses that claim, and the claim aborts on every attempt for every provider" % ", ".join(on))
+    return _result("discord-worker-protocol", "pass", "the worker lease protocol is on with the Discord features")
 
 
 def validate_environment(values):
     checks = []
     missing = [key for key in REQUIRED_ENV if not values.get(key) or any(marker in values.get(key, "") for marker in PLACEHOLDERS)]
     checks.append(_result("required-environment", "pass" if not missing else "pending", "all required names are populated" if not missing else "missing or placeholder: " + ", ".join(missing)))
+    checks.append(validate_discord_lane(values))
+    checks.append(validate_discord_worker_protocol(values))
     if missing:
         return checks
 

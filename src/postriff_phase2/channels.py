@@ -4,6 +4,9 @@ Levels: Direct (official API + production app/scopes verified), Assisted (export
 no execution claim), Bridge (reviewed device workflow), Unsupported. Catalog presence is
 never evidence; a level above Unsupported requires an evidence string and a verified_at.
 """
+import copy
+import math
+
 from postriff_alpha.domain import AlphaError
 
 CAPABILITIES = ("identity", "publish", "schedule", "analytics", "comments_read", "reply", "moderate", "media_types", "webhooks")
@@ -77,6 +80,16 @@ def connection_state(channel, now):
     return "read_verified"
 
 
+def _discord_sender_fields(channel):
+    """What a review would freeze as the sender RIGHT NOW (not the raw setting), because that is what an automation approval is
+    checked against: a webhook's custom name (None when the feature is off or none is saved), and for a bot installation the
+    server nickname it last observed, only while the nickname capability is on. Values only; the observation and the edit claim
+    stay internal."""
+    from .discord.sender_names import bot_nickname_in_view, sender_name_in_view
+    return {"discordSenderName": sender_name_in_view(channel) if channel.get("discordConnectionKind") == 'webhook' else None,
+            **bot_nickname_in_view(channel)}
+
+
 def customer_view(channel, matrix, now):
     """What the Channels card shows: identity, then one row per capability, never a blended 'Ready'."""
     return {
@@ -90,4 +103,12 @@ def customer_view(channel, matrix, now):
         "refreshBindingRequired": channel.get("refreshBindingRequired") is True,
         "authorizationLane": channel.get("authorizationLane", "standard") if channel.get("platform") == "YouTube" else None,
         "accessTokenExpiresAt": channel.get("accessTokenExpiresAt"),
+        **({"discordDestinations": copy.deepcopy(channel.get("discordDestinations", [])),
+            "defaultDestinationId": channel.get("defaultDestinationId"),
+            "discordAuthorizationGeneration": channel.get("discordAuthorizationGeneration"),
+            "discordIdentityConnectionId": channel.get("discordIdentityConnectionId"),
+            "discordConnectionKind": channel.get("discordConnectionKind"),
+            **_discord_sender_fields(channel),
+            "providerAccountId": channel.get("providerAccountId")}
+           if channel.get("platform") == "Discord" else {}),
     }
