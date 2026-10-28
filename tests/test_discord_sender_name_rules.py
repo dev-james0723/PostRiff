@@ -32,6 +32,8 @@ class Accepted(unittest.TestCase):
         # unpublished counting from rejecting an approved post later.
         self.assertEqual(names.name_problem(ASTRAL * 41, 'webhook'), 'too_long')
         self.assertIsNone(names.name_problem(ASTRAL * 40, 'webhook'))
+        self.assertEqual(names.name_problem('a' + ASTRAL * 16, 'bot'), 'too_long')       # 33 units
+        self.assertIsNone(names.name_problem(ASTRAL * 16, 'bot'))                         # exactly 32 units
 
 
 class Refused(unittest.TestCase):
@@ -48,6 +50,11 @@ class Refused(unittest.TestCase):
         ('join\U0000200der', 'webhook', 'control_or_format'), ('bom\U0000feffname', 'bot', 'control_or_format'),
         ('tag\U000e0041name', 'webhook', 'control_or_format'), ('pua\U0000e000name', 'webhook', 'control_or_format'),
         ('gap\U00000378name', 'webhook', 'control_or_format'), ('line\U00002028sep', 'webhook', 'control_or_format'),
+        # an unpaired surrogate (what JSON "backslash-u d800" decodes to) is an invalid name, never an encoding error
+        ('x' + chr(0xD800) + 'y', 'webhook', 'control_or_format'), ('x' + chr(0xDFFF) + 'y', 'bot', 'control_or_format'),
+        (chr(0xDC00), 'webhook', 'control_or_format'), ('tail' + chr(0xDBFF), 'bot', 'control_or_format'),
+        ('a' * 31 + chr(0xD800), 'bot', 'control_or_format'), ('a' * 32 + chr(0xD800), 'bot', 'too_long'),
+        ('pair' + chr(0xD83D) + chr(0xDE00), 'webhook', 'control_or_format'),    # two separate surrogates are not one character
         # whitespace other than single ASCII spaces (Discord collapses "excessive" whitespace, so the read-back
         # of an approved post would no longer equal the approved name)
         ('a  b', 'webhook', 'spacing'), ('a\U000000a0b', 'webhook', 'spacing'), ('a\U00003000b', 'bot', 'spacing'),

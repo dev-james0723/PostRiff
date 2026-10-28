@@ -275,6 +275,22 @@ class Bodies(Base):
         self.assertEqual(len(self.w.hooks.calls), calls)
         self.assertEqual(self.w.channel(self.A, self.wa.connection)['discordSenderName'], 'Alpha Weekly')
 
+    def test_an_unpaired_surrogate_is_an_invalid_name_and_never_a_server_error(self):
+        """JSON can carry a lone surrogate (backslash-u d800); Python holds it as a str that cannot be encoded to UTF-8 or
+        UTF-16 strictly. It must reach the same 400 as every other bad character, for both kinds, before any Discord work."""
+        for ids, limit in ((self.wa, 80), (self.ia, 32)):
+            profile = self.w.get(self.A, self.ta, ids.connection)
+            calls, before = len(self.w.hooks.calls), self.w.snapshot()
+            for name in ('x' + chr(0xD800) + 'y', chr(0xDFFF), 'tail' + chr(0xDBFF), chr(0xD83D) + chr(0xDE00)):
+                with self.subTest(kind=ids.connection[:12], name=ascii(name)):
+                    self.w.now += 601        # a refused attempt still counts toward the write throttle: one window each
+                    outcome = self.w.attempt(self.w.post, self.A, self.ta, ids.connection,
+                                             {'name': name, 'fingerprint': profile['fingerprint'], **BODY})
+                    self.assertEqual(outcome[:2], (400, 'discord_sender_name_invalid'))
+                    self.assertEqual(outcome[3], {'reason': 'control_or_format', 'maxLength': limit})
+            self.assertEqual(len(self.w.hooks.calls), calls)
+            self.assert_untouched(before)
+
     def test_a_bot_nickname_needs_the_shared_server_confirmation(self):
         profile = self.w.get(self.A, self.ta, self.ia.connection)
         outcome = self.w.attempt(self.w.post, self.A, self.ta, self.ia.connection,

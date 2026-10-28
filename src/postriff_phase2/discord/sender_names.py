@@ -186,7 +186,9 @@ def name_problem(name, kind):
         return 'surrounding_space'
     if unicodedata.normalize('NFC', name) != name:
         return 'not_normalized'
-    if len(name) > limit or len(name.encode('utf-16-le')) // 2 > limit:
+    # Code points, and UTF-16 units (an astral character is two), counted without encoding: a lone surrogate, which a
+    # JSON body can carry, cannot be encoded and must reach the category scan below as an ordinary invalid character.
+    if len(name) > limit or len(name) + sum(1 for ch in name if ord(ch) > 0xFFFF) > limit:
         return 'too_long'
     categories = [unicodedata.category(c) for c in name]
     for index, (category, ch) in enumerate(zip(categories, name)):
