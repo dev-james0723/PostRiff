@@ -814,9 +814,9 @@ DRILLS = (d0_baseline, d1_backlog, d2_delivery, d3_rate_limit, d4_silent_halt, d
           o1_hold, o2_rollback_order)
 
 
-def run(out=None, only=None):
+def run(out=None, only=None, composition=None):
     receipt = {'kind': 'rafii.discord.ops.drill-receipt', 'version': 1, 'environment': 'isolated',
-               'sourceRevision': source_revision(), 'startedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+               'sourceRevision': source_revision(), 'composition': composition, 'startedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
                'python': platform.python_version(), 'postgres': None, 'thresholds': 'docs/ops/discord-alert-thresholds.json',
                'command': 'POSTRIFF_PG_BIN=/usr/lib/postgresql/16/bin PYTHONPATH=src:tests python tests/discord_ops_drills.py',
                'drills': []}
@@ -872,6 +872,7 @@ def render_markdown(receipt):
            '| Run | Value |', '|---|---|',
            '| Started, finished (UTC) | %s, %s |' % (receipt.get('startedAt'), receipt.get('finishedAt')),
            '| Source revision | `%s` |' % receipt.get('sourceRevision'),
+           *(['| Composition | %s |' % receipt['composition']] if receipt.get('composition') else []),
            '| Database | disposable PostgreSQL %s (repository schema: tests/phase2/rls.sql, migrations 060, 124, 126, 128) |'
            % receipt.get('postgres'),
            '| Discord | in-process mock (tests/discord_lane_fixture.py); no network except 127.0.0.1 |',
@@ -918,6 +919,7 @@ def main(argv=None):
     parser.add_argument('--markdown', help='also write the receipt as markdown')
     parser.add_argument('--render', help='only render an existing JSON receipt to --markdown')
     parser.add_argument('--only', help='comma-separated drill ids, e.g. D1,O1')
+    parser.add_argument('--composition', help='what the source revision is made of, when it is a local scratch merge')
     args = parser.parse_args(argv)
     if args.render:
         Path(args.markdown).write_text(render_markdown(json.loads(Path(args.render).read_text())))
@@ -925,7 +927,7 @@ def main(argv=None):
     if not F.AVAILABLE:
         print('needs POSTRIFF_PG_BIN and psycopg', file=sys.stderr)
         return 2
-    receipt = run(args.out, set(args.only.split(',')) if args.only else None)
+    receipt = run(args.out, set(args.only.split(',')) if args.only else None, args.composition)
     if args.markdown:
         Path(args.markdown).write_text(render_markdown(receipt))
     print('overall', receipt['result'])
