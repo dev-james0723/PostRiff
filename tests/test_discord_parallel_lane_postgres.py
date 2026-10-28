@@ -1794,10 +1794,6 @@ class ParallelLaneOnPostgres(unittest.TestCase):
                 self.assert_waiting_untouched()
                 self.assert_all_created_once_after_the_pause(worker, 8)
 
-    def revisions(self):
-        with self.cluster.connect(autocommit=True) as db:
-            return dict(db.execute("SELECT id::text,revision FROM public.pr_workspaces WHERE state ? 'phase2'").fetchall())
-
     def test_a_paused_discord_leaves_the_minute_crons_posts_untouched_however_long_the_pause(self):
         """K1 churn. The frozen minute cron (lane flag off, which is today's production, or the lane unable to run)
         claimed every due post again each minute of a pause: a claim and a submitting event, an attempt, a release
