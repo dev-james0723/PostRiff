@@ -81,7 +81,7 @@ def shape():
     check('the artifact never includes the per-run environment files', 'env-' not in paths and 'env*' not in paths)
     # A failure must be diagnosable from the artifact alone: every child process's own output is kept.
     for name in ('seed-*.out', 'seed-plan.json', 'pooler.out', 'pgbouncer.out', 'mock.out', 'harness.log',
-                 'pgbouncer/pgbouncer.log', 'postgres.log'):
+                 'pgbouncer/pgbouncer.log', 'postgres.log', 'admissions.jsonl', 'invocations-summary.json'):
         check('the artifact keeps %s' % name, '${{ runner.temp }}/capacity/*/' + name in paths)
     check('every artifact path is under the run directories', all(
         line.strip().startswith('${{ runner.temp }}/capacity/*/') for line in paths.splitlines() if line.strip()))
@@ -207,6 +207,15 @@ def request_reader(fix):
     code, out, values = fix.read_request({**good, 'profile': 's1levers', 'pools': '20'}, 'claude/discord-capacity-run-s1levers-d1')
     check('an s1levers request is S1 as control plus the three lever variants', code == 0 and json.loads(values.get('matrix', '[]')) == [
         {'scenario': name, 'pool': 20} for name in ('S1', 'S1-lane58', 'S1-lane70', 'S1-warm')], out[-400:])
+    code, out, values = fix.read_request({**good, 'profile': 'devset', 'pools': '20'}, 'claude/discord-capacity-run-devset-d1')
+    check('a devset request is the development measurement set, one job each', code == 0 and json.loads(values.get('matrix', '[]')) == [
+        {'scenario': name, 'pool': 20} for name in ('S1', 'S0-100', 'Fdb', 'Fcrash', 'F429')], out[-400:])
+    code, out, values = fix.read_request({**good, 'profile': 's2sizes', 'pools': '20'}, 'claude/discord-capacity-run-s2sizes-z1')
+    check('an s2sizes request is S2 with a hot workspace of 100, 300 and 1,000 posts', code == 0 and json.loads(values.get('matrix', '[]')) == [
+        {'scenario': name, 'pool': 20} for name in ('S2-100', 'S2-300', 'S2-1000')], out[-400:])
+    code, out, values = fix.read_request({**good, 'profile': 's2', 'pools': '20'}, 'claude/discord-capacity-run-s2-z1')
+    check('the s2 profile is still the 3,000-post S2 alone', code == 0 and json.loads(values.get('matrix', '[]')) == [
+        {'scenario': 'S2', 'pool': 20}], out[-400:])
     # Every scenario a profile names must exist in the harness (a typo would only show on the runner).
     named = set()
     for line in step('plan', 'Read the request')['run'].splitlines():
@@ -291,12 +300,56 @@ def maker(fix):
         open(os.path.join(work, 'capacity/REQUEST.json')).read())['profile'] == 'lockbench'
         and git('rev-parse', '--abbrev-ref', 'HEAD', cwd=work, env=fix.env) == 'claude/discord-capacity-run-lockbench-lb1',
         done.stdout + done.stderr)
+    for profile in ('s2sizes', 'devset'):
+        done = subprocess.run(['bash', MAKER, profile, 'p1', tree, harness], capture_output=True, text=True, env=env)
+        work = re.search(r'work tree:\s+(\S+)', done.stdout).group(1) if done.returncode == 0 else None
+        check('make_request_branch.sh builds a %s request' % profile, work is not None and git(
+            'rev-parse', '--abbrev-ref', 'HEAD', cwd=work, env=fix.env) == 'claude/discord-capacity-run-%s-p1' % profile
+            and json.loads(open(os.path.join(work, 'capacity/REQUEST.json')).read())['profile'] == profile, done.stdout + done.stderr)
     for name, args in (('an unknown profile', ['all', 'x', tree, harness]), ('a bad suffix', ['s1', 'A_B', tree, harness]),
                        ('a short SHA', ['s1', 'x', 'abc', harness]), ('a bad pool', ['s1', 'x', tree, harness, '--pools', '200']),
                        ('a bad latency', ['s1', 'x', tree, harness, '--latency', 'fast']),
                        ('an unknown option', ['s1', 'x', tree, harness, '--force'])):
         done = subprocess.run(['bash', MAKER, *args], capture_output=True, text=True, env=env)
         check('make_request_branch.sh refuses ' + name, done.returncode == 2, done.stdout + done.stderr)
+
+
+# --- the scenario settings the workflow's command line reaches --------------------------------------------------------
+
+def command_line():
+    """The workflow passes the matrix pool and the request's round trip to every scenario (Fdb's own 6-connection pool and
+    8 ms round trip were silently replaced by them on the first GitHub-hosted run): parse the exact arguments it passes with
+    the harness's own parser, and check what each scenario ends up with."""
+    sys.path.insert(0, os.path.join(HERE, '..', '..', '..', 'scripts'))
+    try:
+        import discord_lane_capacity_run as runner
+    except ImportError as error:
+        check('the harness imports (for the command-line checks)', False, repr(error))
+        return
+    line = ' '.join(re.sub(r'\\\s*\n', ' ', step('capacity', 'Run the scenario')['run']).split())
+    match = re.search(r'discord_lane_capacity_run\.py (run .*?) uptime', line)
+    check('the workflow runs the harness with run --scenario and the pool and round trip options', bool(match)
+          and '--max-db-connections "$POOL"' in match.group(1) and '--db-latency-ms "$LATENCY"' in match.group(1), line[-300:])
+    if not match:
+        return
+
+    def settings(scenario, pool='20', latency='2'):
+        argv = match.group(1).replace('"$SCENARIO"', scenario).replace('"$GITHUB_WORKSPACE/tree"', '/tree')
+        argv = argv.replace('"$RUNNER_TEMP/capacity"', '/out').replace('"gha-pool${POOL}"', 'gha-pool' + pool)
+        argv = argv.replace('"$POOL"', pool).replace('"$LATENCY"', latency)
+        args = runner.build_parser().parse_args(argv.split())
+        return runner.settings_for(args.scenario, runner.overrides_from(args))
+    fdb, s1 = settings('Fdb'), settings('S1')
+    check('Fdb keeps its 6-connection pool, 8 ms round trip and 1.5 s statement timeout under the workflow\'s arguments',
+          (fdb['max_db_connections'], fdb['db_latency_ms'], fdb['db_statement_timeout_ms']) == (6, 8.0, 1500), repr(fdb))
+    check('the receipt is told what Fdb ignored', fdb['pinnedOverridesIgnored'] == {'max_db_connections': 20, 'db_latency_ms': 2.0},
+          repr(fdb.get('pinnedOverridesIgnored')))
+    check('every other scenario takes the matrix pool and the request\'s round trip',
+          all(settings(name)['max_db_connections'] == 20 and settings(name)['db_latency_ms'] == 2.0
+              for name in runner.SCENARIOS if name != 'Fdb') and s1['pinnedOverridesIgnored'] is None)
+    check('a pool of 60 and 5 ms reach S1 and are ignored by Fdb',
+          (settings('S1', '60', '5')['max_db_connections'], settings('S1', '60', '5')['db_latency_ms']) == (60, 5.0)
+          and settings('Fdb', '60', '5')['max_db_connections'] == 6)
 
 
 # --- the multi-process seeding path ----------------------------------------------------------------------------------------
@@ -399,6 +452,7 @@ def main():
         request_reader(fix)
         fetch_step(fix)
         maker(fix)
+        command_line()
         validators(fix)
     finally:
         shutil.rmtree(fix.root, ignore_errors=True)

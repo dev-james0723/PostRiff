@@ -87,6 +87,7 @@ scenario measures the frozen worker, so point it at RC1: `--source-tree "$SCRATC
 | `smoke` | 30 posts, 10 workspaces, 20-second cron period, 4 shards | every post verified, no duplicate, no late send, isolation, clean invocations |
 | `S1` | 5,000 posts due at T over 2,000 workspaces | section 4 (lateness, duplicates, late sends, ceilings, held, database) |
 | `S2` | the same 5,000 with one workspace holding 3,000 | section 4 plus fairness |
+| `S2-100`, `S2-300`, `S2-1000` | the same 5,000 posts with the hot workspace holding 100, 300 or 1,000 (profile `s2sizes`; the 3,000 case above stays as the stress case) | judged as S2; the receipt adds the hot workspace's document size, per-transaction time, create rate while it has due posts (REPORTED) and posts per minute |
 | `S3` | 13,000 posts due at T | section 4; where approval expiry starts holding posts |
 | `S0-100`, `S0-250` | 100 or 250 posts due per minute for 20 minutes, 30% of them at a random second of their minute | `normalLoad` |
 | `baseline` | lane flag off, S1 data, 10 minutes, on the frozen RC1 | posts per minute of the minute worker |
@@ -126,9 +127,12 @@ requests, database share, statement timeouts) unless the standard marks it not a
 `result.json` (every figure), `config.json` (settings, SHAs, load average, the rate policy), `seed-manifest.jsonl`
 (every post: workspace, job, nonce, due time, approval expiry), `mock/mock-requests.jsonl` (every Discord request
 with the mock's timestamps), `mock/mock-summary.json`, `invocations/*.json` (each invocation's timings, status, body,
-CPU, memory, log lines), `samples.jsonl`, `pooler-final.json`, `database-final.json` (admissions by state, coordinator
-holds, pg_stat_statements top 15, server-log SQLSTATEs), `final-states.json`, `postgres.log`, `harness/` (the
-harness copy that ran). Environment files with the synthetic credential key and cron secret are mode 600 and hold
+CPU, memory, log lines), `invocations-summary.json` (the same without the log lines: the part that is uploaded),
+`samples.jsonl`, `pooler-final.json`, `database-final.json` (admissions by state, the open admissions, permit fates,
+coordinator holds, pg_stat_statements top statements by maximum and by total time, server-log SQLSTATEs, the
+largest document, the budget probes), `admissions.jsonl` (every admission of the run: reserved, sealed, sent,
+answered and expiry times, state, path digest), `final-states.json`, `postgres.log`, `harness/` (the harness copy
+that ran). Environment files with the synthetic credential key and cron secret are mode 600 and hold
 no real secret.
 
 ## Reading a receipt
@@ -152,6 +156,34 @@ no real secret.
 - The admission-to-observation time d and the busiest 60 s and 300 s request rates say how much of the 25/s budget
   the lane could use (about 25/(1 + d) while in-flight requests are charged in two windows; see
   `docs/w02/REQUEST-BUDGET.md`).
+- **Launch gates** (a table after the expected behaviour; reported, never raised, and they do not change the
+  verdicts above). Admissions left without an observed answer at the end, by state (a `sent` or `uncertain` one
+  holds a slot of every window on a tree without an age bound). The application budget probed after the run: the
+  harness reserves reads on synthetic routes through the tree's own coordinator until it refuses, once at once and
+  once after `budget_probe_delay_seconds` (90 s, longer than any age bound for an unanswered request), then observes
+  them with a synthetic answer. Nothing is sent anywhere. A whole budget is 25 of 25. Create permits that died
+  unused (expired still reserved, or sealed and then blocked).
+- **Wire timing.** Each admission's `sent_at` (database clock) is joined, by path digest and in order, to the mock's
+  arrival of that request. The invocation wrapper stamps every request it forwards with its cron source and with
+  the time just before the HTTP call, so the delay splits into admission to call (inside the application) and call
+  to arrival (loopback, plus the mock's accept and thread start on the same machine). The receipt prints p50 / p90 /
+  p99 / p99.9 / max, the spread above the median, and attributes every request the mock counted above 25 in its
+  trailing second: the coordinator had already sent more than 25 in that second ('coordinator'), or the arrivals
+  bunched ('wire'), or only the mock's own processing order put it over ('mock'). The same stamps make traffic
+  from invocations other than the lane shards visible at the mock.
+- **Witness age.** Per create: the person's grant check (else the server read) of its pass to the create reaching
+  the mock, p50 / p90 / p99 / max, and the channel list's age.
+- **Per lane step.** Loop seconds (minus waits for the budget and for work) per step, and the database share of it:
+  statements per step (each a round trip), server execution time per step, and the emulated network time. The
+  statements are those of `pg_stat_statements` after seeding; the harness's own recurring statements carry a
+  `/*cap-harness*/` comment and are left out.
+- **Hot workspace** (scenarios with one): the document as seeded and at the end (jobs, bytes, one read-modify-write
+  timed three times and rolled back), the application's UPDATE of a workspace document (mean and maximum), the
+  create rate while it had due posts against the physical one per second per channel (REPORTED only; the
+  80% target is a proposal for the owner, not applied), the steady rate between its first and last create, its
+  posts per minute, and the small workspaces' own lateness (the proposed scope of the lateness lines).
+- Identity tokens: the time left at T of every Discord identity (the harness gives each a 7-day token, so none
+  expires during a run), `POST /oauth2/token` refreshes seen at the mock, and the largest channel list answered.
 - The machine line comes from the environment: a GitHub-hosted runner names itself (`RUNNER_ENVIRONMENT`,
   `RUNNER_NAME`, `ImageOS`), anything else is "outside GitHub Actions".
 
@@ -166,6 +198,8 @@ mode. It uses no secret and no environment, has a read-only token, fetches exact
 | Profile | Jobs (one per scenario and pool) |
 |---|---|
 | `smoke`, `s0`, `s1`, `s2` | the scenario(s) on the tree under test |
+| `s2sizes` | S2-100, S2-300, S2-1000 (S2 with a hot workspace of 100, 300 and 1,000 posts) |
+| `devset` | the development measurement set: S1, S0-100, Fdb, Fcrash, F429, one runner each, all at once |
 | `faults` | F429, F5xx, Fcrash, Fdb, Fexpiry, Fstall, Fflip, Nmisroute, Ndup, Nceiling |
 | `release` | every scenario, baseline included |
 | `baseline` | the frozen minute worker on the request's baseline SHA (default RC1) |
@@ -177,7 +211,7 @@ PostgreSQL's log and PgBouncer's log. The per-run environment files are never up
 
 `python3 docs/w02/ci/run_tests.py` runs the workflow's own blocks against local git repositories. It covers request
 validation, exact-SHA fetches, the request script, action-validator and shellcheck. With `POSTRIFF_PG_BIN` set it
-adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (97 checks).
+adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (111 checks).
 
 ## The official run on Depot
 
