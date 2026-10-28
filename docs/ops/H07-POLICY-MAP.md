@@ -80,7 +80,7 @@ P0 means "wake someone at 3 a.m.": it is dangerous to continue, or every custome
 | RATE_EMBARGO | P2 | P1 | Discord-side; sleeps itself out |
 | RATE_429 | P2 | P1 | coordinator should prevent |
 | RATE_APP_BUDGET_SPENT | P2 | | expected in a declared burst |
-| RATE_ROUTE_CIRCUITS | P2 | | Discord server errors on routes |
+| RATE_ROUTE_CIRCUITS | P2 | | Discord server errors, or 403 refusals (limiter head), on routes |
 | RATE_RETENTION_BEHIND | P2 | | the coordinator's settled rows are not being purged; housekeeping, no customer effect |
 | SILENT_HALT_NO_PROGRESS | P2 (only under a hold) | **P0** | nothing sends; approvals lapse after an hour |
 | SILENT_HALT_NO_SHARDS | | **P0** | shard crons do not run |

@@ -1,6 +1,6 @@
 # REVIEW 8e76afdd: the evidence behind each closed finding
 
-Raw outputs behind `H07-EVIDENCE.md` section 5, copied from the agent's scratchpad so they survive it. Synthetic tenants, posts and ids only; disposable PostgreSQL 16 clusters; a mock Discord. Head under test: the merged line `d864f25f` (probes) and the branch head of each commit (tests and mutants).
+Raw outputs behind `H07-EVIDENCE.md` sections 4a and 5, copied from the agent's scratchpad so they survive it. Synthetic tenants, posts and ids only; disposable PostgreSQL 16 clusters; a mock Discord. Head under test: the merged line `d864f25f` (probes) and the branch head of each commit (tests and mutants).
 
 ## 1. The evaluator tests run against the reviewed evaluator (fail before)
 
@@ -54,6 +54,19 @@ Command: `REV=<worktree> POSTRIFF_PG_BIN=/usr/lib/postgresql/16/bin python exp_r
 ```
 
 Read: each refused read-back burns one check; the fifth parks the post for 86,400 s as "manual provider review" (the probe then forces `nextAt` to show it would verify). E1 survives on the merged head.
+
+**Re-run on 2026-10-28 against the limiter's read wait.** Limiter `1fe434c7` (B4, "a read refused by a hold is a wait") makes a read under a hold a 300 s deferral that refunds its check. The same probe, unchanged, on the sparse scratch merge `65abc75f` (alerts `f7a111f4` + limiter `68f968a7` + W-02 `4cf85a78`; local, never pushed):
+
+```
+  after create + hold   : [{'state': 'provider_accepted', 'checks': 0, 'nextIn': 5.0, 'nextAction': 'Await provider reconciliation; do not resubmit', 'intents': 1, 'ref': True, 'stage': 'done', 'lastEvent': 'Discord created the approved channel message; read-back pending'}]  POSTs on the wire: 1
+  hold-on step 1        : [{'state': 'provider_accepted', 'checks': 0, 'nextIn': 300.0, 'nextAction': 'Await provider reconciliation; do not resubmit', 'intents': 1, 'ref': True, 'stage': 'done', 'lastEvent': 'Discord message receipt retained; awaiting shared capacity for the exact read-back. Do not'}]
+  hold-on step 5        : [{'state': 'provider_accepted', 'checks': 0, 'nextIn': 300.0, 'nextAction': 'Await provider reconciliation; do not resubmit', 'intents': 1, 'ref': True, 'stage': 'done', 'lastEvent': 'Discord message receipt retained; awaiting shared capacity for the exact read-back. Do not'}]
+  hold-on step 8        : [{'state': 'provider_accepted', 'checks': 0, 'nextIn': 300.0, 'nextAction': 'Await provider reconciliation; do not resubmit', 'intents': 1, 'ref': True, 'stage': 'done', 'lastEvent': 'Discord message receipt retained; awaiting shared capacity for the exact read-back. Do not'}]
+  after HOLD_OFF + step : [{'state': 'verified', 'checks': 1, 'nextIn': 4.9, 'nextAction': 'Inspect receipt', 'intents': 1, 'ref': True, 'stage': 'done', 'lastEvent': 'Discord read-back matched the approved text, bot, channel and mention policy.'}]  (nextIn near 86400 = parked a day; the message IS in Discord: 1 message)
+  duplicates on the wire: 0
+```
+
+Read: with the read wait the frozen path spends no check under the hold and does not park the post; after the lift it verifies with one check. E1 still describes every build without the read wait (RC1, and the serving build until the limiter ships); the payload's `config.holdReadWaitSeconds` and the hold alert say which applies. E1c below (the pinned RC1 file) is the rollback case and is unchanged.
 
 ### E1c (the pinned RC1 worker serving while the hold is on)
 
@@ -131,3 +144,91 @@ Command: the reviewer's `mutate.py` (copy of the worktree with one change, then 
 exit=0
 ```
 
+## 4. 2026-10-28: the limiter and W-02 heads (fail before, pass after)
+
+The coordinator's resume of 2026-10-28 (D3 red against the limiter head, W-02's new counters and lag split, failed reads as observed 503, retention fields). Each new test was written first and run against the code just before its fix: `e79df41d` (the head before this work) for 4.2 and 4.3; that tree with the 4.2 and 4.3 fixes for 4.4 (all three in `5a04369e`); `1c7966ce` for 4.5 (fixed in `da6973ff`). Outputs condensed to the failing lines. All pass on `828192e8` and on the scratch merge (`H07-EVIDENCE.md` section 4a).
+
+### 4.1 D3 on the scratch merge before the fix
+
+`e79df41d` + limiter `e6aa7db8` + W-02 `090c7ce6` (sparse scratch merge, local), `tests.test_discord_ops_drills_postgres` and `tests.test_oncall_drills_postgres`:
+
+```
+FAIL: test_d3_rate_limit (tests.test_discord_ops_drills_postgres.IsolatedDrills.test_d3_rate_limit)
+AssertionError: Lists differ: [{'check': 'budget spent for the last minu[64 chars]one}] != []
+{'check': 'budget spent for the last minute: RATE_APP_BUDGET_SPENT is warn', 'pass': False, 'observed': None}
+Ran 28 tests in 273.122s
+FAILED (failures=1)
+```
+
+After (`d995ff13` = alerts `828192e8` + limiter `68f968a7` + W-02 `4cf85a78`): 28 tests OK; the receipt's D3 row is in `DRILL-RECEIPT-ISOLATED.md`. In between, one run of the receipt on `65abc75f` failed D3 for the machine, not the rule: under other sessions' load the single demand loop reached 102 admissions of the 109.1 the coordinator can grant (0.935, below 0.95), so the alert correctly stayed silent; D3 now asks with three loops and checks the injection itself (`43553f98`).
+
+### 4.2 Task 1: the achievable ceiling and the guard from the build
+
+```
+ERROR: test_the_payload_reports_the_guard_the_serving_coordinator_uses
+FAIL: test_a_guard_above_a_tenth_of_the_window_counts_as_a_tenth
+FAIL: test_an_unknown_guard_is_the_largest_the_coordinator_allows
+FAIL: test_application_budget_spent_against_the_achievable_ceiling (admitted=1296)
+FAIL: test_application_budget_spent_against_the_achievable_ceiling (admitted=1363)
+FAIL: test_continuous_demand_under_the_limiters_guard_is_reported
+Ran 15 tests in 0.016s
+FAILED (failures=5, errors=1, skipped=1)
+```
+
+### 4.3 Tasks 2 to 4: W-02's counters, quarantine, lag split and pause; failed reads; retention
+
+```
+ERROR: test_a_quarantined_workspace_is_a_warning_with_its_error_class_only 
+ERROR: test_the_create_and_read_back_thresholds_are_the_lanes_own 
+ERROR: test_the_lane_counters_include_quarantined_and_positions_kept 
+FAIL: test_a_known_pause_never_pages_and_says_so  (rule='BACKLOG_LAG')
+FAIL: test_a_known_pause_never_pages_and_says_so  (rule='SILENT_HALT_NO_PROGRESS')
+FAIL: test_a_known_pause_never_pages_and_says_so  (rule='SILENT_HALT_NO_CREATE')
+FAIL: test_a_known_pause_never_pages_and_says_so 
+FAIL: test_late_creates_use_the_lanes_split_at_300_seconds_and_page_at_the_backlog_page  (lagging line, creates 301 s)
+FAIL: test_late_creates_use_the_lanes_split_at_300_seconds_and_page_at_the_backlog_page  (lagging line, creates 2701 s)
+FAIL: test_read_backs_deferred_by_a_burst_warn_only_past_an_hour 
+FAIL: test_retention_behind_when_settled_rows_outlive_three_retentions 
+FAIL: test_retention_purged_and_remaining_counts_are_read_when_present 
+FAIL: test_server_errors_include_failed_reads_and_say_so 
+AssertionError: 'failed before an answer' not found in 'Discord server errors are 5.0% of 100 responses in 5 minutes. Usually a Discord outage: do not roll back (RUNBOOK-INCIDENT 4.A).'
+Ran 10 tests in 0.170s
+FAILED (failures=10, errors=3)
+```
+
+### 4.4 The hold alert follows the build's read wait (limiter `1fe434c7`)
+
+```
+ERROR: test_the_payload_says_whether_a_read_under_a_hold_waits
+KeyError: 'holdReadWaitSeconds'
+FAIL: test_the_hold_message_follows_what_the_serving_build_does_with_a_read_under_a_hold
+AssertionError: 'parked' unexpectedly found in "The operator hold is on: Discord sends nothing and posts wait. A post needs a new approval from about 55 minutes after its own scheduled time, and while the lane does no...
+Ran 19 tests in 0.345s
+FAILED (failures=1, errors=1)
+```
+
+(The 19 tests of that run include the 17 policy tests, which pass.)
+
+### 4.5 A lagging line from before a recovery
+
+```
+FAIL: test_a_lagging_line_from_before_the_recovery_does_not_keep_the_alert
+AssertionError: 'page' is not None
+Ran 1 test in 0.001s
+FAILED (failures=1)
+```
+
+### 4.6 Every alert id has an on-call priority
+
+`Priorities.test_every_evaluator_rule_and_severity_has_a_row` with the count raised to 42 and no new rows: `Lists differ: [('RATE_RETENTION_BEHIND', 'warn'), ('SILENT_HALT_QUARANTINE', 'warn')] != []`; with the count at 40: `AssertionError: 42 != 40`. Passes with the two rows in `h07-oncall-policy.json`.
+
+### 4.7 Route circuits opened by a 403 (limiter `7f8eacb6`, B2)
+
+Seen in the regenerated receipt: D3's sixteen 403 answers now also raise `RATE_ROUTE_CIRCUITS` (warn), whose message said every circuit came from server errors. Run on `43553f98`, fixed after it:
+
+```
+FAIL: test_route_circuits_name_a_403_refusal_as_a_cause
+AssertionError: '403' not found in '16 Discord routes have a short circuit open after repeated server errors.'
+Ran 1 test in 0.002s
+FAILED (failures=1)
+```
