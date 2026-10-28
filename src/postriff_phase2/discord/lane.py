@@ -287,9 +287,35 @@ def soonest_due(lane):
 
 
 def _projection_ready(lane):
-    with lane.connection_factory() as db, db.cursor() as cur:
-        cur.execute("SELECT to_regclass('public.pr_discord_worker_projection')")
-        return cur.fetchone()[0] is not None
+    """Whether this invocation's loop starts (True) or why not: blocker()'s reason, False when the projection table
+    (migration 126) is missing, or 'idle'. It replaced a bare schema check, hence the name.
+
+    A shard that cannot run opens no connection; an idle one opens one, for one statement. First blocker() on this
+    process's clock, pure as before, so a broken configuration still ends every invocation with its WARNING. Then
+    one statement: the database clock and the soonest next_at in the projection. The loop claims only through
+    due_workspaces_sql on that projection (a row whose next_at has passed), so when nothing is due within the idle
+    horizon it could claim nothing: it stops as idle before the coordinator read (outlook) and before any claim,
+    which is where it stopped before, one claim miss and two queries later. Otherwise the loop runs exactly as
+    before. The second blocker() is outlook()'s: at a policy's edges the coordinator's own clock decides.
+    """
+    values = getattr(lane, 'environment', None)
+    reason = blocker(lane.social, lane.clock(), values)
+    if reason:
+        return reason
+    try:
+        with lane.connection_factory() as db, db.cursor() as cur:
+            cur.execute(_SOONEST)
+            now, soonest = cur.fetchone()
+    except Exception as error:
+        if getattr(error, 'sqlstate', None) == '42P01' or type(error).__name__ == 'UndefinedTable':
+            return False
+        raise
+    reason = blocker(lane.social, now, values)
+    if reason:
+        return reason
+    if soonest is None or soonest - now > IDLE_HORIZON_SECONDS:
+        return 'idle'
+    return True
 
 
 def run(worker, number, values=None, *, started=None, request_id=None, sleep=time.sleep, monotonic=time.monotonic,
@@ -307,8 +333,9 @@ def run(worker, number, values=None, *, started=None, request_id=None, sleep=tim
     waited = {'rate': 0.0, 'idle': 0.0}
     stopped, error, misses = None, None, 0
     try:
-        if not _projection_ready(lane):
-            stopped = 'schema'
+        ready = _projection_ready(lane)
+        if ready is not True:
+            stopped = ready or 'schema'
         while stopped is None:
             remaining = deadline - monotonic()
             if lane._stopping:

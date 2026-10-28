@@ -8,9 +8,9 @@ found the regressions below; this branch fixes them. Facts first; *inference* ma
 | | |
 |---|---|
 | Branch | `claude/discord-rc2-fixes-20261023` |
-| Base | the W-02 head `150ab4fa` (RC1 `2a5a523d` + the W-02 lane); later merged W-02 `4a776000` (test-only) and the impact branch `9f1946cf` (docs, scripts and tests only) |
+| Base | the W-02 head `150ab4fa` (RC1 `2a5a523d` + the W-02 lane); later merged W-02 `4a776000` (test-only) and `820d8c7d` (RC2-1 in `lane.py`, W-02 tests), and the impact branch `9f1946cf` (docs, scripts and tests only) |
 | Live | `c5fc1fd1` (`dpl_47SGxEqVXPtKMZWXt2kAE9C4ooRg`) |
-| Code head tested | `2ca119ad` (everything after it is documentation) |
+| Head tested | `60ca222d` (the last production-code fix is `2ca119ad`; after `60ca222d` only documentation changed) |
 | Method | every fix has tests that fail on `150ab4fa` and pass here; where a behaviour exists on live, the same probe or scenario runs with the live tree (`git archive c5fc1fd1`) and with this tree and the records are compared. No network, no Production access, nothing deployed |
 
 ## Summary
@@ -23,7 +23,8 @@ found the regressions below; this branch fixes them. Facts first; *inference* ma
 | UI-1 Personal Discord accounts | MEDIUM-LOW | `3d331c41` | `channels-view.tsx`, `discord-personal-account.ts` (+14 -2) | 3 of 4 web tests | not applicable (live has no such section) |
 | ENV-1 pool settings | LOW | `ad6f26ad` | `hosted_app.py`, `postgres_pool.py` (+38 -6) | 3 of 4 (8 errors with subtests) | live has no pool; the API stays up as on live |
 | Cron Authorization on non-ASCII headers (independent review) | LOW, pre-existing | `2ca119ad` | `hosted_app.py` (+8 -2) | 2 of 3 (7 failures), also on the live tree | an improvement over live (live answers 500) |
-| Impact suites merged, FB-1 and CH-1 as guards | | `7c8734cf`, `604417d2` | none | 3 guards fail with `IMPACT_RC_REV=150ab4fa` | the impact agent's live-versus-candidate suite: 32 tests OK |
+| Impact suites merged, FB-1 and CH-1 as guards | | `7c8734cf`, `604417d2`, `b9b1383b` | none | 3 guards fail with `IMPACT_RC_REV=150ab4fa` | the impact agent's live-versus-candidate suite: 32 tests OK |
+| Synthetic credentials generated at run time (offline secret scan, rule P2-SEC-CI-04) | | `438b5816`, `5c7531dc`, `60ca222d` | none (tests only) | the scan: 8 unexpected findings before `438b5816`, none on `60ca222d` | not applicable; the tests behave as before |
 
 ## FB-1: Facebook Page posts approved exactly as on live (`9c044aa7`)
 
@@ -178,6 +179,22 @@ ERROR line, on live too. Both now use the W-02 shard route's guard (refuse a sec
 passes on all. **Reported, not changed:** `/api/cron/worker` starts the runtime before it authenticates (live line 777,
 `150ab4fa` line 843, here line 883); the runtime also supplies `self.cron_secret` there.
 
+## Synthetic credentials at run time (`438b5816`, `5c7531dc`, `60ca222d`)
+
+The offline source scan (`scripts/consumer_ready_secrets.py`) reported 8 unexpected findings before `438b5816`, all in
+test files this branch added or merged from the impact branch: 6 `Secret Keyword` (synthetic Discord client secrets,
+Supabase keys, a PDF owner password) and 2 `Basic Auth Credentials` (database URLs with a user and password, never
+connected) in `impact_scenario.py`, `rc2_shared_path_scenario.py`, `test_customer_impact_dependencies.py`,
+`test_impact_compare.py` and `test_rc2_shared_path_fixes.py`. Following rule P2-SEC-CI-04, no scanner exception or
+allowlist entry was added. Every credential-shaped value in the files this branch added or merged is now made per run
+as `'synthetic-' + secrets.token_hex(12)` (through a `synthetic()` helper, so no literal follows a secret keyword; a
+random Fernet key where one is needed), including values the scanner does not flag (bot, page, user and session
+tokens, cron secrets, the capture test's bearer header and the fake builds' session cookie, the non-ASCII cron header
+and secret, whose first character stays non-ASCII). Database URLs carry no user or password. Values two builds or two
+processes must share are generated once per process (`test_impact_compare.SYNTHETIC`, the scenario's handoff file).
+The tests behave as before: the same failures on `150ab4fa` and the live tree, and a negative control with cookie
+redaction disabled fails on the generated cookie value.
+
 ## Half-carried changes in the integration (17e3844c, d4572f68) and where they came from
 
 Method (read-only, git objects): (1) for each non-Discord file `17e3844c` changed, every line the repair branch head it
@@ -195,7 +212,7 @@ Findings:
    `previewDispatchPending`, `_invalidate_owned`, `execute_job`, the `/jobs/<id>/execute` route, the web "Publish
    approved post" button) was carried without its `hosted_app.py` wiring, so `worker_binding` is never set: dormant.
    Visible traces: `workerBinding: null` in every workspace read (inventory API-1), the execute route answers only
-   Discord jobs (API-6), Facebook/Business Profile destination-picker wording (UI-8). Its `_capabilities` Page checks
+   Discord jobs (API-6), Facebook/Business Profile destination-picker wording (UI-8; stripped on 2026-10-28). Its `_capabilities` Page checks
    and Facebook adapter changes were not carried (consistent with live).
 3. `6037ff7c` (2026-10-05, official social workflows): `nativeScheduleAt` readers carried (the approval's `nextAt`,
    the worker's `native_scheduled` branch and an extra `!= 'native_scheduled'` condition) without the writer: dead code
@@ -206,7 +223,7 @@ Findings:
    half not. The status text "Accepted by LinkedIn. Publication is not API verified; confirm it on LinkedIn. Do not
    resubmit." shows for a LinkedIn post while it is `provider_accepted` (live writes that state at submit and the next
    worker step reconciles it, usually to `uncertain` without `r_member_social`): observable for about a minute per post,
-   a correction to the inventory's UI-21. Not changed (SC-1 list below).
+   a correction to the inventory's UI-21. Stripped on 2026-10-28 (owner reply 17): the text and the link no longer show.
 6. `6d6346f8` (founder unlimited entitlements): only TypeScript type fields carried; no runtime effect.
 7. `7d803d40`, `afda8f51` (public connection review gate): `connection_review.py` carried, called only by the Discord
    connect path; its Facebook branch never runs. Inert.
@@ -246,9 +263,11 @@ sent to the coordinator and routed to the W-02 fix agent: keep the pure readines
 broken configuration stays), then one connection with one statement (the soonest-due read, an undefined table meaning
 `schema`), and stop `idle` before the coordinator read and the claim when nothing is due within the idle horizon. The
 lane claims only through `hint.next_at <= now`, so no claimable work is skipped. Idle cost: 1 connection, 1 statement.
-Options (d) and (e) (crons only once the flag is on; fewer shards when idle) were rejected.
+Options (d) and (e) (crons only once the flag is on; fewer shards when idle) were rejected. The W-02 agent implemented
+it in `820d8c7d` (merged here in `45352b92`); measured by the impact suite: an idle shard now opens 1 connection for 1
+statement (its pin updated in this branch).
 
-**SC-1 (non-Discord changes riding in the candidate).** For the owner; sizes are the lines a strip would touch.
+**SC-1 (non-Discord changes riding in the candidate).** Sizes are the lines a strip would touch. Decided by the owner on 2026-10-28 (reply 17): strip UI-8 and UI-21 (done on this branch), accept the capped "Save as draft" (UI-12/API-9), API-8 and UI-10; the other rows ship.
 
 | Item | Origin | Recommendation | Strip size |
 |---|---|---|---|
@@ -261,15 +280,15 @@ Options (d) and (e) (crons only once the flag is on; fewer shards when idle) wer
 | DEP-6 pypdf 6.21.1 | `0bce18dd` (four advisories) | ship | 1 line, reopens the advisories |
 | DEP-7 psycopg-pool 3.3.3 | pool (inert while off) | ship | 1 line plus the pool module |
 | API-1 `workerBinding: null` in workspace reads | `381ac2d0` machinery | ship (inert) | about 10 lines in `hosted.py` (estimate) and the dormant preview code it feeds |
-| UI-12 / API-9 "Save as draft" (`manual_draft_create`) | `edcdf286`, `4fdc09c3` | owner decision: a new feature every editor sees | about 170 lines (`manual_drafts.py` 100, `hosted.py` about 8 (estimate), `permissions.py` 1, `home-view.tsx` 47, API types) plus `tests/test_manual_drafts.py` |
-| API-8 review preparation without the publishing entitlement | `ea59babb` | owner decision (a workspace without a plan now meets the refusal at approval, not at review) | 1 line plus `tests/test_passive_review_billing.py` (152) |
-| UI-10 schedule dialog native selects, UTC line, one-second clock, option text | `06f4f13c` (a Discord P0 fix) | owner decision; entangled with the Discord destination select and the P0 browser test | revert of about 80 lines in `schedule-dialog.tsx` and 24 in `discord-p0-browser.cjs`, then redo the Discord select |
-| UI-8 Facebook/Business Profile picker wording | `381ac2d0` via `1791d6d1` | strip for exact parity (or accept) | 3 to 4 lines in `destination-picker.tsx` (the strings sit in ternaries shared with Discord) |
-| UI-21 LinkedIn accepted-receipt text | web half of `4e69d899` | strip (its server half was never carried; the text claims a state live does not keep) | about 6 lines in `publication-receipt.tsx` (estimate) |
+| UI-12 / API-9 "Save as draft" (`manual_draft_create`) | `edcdf286`, `4fdc09c3` | **accepted** (owner reply 17, 2026-10-28; the caps come from the G2a branch): a new feature every editor sees | about 170 lines (`manual_drafts.py` 100, `hosted.py` about 8 (estimate), `permissions.py` 1, `home-view.tsx` 47, API types) plus `tests/test_manual_drafts.py` |
+| API-8 review preparation without the publishing entitlement | `ea59babb` | **accepted** (owner reply 17, 2026-10-28): a workspace without a plan now meets the refusal at approval, not at review | 1 line plus `tests/test_passive_review_billing.py` (152) |
+| UI-10 schedule dialog native selects, UTC line, one-second clock, option text | `06f4f13c` (a Discord P0 fix) | **accepted** (owner reply 17, 2026-10-28); entangled with the Discord destination select and the P0 browser test | revert of about 80 lines in `schedule-dialog.tsx` and 24 in `discord-p0-browser.cjs`, then redo the Discord select |
+| UI-8 Facebook/Business Profile picker wording | `381ac2d0` via `1791d6d1` | **stripped** (owner reply 17, 2026-10-28): the picker strings, the toast and the snapshot refetch equal live for Facebook and Business Profile | 3 to 4 lines in `destination-picker.tsx` (the strings sit in ternaries shared with Discord) |
+| UI-21 LinkedIn accepted-receipt text | web half of `4e69d899` | **stripped** (owner reply 17, 2026-10-28; its server half was never carried): LinkedIn receipts render as on live | about 6 lines in `publication-receipt.tsx` (estimate) |
 
 ## Not changed, and why
 
-- BG-1 (accepted LOW), RC2-1 (W-02 owner), WB-1 (a Production setting; owner), SC-1 items (owner's list), the dormant
+- BG-1 (accepted LOW), RC2-1 (W-02 owner), WB-1 (a Production setting; owner), SC-1 items other than UI-8 and UI-21 (accepted by the owner, reply 17), the dormant
   preview-dispatch machinery (inert in Production; removing it touches the worker claim code the Discord lane shares).
 - `/api/cron/worker` runtime-before-authentication (reported only, as asked).
 - The PR-1 scheme caveat with the feature on (unknown; verify on the staged build before turning user install on).
@@ -278,7 +297,42 @@ Options (d) and (e) (crons only once the flag is on; fewer shards when idle) wer
   `test_a_workspace_with_a_linked_discord_identity_still_lists_it` on PostgreSQL instead.
 - Web typecheck, lint and the browser harnesses were not run: this checkout has no `node_modules` (the 34 web unit
   tests that need `typescript`, `react` or other packages fail identically on `150ab4fa` and here).
+- The impact branch `claude/discord-impact-20261023 @9f1946cf` itself still has the literal credential values (another
+  agent's branch); this branch carries the corrected copies of its tests.
 
-## Test runs on the code head `2ca119ad`
+## Test runs on `60ca222d`
 
-Filled from the receipts of the final runs (see the end of this file).
+All on a detached copy of `60ca222d` (scratch worktree), Python 3.13 venv with psycopg, PostgreSQL 16 binaries, no
+network. Receipts are kept in the session scratchpad, not in the repository.
+
+| Run | Command | Result |
+|---|---|---|
+| Offline source secret scan (local-gates step) | `PYTHONPATH=src:tests python scripts/consumer_ready_secrets.py` | status PASS: 3,384 files, 965 findings, every one matched by the repository's existing review rules (none added), 0 unexpected (before `438b5816`: 973 findings, 8 unexpected) |
+| Fenced Discord suite, as the qualification workflow runs it | `CI=true PYTHONPATH=scripts/linkedin_test_fence:src:tests RAFII_DISCORD_SYNTHETIC_FENCE=1 python -m unittest discover -s tests -p 'test_discord*.py'` | 577 tests OK, 49 skipped (the real-PostgreSQL tests stand down under the fence); fence receipt: 0 unexpected transport attempts, 0 real provider requests |
+| This branch's suites and the impact suites, real PostgreSQL | `POSTRIFF_PG_BIN=... python -m unittest test_rc2_shared_path_fixes test_rc2_shared_paths_postgres test_customer_impact_shared_paths test_impact_compare test_customer_impact_dependencies` | 63 tests OK, none skipped (24, 7, 19, 11 and 2 by module) |
+| Web unit tests | `cd web && node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs` (Node 22, no `node_modules`) | 752 tests, 718 pass, 34 fail; the 34 are the same set as on `150ab4fa` (they need `typescript`, `react` or other packages this checkout lacks); the 4 UI-1 tests and the 7 launch-gate tests pass |
+| Full repository discover | `PYTHONPATH=src:tests python -m unittest discover -s tests -p 'test_*.py'` (without `POSTRIFF_PG_BIN`, as the RC1 receipt's 6,141/391 count) | 6,308 tests OK, 455 skipped (529 s) |
+
+Failing-before receipts (each test file copied onto a detached `150ab4fa`, or the live tree, and run there): FB-1, CH-1,
+PR-1 and ENV-1 offline tests (`all-offline-base-150ab4fa*.log`, `env1-base-150ab4fa.log`), the PostgreSQL proof
+(`pg-base-150ab4fa.log`, with the record summary `pg-summary.txt`), the impact guards with `IMPACT_RC_REV=150ab4fa`
+(`impact-guards-on-150ab4fa.log`), the UI-1 web test (3 of 4 fail), the cron guard on `150ab4fa` and on the live tree
+(`cron-guard-base-150ab4fa.log`; with the run-time cron values of `60ca222d`:
+`cron-guard-runtime-credentials-base-and-live.log`, the same 2 of 3 tests and 7 failures), and the 404 tests on the 401
+head `651e1899` (`pr1-404-on-651e1899.log`).
+
+## SC-1 strip: test runs (2026-10-28, owner reply 17)
+
+UI-8 and UI-21 are stripped on the commit that follows `d85c8a47`. Node 22, no network; `web/node_modules` was borrowed
+from another worktree of the same session through a symlink that was removed afterwards.
+
+| Run | Command | Result |
+|---|---|---|
+| Web unit tests | `cd web && node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs` | 997 tests, 996 pass; the one failure is `tests/visual-analysis.test.cjs`, which runs Python and needs the package `psycopg` (absent in this scratch environment, unrelated to the two files) |
+| Fails before the strip | `tests/receipt.test.mjs` against the pre-strip `publication-receipt.tsx`; `tests/destination-picker-parity.test.mjs` against the pre-strip `destination-picker.tsx` | receipt: 1 of 13 fails (the LinkedIn parity test); picker pin: 2 of 2 fail |
+| Typecheck and lint | `tsc --noEmit`; `oxlint` on the two files | 0 errors; 0 warnings and 0 errors |
+| Offline source secret scan | `PYTHONPATH=src:tests python scripts/consumer_ready_secrets.py` | PASS: 3,384 files, 965 findings, 0 unexpected; the new test file, created after the scan started, scanned on its own: 0 findings |
+
+What the strip leaves different from live in these two files: the Discord branches only (button, sheet text, toast,
+`remove`, the snapshot refetch, the Discord receipt rules). For every other platform the strings, the toast and the
+refetch are the live ones; a receipt shows a stored verification time for a non-Discord post exactly as on live.

@@ -340,7 +340,7 @@ class LaneReadiness(unittest.TestCase):
             with self.subTest(name):
                 result, statements, entry = self.run_shard(discord_social(**setup))
                 self.assertEqual((result['stoppedBy'], result['processed'], result['counters']['steps']), (reason, 0, 0))
-                self.assertEqual(len(statements), 1, 'no claim and no coordinator read')
+                self.assertEqual(len(statements), 0, 'no connection at all: no claim, coordinator read or due probe')
                 self.assertEqual((entry['event'], entry['stoppedBy']), ('discord.lane.completed', reason))
                 self.assertEqual((result['status']['ready'], result['status']['blocker']), (False, reason))
 

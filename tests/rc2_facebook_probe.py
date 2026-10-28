@@ -24,6 +24,7 @@ import copy
 import json
 import os
 import re
+import secrets
 import sys
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -42,6 +43,9 @@ WORKSPACE = '10000000-0000-4000-8000-0000000000fb'
 OWNER = '20000000-0000-4000-8000-0000000000fb'
 PERSON, PAGE, OTHER_PAGE = '7700000001', '100200300400', '100200300401'
 CONNECTION = 'facebook-connection-1'
+# Synthetic credentials are generated for each run (rule P2-SEC-CI-04: no literal credential, no scanner exception);
+# none of them reaches the printed record.
+SESSION, APP_SECRET, USER_TOKEN = ('synthetic-' + secrets.token_hex(12) for _ in range(3))
 
 
 def base_state():
@@ -162,13 +166,13 @@ class Repository:
     """The two repository calls a Page choice uses, around one locked workspace row."""
     def __init__(self, state, vault):
         self.state, self.revision, self.statements = state, 7, []
-        access, key = vault.encrypt(json.dumps({'v': 1, 'user': PERSON, 'name': 'Impact Member', 'ut': 'synthetic-user-token',
+        access, key = vault.encrypt(json.dumps({'v': 1, 'user': PERSON, 'name': 'Impact Member', 'ut': USER_TOKEN,
                                                 'scope': list(GRANTED), 'page': None}))
         self.credential = {'access': access, 'key': key, 'scopes': list(GRANTED)}
 
     @contextmanager
     def transaction(self, token, workspace_id, **kwargs):
-        if token != 'synthetic-session' or workspace_id != WORKSPACE:
+        if token != SESSION or workspace_id != WORKSPACE:
             raise AlphaError('Workspace unavailable.', 403)
         # (revision, state, role, can_publish, ...) as PostgresWorkspaceRepository selects MEMBER_COLUMNS.
         yield Cursor(self), (self.revision, copy.deepcopy(self.state), 'owner', True, False, False, False), OWNER
@@ -194,7 +198,7 @@ GRANTED = ['business_management', 'pages_manage_posts', 'pages_read_engagement',
 
 def graph(method, url, **kwargs):
     if method == 'GET' and '/me/accounts' in url:
-        pages = [{'id': page, 'name': name, 'tasks': ['CREATE_CONTENT', 'MANAGE'], 'access_token': 'synthetic-page-token-' + page}
+        pages = [{'id': page, 'name': name, 'tasks': ['CREATE_CONTENT', 'MANAGE'], 'access_token': USER_TOKEN + '-' + page}
                  for page, name in ((PAGE, 'Impact Studio Page'), (OTHER_PAGE, 'Second Page'))]
         return {'status': 200, 'body': {'data': pages}}
     if method == 'GET' and '/me/permissions' in url:
@@ -205,12 +209,12 @@ def graph(method, url, **kwargs):
 def choose_page():
     vault = CredentialVault(CredentialVault.generate_key())
     repository = Repository(base_state(), vault)
-    facebook = FacebookPagesProvider('123456789012345', 'synthetic-facebook-app-secret', transport=graph)
+    facebook = FacebookPagesProvider('123456789012345', APP_SECRET, transport=graph)
     service = OAuthService(repository, HostedPhase2Commands(lambda: NOW), vault, {'facebook': facebook},
                            'https://app.rafii.invalid', clock=lambda: NOW)
     out = {}
     try:
-        out['result'] = service.choose_destination(WORKSPACE, 'synthetic-session', CONNECTION, PAGE)
+        out['result'] = service.choose_destination(WORKSPACE, SESSION, CONNECTION, PAGE)
     except AlphaError as error:
         out['refused'] = str(error)
     out['statements'] = repository.statements

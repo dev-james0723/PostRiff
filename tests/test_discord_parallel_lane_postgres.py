@@ -35,6 +35,53 @@ class WorkerDied(BaseException):
     """A process that stops mid-step: nothing after this point runs; its open transaction rolls back."""
 
 
+class Counted:
+    """A connection factory that counts what is opened through it: connections, and statements by their SQL."""
+    def __init__(self, cluster):
+        self.cluster, self.connections, self.statements = cluster, 0, []
+
+    def __call__(self):
+        self.connections += 1
+        return _CountedConnection(F.psycopg.connect(self.cluster.dsn, prepare_threshold=None), self.statements)
+
+
+class _CountedConnection:
+    def __init__(self, connection, statements):
+        self._connection, self._statements = connection, statements
+
+    def __enter__(self):
+        self._connection.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._connection.__exit__(*exc)
+
+    def cursor(self, *args, **kwargs):
+        return _CountedCursor(self._connection.cursor(*args, **kwargs), self._statements)
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+
+class _CountedCursor:
+    def __init__(self, cursor, statements):
+        self._cursor, self._statements = cursor, statements
+
+    def __enter__(self):
+        self._cursor.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._cursor.__exit__(*exc)
+
+    def execute(self, sql, *args, **kwargs):
+        self._statements.append(sql)
+        return self._cursor.execute(sql, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
+
 def frozen_worker_class():
     """The release candidate's own worker (2a5a523d), as a rollback would run it: the old file in today's package."""
     source = FROZEN_SOURCE.read_bytes()
@@ -937,6 +984,88 @@ class ParallelLaneOnPostgres(unittest.TestCase):
         self.assertEqual((on['processed'], len(self.wire.calls)), (0, calls), 'the minute cron claims no Discord')
         self.drain(worker, 3, seconds=60)
         self.assert_each_created_once_and_verified(20)
+
+    # (k) an idle shard ----------------------------------------------------------------------------------------------
+
+    def shard(self):
+        """One shard invocation on a worker whose own connections are counted. Returns (result, counter)."""
+        counted = Counted(self.cluster)
+        worker = F.PostgresWorker(counted, social=self.hosted, worker_id='w02-counted', discord_workers=True)
+        (result,), failures = F.run_lanes(worker, 1, seconds=50)
+        self.assertEqual(failures, [])
+        return result, counted
+
+    def test_an_idle_shard_opens_one_connection_for_one_statement(self):
+        """Twelve shards every minute: with nothing due, each opens one connection for one statement (the database
+        clock and the soonest due work in the projection) and stops as idle. It used to open four for seven: the
+        schema check, the coordinator read, a claim's checks and due query, and the due probe after the miss."""
+        tenants = [F.Tenant(n) for n in range(4)]
+        now = self.cluster.now()
+        F.seed(self.cluster, tenants[:2], 0)  # workspaces without Discord work
+        F.seed(self.cluster, tenants[2:], 2, now=now - 60, at=now + 1800)  # approved, due in half an hour
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
+        result, counted = self.shard()
+        self.assertEqual((result['stoppedBy'], counted.connections, len(counted.statements)), ('idle', 1, 1))
+        self.assertEqual(counted.statements, [F.discord_lane._SOONEST])
+        self.assertEqual((result['counters']['steps'], result['counters']['claimed']), (0, 0))
+        self.assertEqual(self.wire.calls, [])
+        # Idle by the loop's own rule: the soonest due work lies beyond the idle horizon.
+        with self.cluster.connect(autocommit=True) as db:
+            soonest = db.execute('SELECT min(next_at) FROM public.pr_discord_worker_projection').fetchone()[0]
+        self.assertGreater(soonest - self.cluster.now(), F.discord_lane.IDLE_HORIZON_SECONDS)
+
+    def test_a_shard_with_work_due_runs_the_loop_as_before(self):
+        tenants = [F.Tenant(n) for n in range(2)]
+        self.start(tenants, 1)
+        result, counted = self.shard()
+        # The due probe in place of the schema check, then the loop: its coordinator read before the first claim.
+        self.assertEqual(counted.statements[0], F.discord_lane._SOONEST)
+        self.assertIn('pr_discord_rate_state', counted.statements[1])
+        self.assertEqual((result['counters']['posted'], result['counters']['verified']), (2, 2))
+        self.assert_each_created_once_and_verified(2)
+
+    def test_on_an_idle_shard_the_p0_signals_still_fire(self):
+        tenants = [F.Tenant(n) for n in range(2)]
+        now = self.cluster.now()
+        F.seed(self.cluster, tenants, 1, now=now - 60, at=now + 1800)  # nothing due within the horizon
+        self.wire = F.MockDiscord(tenants)
+        self.hosted = F.social(self.cluster, tenants, self.wire, capacity=200)
+        # A shard that cannot run says why at WARNING every minute, before any database read.
+        for cause, reason in (('rate limits off', 'coordinator_unavailable'), ('policy expired', 'coordinator_unavailable'),
+                              ('no coordinator', 'coordinator_unavailable'), ('degraded', 'coordinator_degraded')):
+            with self.subTest(cause):
+                self.repair()
+                if cause == 'degraded':
+                    self.hosted.providers['discord'].rate_coordinator_degraded = True
+                else:
+                    self.unable(cause)
+                with self.assertLogs('postriff.request', 'WARNING') as logged:
+                    result, counted = self.shard()
+                entry = json.loads(logged.records[-1].getMessage())
+                self.assertEqual((result['stoppedBy'], entry['event'], entry['stoppedBy']),
+                                 (reason, 'discord.lane.completed', reason))
+                self.assertEqual((result['status']['ready'], result['status']['blocker']), (False, reason))
+                self.assertEqual((counted.connections, counted.statements), (0, []))
+        self.repair()
+
+    def test_the_minute_tick_still_warns_of_lagging_work_the_idle_shards_cannot_take(self):
+        """A loop died holding a lease in a workspace whose other post is long overdue: every shard is idle (one lease
+        per workspace, so nothing there is claimable until the lease expires) and the minute tick's lag warning still
+        fires from its own sample."""
+        tenant = F.Tenant(0)
+        F.seed(self.cluster, [tenant], 3, now=self.cluster.now() - 960)  # due eleven minutes ago
+        self.wire = F.MockDiscord([tenant])
+        self.hosted = F.social(self.cluster, [tenant], self.wire, capacity=200)
+        self.worker = F.base_worker(self.cluster, self.hosted)
+        self.leave_a_dead_lease('GET', '/channels', before=True)  # the first post sent, the second leased, the third due
+        result, counted = self.shard()
+        self.assertEqual((result['stoppedBy'], counted.connections, len(counted.statements)), ('idle', 1, 1))
+        tick, warnings = self.lagging(self.worker)
+        self.assertTrue(tick['discordParallelLane'])
+        (warning,) = warnings
+        self.assertGreater(warning['oldestEligibleLagSeconds'], 600)
+        self.assertEqual((warning['laneOwnsDiscord'], warning['laneBlocker']), (True, None))
 
 
 if __name__ == '__main__':

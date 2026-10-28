@@ -32,20 +32,18 @@ test('actual PostgreSQL snapshot reaches the UI without losing receipt fields', 
   for (const text of ['555','999','https://www.instagram.com/p/ABC/','provider lookup']) assert.ok(html.includes(text));
 });
 
-test('accepted LinkedIn receipt provides owner inspection without claiming API verification', () => {
+// SC-1 (owner reply 17): non-Discord receipts render exactly as on the live build. A LinkedIn post that was only
+// accepted shows "Not verified yet" and no link, even when a feed URL is present.
+test('an accepted LinkedIn receipt reads as on the live build: not verified yet, no link, no owner-check wording', () => {
   const accepted = {...job,state:'provider_accepted',manifest:{platform:'LinkedIn'},container:undefined,providerReference:'urn:li:share:123',url:'https://www.linkedin.com/feed/update/urn:li:share:123/',verification:null};
   const html = renderToStaticMarkup(React.createElement(Receipt, {job:accepted}));
-  assert.ok(html.includes('Open post to confirm'));
-  assert.ok(html.includes('Publication is not API verified'));
-  assert.ok(html.includes('Do not resubmit'));
-  assert.ok(!html.includes('Open verified post'));
+  assert.ok(html.includes('Not verified yet'));
+  assert.ok(!html.includes('<a '));
+  for (const text of ['Open post to confirm', 'Publication is not API verified', 'Do not resubmit', 'Open verified post', 'Accepted by']) assert.ok(!html.includes(text), text);
+  // A stored verification record shows its time for a non-Discord post, as on live.
   const stale = renderToStaticMarkup(React.createElement(Receipt, {job:{...accepted,verification:{method:'provider_lookup',at:1}}}));
-  assert.ok(stale.includes('Open post to confirm'));
-  assert.ok(!stale.includes('Verified ·'));
-  for (const update of [{state:'uncertain'}, {url:'https://www.linkedin.com/feed/update/urn:li:share:999/'}, {url:'https://evil.test/feed/update/urn:li:share:123/'}, {providerReference:'bad'}, {manifest:{platform:'Instagram'}}]) {
-    const unsafe = renderToStaticMarkup(React.createElement(Receipt, {job:{...accepted,...update}}));
-    assert.ok(!unsafe.includes('<a '), JSON.stringify(update));
-  }
+  assert.ok(stale.includes('Verified ·'));
+  assert.ok(!stale.includes('<a '));
 });
 
 // Synthetic receipts only: render the real component; no provider transport or navigation.

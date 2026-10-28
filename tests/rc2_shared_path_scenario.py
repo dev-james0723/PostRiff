@@ -24,6 +24,7 @@ import argparse
 import json
 import os
 import re
+import secrets
 import sys
 import time
 import uuid
@@ -49,6 +50,13 @@ RECORD = {'phases': {}, 'errors': []}
 CURRENT = {'phase': None}
 HTTP = []
 PAGE, PERSON = '100200300400', '7700000001'
+# Synthetic credentials are generated for each run, never written in the source (rule P2-SEC-CI-04: no literal
+# credential and no scanner exception). No value is compared across processes.
+def synthetic():
+    return 'synthetic-' + secrets.token_hex(12)
+
+
+USER_TOKEN, PAGE_TOKEN = synthetic(), synthetic()
 GRANTED = ['business_management', 'pages_manage_posts', 'pages_read_engagement', 'pages_show_list']
 
 
@@ -112,7 +120,7 @@ def graph(method, url, **kwargs):
         return {'status': 200, 'body': {'data': [{'permission': name, 'status': 'granted'} for name in GRANTED]}}
     if method == 'GET' and host_path.endswith('/me/accounts'):
         return {'status': 200, 'body': {'data': [{'id': PAGE, 'name': 'Impact Studio Page', 'tasks': ['CREATE_CONTENT'],
-                                                  'access_token': 'synthetic-page-token'}]}}
+                                                  'access_token': PAGE_TOKEN}]}}
     if method == 'POST' and host_path.endswith('/%s/feed' % PAGE):
         return {'status': 200, 'body': {'id': PAGE + '_555000111'}}
     raise AlphaError('Provider HTTP is disabled in this scenario.', 503)
@@ -133,11 +141,11 @@ verify.auth_time = lambda token, principal: time.time()
 
 handoff = json.load(open(args.handoff)) if os.path.exists(args.handoff) else {'vaultKey': CredentialVault.generate_key(), 'people': []}
 ENV = {'POSTRIFF_PUBLIC_BASE_URL': 'https://app.impact.invalid', 'VERCEL_ENV': 'production',
-       'POSTRIFF_OAUTH_FACEBOOK_CLIENT_ID': '123456789012345', 'POSTRIFF_OAUTH_FACEBOOK_CLIENT_SECRET': 'synthetic-facebook-app-secret-01',
+       'POSTRIFF_OAUTH_FACEBOOK_CLIENT_ID': '123456789012345', 'POSTRIFF_OAUTH_FACEBOOK_CLIENT_SECRET': synthetic(),
        'POSTRIFF_OAUTH_FACEBOOK_REVIEWED': 'true',
        'POSTRIFF_OAUTH_DISCORD_CLIENT_ID': '123456789012345678',
-       'POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET': 'synthetic-discord-client-secret-0001',
-       'POSTRIFF_DISCORD_BOT_TOKEN': 'synthetic-discord-bot-token-000000000001',
+       'POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET': synthetic(),
+       'POSTRIFF_DISCORD_BOT_TOKEN': synthetic(),
        'POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED': 'true', 'POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED': 'true'}
 os.environ.update(ENV)
 providers = provider_registry.registry_from_environment(dict(os.environ))
@@ -190,7 +198,7 @@ if 'bootstrap' in phases:
     with phase('bootstrap'):
         for index in range(2):
             user = str(uuid.uuid5(uuid.NAMESPACE_DNS, 'rc2-user-%d.example.invalid' % index))
-            token = 'synthetic-session-%d-%s' % (index, 'x' * 24)
+            token = 'synthetic-session-%d-' % index + secrets.token_hex(12)  # kept in the handoff for the next process
             TOKENS[token] = user
             with psycopg.connect(args.dsn, autocommit=True) as db:
                 db.execute('INSERT INTO auth.users(id) VALUES(%s) ON CONFLICT DO NOTHING', (user,))
@@ -234,8 +242,8 @@ if 'facebook' in phases and a:
         channel = {'id': 'facebook-impact-1', 'platform': 'Facebook', 'account': 'Impact Studio Page', 'accountType': 'page',
                    'scopes': list(GRANTED), 'verifiedAt': now, 'expiresAt': now + 86400 * 365, 'capabilityVersion': 1,
                    'providerAccountId': PERSON, 'language': 'English'}
-        session = {'v': 1, 'user': PERSON, 'name': 'Impact Member', 'ut': 'synthetic-user-token', 'scope': list(GRANTED),
-                   'page': {'id': PAGE, 'name': 'Impact Studio Page', 'token': 'synthetic-page-token'}}
+        session = {'v': 1, 'user': PERSON, 'name': 'Impact Member', 'ut': USER_TOKEN, 'scope': list(GRANTED),
+                   'page': {'id': PAGE, 'name': 'Impact Studio Page', 'token': PAGE_TOKEN}}
         access, key_id = vault.encrypt(json.dumps(session))
         with psycopg.connect(args.dsn, autocommit=True) as db:
             db.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,key_id,scopes) "
