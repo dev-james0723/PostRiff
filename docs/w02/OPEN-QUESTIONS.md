@@ -34,9 +34,9 @@ procedure to release such a row today. More concurrent loops mean more requests 
 flight at any instant, so W-02 raises the exposure. Options: a reviewed operator procedure (monitor M5 finds the rows);
 or an automatic release of unanswered reads after a fixed age (a read that left two minutes ago cannot still be using a
 one-second window), creates only after their job is reconciled. This is a coordinator change and needs the coordinator's
-reviewer. Dependency: the coordinator rewrite on another branch changes how such rows are released, so the "no reviewed
-procedure" wording above will change with it; this branch does not touch that rule (its own change covers only a
-permit an embargo or hold blocked before it was used, never an admission that was sent).
+reviewer. **Since changed (limiter branch):** such a row stops counting after its scope's window plus 30 seconds, whoever
+reviews it, and stays `sent` or `uncertain` as evidence; a read that failed is resolved at once. A dead create still leaves
+its job `uncertain` for manual reconciliation.
 
 **Q4. What the operator hold does to a post mid-handoff.** Setting the hold also blocks every reserved-but-unused create
 permit (existing coordinator rule). A loop that had sealed a post's intent but not yet sent it records the post as
@@ -63,7 +63,11 @@ when every other loop is idle [reasoned]. Keep (fair, simple) or allow a few in 
 **Q7. A higher request policy.** Discord's documented global limit is 50 requests per second per bot; the reviewed policy
 uses 25 so that two adjacent fixed windows stay inside it. Moving to 50 halves drain times (5,000 posts: about 23 to about
 12 minutes at six requests per post [simulated]) but leaves no margin for the shared egress addresses. Needs a new reviewed
-policy (`scripts/discord_rate_policy.py`) and the owner's capacity run.
+policy (`scripts/discord_rate_policy.py`) and the owner's capacity run. Mechanics, as built on the limiter branch: the
+policy tool refuses an `app_capacity` above half the bot limit (25), a renewal can only tighten the stored cap while the
+previous policy is valid (the stored expiry is the latest of all), and the exact window no longer needs the "two adjacent
+windows" margin. A reviewed raise therefore needs (1) the tool's ceiling changed and reviewed, (2) the new policy, and (3) an
+operator updating the application row's `limit_count`; none of the three happens by accident.
 
 **Q8. Scheduled-time jitter (Phase 1b, not built).** A backend-only random offset of up to two minutes on the stored
 scheduled time turns a top-of-the-minute spike into a two-minute plateau. It changes what the customer sees ("sent between

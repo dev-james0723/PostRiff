@@ -303,6 +303,27 @@ class PolicyAndHold(Base):
         self.denied(lambda: self.read(looser))
         self.assertEqual(self.policy_row()['cap'], 2)
 
+    def test_a_reviewed_raise_is_an_operator_update_of_the_stored_cap_and_nothing_else_raises_it(self):
+        """A renewal alone never raises the ceiling (the test above), and neither does a later reservation under the renewed
+        revision: the stored cap (limit_count of the application row) is the ceiling in force. The deliberate path is an
+        UPDATE of that row; the exact window uses it at the next reservation. Pinned so a raise can neither happen by
+        accident nor stop being possible, and so that a later, tighter policy still tightens a raised cap."""
+        self.make(2, 1)
+        self.read()
+        higher = SharedPostgresBudget(self.db.connection, APP, policy={**self.policy, 'revision': 'raised', 'app_capacity': 5})
+        for second in range(3):
+            self.at(second * 1.2)
+            self.read(higher)
+        self.assertEqual(self.policy_row()['cap'], 2, 'renewed, and used under the renewed revision: unchanged')
+        self.at(4)
+        self.policy_row()['cap'] = 5                                                  # the operator's UPDATE of limit_count
+        self.assertEqual([self.read(higher) is not None for _ in range(5)], [True] * 5)
+        self.denied(lambda: self.read(higher))
+        tighter = SharedPostgresBudget(self.db.connection, APP, policy={**self.policy, 'revision': 'tighter', 'app_capacity': 3})
+        self.at(6)
+        self.read(tighter)
+        self.assertEqual(self.policy_row()['cap'], 3, 'a later, tighter policy still tightens a raised cap')
+
     def test_hold_refuses_everything_and_release_resumes_with_the_same_exact_state(self):
         self.read()
         self.read()

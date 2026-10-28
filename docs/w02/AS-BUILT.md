@@ -392,14 +392,47 @@ platform before any claim is made to customers.
   minute cron still leaves Discord to the lane, so due posts wait unsent. Nothing could be sent in that state either
   way; the signals are the shard lines (`coordinator_degraded`, at WARNING) and, after five minutes, the lag warning
   with `laneOwnsDiscord` true, which does not name the cause.
-- A learned route can close until the policy expires. When its window ends, the next reservation refills it and
-  sets its reset to the policy's expiry until a response from the new window gives the real one (`_roll`). If the
-  permits reserved after that refill all expire unused (a slow step, a released job), no request leaves, no response
-  comes back, and the route stays at nothing left: every later request on it is refused with a wait of the policy's
-  remaining life, so every later post to that channel is held ("Discord rate wait outlasts approval"), nothing
-  sent [measured: reproduced deterministically with the coordinator alone, a refused read waits 86,336 s on the
-  one-day test policy; seen under heavy CPU contention in the many-loops, cron-gap and fairness tests, where six to
-  ten posts on such channels ended held]. Coordinator code; left to the coordinator's reviewer.
+- A learned route used to close until the policy expired when the permits reserved after its refill all expired unused.
+  Resolved on the limiter branch: such a route is probed again at once (`_window_unused`), and one whose requests were
+  sent but never answered waits at most a window plus the margin; see "The shared request coordinator after the limiter
+  work" below.
+
+## The shared request coordinator after the limiter work
+
+`rate_limits.py` (`SharedPostgresBudget`) changed on the limiter branch; the lane is unchanged. What a reader of this
+document should know:
+
+- **The 25 per second is exact and counts wire times.** The application row admits when the admissions occupying a slot
+  plus those held are fewer than the cap. An admission occupies a slot from its wire time (`sent_at`: a read when it is
+  admitted, a create when its permit is consumed; else its reservation) for one span, the window plus
+  `SLOT_GUARD_SECONDS` (0.1 s). A permit not used yet, and a request sent but never answered, keep a slot as well
+  (`held`). So no closed second of wire times holds more than the cap, and arrivals at Discord stay within it while the
+  admission-to-wire spread is at most 100 ms; the cost is 22.7 of 25 a second at the ceiling and nothing below it. The
+  capacity harness reports the real spread (wire jitter p99.9): the guard is the one constant to set from it.
+- **A permit lives `permit_ttl_seconds`** (5 in the reviewed policy), the lease and the approval, not its window: a
+  window that ends while a permit is unused refills its row counting the permit as pending, and the application window
+  holds a slot for it until it is used or expires. Before, 11.5% of create preflights of a 5,000-post run were repeated
+  because the permit died before it could be sealed.
+- **Nothing stays unresolved for ever.** A read whose transport failed is resolved at once (observed 503); an answer that
+  arrived and was refused for its size (`ProviderResponseLimit`) is recorded with its real status and headers; a request
+  whose outcome is unknown (a write, a lost process, an observation that timed out) keeps its slot for its scope's window
+  plus 30 s (`UNOBSERVED_MARGIN_SECONDS`, the transport's 20 s timeout and allowance) and then stops counting; the row
+  stays `sent` or `uncertain` for an operator and for the claim paths that retire it. A guild owner can no longer take
+  the shared budget to zero with an oversized channel list.
+- **Refusals.** 401 holds the credential; 403 (and a 404 on a webhook) opens the route's circuit for 30 s, doubling per
+  consecutive refusal up to 16 minutes; a 404 on anything else opens none; 429 embargoes the scope Discord names; three
+  5xx or transport failures open the 30 s circuit.
+- **The lock.** A reservation sends, after the statement that takes the locks, a reading of the clock and the window, one
+  statement that writes the scopes and the admission, and the commit; an observation sends six (was nine). The reading
+  cannot be part of the lock statement: in READ COMMITTED a statement that waited for a lock keeps its start-of-statement
+  snapshot and would not see the admission the previous holder committed meanwhile.
+- **A policy renewal can only tighten.** `_roll` keeps the stored cap and window of the policy, invalid-request and
+  discovery rows as the minimum cap and the maximum window of every policy whose expiry has not passed (the stored expiry is
+  the latest of them). A renewal with a higher `app_capacity` therefore changes nothing until the stored expiry is past. A
+  deliberate raise is an operator act: apply the new policy, then UPDATE the application row's `limit_count` (an UPDATE
+  the service role may make; the stored cap is the ceiling in force and a reservation under the renewed revision does not
+  reconsider it); the policy tool also refuses an `app_capacity` above half the bot limit and must be changed (reviewed)
+  first. It cannot happen by accident, and a later, tighter policy still tightens a raised cap.
 
 ## Not done
 
