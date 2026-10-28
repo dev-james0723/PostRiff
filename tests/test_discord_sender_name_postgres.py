@@ -357,9 +357,10 @@ class RoutesOnPostgres(unittest.TestCase):
 @unittest.skipUnless(L.AVAILABLE, L.SKIP_UNAVAILABLE)
 class ClaimFlowOnPostgres(unittest.TestCase):
     """SharedPostgresBudget on a disposable PostgreSQL, Discord synthetic. The coordinator's clock is the database's, so
-    "time passes" means a short real wait (permit_ttl_seconds is 5) plus ageing the admission row, and the Rafii-side clock
+    "time passes" means a short real wait (the permit life, 10 s here) plus ageing the admission row, and the Rafii-side clock
     (claims) moves by itself."""
     GUILD = '6800001'
+    PERMIT_TTL = 10
 
     @classmethod
     def setUpClass(cls):
@@ -386,7 +387,11 @@ class ClaimFlowOnPostgres(unittest.TestCase):
         self.r.flush()
         self.provider = m.s.adapter
         self.provider.rate_v1_enabled = True
-        self.limiter = SharedPostgresBudget(self.cluster.factory(), F.APP, policy=L.policy(self.cluster.now(), capacity=200))
+        # A permit lives `permit_ttl_seconds` (default 5, at most 10) between the reservation and the consumption, and the write's
+        # admission callback makes three database transactions in between. On a loaded machine five seconds can pass and `consume`
+        # answers a rate delay (permit_expired), which is correct behaviour but not what these tests are about: use the longest life.
+        self.limiter = SharedPostgresBudget(self.cluster.factory(), F.APP,
+                                            policy=L.policy(self.cluster.now(), capacity=200, permit_ttl_seconds=self.PERMIT_TTL))
         self.provider.rate_limiter = self.limiter
         m.hooks.rate_headers = F.Hooks.bucket_headers
         self.config = m.hooks.guild_config[self.GUILD]
@@ -415,9 +420,9 @@ class ClaimFlowOnPostgres(unittest.TestCase):
                                                  "AND kind LIKE 'discord.sender_name%%'", (self.A,)).fetchall()}
 
     def age_admissions(self):
-        """Let the coordinator see the admission as old: its own deadline passes in real time (5 s), and it was reserved
-        ten minutes ago (the reconciliation needs 120 s)."""
-        time.sleep(6)
+        """Let the coordinator see the admission as old: its own deadline passes in real time (the permit life, 10 s), and it
+        was reserved ten minutes ago (the reconciliation needs 120 s)."""
+        time.sleep(self.PERMIT_TTL + 1)
         with self.cluster.connect(autocommit=True) as db:
             db.execute("UPDATE public.pr_discord_request_admissions SET reserved_at = reserved_at - interval '10 minutes' "
                        "WHERE method='PATCH'")
