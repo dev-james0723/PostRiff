@@ -1,0 +1,13 @@
+<!-- Provenance: working notes of the independent scope-B reviewer (agent a1e4bd77...) for the coordinator delta review of claude/discord-rc2-limiter-20261023, written into the repository root by mistake at 2026-10-28 13:56Z and moved here by the release captain. Not authoritative until the reviewer files its final report; synthetic test data only, no credentials. -->
+
+- [14:02] c1_circuit (real PG): consecutive 403s on one route -> circuit 30,60,120,240,480,960,960,960 s (streak 1..8); after a 200 streak=0 and the next 403 = 30 s; webhook 404 = invalid budget -1 + 30 s circuit; bot 404 (deleted message) = not invalid, no circuit;
+  bot removed then re-added: destinations() first 409, then RateDelayed(embargo) 30 s / 28 s, ok once the circuit lapsed. => G2E-B-04 CLOSED (residual LOW: up to 16 min if the customer kept retrying while the bot was absent; no reset on re-add).
+  c2_policy: rev-two (100/s) leaves limit 25; the documented SQL raise (UPDATE limit_count=50) holds across the next renewal (rev-three) -> G2E-B-08 CLOSED as documented operator act (behaviour intentionally unchanged, pinned by tests).
+  h16: reserve a create permit, set the hold, consume -> SUCCEEDED (consume reads no manual_hold); a permit blocked by a LATER observe() is refused. G2E-B-16 NOT CLOSED (the permit now lives 5 s, was <=1 s).
+  hold_late (12 loops, cap 14 and 25): 0 creates after the hold committed in both runs (loops stop 'operator_hold'); the hole is structural (h16), not hit in this run.
+- [14:05] pg_mix (real PG, 12 booking loops saturating cap 25, mock Discord, web = IMMEDIATE callers): busiest closed second of stamps = 25 in EVERY cell (never 26), over25AtMock 0 in every cell, incl. web 4-8 threads, 3 nudger threads (immediate creates), jitter 100 ms, guard 0.05/0.1.
+  lane only: 21.4 adm/s (busiest second 24 = cap - reserve). => H1 (immediate callers + unused permit) NOT reproduced on PG or in 2,400 simulated seconds (h1_sim), only a theoretical +k hole remains (INFO).
+  Single-read web calls, 4 threads (~5/s): admitted share reserve1 40%, reserve2 74%, reserve4 88% (p50 0.56/0.46/0.31 s).
+  5-read web calls (the channel picker), 3 threads, 12 saturating loops: reserve 1: 9.8% of calls complete (p50 2.55 s), 2: 30%, 3: 65.5%, 4: 75% (1.79 s), 6: 84% (1.46 s); idle budget: 100% in 0.88 s.
+  Lane throughput (reads+creates by the booking loops per s): reserve1 19.0, 2 17.1, 3 15.4, 4 14.6, 6 12.9 (web takes the freed budget 1:1; total admissions stay 21.2-21.4/s).
+  => IMMEDIATE_RESERVE=1 guarantees ~0.9 read/s to web callers; a multi-read call practically cannot complete during a burst. Recommend 3-4 (or let the picker book <=0.5 s) if the picker must work during bursts.
