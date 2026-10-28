@@ -12,12 +12,12 @@ Rollback target for every row that changes what customers are served: `dpl_47SGx
 
 | Field | Value |
 |---|---|
-| Frozen RC2 SHA / branch / draft PR | TBD (`claude/discord-launch-rc2-20261023`, DO NOT MERGE) |
-| Exact-SHA CI | TBD: run links per workflow |
-| Final-SHA security review (G2) | TBD: report, `SECURITY-FIX-EVIDENCE.md` rows CLOSED |
+| Frozen RC2 SHA / branch / draft PR | **`abca8b7104ef5885b5879c8b828da481bb4a63c8`** on `claude/discord-launch-rc2-20261023` (draft PR #226, DO NOT MERGE), frozen 23:58Z on 2026-10-28 |
+| Exact-SHA CI | All 11 required jobs green on the SHA: `local-gates` run 910 https://github.com/dev-james0723/PostRiff/actions/runs/40782478733 ; `qualification` run 28 https://github.com/dev-james0723/PostRiff/actions/runs/40782474741 ; `library` and `document-runtime` run 396 https://github.com/dev-james0723/PostRiff/actions/runs/40782482228 ; `agent-ui` and `agent-ui-browser` run 436 https://github.com/dev-james0723/PostRiff/actions/runs/40782478370 ; `scenes` run 866 https://github.com/dev-james0723/PostRiff/actions/runs/40782478777 ; `founder` run 636 https://github.com/dev-james0723/PostRiff/actions/runs/40782478669 ; `growth-studio` run 565 https://github.com/dev-james0723/PostRiff/actions/runs/40782478773 ; `native-learning-browser` run 465 https://github.com/dev-james0723/PostRiff/actions/runs/40782478791 ; `native-input` run 45 https://github.com/dev-james0723/PostRiff/actions/runs/40782478838 ; `local-foundation` run 294 https://github.com/dev-james0723/PostRiff/actions/runs/40782478822. The ledger keeps the history of the earlier red runs (`RC2-EVIDENCE-PACKET.md` sections 3F and 3G) |
+| Final-SHA security review (G2) | Done on `94bb61da`: no CRITICAL, no HIGH, no duplicate-send path; MEDIUM RA-1 and B-2 fixed (`80e1bc0f`, `a2d7055e`) with fail-before tests but not independently re-reviewed (lean plan); RA-2 and B-1 documented with triggers (`RC2-EVIDENCE-PACKET.md` section 4A); register rows FINAL-A, FINAL-B, CI-GATES in `SECURITY-FIX-EVIDENCE.md`. Later commits: tests, CI configuration and dependency pins only (`2f6a0c04`, `f0b80724`, `0484a020`, `fd3db397`, `1f6d246b`, `c252a2ba`, `abca8b71`) |
 | Cross-tenant probe on the exact SHA (Q-05) | TBD: the one hosted A/B run of row 10 (the reviewed pair at `0ddb144e`); the local probe on the exact SHA if it is run |
 | Capacity evidence | D-18: hosted S0-100 receipts (0.29 / 0.53 / 0.67 minutes), the 13-cell batch at limiter head `0cb19962` (`RC2-EVIDENCE-PACKET.md` section 3E), the documented burst limit; no Depot run |
-| Customer-impact re-run on the final SHA | TBD: `CUSTOMER-IMPACT-INVENTORY.md` section 11 |
+| Customer-impact re-run on the final SHA | Local, on the head: Pillow 12.3.0 against 13.0.0 (15 images) and pypdf across versions (6 PDFs) identical; the customer-impact tests are part of the green CI Python suite (the Pillow comparison skips in CI). TBD: the comparison of the dark build against `dpl_47SG` (`CUSTOMER-IMPACT-INVENTORY.md` section 11) |
 | Stop and rollback method, monitors | TBD: the rehearsal of row 8 on Production; H-07 minimal (row 11): the scheduled health check and one real test alert |
 
 ## 1. Rows (order is the order of execution)
