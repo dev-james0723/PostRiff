@@ -9,6 +9,10 @@ grid is one run; it reports what the capacity harness reports:
   jitter     admission-to-wire delay (the coordinator's wire stamp to the mock's arrival), p50 / p99 / p99.9 / max
   creates    permits reserved, how many died before they could be used (permit expiry rate)
   leaked     admissions still `sent` or `uncertain` when the run ended (nothing was lost here, so none is expected)
+  locks      reservation lock statements per admission (a refused reservation costs one too), and the bookings made
+
+`--book 0,1` runs each cell without and with booking: the workers call inside rate_limits.booking(), as the lane does, and a
+create asks for book_ahead. In that run a full window gives a caller a place in line instead of a refusal to poll for.
 
 `--jitter J` makes every request wait U(0, J) between its admission and the mock, the delay a busy machine or a slow
 connection set-up adds; `--guard` overrides SLOT_GUARD_SECONDS where the tree has it. The source tree is an argument so
@@ -45,7 +49,9 @@ def busiest_closed(times, span):
     return best
 
 
-def run_cell(tree, F, cluster, *, capacity, jitter, guard, threads, seconds, create_share, in_flight):
+def run_cell(tree, F, cluster, *, capacity, jitter, guard, threads, seconds, create_share, in_flight, book=False):
+    import contextlib
+    from postriff_phase2.discord import rate_limits
     from postriff_phase2.discord.rate_limits import RateDelayed, RateCoordinatorUnavailable, RequestIdentity, SharedPostgresBudget
     from postriff_phase2.social_connectors import DiscordProvider
     cluster.reset()
@@ -67,7 +73,18 @@ def run_cell(tree, F, cluster, *, capacity, jitter, guard, threads, seconds, cre
     provider = DiscordProvider(app, 'synthetic-secret', 'synthetic-bot-token', 'https://rafii.example.invalid',
                                transport=wired, production_reviewed=True)
     provider.authorization_v2_enabled = provider.connections_v2_enabled = provider.rate_v1_enabled = True
-    limiter = SharedPostgresBudget(cluster.factory(), app, policy=F.policy(cluster.now(), capacity=capacity))
+    locks = {'n': 0}
+
+    def counted():
+        import psycopg
+
+        class Counter(psycopg.Cursor):
+            def execute(self, query, params=None, **kwargs):
+                if ' '.join(str(query).split()).startswith('WITH scope_lock AS MATERIALIZED ( SELECT scope_key,kind,limit_count'):
+                    locks['n'] += 1
+                return super().execute(query, params, **kwargs)
+        return lambda: psycopg.connect(cluster.dsn, prepare_threshold=None, cursor_factory=Counter)
+    limiter = SharedPostgresBudget(counted(), app, policy=F.policy(cluster.now(), capacity=capacity))
     provider.rate_limiter = limiter
     identity = RequestIdentity.make(app, 'bot', 'synthetic-bot-token')
     counts = {'reads': 0, 'creates': 0, 'expired': 0, 'delayed': 0, 'errors': 0}
@@ -80,7 +97,7 @@ def run_cell(tree, F, cluster, *, capacity, jitter, guard, threads, seconds, cre
             try:
                 if rng.random() < create_share:
                     path = '/channels/%s/messages' % tenant.channel
-                    permit = limiter.reserve('POST', path, identity=identity)
+                    permit = limiter.reserve('POST', path, identity=identity, **({'book_ahead': 1.0} if book else {}))
                     with gate:
                         counts['creates'] += 1
                     time.sleep(rng.uniform(.15, 1.0))   # the preflight's seal and consume step, between reserve and use
@@ -93,7 +110,8 @@ def run_cell(tree, F, cluster, *, capacity, jitter, guard, threads, seconds, cre
                     answer = wired('POST', DiscordProvider.API + path, body={'content': 'synthetic', 'nonce': secrets.token_hex(6)})
                     limiter.observe(permit, answer)
                 else:
-                    provider._bot('GET', '/guilds/%s/members/%s' % (tenant.guild, F.USER) if rng.random() < .5 else '/guilds/' + tenant.guild)
+                    with (rate_limits.booking(1.0) if book else contextlib.nullcontext()):
+                        provider._bot('GET', '/guilds/%s/members/%s' % (tenant.guild, F.USER) if rng.random() < .5 else '/guilds/' + tenant.guild)
                     with gate:
                         counts['reads'] += 1
             except RateDelayed as error:
@@ -136,14 +154,17 @@ def run_cell(tree, F, cluster, *, capacity, jitter, guard, threads, seconds, cre
     steady = [t for t in sent if busy_from <= t <= max(sent) - 1] if sent else []
     rate = len(steady) / max(1e-9, (max(sent) - min(sent) - 2)) if len(sent) > 2 * capacity else len(sent) / max(elapsed, 1e-9)
     guard_used = getattr(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', None)
-    return {'tree': str(tree), 'capacity': capacity, 'jitterMs': int(jitter * 1000), 'guard': guard_used, 'threads': threads,
+    stats = limiter.booking_stats() if hasattr(limiter, 'booking_stats') else {}
+    return {'tree': str(tree), 'book': bool(book), 'capacity': capacity, 'jitterMs': int(jitter * 1000), 'guard': guard_used, 'threads': threads,
             'seconds': round(elapsed, 1), 'admissions': len(wires), 'admissionsPerSecond': round(rate, 1),
             'shareOfCeiling': round(rate / capacity, 3), 'over25AtMock': wire.over_ceiling, 'peakTrailingSecondAtMock': wire.peak_second,
             'busiestClosedSecondOfWireStamps': busiest_closed(sent, 1.0), 'route429': wire.route429,
             'wireDelayMs': {k: round(1000 * percentile(delays, q), 1) for k, q in (('p50', .5), ('p99', .99), ('p999', .999), ('max', 1.0))} if delays else None,
             'creates': counts['creates'], 'permitsExpiredUnused': counts['expired'],
             'permitExpiryRate': round(counts['expired'] / counts['creates'], 4) if counts['creates'] else None,
-            'reads': counts['reads'], 'delayed': counts['delayed'], 'errors': counts['errors'], 'leakedAtEnd': leaked}
+            'reads': counts['reads'], 'delayed': counts['delayed'], 'errors': counts['errors'], 'leakedAtEnd': leaked,
+            'lockStatementsPerAdmission': round(locks['n'] / max(1, len(wires)), 2), 'bookings': stats.get('bookings', 0),
+            'bookedWaitSecondsMean': round(stats['bookedWaitSeconds'] / stats['bookings'], 3) if stats.get('bookings') else None}
 
 
 def main():
@@ -156,6 +177,7 @@ def main():
     parser.add_argument('--seconds', type=float, default=8.0)
     parser.add_argument('--create-share', type=float, default=.14)
     parser.add_argument('--in-flight-ms', type=float, default=100.0, help='the mock\'s answer time')
+    parser.add_argument('--book', default='0', help='comma list: 0 = callers are refused at a full window, 1 = they are booked')
     args = parser.parse_args()
     tree = Path(args.tree).resolve()
     sys.path[:0] = [str(tree / 'src'), str(tree / 'tests')]
@@ -166,9 +188,11 @@ def main():
     try:
         for jitter in [float(x) / 1000 for x in args.jitter.split(',')]:
             for guard in ([float(x) for x in args.guard.split(',')] if args.guard else [None]):
-                print(json.dumps(run_cell(tree, F, cluster, capacity=args.capacity, jitter=jitter, guard=guard, threads=args.threads,
-                                          seconds=args.seconds, create_share=args.create_share, in_flight=args.in_flight_ms / 1000)),
-                      flush=True)
+                for book in [x.strip() == '1' for x in args.book.split(',')]:
+                    print(json.dumps(run_cell(tree, F, cluster, capacity=args.capacity, jitter=jitter, guard=guard, threads=args.threads,
+                                              seconds=args.seconds, create_share=args.create_share,
+                                              in_flight=args.in_flight_ms / 1000, book=book)),
+                          flush=True)
     finally:
         cluster.close()
 

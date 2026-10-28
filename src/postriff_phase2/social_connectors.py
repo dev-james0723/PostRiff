@@ -372,6 +372,17 @@ class DiscordProvider(OAuthProvider):
         credential = self.bot_token if kind == 'bot' else bearer if kind in ('user', 'webhook') else self.client_secret
         return RequestIdentity.make(self.client_id, kind, credential, user_id)
 
+    @staticmethod
+    def _book_ahead(room=None):
+        """The book_ahead keyword for a coordinator call: what the calling context may be booked (rate_limits.booking; none
+        outside it), within `room` seconds when the call has a wait budget. Empty when it is not to be booked, so a coordinator
+        that cannot book is called exactly as before."""
+        from .discord.rate_limits import current_book_ahead
+        book = current_book_ahead()
+        if room is not None:
+            book = min(book, room)
+        return {'book_ahead': book} if book >= .005 else {}
+
     def admit_bot_request(self, method, path, *, binding=None, valid_until=None):
         """Reserve one atomic global/route slot before an irreversible publication intent."""
         from .discord.rate_limits import RateCoordinatorUnavailable
@@ -380,7 +391,7 @@ class DiscordProvider(OAuthProvider):
         if self.rate_coordinator_degraded or self.rate_limiter is None:
             raise RateCoordinatorUnavailable()
         return self.rate_limiter.reserve(method, path, identity=self._rate_identity('bot'),
-                                         binding=binding, valid_until=valid_until)
+                                         binding=binding, valid_until=valid_until, **self._book_ahead())
 
     def _bot(self, method, path, **kwargs):
         extra = kwargs.pop('headers',{})
@@ -390,7 +401,8 @@ class DiscordProvider(OAuthProvider):
         return self._discord_http(method, path, headers=headers, credential_kind='bot', **kwargs)
 
     def _discord_http(self, method, path, *, credential_kind, bearer=None, user_id=None, **kwargs):
-        from .discord.rate_limits import Permit, RateDelayed, RateCoordinatorUnavailable, UnconsumedPublishPermit, ReadAdmissionDelayed
+        from .discord.rate_limits import (Permit, RateDelayed, RateCoordinatorUnavailable, UnconsumedPublishPermit,
+                                          ReadAdmissionDelayed)
         from .providers import ProviderResponseLimit
         read_authorize = kwargs.pop('read_authorize', None)
         write_authorize = kwargs.pop('write_authorize', None)
@@ -431,7 +443,10 @@ class DiscordProvider(OAuthProvider):
                 try:
                     direct_read = method == 'GET' and rate_permit is None and binding is None
                     if direct_read:
-                        permit = self.rate_limiter.reserve_read(method, path, identity=self._rate_identity(credential_kind,bearer,user_id))
+                        # Inside rate_limits.booking() (the lane) a full window books this read a slot instead of refusing it,
+                        # for what is left of the wait this call allows itself; anywhere else the answer is immediate.
+                        permit = self.rate_limiter.reserve_read(method, path, identity=self._rate_identity(credential_kind,bearer,user_id),
+                                                                **self._book_ahead(wait_deadline - time.monotonic()))
                     else:
                         permit = rate_permit if isinstance(rate_permit, Permit) else (
                             self.rate_limiter.reserve(method, path, identity=self._rate_identity(credential_kind,bearer,user_id))

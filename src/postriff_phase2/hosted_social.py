@@ -410,7 +410,7 @@ class HostedSocial:
                 raise AlphaError('Discord webhook grant changed.', 409)
             return provider.rate_limiter.reserve('POST', path(session, execute=True),
                 identity=provider._rate_identity('webhook', session['secret']), binding=binding,
-                valid_until=min(job['leaseUntil'], manifest['expiresAt']))
+                valid_until=min(job['leaseUntil'], manifest['expiresAt']), **provider._book_ahead())
         return provider.admit_bot_request('POST', f'/channels/{channel}/messages', binding=binding,
                                          valid_until=min(job['leaseUntil'],manifest['expiresAt']))
 

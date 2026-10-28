@@ -7,12 +7,16 @@ Shared tables contain opaque keys/statuses, never tokens, bodies or content.
 """
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import math
 import os
 import re
+import threading
+import time
 import uuid
+from bisect import bisect_right
 from contextlib import contextmanager
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
@@ -36,6 +40,30 @@ HOLD_WAIT_SECONDS = 300.0
 # The transaction-level advisory lock that serializes the retention purge (purge_settled): one deleter at a time, the others
 # return at once. Not a row or table lock; it conflicts with nothing the coordinator does.
 PURGE_LOCK = int.from_bytes(hashlib.sha256(b'postriff.discord.admissions.purge').digest()[:8], 'big') >> 1
+# The longest a caller may be made to wait for the slot it is booked (SharedPostgresBudget, BOOK_AHEAD_SECONDS below).
+BOOK_AHEAD_SECONDS = 1.0
+_BOOK_AHEAD = contextvars.ContextVar('postriff_discord_book_ahead', default=(0.0, None))
+
+
+@contextmanager
+def booking(seconds=BOOK_AHEAD_SECONDS, tally=None):
+    """Within this block the calling thread may be booked a slot up to `seconds` ahead instead of being refused when the
+    window is full (the lane's preflight, create permit and read-back). It is per call, by context variable: a direct
+    provider call, another thread, the minute worker and a web request never see it and keep the immediate answer, a slot now
+    or a refusal. Never longer than BOOK_AHEAD_SECONDS. `tally`, a dict with 'bookings' and 'bookedWaitSeconds', is added to
+    for every booking made inside the block, so a caller can count its own (the coordinator's own totals are per process)."""
+    token = _BOOK_AHEAD.set((max(0.0, min(float(seconds), BOOK_AHEAD_SECONDS)), tally))
+    try:
+        yield
+    finally:
+        _BOOK_AHEAD.reset(token)
+
+
+def current_book_ahead():
+    """How far ahead the calling context may be booked: 0.0 (the immediate answer) unless inside booking()."""
+    return _BOOK_AHEAD.get()[0]
+
+
 NICKNAME_TEMPLATE = 'PATCH:/guilds/{id}/members/@me'   # the one Discord write the sender-name feature makes
 NICKNAME_ENV = 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED'
 _ID = re.compile(r'^[0-9]{5,25}$')
@@ -363,6 +391,25 @@ class SharedPostgresBudget:
     # between admission and mock, none at 0.05 and at 0.1 s; with 300 ms, 3 to 6 at 0.05, 0.1 and 0.2 s (it takes 0.3 s,
     # 19 a second). The capacity harness reports the real spread (wire jitter p99.9): set this to it.
     SLOT_GUARD_SECONDS = 0.1
+    # Booking (docs/w02/OPEN-QUESTIONS.md, Q19). A caller inside booking() that finds the window full is not refused and left to
+    # ask again: it is given the earliest slot that is exact (_booking_slot), if that is at most the caller's book-ahead away
+    # (never more than BOOK_AHEAD_SECONDS), and reserve/reserve_read return when the slot has come, with no lock held. The
+    # admission is stored with the slot as its wire time (a read: sent_at; a create's permit: reserved_at), so the ceiling is
+    # the same rule, only a wire time may lie ahead of the clock. Polling a full window was a lottery for the next freed slot
+    # (12 shards: 17 lock statements and one release a post, 24 shards: 48 and 7); a booking is one statement and a place in
+    # line. The wait is in reserve only: never in consume, never between seal and consume. Set to 0 it restores the old behaviour.
+    BOOK_AHEAD_SECONDS = BOOK_AHEAD_SECONDS
+    # A permit is booked only if it will still live this long after its slot, and not past the lease or approval deadline the
+    # caller named: its seal and consume (about 0.16 s) must fit inside its life, and a create with a permit lifetime shorter than
+    # this (tests use 0.05 s) is refused as before.
+    BOOK_MIN_LIFE_SECONDS = 0.5
+    # Slots of every window that bookings leave to callers that cannot wait (a web request keeps the immediate answer): without
+    # them a window kept full by bookings would refuse every web request for as long as the load lasts.
+    IMMEDIATE_RESERVE = 1
+    # A booked read that slept at least this long asks, in one short statement just before it is sent, whether an embargo, a
+    # circuit or a hold began meanwhile, and is not sent if so (it stays spent). Shorter waits are the delay every admission
+    # already has between its commit and the wire.
+    BOOK_GATE_MIN_SECONDS = 0.025
     # How many times a route's circuit after a 403 may double: circuit_seconds x 2**5 = 16 minutes at most.
     DENIAL_BACKOFF_STEPS = 5
     # Retention (purge_settled). An admission the coordinator can no longer count is deleted: it counts for the application
@@ -380,11 +427,16 @@ class SharedPostgresBudget:
     PURGE_PUBLICATION_SECONDS = 86400.0   # a settled publication
     PURGE_SETTLE_GRACE_SECONDS = 600.0    # a row settled more recently than this stays, however old its reservation
 
-    def __init__(self, connection_factory, application_id, *, policy=None, **_compat):
+    def __init__(self, connection_factory, application_id, *, policy=None, sleep=time.sleep, monotonic=time.monotonic, **_compat):
         if not isinstance(application_id, str) or not _ID.fullmatch(application_id):
             raise RateCoordinatorUnavailable()
         self.connection_factory, self.application_id = connection_factory, application_id
         self.application_key = _digest(application_id)
+        self._sleep, self._monotonic = sleep, monotonic
+        self._booking_lock = threading.Lock()
+        # Counts since this process started, read by the lane (booking_stats): bookings made, the seconds they were booked
+        # ahead in all, booked reads stopped at the gate, and bookings refused because the horizon was full.
+        self._booking = {'bookings': 0, 'bookedWaitSeconds': 0.0, 'gateStops': 0, 'horizonRefusals': 0}
         # The legacy runtime constructor can attach an inert coordinator. OAuth
         # attaches the reviewed policy before use; absence never enables a request.
         self.policy = SafetyPolicy.parse(policy) if policy is not None else None
@@ -436,11 +488,15 @@ class SharedPostgresBudget:
         An admission occupies a slot from the moment it can reach Discord, its `sent_at` (a read is sent when it is
         admitted, a create when its permit is consumed), else from its reservation, for one span. Older ones that may
         still reach Discord keep a slot too (`held`): a permit not yet used or expired, and a request sent but never
-        answered, for _horizon at most. Returns (now, {cap, window, held, occupied}).
+        answered, for _horizon at most. Returns (now, {cap, window, held, occupied, unused}); `unused` is the part of
+        `occupied` that is permits still to be used (they may be used at any later time: a booking counts them in every window).
         """
         span, horizon = self._span(window) + SLOT_EPSILON, self._horizon(window)
         clock, lead = ('clock_timestamp()', ()) if at is None else ('to_timestamp(%s::double precision)', (at,))
-        cur.execute(f'''WITH tick AS MATERIALIZED (SELECT {clock} AS at)
+        cur.execute(f'''WITH tick AS MATERIALIZED (SELECT {clock} AS at),
+            newest AS MATERIALIZED (SELECT coalesce(sent_at,reserved_at) AS wire,
+                    state IN ('reserved','sealed') AND expires_at>(SELECT at FROM tick) AS unused
+                FROM {ADMISSIONS} WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s)
             SELECT extract(epoch from tick.at)::double precision,
                 (SELECT count(*) FROM {ADMISSIONS} WHERE application_key=%s
                     AND coalesce(sent_at,reserved_at)<=tick.at-make_interval(secs=>%s)
@@ -448,17 +504,19 @@ class SharedPostgresBudget:
                     AND (state IN ('reserved','sealed') AND expires_at>tick.at
                          OR state IN ('sent','uncertain') AND expires_at>tick.at-make_interval(secs=>%s)
                             AND coalesce(sent_at,reserved_at)>tick.at-make_interval(secs=>%s))),
-                array(SELECT extract(epoch from newest.wire)::double precision FROM (
-                        SELECT coalesce(sent_at,reserved_at) AS wire FROM {ADMISSIONS}
-                        WHERE application_key=%s ORDER BY request_seq DESC LIMIT %s) newest
-                    WHERE newest.wire>tick.at-make_interval(secs=>%s))
-            FROM tick''', (*lead,self.application_key,span,horizon+SENT_SLACK,horizon,
-                           self.application_key,self._scan_limit(cap,window),span))
+                array(SELECT extract(epoch from newest.wire)::double precision FROM newest
+                    WHERE newest.wire>tick.at-make_interval(secs=>%s)),
+                array(SELECT extract(epoch from newest.wire)::double precision FROM newest
+                    WHERE newest.unused AND newest.wire>tick.at-make_interval(secs=>%s))
+            FROM tick''', (*lead,self.application_key,self._scan_limit(cap,window),
+                           self.application_key,span,horizon+SENT_SLACK,horizon,span,span))
         value = cur.fetchone()
-        if (not value or len(value) != 3 or not valid_number(value[0]) or type(value[1]) is not int or value[1] < 0
-                or not isinstance(value[2], list) or not all(valid_number(s) for s in value[2])):
+        if (not value or len(value) != 4 or not valid_number(value[0]) or type(value[1]) is not int or value[1] < 0
+                or not isinstance(value[2], list) or not all(valid_number(s) for s in value[2])
+                or not isinstance(value[3], list) or not all(valid_number(s) for s in value[3])):
             raise RateCoordinatorUnavailable()
-        return value[0], {'cap': cap, 'window': window, 'held': value[1], 'occupied': sorted(value[2])}
+        return value[0], {'cap': cap, 'window': window, 'held': value[1], 'occupied': sorted(value[2]),
+                          'unused': sorted(value[3])}
 
     def _reading(self, cur, row):
         """`now` after the locks, as _policy(cur) reads it, with the window's inputs for the stored cap and window.
@@ -740,28 +798,84 @@ class SharedPostgresBudget:
             raise RateCoordinatorUnavailable()
         return count == 0
 
-    def _slide(self, cur, row, now, reading):
+    @staticmethod
+    def _fits(wires, at, span, slots):
+        """Whether one more admission with wire time `at` is exact: no window of one span that contains `at` would then hold
+        more than `slots`. `wires` ascend and may include booked ones later than `at`. A window (e - span, e] contains `at` for
+        every end e from `at` up to, not including, at + span; its count only rises at a wire time, so the ends to look at are
+        `at` itself and each later wire time inside that reach. With no wire later than `at` this is len(wires) < slots."""
+        if slots <= 0:
+            return False
+        for end in [at] + [w for w in wires if at < w < at + span]:
+            if bisect_right(wires, end) - bisect_right(wires, end - span) + 1 > slots:
+                return False
+        return True
+
+    def _earliest_fit(self, wires, at, span, slots):
+        """The first instant at or after `at` at which _fits holds: the wait quoted to a caller that cannot be booked."""
+        for t in sorted({at} | {w + span for w in wires if w + span > at}):
+            if self._fits(wires, t, span, slots):
+                return t
+        return wires[-1] + span if wires else at
+
+    @staticmethod
+    def _booking_slot(wires, unused, at, span, slots):
+        """The earliest instant at or after `at`, and not before any wire already stored, at which an admission is exact in
+        every window that holds it; None when no booking can be exact. A permit still to be used may be used at any later time,
+        so for a booking it counts in every window: it is taken out of the wires and out of the slots. That is what keeps the
+        count exact when a permit is used after a booking that lies more than a span ahead of the permit's reservation."""
+        rest = list(wires)
+        for w in unused:
+            rest.remove(w)
+        free = slots - len(unused)
+        if free <= 0:
+            return None
+        slot = max(at, wires[-1]) if wires else at
+        if len(rest) >= free:
+            slot = max(slot, rest[len(rest) - free] + span)
+        return slot
+
+    def _published(self, row, wires, now, window, span, slots, create_slot=None):
+        """The values the application row keeps for those who read it (lane.outlook, the health payload), the same whatever the
+        writer's own mode, for the capacity bookings may fill (`slots`: the cap less the held and less IMMEDIATE_RESERVE):
+        `left`, the free slots among the wires at or before `now`; `reset`, while none is free, the instant from which a
+        booking within BOOK_AHEAD_SECONDS is possible (the next wire to leave, less that horizon; an instant already past
+        means possible now), else now + window. With no booking (BOOK_AHEAD_SECONDS 0) that is the next wire to leave,
+        which is what the row has always held. `wires` are the wires after this admission."""
+        row['left'] = max(0, slots - bisect_right(wires, now))
+        row['reset'] = now + window
+        if row['left'] == 0 and slots > 0:
+            horizon = self.BOOK_AHEAD_SECONDS
+            row['reset'] = (wires[len(wires) - slots] + span - horizon) if len(wires) >= slots else now + window
+
+    def _slide(self, cur, row, now, reading, book=0.0, create=False):
         """Set the application row's `left` and `reset` from the admissions themselves (an exact sliding window).
 
         What is counted. Every admission occupies one slot from its wire time `w` (sent_at when it has one, else
         reserved_at) until w + span, whatever became of it (answered, released, blocked, expired): none is refunded
-        inside its span, as the fixed window never refunded one inside its own. A permit that has not been used yet has
-        no wire time, so it occupies a slot until it is used (then from sent_at) or expires; an admission sent and never
-        answered occupies one for at most _horizon. Such older admissions are `held` (see _window_state). A slot is free
-        only STRICTLY more than one span after the wire time that held it.
+        inside its span, as the fixed window never refunded one inside its own. A permit that has not been used yet
+        occupies a slot from its reservation and, once older than a span, until it is used (then from sent_at) or expires;
+        an admission sent and never answered occupies one for at most _horizon. Such older admissions are `held` (see
+        _window_state). A slot is free only STRICTLY more than one span after the wire time that held it.
 
-        Exactness. This reservation holds its policy row FOR UPDATE from before `now` is read until it commits and
-        admits only when occupied slots + held < cap. Using a permit (consume) moves it from "held" to "occupying from
-        sent_at" without changing the count, and no other event adds to it. So at every instant at most `cap` wire
-        times lie in any half-open span, hence at most `cap` in any CLOSED interval of one window: no trailing second of
-        wire times holds more than `cap`. The requests themselves arrive at the wire some time after their wire time;
-        that spread is what the span's headroom (SLOT_GUARD_SECONDS) absorbs: arrivals stay within `cap` per window
+        Exactness. This reservation holds its policy row FOR UPDATE from before `now` is read until it commits and admits
+        only where one more wire time keeps every window of one span at `cap` or fewer (_fits; with every wire at or before
+        `now`, as before bookings existed, that is occupied slots + held < cap). Using a permit (consume) moves it from "held"
+        to "occupying from sent_at" without changing the count, and no other event adds to it. So at every instant at most
+        `cap` wire times lie in any half-open span, hence at most `cap` in any CLOSED interval of one window: no trailing
+        second of wire times holds more than `cap`. The requests themselves arrive at the wire some time after their wire
+        time; that spread is what the span's headroom (SLOT_GUARD_SECONDS) absorbs: arrivals stay within `cap` per window
         whenever the spread is at most the headroom. A database clock behind a wire time already stamped is waited out,
         not trusted: that wire time is simply still inside its span.
 
-        left: free slots before this request. reset: when the next slot frees if none is free; otherwise now + window,
-        the bound a poll has always had. Returns the reset to store when this request's own admission will fill the
-        window, else None.
+        Booking (`book` > 0, a caller inside booking()). Where the window is full the caller is given the earliest exact
+        instant after every wire already stored (_booking_slot), when that is at most `book` ahead: the wire time may lie in
+        the future, nothing else about the rule changes. Bookings fill only cap - IMMEDIATE_RESERVE of every window, so a caller
+        that cannot wait (a web request) always finds a slot. Beyond `book` the caller is refused, with the wait until a
+        booking is possible.
+
+        left, reset: see _published. Returns (the booked wire time, or None for an immediate admission). A refusal leaves
+        `left` 0 and `reset` at the instant the refused caller may ask again.
         """
         cap, window = row['cap'], row['window']
         span = self._span(window) + SLOT_EPSILON
@@ -769,45 +883,71 @@ class SharedPostgresBudget:
             # a reviewed policy changed the cap or window just now: the reading answered for the old ones
             _now, reading = self._window_state(cur, cap, window, now)
         slots = cap - reading['held']
+        wires, unused = reading['occupied'], reading['unused']  # ascending wire times that are still inside their span
         row['left'], row['reset'] = 0, now + window  # resolution alone can free a slot: poll once per window
         if slots <= 0:
             return None
-        occupied = reading['occupied']  # ascending wire times that are still inside their span
-        if len(occupied) >= slots:
-            row['reset'] = occupied[len(occupied) - slots] + span  # the oldest one that must go before a slot is free
+        if wires and wires[-1] > now + self.BOOK_AHEAD_SECONDS + .05:
+            # A wire time further ahead than any booking reaches: the database clock stepped back since it was stamped. It is
+            # waited out, not trusted: that wire is simply still inside its span and every wire counts, as before bookings.
+            if len(wires) >= slots:
+                row['reset'] = wires[len(wires) - slots] + span
+                return None
+            row['left'] = slots - len(wires)
+            row['reset'] = wires[0] + span if row['left'] == 1 else now + window
             return None
-        row['left'], row['reset'] = slots - len(occupied), now + window
-        if row['left'] == 1:  # this admission fills the window: the next slot is the oldest occupied one's (or its own)
-            return occupied[0] + span if occupied else now + span
-        return None
+        # what bookings may fill: callers that cannot wait (book 0) may use the reserve as well
+        slots_b = slots - (min(self.IMMEDIATE_RESERVE, slots - 1) if self.BOOK_AHEAD_SECONDS > 0 else 0)
+        mine = slots if book <= 0 else slots_b
+        if self._fits(wires, now, span, mine):
+            self._published(row, sorted(wires + [now]), now, window, span, slots_b)
+            row['left'] += 1  # published as it will stand once this admission is debited (_reserve debits every capped row)
+            return None
+        if book <= 0:
+            row['reset'] = self._earliest_fit(wires, now, span, slots)  # the oldest one that must go before a slot is free
+            return None
+        slot = self._booking_slot(wires, unused, now, span, slots_b)
+        if slot is None:  # permits still to be used fill every slot
+            return None
+        if slot - now > book:
+            row['reset'] = slot - book  # a booking is possible from here
+            return None
+        self._published(row, sorted(wires + [slot]), now, window, span, slots_b)
+        row['left'] += 1  # the booking is the admission; the debit takes it back
+        return slot
 
-    def _insert_parts(self, permit, route, major, bucket, keys, binding, read_sent):
-        """The admission's INSERT ... SELECT, to be run after a `reservation_clock` CTE: (statement, params)."""
+    def _insert_parts(self, permit, route, major, bucket, keys, binding, read_sent, slot=None):
+        """The admission's INSERT ... SELECT, to be run after a `reservation_clock` CTE: (statement, params).
+
+        `slot` is a booked wire time (epoch seconds): a read is stored sent at it, a create's permit reserved at it. Unbooked,
+        the parameter is 0 and the wire time is the reservation clock, as it always was."""
         if read_sent and (permit.method != 'GET' or binding is not None or permit.binding_hash is not None):
             raise RateCoordinatorUnavailable()
+        wire = 'greatest(at,to_timestamp(%s::double precision))'
         read_columns = ',state,sent_at' if read_sent else ''
-        read_values = ",'sent',at" if read_sent else ''
+        read_values = f",'sent',{wire}" if read_sent else ''
+        reserved_value = 'at' if read_sent else wire
         # Store and compare the SAME database-clock value. Lock/storage latency
         # can exhaust an immutable expiry after reserve() calculated it. A
         # rejected insert raises inside the transaction and rolls back debits.
         insert=f'''INSERT INTO {ADMISSIONS}(id,application_key,auth_key,credential_key,credential_kind,
             method,path_key,route_key,major_key,bucket_key,scope_keys,is_publish,binding_hash,workspace_id,
             publication_id,manifest_digest,authorization_digest,approval_digest,worker_key,lease_key,channel_key,expires_at,reserved_at{read_columns})
-            SELECT %s::uuid,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::uuid,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),at{read_values}
+            SELECT %s::uuid,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::uuid,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),{reserved_value}{read_values}
             FROM reservation_clock WHERE to_timestamp(%s)>at'''
         parameters=(permit.id,self.application_key,permit.identity.auth_key,permit.identity.credential_key,permit.identity.kind,
              permit.method,permit.path_key,route,major,bucket,sorted(keys),binding is not None,permit.binding_hash,
              *(binding.get(k) if binding else None for k in ('workspaceId','publicationId','manifestDigest','authorizationDigest',
-                  'approvalDigest','workerKey','leaseKey','channelKey')),permit.expires_at,permit.expires_at)
+                  'approvalDigest','workerKey','leaseKey','channelKey')),permit.expires_at,0.0 if slot is None else slot,permit.expires_at)
         return insert, parameters
 
-    def _insert(self, cur, permit, route, major, bucket, keys, binding, *, read_sent=False):
-        insert, parameters = self._insert_parts(permit, route, major, bucket, keys, binding, read_sent)
+    def _insert(self, cur, permit, route, major, bucket, keys, binding, *, read_sent=False, slot=None):
+        insert, parameters = self._insert_parts(permit, route, major, bucket, keys, binding, read_sent, slot)
         cur.execute('WITH reservation_clock AS MATERIALIZED (SELECT clock_timestamp() AS at) '+insert,parameters)
         if cur.rowcount != 1:
             raise RateDelayed(.05,cause='permit_expired',scope='permit')
 
-    def _store_and_insert(self, cur, rows, keys, previous, permit, route, major, bucket, binding, read_sent):
+    def _store_and_insert(self, cur, rows, keys, previous, permit, route, major, bucket, binding, read_sent, slot=None):
         """Write the changed scope states and the admission in ONE statement: one round trip under the application lock.
 
         Both are data-modifying parts of the same statement, so they succeed or fail together exactly as the two
@@ -819,9 +959,9 @@ class SharedPostgresBudget:
             raise RateCoordinatorUnavailable()
         changed = self._changed(rows, ordered, previous, True)
         if not changed:
-            return self._insert(cur, permit, route, major, bucket, keys, binding, read_sent=read_sent)
+            return self._insert(cur, permit, route, major, bucket, keys, binding, read_sent=read_sent, slot=slot)
         cte, update, stored = self._store_parts(rows, changed, True)
-        insert, admitted = self._insert_parts(permit, route, major, bucket, keys, binding, read_sent)
+        insert, admitted = self._insert_parts(permit, route, major, bucket, keys, binding, read_sent, slot)
         cur.execute(f'''WITH {cte}, written AS ({update}),
             reservation_clock AS MATERIALIZED (SELECT clock_timestamp() AS at)
             {insert} RETURNING (SELECT array_agg(scope_key ORDER BY scope_key COLLATE "C") FROM written)''',(*stored,*admitted))
@@ -831,20 +971,43 @@ class SharedPostgresBudget:
         if not written or len(written) != 1 or written[0] != changed:
             raise RateCoordinatorUnavailable()
 
-    def reserve_read(self, method, path, *, identity):
+    def reserve_read(self, method, path, *, identity, book_ahead=0.0):
         """Authorize one GET atomically with its debit, committed before I/O.
 
         `sent` is the authorization linearization point, as in consume(). A lost
         response retains the spent admission. Publishing never uses this path.
+        `book_ahead` (seconds, only inside booking()): a full window books the read a slot up to that far ahead and this call
+        returns when the slot has come; 0 refuses at once, as it always did.
         """
         if method != 'GET':
             raise RateCoordinatorUnavailable()
-        return self._reserve(method, path, identity=identity, read_sent=True)
+        return self._reserve(method, path, identity=identity, read_sent=True, book_ahead=book_ahead)
 
-    def reserve(self, method, path, *, identity, binding=None, valid_until=None):
-        return self._reserve(method, path, identity=identity, binding=binding, valid_until=valid_until)
+    def reserve(self, method, path, *, identity, binding=None, valid_until=None, book_ahead=0.0):
+        return self._reserve(method, path, identity=identity, binding=binding, valid_until=valid_until, book_ahead=book_ahead)
 
-    def _reserve(self, method, path, *, identity, binding=None, valid_until=None, read_sent=False):
+    def _book_ahead(self, requested):
+        """What a call may be booked ahead: what its caller asked, never more than BOOK_AHEAD_SECONDS, and nothing below
+        5 ms (a wait that short is the delay between commit and wire every admission already has)."""
+        book = min(float(requested or 0.0), float(self.BOOK_AHEAD_SECONDS))
+        return book if book >= .005 else 0.0
+
+    def booking_stats(self):
+        """Counts since this process started: bookings made, the seconds they were booked ahead in all, booked reads stopped at
+        the gate (an embargo, circuit or hold began while they waited) and calls refused because the booked horizon was full."""
+        with self._booking_lock:
+            return dict(self._booking)
+
+    def _count_booking(self, **increments):
+        with self._booking_lock:
+            for name, amount in increments.items():
+                self._booking[name] += amount
+        tally = _BOOK_AHEAD.get()[1]
+        if tally is not None and 'bookings' in increments:  # the caller's own count (booking(tally=...)): this thread's context
+            tally['bookings'] += increments['bookings']
+            tally['bookedWaitSeconds'] += increments['bookedWaitSeconds']
+
+    def _reserve(self, method, path, *, identity, binding=None, valid_until=None, read_sent=False, book_ahead=0.0):
         template, major = route_identity(method,path)
         route = _digest(template)
         if not isinstance(identity, RequestIdentity):
@@ -860,6 +1023,7 @@ class SharedPostgresBudget:
                 raise RateCoordinatorUnavailable()
         if self.policy is None:
             raise RateCoordinatorUnavailable()
+        book = self._book_ahead(book_ahead)
         with self._transaction() as cur:
             bucket, _seq = self._map(cur,identity,route,major)
             keys = self._keys(identity,route,major,bucket)
@@ -869,8 +1033,9 @@ class SharedPostgresBudget:
             rows = self._locked(cur,keys,fresh=fresh)
             previous = {key:dict(row) for key,row in rows.items()}
             now, reading = self._reading(cur,rows['00:'+self.application_key])
+            read_at = self._monotonic()  # when `now` was read: a booked wait is counted from here, on this process's clock
             wait, wait_scope = 0.0, 'unknown'
-            filled_reset = None
+            slot = None
             for key,row in rows.items():
                 self._roll(cur,key,row,now,fresh=key in fresh)
                 if row['hold']:
@@ -879,7 +1044,8 @@ class SharedPostgresBudget:
                         raise RateDelayed(HOLD_WAIT_SECONDS,cause='hold',scope='embargo')
                     raise RateCoordinatorUnavailable()
                 if row['kind'] == 'policy':
-                    filled_reset = self._slide(cur,row,now,reading)  # sets left/reset; denied below like any capped row
+                    # sets left/reset; denied below like any capped row unless this is a booking
+                    slot = self._slide(cur,row,now,reading,book,create=not read_sent)
                 embargo = max((row['blocked'] or 0)-now,(row['circuit'] or 0)-now)
                 if embargo > wait:
                     wait,wait_scope = embargo,'embargo'
@@ -890,6 +1056,8 @@ class SharedPostgresBudget:
                             kind = 'learned_route' if row['learned'] else 'unknown_route'
                         wait,wait_scope = row['reset']-now,kind
             if wait > 0:
+                if book and wait_scope == 'application':
+                    self._count_booking(horizonRefusals=1)
                 raise RateDelayed(wait,scope=wait_scope)
             # A permit lives as long as its caller can use it: the policy's permit lifetime, the caller's own deadline
             # (a create's lease and approval) and the policy's end; no window ends it. A window that ends while the
@@ -897,8 +1065,14 @@ class SharedPostgresBudget:
             # keeps a slot for it until it is used or expires (_slide), so using it late is paid for in the later window.
             # It used to end with the earliest reset of its rows (at most the 1-second application window): 11.5% of the
             # create preflights of a 5,000-post run were repeated because the permit died before it could be sealed.
-            expiry = round(min(now+self.policy.permit_ttl_seconds,self.policy.expires_at,
-                         valid_until if valid_number(valid_until) else MAX_EPOCH),6)
+            # A booked permit's life starts at its slot, and a booking never reaches past the caller's own deadline: it is
+            # refused (as an immediate admission would be at a full window) unless the permit, whole, still ends before the
+            # lease or approval ends and lives long enough after its slot to be sealed and used.
+            ttl = self.policy.permit_ttl_seconds
+            deadline = min(self.policy.expires_at,valid_until if valid_number(valid_until) else MAX_EPOCH)
+            if slot is not None and ((not read_sent and ttl < self.BOOK_MIN_LIFE_SECONDS) or slot+ttl > deadline):
+                raise RateDelayed(slot-now,scope='application')
+            expiry = round(min((now if slot is None else slot)+ttl,deadline),6)
             # A fixed headroom margin rejects usable short provider windows
             # and can repeatedly restart OAuth. INSERT and consume independently
             # compare this frozen deadline with the live DB clock; never extend
@@ -908,11 +1082,51 @@ class SharedPostgresBudget:
             for key,row in rows.items():
                 if row['cap'] is not None and row['kind'] != 'invalid':
                     row['left'] -= 1
-                    if row['kind'] == 'policy' and filled_reset is not None:
-                        row['reset'] = filled_reset  # stored for readers: when the full window frees its next slot
             permit = Permit(str(uuid.uuid4()),self.application_key,method,_digest(path),identity,binding_hash(binding),expiry)
-            self._store_and_insert(cur,rows,keys,previous,permit,route,major,bucket,binding,read_sent)
+            self._store_and_insert(cur,rows,keys,previous,permit,route,major,bucket,binding,read_sent,slot)
+        if slot is not None:
+            self._wait_for_slot(permit,slot-now,read_at,read_sent)
         return permit
+
+    def _wait_for_slot(self, permit, booked, read_at, read_sent):
+        """Sleep until the booked slot has come: after the commit, no lock held. `booked` seconds after the database clock was
+        read, counted on this process's monotonic clock from the moment that reading arrived, so the time the reservation itself
+        took is not slept twice and a send is never early (the reading reached us a moment after it was taken). Then, for a read
+        that slept, the gate: one last look at whether anything stopped its route meanwhile."""
+        self._count_booking(bookings=1,bookedWaitSeconds=booked)
+        slept = 0.0
+        for _ in range(int(booked/.1)+20):  # slices of 0.1 s; the bound only guards a sleep that never advances a clock
+            remaining = booked-(self._monotonic()-read_at)
+            if remaining <= 0:
+                break
+            pause = min(remaining,.1)
+            self._sleep(pause)
+            slept += pause
+        if read_sent and slept >= self.BOOK_GATE_MIN_SECONDS:
+            self._start_gate(permit)
+
+    def _start_gate(self, permit):
+        """The last look before a booked read is sent: did an embargo, a circuit or a hold begin on any scope it was admitted
+        under while it waited? One statement in its own short transaction, no scope lock and no application lock. If so the read
+        is closed as blocked (its slot stays spent, nothing is refunded) and not sent, and the caller is told how long to wait:
+        a hold as in _reserve, an embargo for what is left of it. What can still go out after an embargo begins is bounded by
+        the time between this look and the wire, the delay every admission has."""
+        with self._transaction() as cur:
+            cur.execute(f'''UPDATE {ADMISSIONS} a SET state='blocked',outcome_at=clock_timestamp()
+                WHERE a.id=%s::uuid AND a.state='sent' AND NOT a.is_publish AND a.method='GET' AND EXISTS (
+                    SELECT 1 FROM {STATE} r WHERE r.scope_key=ANY(a.scope_keys)
+                        AND (r.manual_hold OR r.blocked_until>clock_timestamp() OR r.circuit_until>clock_timestamp()))
+                RETURNING (SELECT bool_or(r.manual_hold) FROM {STATE} r WHERE r.scope_key=ANY(a.scope_keys)),
+                    extract(epoch from (SELECT max(greatest(r.blocked_until,r.circuit_until)) FROM {STATE} r
+                        WHERE r.scope_key=ANY(a.scope_keys)))::double precision,
+                    extract(epoch from clock_timestamp())::double precision''',(permit.id,))
+            stopped = cur.fetchone()
+        if stopped:
+            held, until, now = stopped
+            self._count_booking(gateStops=1)
+            if held:
+                raise RateDelayed(HOLD_WAIT_SECONDS,cause='hold',scope='embargo')
+            raise RateDelayed(max(.05,until-now) if valid_number(until) and valid_number(now) else .05,cause='embargo',scope='embargo')
 
     def _admission(self, cur, permit, *, clock=False):
         """Lock the permit's admission row and check it is this permit's; with clock=True also return the database
@@ -993,6 +1207,10 @@ class SharedPostgresBudget:
                 raise RateCoordinatorUnavailable()
             if min(row['expires'],deadline if deadline is not None else MAX_EPOCH) <= now:
                 raise RateDelayed(.05,cause='permit_expired')
+            if row['reserved'] > now + SLOT_EPSILON:
+                # A booked permit is not to be used before its slot: its slot is where the ceiling counts it. reserve() returns
+                # only when the slot has come, so nothing in the shipped flow gets here; this is the defence if something does.
+                raise RateDelayed(row['reserved']-now,cause='permit_early',scope='permit')
             cur.execute(f"UPDATE {ADMISSIONS} SET state='sent',sent_at=clock_timestamp() WHERE id=%s::uuid AND state=%s", (permit.id,expected_state))
             if cur.rowcount != 1:
                 raise RateCoordinatorUnavailable()

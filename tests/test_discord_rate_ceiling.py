@@ -379,17 +379,20 @@ class PolicyAndHold(Base):
         self.read()
 
     def test_the_application_row_mirrors_the_window_for_readers(self):
-        """lane.outlook reads remaining/reset without locks: a full window shows 0 and the exact next-slot time."""
-        self.read()
-        self.assertEqual(self.policy_row()['left'], 2)
-        self.read()
-        self.read()
-        row = self.policy_row()
-        self.assertEqual(row['left'], 0)
-        self.assertAlmostEqual(row['reset'], T0 + 1 + EPS, places=9)
-        self.at(.4)
-        self.denied()
-        self.assertEqual(self.policy_row()['reset'], row['reset'], 'a denial writes nothing')
+        """lane.outlook reads remaining/reset without locks: a full window shows 0 and the exact next-slot time. That is the
+        row without booking (BOOK_AHEAD_SECONDS 0, the switch that restores the old behaviour); with it the row is the
+        booking horizon's (test_discord_rate_booking.StoredRow)."""
+        with patch.object(SharedPostgresBudget, 'BOOK_AHEAD_SECONDS', 0.0):
+            self.read()
+            self.assertEqual(self.policy_row()['left'], 2)
+            self.read()
+            self.read()
+            row = self.policy_row()
+            self.assertEqual(row['left'], 0)
+            self.assertAlmostEqual(row['reset'], T0 + 1 + EPS, places=9)
+            self.at(.4)
+            self.denied()
+            self.assertEqual(self.policy_row()['reset'], row['reset'], 'a denial writes nothing')
 
 
 class ReadsUnderAHold(Base):

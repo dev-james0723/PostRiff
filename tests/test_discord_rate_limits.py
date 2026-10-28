@@ -102,7 +102,7 @@ class MemoryLedger:
             elif self.lock_fault=='reordered':self.result.reverse()
         elif sql.startswith('WITH scope_store('):
             inserted = 'INSERT INTO public.pr_discord_request_admissions' in sql   # the reservation's one write statement
-            store, admission = (params[:-23], params[-23:]) if inserted else (params, ())
+            store, admission = (params[:-24], params[-24:]) if inserted else (params, ())
             ordered=[];self.result=[]
             for index in range(0,len(store),14):
                 cap,left,window,reset,blocked,circuit,streak,hold,seq,revision,_expiry,learned,fresh_after,key=store[index:index+14]
@@ -142,10 +142,10 @@ class MemoryLedger:
         elif sql.startswith('WITH tick AS MATERIALIZED'):
             # the clock (or the instant a reservation names) and the application window's inputs there (_window_state)
             explicit = 'to_timestamp(%s::double precision) AS at' in sql
-            at, (key, span, band, horizon, _key, scan, _span) = (params[0], params[1:]) if explicit else (None, params)
+            at, (key, scan, _key, span, band, horizon, _span, _unused_span) = (params[0], params[1:]) if explicit else (None, params)
             moment = at if explicit else self.workspace.now if self.workspace else self.now
-            held, occupied = self.window_inputs(moment, key, span, band, horizon, scan)
-            self.result = [(moment, held, occupied)]
+            held, occupied, unused = self.window_inputs(moment, key, span, band, horizon, scan)
+            self.result = [(moment, held, occupied, unused)]
         elif sql.startswith('WITH reservation_clock AS MATERIALIZED'):
             self.result=[];self.admit(sql,params)
         elif sql.startswith('SELECT request_seq,application_key') or sql.startswith('WITH adm AS MATERIALIZED'):
@@ -180,6 +180,16 @@ class MemoryLedger:
         elif "SET state='sent'" in sql:
             pid,expected=params;r=self.admissions[pid];self.rowcount=int(r['state']==expected)
             if self.rowcount:r.update(state='sent',sent=self.workspace.now if self.workspace else self.now)
+        elif sql.startswith("UPDATE public.pr_discord_request_admissions a SET state='blocked'"):   # the gate before a booked read is sent
+            r=self.admissions[params[0]];moment=self.workspace.now if self.workspace else self.now
+            scopes=[self.states[k] for k in r['keys'] if k in self.states]
+            stopped=r['state']=='sent' and not r['publish'] and r['method']=='GET' and any(
+                x['hold'] or (x['blocked'] or 0)>moment or (x['circuit'] or 0)>moment for x in scopes)
+            self.rowcount=int(stopped);self.result=[]
+            if stopped:
+                r['state']='blocked'
+                until=max([max(x['blocked'] or 0,x['circuit'] or 0) for x in scopes]+[0]) or None
+                self.result=[(any(x['hold'] for x in scopes),until,moment)]
         elif "SET state='blocked',outcome_at=clock_timestamp() WHERE id=" in sql:
             method = 'PATCH' if "method='PATCH'" in sql else 'GET'
             r=self.admissions[params[0]];self.rowcount=int(r['state']=='sent' and r['method']==method and not r['publish']
@@ -206,19 +216,22 @@ class MemoryLedger:
         self.serial+=1
         names=('id','application','auth','credential','kind','method','path','route','major','bucket','keys',
             'publish','binding','workspace','publication','manifest','authorization','approval','worker','lease','channel','expires')
-        row=dict(zip(names,params[:-1]));row.update(seq=self.serial,state='sent' if ',state,sent_at)' in sql else 'reserved',intent=None,reserved=moment,
-            sent=moment if ',state,sent_at)' in sql else None)
+        wire=max(moment,params[22])   # greatest(at, the booked wire time): an unbooked admission names epoch 0
+        read=',state,sent_at)' in sql
+        row=dict(zip(names,params[:22]));row.update(seq=self.serial,state='sent' if read else 'reserved',intent=None,
+            reserved=moment if read else wire,sent=wire if read else None)
         if row['publish'] and any(r['binding']==row['binding'] for r in self.admissions.values()):
             raise ValueError('Duplicate synthetic binding')
         self.admissions[row['id']]=row
     def window_inputs(self,at,key,span,band,horizon,scan):
-        """(held, occupied wire times) for an application at `at`, as _window_state and _locked state them."""
+        """(held, occupied wire times, the wire times of permits still to be used) for an application at `at`, as _window_state states them."""
         held=sum(r['application']==key and self.wire_time(r)<=at-span and (
             r['state'] in ('reserved','sealed') and r['expires']>at or
             r['state'] in ('sent','uncertain') and r['expires']>at-band and self.wire_time(r)>at-horizon)
             for r in self.admissions.values())
         newest=sorted((r for r in self.admissions.values() if r['application']==key),key=lambda r:-r['seq'])[:scan]
-        return held,[self.wire_time(r) for r in newest if self.wire_time(r)>at-span]
+        return (held,[self.wire_time(r) for r in newest if self.wire_time(r)>at-span],
+                [self.wire_time(r) for r in newest if self.wire_time(r)>at-span and r['state'] in ('reserved','sealed') and r['expires']>at])
     @staticmethod
     def wire_time(row):return row['sent'] if row.get('sent') is not None else row['reserved']  # coalesce(sent_at,reserved_at)
     unobserved_at=wire_time
