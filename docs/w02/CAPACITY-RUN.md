@@ -238,6 +238,7 @@ mode. It uses no secret and no environment, has a read-only token, fetches exact
 | `smoke`, `s0`, `s1`, `s2` | the scenario(s) on the tree under test |
 | `s2sizes` | S2-100, S2-300, S2-1000 (S2 with a hot workspace of 100, 300 and 1,000 posts) |
 | `devset` | the development measurement set: S1, S0-100, Fdb, Fcrash, F429, one runner each, all at once |
+| `s0100`, `fdb`, `fcrash`, `f429` | one scenario of the development set alone, to run it again after a failure or a change (the branch name is `claude/discord-capacity-run-<profile>-<suffix>` as for every profile) |
 | `faults` | F429, F5xx, Fcrash, Fdb, Fexpiry, Fstall, Fflip, Nmisroute, Ndup, Nceiling |
 | `release` | every scenario, baseline included |
 | `baseline` | the frozen minute worker on the request's baseline SHA (default RC1) |
@@ -249,7 +250,7 @@ PostgreSQL's log and PgBouncer's log. The per-run environment files are never up
 
 `python3 docs/w02/ci/run_tests.py` runs the workflow's own blocks against local git repositories. It covers request
 validation, exact-SHA fetches, the request script, action-validator and shellcheck. With `POSTRIFF_PG_BIN` set it
-adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (113 checks).
+adds a live four-process seed check, a deliberately failing slice and the smallest lock benchmark (119 checks).
 
 ## The official run on Depot
 

@@ -607,6 +607,7 @@ def attempt_statistics(attempts, created_posts=None, restart_gap=3.0):
     booked_rows = [r for r in attempts if r[7] == 'A' and _booking_columns(r)[0] > 0]
     return {'attempts': len(attempts), 'admitted': totals['A'], 'refused': totals['R'], 'errors': totals['E'],
             'withBookingColumns': sum(1 for r in attempts if len(r) >= 16),
+            'errorsByCause': dict(Counter('%s %s' % (r[2], r[10]) for r in attempts if r[7] == 'E').most_common()),
             'booked': len(booked_rows), 'bookedByOperation': dict(Counter(r[2] for r in booked_rows)),
             'bookedPlannedSeconds': sum(_booking_columns(r)[0] for r in booked_rows),
             'bookedSleptSeconds': sum(_booking_columns(r)[1] for r in booked_rows),
@@ -653,6 +654,10 @@ def attempt_lines(stats):
             _ms((row.get('callSecondsAdmittedUnbooked') or {}).get('p50')),
             _ms((row.get('callSecondsAdmittedBooked') or {}).get('p50')),
             _ms((row['callSecondsRefused'] or {}).get('p50'))))
+    if stats.get('errorsByCause'):
+        lines.append('')
+        lines.append('Errors (a failure that is not a refusal with a wait; the coordinator hides the cause of a failed transaction, '
+                     'so these are the class and SQLSTATE of the failure it hid), by operation and cause: %s.' % json.dumps(stats['errorsByCause']))
     lines.append('')
     lines.append('Attempts a read step needed (a run of attempts at one route by one process until it was admitted or the provider gave up): '
                  + '; '.join('%s: %s' % (kind, ', '.join('%s %s' % (k, _count(v)) for k, v in sorted(counts.items())))

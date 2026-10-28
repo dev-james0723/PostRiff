@@ -127,7 +127,8 @@ def instrument_coordinator(path, source):
     leaving for the wire) are wrapped: each call is logged as one JSON array [time, seconds the call took, operation, method,
     route with ids masked, credential kind, workspace index where the path names a server or channel, outcome (A admitted,
     R refused with a wait, E error), the wait the coordinator quoted, its scope, its cause, the permit id when admitted,
-    the cron source of this process, seconds booked, seconds slept, book-ahead room the caller allowed].
+    the cron source of this process, seconds booked, seconds slept, book-ahead room the caller allowed]. For an error that is
+    not a refusal with a wait (outcome E) the cause column holds the class and SQLSTATE of the failure the coordinator hid.
     A refused reservation leaves no row in the database, so this log is the only record of the wait it was quoted. The
     wrapped methods return and raise exactly what the originals do.
 
@@ -161,12 +162,22 @@ def instrument_coordinator(path, source):
         except Exception:
             return None
 
+    def hidden_cause(error):
+        """The coordinator turns any failure inside its transaction into RateCoordinatorUnavailable and hides the cause
+        (`raise ... from None`); the context is still on the exception. Its class and SQLSTATE go in the cause column."""
+        if error is None or isinstance(error, limits.RateDelayed):
+            return None
+        inner = getattr(error, '__context__', None)
+        if inner is None:
+            return type(error).__name__
+        return '%s:%s' % (type(inner).__name__, getattr(inner, 'sqlstate', None) or getattr(getattr(inner, 'diag', None), 'sqlstate', None) or '')
+
     def emit(operation, method, target, identity, started, took, outcome, error=None, permit=None, booked=0.0, slept=0.0,
              room=None):
         row = [round(started, 4), round(took, 4), operation, method, re.sub(r'/[0-9]{5,25}', '/{id}', target.split('?')[0]),
                getattr(identity, 'kind', None), workspace(target), outcome,
                round(error.retry_after_seconds, 4) if isinstance(error, limits.RateDelayed) else None,
-               getattr(error, 'rate_scope_kind', None), getattr(error, 'rate_cause', None),
+               getattr(error, 'rate_scope_kind', None), getattr(error, 'rate_cause', None) or hidden_cause(error),
                getattr(permit, 'id', None), source, round(booked, 4), round(slept, 4),
                round(float(room), 3) if isinstance(room, (int, float)) else None]
         handle.write(json.dumps(row, separators=(',', ':')) + '\n')

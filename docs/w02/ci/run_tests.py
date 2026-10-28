@@ -211,6 +211,10 @@ def request_reader(fix):
     code, out, values = fix.read_request({**good, 'profile': 'devset', 'pools': '20'}, 'claude/discord-capacity-run-devset-d1')
     check('a devset request is the development measurement set, one job each', code == 0 and json.loads(values.get('matrix', '[]')) == [
         {'scenario': name, 'pool': 20} for name in ('S1', 'S0-100', 'Fdb', 'Fcrash', 'F429')], out[-400:])
+    for profile, scenario in (('s0100', 'S0-100'), ('fdb', 'Fdb'), ('fcrash', 'Fcrash'), ('f429', 'F429')):
+        code, out, values = fix.read_request({**good, 'profile': profile, 'pools': '20'}, 'claude/discord-capacity-run-%s-r1' % profile)
+        check('a %s request is the %s scenario alone, to run it again' % (profile, scenario), code == 0 and json.loads(
+            values.get('matrix', '[]')) == [{'scenario': scenario, 'pool': 20}], out[-400:])
     code, out, values = fix.read_request({**good, 'profile': 's2sizes', 'pools': '20'}, 'claude/discord-capacity-run-s2sizes-z1')
     check('an s2sizes request is S2 with a hot workspace of 100, 300 and 1,000 posts', code == 0 and json.loads(values.get('matrix', '[]')) == [
         {'scenario': name, 'pool': 20} for name in ('S2-100', 'S2-300', 'S2-1000')], out[-400:])
@@ -301,7 +305,7 @@ def maker(fix):
         open(os.path.join(work, 'capacity/REQUEST.json')).read())['profile'] == 'lockbench'
         and git('rev-parse', '--abbrev-ref', 'HEAD', cwd=work, env=fix.env) == 'claude/discord-capacity-run-lockbench-lb1',
         done.stdout + done.stderr)
-    for profile in ('s2sizes', 'devset'):
+    for profile in ('s2sizes', 'devset', 'fdb', 's0100'):
         done = subprocess.run(['bash', MAKER, profile, 'p1', tree, harness], capture_output=True, text=True, env=env)
         work = re.search(r'work tree:\s+(\S+)', done.stdout).group(1) if done.returncode == 0 else None
         check('make_request_branch.sh builds a %s request' % profile, work is not None and git(

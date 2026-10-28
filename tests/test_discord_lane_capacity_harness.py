@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -540,6 +541,38 @@ class AttemptLog(unittest.TestCase):
         row = json.loads(path.read_text().splitlines()[0])
         self.assertEqual((row[7], row[13], row[14], row[15]), ('R', 0.0, 0.0, 0.45))
 
+    def test_an_error_logs_the_failure_the_coordinator_hid(self):
+        """SharedPostgresBudget._transaction turns any failure into RateCoordinatorUnavailable `from None`: the context is
+        still on the exception, and its class and SQLSTATE are what tells a lock timeout from a deadlock or a lost connection."""
+        import discord_lane_cap_invoke as invoke
+        budget, delayed, permit, identity = self.fake_coordinator()
+
+        class LockNotAvailable(Exception):
+            sqlstate = '55P03'
+
+        class Unavailable(Exception):
+            pass
+
+        def broken(self, method, path, *, identity, book_ahead=0.0):
+            try:
+                raise LockNotAvailable('canceling statement due to lock timeout')
+            except LockNotAvailable:
+                raise Unavailable() from None
+        budget.reserve_read = broken
+        path = Path(tempfile.mkdtemp(prefix='cap-attempts-')) / 'a.jsonl'
+        self.addCleanup(shutil.rmtree, path.parent, True)
+        handle = invoke.instrument_coordinator(str(path), 'lane3')
+        self.addCleanup(handle.close)
+        with self.assertRaises(Unavailable):
+            budget().reserve_read('GET', '/guilds/1392000000000000007', identity=identity())
+        handle.flush()
+        row = json.loads(path.read_text().splitlines()[0])
+        self.assertEqual((row[7], row[8], row[9], row[10]), ('E', None, None, 'LockNotAvailable:55P03'))
+        stats = analysis.attempt_statistics([row], created_posts=1)
+        self.assertEqual(stats['errors'], 1)
+        self.assertEqual(stats['errorsByCause'], {'read LockNotAvailable:55P03': 1})
+        self.assertIn('LockNotAvailable:55P03', '\n'.join(analysis.attempt_lines(stats)))
+
     def test_a_tree_without_booking_is_logged_as_before(self):
         import discord_lane_cap_invoke as invoke
         budget, delayed, permit, identity = self.fake_coordinator()
@@ -582,6 +615,78 @@ class AttemptLog(unittest.TestCase):
         self.assertEqual((unpaired, len(every)), (1, 2), 'the other admission is reported without an arrival')
         legacy, unpaired, _ = analysis.pair_admissions([{'arrived': 10.6, 'pathKey': 'aaaaaaaaaaaaaaaa'}], [r[:11] for r in rows])
         self.assertEqual([p[0] for p in legacy], [10.0], 'without the permit id the old pairing by path and order still works')
+
+
+class SeedingRetries(unittest.TestCase):
+    """Seeding is not what a run measures: a GET the coordinator could not take is tried again, and counted with its cause."""
+
+    def install(self):
+        import types
+        module = types.ModuleType('postriff_phase2.discord.rate_limits')
+
+        class RateDelayed(Exception):
+            def __init__(self, seconds=0.01):
+                super().__init__('delayed')
+                self.retry_after_seconds, self.rate_scope_kind, self.rate_cause = seconds, 'application', 'rate_budget'
+
+        class RateCoordinatorUnavailable(Exception):
+            pass
+        module.RateDelayed, module.RateCoordinatorUnavailable = RateDelayed, RateCoordinatorUnavailable
+        package, discord = types.ModuleType('postriff_phase2'), types.ModuleType('postriff_phase2.discord')
+        discord.rate_limits, package.discord = module, discord
+        saved = {name: sys.modules.get(name) for name in ('postriff_phase2', 'postriff_phase2.discord', 'postriff_phase2.discord.rate_limits')}
+        sys.modules.update({'postriff_phase2': package, 'postriff_phase2.discord': discord, 'postriff_phase2.discord.rate_limits': module})
+        self.addCleanup(lambda: [sys.modules.pop(n, None) if v is None else sys.modules.__setitem__(n, v) for n, v in saved.items()])
+        return RateDelayed, RateCoordinatorUnavailable
+
+    def patient(self, behaviour):
+        import types
+        import discord_lane_cap_seed as seed
+        calls = []
+
+        def original(method, path, **kwargs):
+            calls.append((method, path))
+            return behaviour(len(calls), method)
+        fake = types.SimpleNamespace(provider=types.SimpleNamespace(_discord_http=original), read_retries={}, mock=mock)
+        patcher = unittest.mock.patch.object(seed.time, 'sleep', lambda seconds: None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        seed.Seeder._patient_reads(fake)
+        return fake, calls
+
+    def test_a_get_is_tried_again_after_a_failure_the_coordinator_hid_and_the_cause_is_counted(self):
+        import unittest.mock  # noqa: F401
+        delayed, unavailable = self.install()
+
+        class DeadlockDetected(Exception):
+            sqlstate = '40P01'
+
+        def behaviour(n, method):
+            if n <= 2:
+                try:
+                    raise DeadlockDetected('deadlock detected')
+                except DeadlockDetected:
+                    raise unavailable() from None
+            return 'answer'
+        fake, calls = self.patient(behaviour)
+        self.assertEqual(fake.provider._discord_http('GET', '/oauth2/@me'), 'answer')
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(fake.read_retries, {'GET /oauth2/@me (coordinator unavailable: DeadlockDetected:40P01)': 2})
+
+    def test_six_failures_in_a_row_stop_the_seeding_and_a_write_is_never_tried_again(self):
+        import unittest.mock  # noqa: F401
+        delayed, unavailable = self.install()
+
+        def behaviour(n, method):
+            raise unavailable()
+        fake, calls = self.patient(behaviour)
+        with self.assertRaises(unavailable):
+            fake.provider._discord_http('GET', '/oauth2/@me')
+        self.assertEqual(len(calls), 6, 'the first try and five more')
+        fake, calls = self.patient(behaviour)
+        with self.assertRaises(unavailable):
+            fake.provider._discord_http('POST', '/channels/1393000000000000001/messages')
+        self.assertEqual(len(calls), 1)
 
 
 class SchemaSet(unittest.TestCase):

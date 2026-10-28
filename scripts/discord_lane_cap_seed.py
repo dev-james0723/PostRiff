@@ -114,15 +114,34 @@ class Seeder:
         ReadAdmissionDelayed ("no request was sent"). One seeding process then died at its first workspace (seen on
         the GitHub-hosted runner and reproduced here with four processes starting at once). Retrying a GET that was
         never sent is safe and changes nothing the run measures: seeding requests are not in the run's log, and the
-        harness checks afterwards that seeding left no admission open. Writes are never retried."""
-        from postriff_phase2.discord.rate_limits import RateDelayed
+        harness checks afterwards that seeding left no admission open. Writes are never retried.
+
+        The coordinator also turns any failure inside its transaction into RateCoordinatorUnavailable ("no request was
+        sent") and hides the cause (`raise ... from None`). On the hosted run of the limiter head 02fd679b one of four
+        seeding processes died that way 70 s into connecting the 1,000 workspaces of Fdb, and the run was lost before
+        anything was measured. A GET is tried again up to five times; each is counted with the class and SQLSTATE of the
+        failure it hid (the context is still on the exception), in `delayedReadsRetried` of the slice summary
+        (seed-N.out), and said on stderr. Five in a row stop the seeding with that cause, as before."""
+        from postriff_phase2.discord.rate_limits import RateCoordinatorUnavailable, RateDelayed
         original = self.provider._discord_http
         counts = self.read_retries
 
         def patient(method, path, **kwargs):
+            unavailable = 0
             for attempt in range(80):
                 try:
                     return original(method, path, **kwargs)
+                except RateCoordinatorUnavailable as error:
+                    hidden = error.__context__
+                    cause = '%s:%s' % (type(hidden).__name__, getattr(hidden, 'sqlstate', None) or '') if hidden is not None else 'no cause'
+                    key = '%s %s (coordinator unavailable: %s)' % (method, self.mock.route_class(method, path).split(' ', 1)[1], cause)
+                    counts[key] = counts.get(key, 0) + 1
+                    print('seeding: the coordinator was unavailable for %s; the failure it hid: %r' % (key.split(' (')[0], hidden),
+                          file=sys.stderr, flush=True)
+                    unavailable += 1
+                    if method != 'GET' or unavailable > 5:
+                        raise
+                    time.sleep(0.25 * unavailable + (os.getpid() % 7) * 0.03)
                 except RateDelayed as error:
                     if method != 'GET' or attempt == 79:
                         raise
