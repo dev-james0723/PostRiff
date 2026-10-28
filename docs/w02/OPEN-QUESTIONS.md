@@ -110,3 +110,33 @@ read-backs waiting. An exact split over every workspace, and the same split in t
 projection), needs two columns in the projection (a new migration, not made). Without one, the oldest due `next_at` among
 workspaces with `last_claimed_at = 0` is an exact create lag for workspaces the lane never served.
 
+**Q16. Admissions are never purged.** Every request writes one row to `pr_discord_request_admissions` (the permit, then its
+outcome) and nothing deletes it. Measured on PostgreSQL 16 with the real coordinator (1,500 reads): 2.6 KB of heap per
+admission (the insert and the observation's update each leave a version until vacuum) plus its indexes, 1.5 KB when the routes
+are learned and 3.9 KB when every request is a new resource (the GIN index on `scope_keys` holds a key per cold route): 3.7 to
+6.5 KB. At the reviewed 25 a second that is 2.16 million rows and 8 to 14 GB a day (250 to 440 GB over the policy's 31 days);
+at one a second 86,400 rows and 0.32 to 0.56 GB a day. The coordinator needs a read's row only until it is answered and its
+slot has freed (the window and 0.1 s, or 30 s more if it was never answered); the ops snapshot reads the newest 2,048; a
+publication's row is the audit trail. The service role may SELECT, INSERT and UPDATE these tables, not DELETE (migrations 124
+and 125). The application's connection is not that role if the preview preflight (`deployment.py`: user `postgres`, or
+`postgres.<project>` through the pooler) also holds in production, and the table owner needs no grant. Not checked (no
+Production access): `SELECT current_user, has_table_privilege(current_user,'public.pr_discord_request_admissions','DELETE')`
+from the application's own session. Options: a periodic delete, in small batches, of rows that are `NOT is_publish`, `observed`
+or `blocked` and older than an hour (at 25 a second the table then stays near 90,000 rows, 0.3 to 0.6 GB); daily partitions
+dropped after two days (a migration); or a ring of the last 25 wire times in the application row, which puts a write on the
+hottest row at every consume and loses the per-request record. Nothing is built; a grant would be a migration.
+
+**Q17. A hold and a read-back.** A read admitted under an operator hold raises `RateCoordinatorUnavailable`. The read-back
+(`hosted_social`, the `except RateDelayed` branch) treats only a `RateDelayed` as a deferral, so the answer is `uncertain`,
+the check is not refunded and the worker comes back in 5 s: five attempts, about 25 s of hold, park the post for a day
+("Manual provider review required"). A `RateDelayed` would refund the check and keep the post polling. The smallest change is
+in `_reserve`: when `read_sent` and a locked row has `hold`, raise `RateDelayed(300.0, cause='hold', scope='embargo')`
+instead (three lines); `_discord_http` already turns a read's `RateDelayed` into `ReadAdmissionDelayed` and the read-back
+already answers that with a deferral that refunds the check. Tried in a scratch tree on all 910 offline Discord tests: it
+breaks `PolicyAndHold.test_hold_refuses_everything_and_release_resumes_with_the_same_exact_state` (its reads) and the
+randomized model (`RandomizedAgainstModel`, which would learn the rule); the ban and break-glass tests use `reserve`, not
+`reserve_read`, and stay green; the PostgreSQL drills were not run. It also changes what every other direct read sees during
+a hold: 429 `discord_rate_delayed` where it was 503 `discord_rate_coordinator_unavailable` (destinations, the preflight's
+identity reads). The alternative that touches only the read-back is to catch `RateCoordinatorUnavailable` there too, which
+would also defer a missing policy or an unreachable database for ever. Not built.
+

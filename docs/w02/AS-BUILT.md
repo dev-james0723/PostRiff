@@ -590,6 +590,14 @@ document should know:
   the service role may make; the stored cap is the ceiling in force and a reservation under the renewed revision does not
   reconsider it); the policy tool also refuses an `app_capacity` above half the bot limit and must be changed (reviewed)
   first. It cannot happen by accident, and a later, tighter policy still tightens a raised cap.
+- **The sender-name write.** `PATCH /guilds/{id}/members/@me` is admitted only while `POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED`
+  is exactly `true`, read at call time: turning the flag off refuses new admissions at once, and an admission that already
+  exists is retired by `abandon_unsent_nickname`, `reconcile_nickname` or `reconcile_nickname_by_id`, each silent for one
+  that is settled (`observed`, `blocked`), however young. The by-id reconciler needs no token (a rotated token cannot strand
+  an admission); it accepts only this application's bot, unbound, non-publish PATCH of the nickname route and the exact guild
+  path, and only once the admission is 120 s old and its permit has expired. Such rows keep counting against the ceiling for
+  their span (no refund) and carry no status code (`NULL`, scope `unknown`); the age bound changes no row, so the claim path
+  can still retire an orphan after it.
 
 - A route whose first (cold) probe never got an answer refuses every later request with the probe window (about a second),
   so the approved posts to that channel churn (claim, three admitted reads, release) until their approval ends [independent
