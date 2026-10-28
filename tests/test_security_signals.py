@@ -3,16 +3,21 @@
 The gate is the real PostgresWorkspaceRepository.transaction over an in-memory connection; the signal's own tables run
 on an injected clock. The real-PostgreSQL drill (two tenants, the real query) is in test_discord_ops_drills_postgres.py.
 """
+import importlib.util
 import json
 import logging
 import re
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2 import security_signals
 from postriff_phase2.hosted import PostgresWorkspaceRepository
 
+_SPEC = importlib.util.spec_from_file_location('discord_ops_check', Path(__file__).resolve().parents[1] / 'scripts/discord_ops_check.py')
+check = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(check)
 MEMBER = '5a9e1c3b-7d2f-4e6a-8b0c-1d2e3f4a5b6c'
 FOREIGN = '0f1e2d3c-4b5a-4968-8776-655443322110'
 
@@ -90,9 +95,10 @@ class TheGate(unittest.TestCase):
         self.assertEqual((error.status, str(error), error.code), (403, 'Workspace unavailable.', 'permission_denied'))
         events = captured.events()
         self.assertEqual(len(events), 1)
-        self.assertEqual(set(events[0]), {'event', 'routeFamily', 'status', 'actorKey', 'suppressed'})
-        self.assertEqual(events[0]['status'], 403)
-        self.assertEqual(events[0]['suppressed'], 0)
+        self.assertEqual(set(events[0]), {'event', 'routeFamily', 'status', 'actorKey', 'count', 'minute', 'final', 'instance'})
+        self.assertEqual((events[0]['status'], events[0]['count'], events[0]['final']), (403, 1, False))
+        self.assertEqual(events[0]['minute'], int(self.clock.at // 60))
+        self.assertRegex(events[0]['instance'], r'^[0-9a-f]{8}$')
         self.assertRegex(events[0]['actorKey'], r'^[0-9a-f]{10}$')
         self.assertEqual(events[0]['actorKey'], security_signals.actor_key(MEMBER))
         self.assertEqual([level for level, message in captured.lines if security_signals.EVENT in message], [logging.WARNING])
@@ -114,20 +120,54 @@ class TheGate(unittest.TestCase):
         self.assertEqual(captured.events(), [])
         self.assertEqual(self.signal.summary()['deniedTotal'], 0)
 
-    def test_one_line_per_actor_and_family_a_minute_with_the_rest_counted(self):
+    def test_lines_at_running_counts_then_a_final_line_when_the_minute_is_over(self):
         with Captured() as captured:
-            for _ in range(5):
+            for _ in range(12):
                 self.deny()
-            self.assertEqual(len(captured.events()), 1)
+            self.assertEqual([e['count'] for e in captured.events()], [1, 10])
             self.clock.at += 60
             self.deny()
         events = captured.events()
-        self.assertEqual([e['suppressed'] for e in events], [0, 4])
+        self.assertEqual([(e['count'], e['final']) for e in events], [(1, False), (10, False), (12, True), (1, False)])
+        self.assertEqual(events[2]['minute'] + 1, events[3]['minute'])
         other = repository(None, member='9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d')
         with Captured() as captured:
             self.deny(other)
         self.assertEqual(len(captured.events()), 1, 'another member has their own line')
-        self.assertEqual(self.signal.summary()['deniedTotal'], 7)
+        self.assertEqual(self.signal.summary()['deniedTotal'], 14)
+
+    def test_a_burst_is_reported_by_its_size_not_as_one_denial(self):
+        """Review M5: 5 + 5 + 5,000 refusals in three minutes were 11 in the fleet view; a one-minute burst of 5,000
+        was 1. The fleet view now reads the running counts."""
+        signal = security_signals.DenialSignal(clock=self.clock)
+        with Captured() as captured:
+            for size in (5, 5, 5000):
+                for _ in range(size):
+                    signal.denied(MEMBER, 'workspace')
+                self.clock.at += 60
+            signal.summary()                         # the health route's call flushes the last minute
+        lines = [message for _level, message in captured.lines if security_signals.EVENT in message]
+        self.assertLessEqual(len(lines), 16)
+        fleet = check.parse_logs(lines, 600)['denials']
+        self.assertEqual((fleet['deniedTotal'], fleet['topActorDenials10m']), (5010, 5010))
+        with Captured() as captured:                 # a process that stops before the minute's end leaves its last mark
+            for _ in range(5000):
+                signal.denied('another', 'discord')
+        unflushed = check.parse_logs([m for _l, m in captured.lines], 600)['denials']
+        self.assertEqual(unflushed['denied'], {'discord': 5000})
+        alerts = check.evaluate({'version': 1, 'source': 'logs', 'observedAt': self.clock.at, 'fleet': {'denials': fleet}},
+                                check.load_thresholds(), now=self.clock.at)
+        self.assertEqual({a['id']: a['severity'] for a in alerts}.get('CROSS_TENANT_PROBING'), 'page')
+
+    def test_two_processes_add_up_and_a_drain_envelope_is_unwrapped(self):
+        first = security_signals.DenialSignal(clock=self.clock, instance='0000aaaa')
+        second = security_signals.DenialSignal(clock=self.clock, instance='0000bbbb')
+        with Captured() as captured:
+            for _ in range(10):
+                first.denied(MEMBER, 'discord')
+                second.denied(MEMBER, 'discord')
+        lines = [json.dumps({'message': m, 'level': 'warning'}) for _l, m in captured.lines]
+        self.assertEqual(check.parse_logs(lines, 600)['denials']['deniedTotal'], 20)
 
     def test_the_signal_never_raises_and_never_changes_the_denial(self):
         with patch.object(self.signal, 'denied', side_effect=RuntimeError('logging broke')):
@@ -173,8 +213,8 @@ class Bounds(unittest.TestCase):
             for number in range(security_signals.MAX_KEYS + 50):
                 signal.denied('member-%d' % number, 'workspace')
         events = captured.events()
-        self.assertEqual(len(events), security_signals.MAX_KEYS + 1)
-        self.assertEqual(events[-1]['actorKey'], security_signals.OVERFLOW)
+        self.assertEqual(len(events), security_signals.MAX_KEYS + 2)   # the overflow key at its counts 1 and 10
+        self.assertEqual([e['count'] for e in events if e['actorKey'] == security_signals.OVERFLOW], [1, 10])
         self.assertEqual(len(signal.minutes[int(clock.at // 60)]), security_signals.MAX_KEYS + 1)
 
     def test_old_minutes_are_dropped_and_the_summary_windows_hold(self):
@@ -196,7 +236,7 @@ class Bounds(unittest.TestCase):
         clock.at += 20 * 60
         signal.denied(MEMBER, 'workspace')
         self.assertEqual(sorted(signal.minutes), [int(clock.at // 60)])
-        self.assertEqual(set(signal.logged), {(security_signals.actor_key(MEMBER), 'workspace')})
+        self.assertEqual(set(signal.logged), {(int(clock.at // 60), (security_signals.actor_key(MEMBER), 'workspace'))})
 
     def test_an_unknown_family_is_other(self):
         signal = security_signals.DenialSignal(clock=Clock(), logger=logging.getLogger('security-signals-quiet'))

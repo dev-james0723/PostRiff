@@ -109,3 +109,9 @@ It loads 001, 002, 004–012, 018, 019, then 023–025 and the released 030–03
 - A read-only scan checked 598 local refs and 209 accessible worktrees before allocation and found no 131-139 files. Git remote refs must be rescanned at release time; this does not establish global exclusivity.
 - Production's checksum ledger contained none of 131-133 at preflight, so these are **pending forward migrations**. The historical Mastodon Cloud Preview already carries the old 113-115 SQL, and must not be conflated with this revised RC. Rehearse a new isolated preview with exact checksums and rollback receipts.
 - Production's applied 103, 116, and 117 sources must remain byte-identical, and the complete applied ledger must match the source inventory before any production migration. No migration is authorized by this note.
+
+## 2026-10-23 H-07 operations reservation (NOT applied anywhere)
+
+- **140** `140_rafii_control_oncall.sql`: the on-call engine's tables in `rafii_control` (incidents, append-only events, deliveries, heartbeat), forced RLS with the environment GUC like 055, after 049 (and 066's watchdog role, created if missing). Branch `claude/discord-ops-alerts-20261023` only.
+- **141** `141_discord_ops_snapshot_reader.sql`: `public.pr_discord_ops_snapshot()`, the SQL twin of the Discord health payload as a SECURITY DEFINER function owned by a NOLOGIN, non-BYPASSRLS projection role with column grants, and a NOLOGIN reader role with EXECUTE only (review finding M9). After 124, 126 and the credential and OAuth tables. Same branch only.
+- A read-only scan of every local ref found no other 140 or 141 file (130-135 are taken by founder, Discord, Mastodon, X and Twitch lines). Rescan remote refs before any release. Both are pending forward migrations that need the owner's approval (`docs/ops/H07-EVIDENCE.md` section 6); this note authorizes nothing.

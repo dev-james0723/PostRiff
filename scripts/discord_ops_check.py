@@ -1,31 +1,40 @@
 #!/usr/bin/env python3
 """Evaluate the Discord operations health snapshot against the H-07 alert rules. Standard library only.
 
-    evaluate(snapshot, thresholds, now=None) -> [{'id', 'class', 'severity', 'message', 'evidence'}, ...]
+    evaluate(snapshot, thresholds, now=None, phase='open', previous=None)
+        -> [{'id', 'class', 'severity', 'message', 'evidence'[, 'scope']}, ...]
 
 Pure: no network, database or clock of its own except the optional `now` (epoch seconds) used to see whether the
-snapshot itself is stale. Rules are data-driven by docs/ops/discord-alert-thresholds.json. Six classes: BACKLOG,
-DELIVERY, RATE_LIMIT, SILENT_HALT, CROSS_TENANT and CONFIG. Severity is 'page', 'warn' or 'info' (the meaning for the
-person holding the pager is in the thresholds file and docs/ops/PHONE-RUNBOOK.md). A section the snapshot does not
-carry (the SQL twin has no process view; a failed section says 'unavailable') makes its rules silent, except that a
-missing or failed snapshot is itself a SILENT_HALT page: the absence of the signal is an alarm.
+snapshot itself is stale, and the optional previous report (persistence and deltas). Rules are data-driven by
+docs/ops/discord-alert-thresholds.json. Six classes: BACKLOG, DELIVERY, RATE_LIMIT, SILENT_HALT, CROSS_TENANT and
+CONFIG; 47 alert ids. Severity is 'page', 'warn' or 'info' (the meaning for the person holding the pager is in the
+thresholds file and docs/ops/PHONE-RUNBOOK.md). The absence of the signal is an alarm: a missing, failed or malformed
+snapshot (wrong kind, version or source, or a required section missing) is SILENT_HALT_HEALTH_UNANSWERED, and every
+section the payload could not read (one entry of errors[]) is SILENT_HALT_SECTION for that section: a warning the first
+time, a page when the previous evaluation had it too. A section the snapshot does not carry by design (the SQL twin has
+no process view) makes only its own rules silent.
 
 The snapshot is the payload of GET /api/ops/discord/health (src/postriff_phase2/discord/ops.py) or the read-only SQL
 twin (docs/ops/discord-ops-snapshot.sql). Fleet-wide numbers that only the function logs know (cross-tenant denials,
 lane invocations) can be added under snapshot['fleet'] with parse_logs().
 
 Command line:
-    discord_ops_check.py evaluate SNAPSHOT.json [--thresholds FILE] [--phase pre_open|canary|open] [--logs FILE]
-                                                [--previous ALERTS.json] [--now EPOCH]
-    discord_ops_check.py fetch URL [--timeout 10]   (bearer from DISCORD_OPS_BEARER; prints the snapshot, never the
-                                                    bearer; a failed fetch prints an 'unavailable' snapshot)
-Exit code of evaluate: 2 when any alert pages, 1 when the worst is a warning, 0 otherwise.
+    discord_ops_check.py evaluate SNAPSHOT.json --phase pre_open|canary|open [--thresholds FILE] [--logs FILE]
+                                                [--previous REPORT.json] [--now EPOCH]
+    discord_ops_check.py fetch URL [--timeout 10]   (bearer from DISCORD_OPS_BEARER; https only, or http to this
+                                                    machine; no redirects; one overall deadline; prints the snapshot,
+                                                    never the bearer; a failed fetch prints an 'unavailable' snapshot)
+--phase is required: the configuration rules depend on it. --previous is the report a previous run printed; its
+'memory' carries what persistence and deltas need.
+Exit code of evaluate: 2 when any alert pages, 1 when the worst is a warning, 0 otherwise, 3 when the evaluation
+itself failed (an internal error is never mistaken for a warning).
 """
 import argparse
 import json
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -34,10 +43,24 @@ DEFAULT_THRESHOLDS = ROOT / 'docs' / 'ops' / 'discord-alert-thresholds.json'
 SEVERITIES = ('page', 'warn', 'info')
 CLASSES = ('BACKLOG', 'DELIVERY', 'RATE_LIMIT', 'SILENT_HALT', 'CROSS_TENANT', 'CONFIG')
 PHASES = ('pre_open', 'canary', 'open')
-GUARD_KINDS = ('policy', 'global', 'credential', 'invalid')
-QUIET_STOPS = ('idle', 'time_budget', 'step_budget', 'rate_wait', 'operator_hold')
-LANE_COUNTERS = ('claimed', 'posted', 'verified', 'held', 'uncertain', 'deadLetters', 'rateDelayed', 'leaseLost')
+GUARD_KINDS = ('policy', 'bearer', 'global', 'credential', 'invalid')   # 'bearer': the person's own calls' budget (D-2 option 1)
+# discord_paused (W-02 090c7ce6): the provider's execution or authorization is off, so a loop claims nothing; a pause is
+# reported by the backlog and halt rules (never as an abnormal stop), and they never page for it.
+QUIET_STOPS = ('idle', 'time_budget', 'step_budget', 'rate_wait', 'operator_hold', 'discord_paused')
+LANE_COUNTERS = ('claimed', 'posted', 'verified', 'held', 'uncertain', 'deadLetters', 'rateDelayed', 'leaseLost',
+                 'quarantined', 'positionsKept', 'coordinatorBusy')
+# Sections whose failure blinds no rule that pages (the round trip is a measurement for COORD_LOCK_BOUND, an estimate).
+INFORMATIONAL_SECTIONS = ('roundTrip',)
+# Stops that a rule of their own reports (RATE_COORDINATOR_DEGRADED), so SILENT_HALT_LANE_STOPS does not count them twice.
+OWN_RULE_STOPS = ('coordinator_degraded',)
+RETENTION_FAILURES = ('denied', 'timeout', 'error')
 DENIAL_EVENT = 'security.cross_tenant_denied'
+KIND = 'rafii.discord.ops.health'
+# The sections each source must carry (a missing one is a malformed snapshot, not a quiet one).
+REQUIRED = {'health_route': ('queue', 'deliveries', 'progress', 'coordinator', 'config', 'lane', 'security', 'errors'),
+            'sql': ('queue', 'deliveries', 'progress', 'coordinator', 'servers', 'errors'),
+            'logs': ('fleet',)}
+LOOPBACK = ('127.0.0.1', 'localhost', '::1')
 
 
 def load_thresholds(path=DEFAULT_THRESHOLDS):
@@ -58,6 +81,24 @@ def _alert(rule, cls, severity, message, **evidence):
             'evidence': {key: value for key, value in evidence.items() if value is not None}}
 
 
+def bookable_per_minute(capacity, window, guard, reserve):
+    """What bookings can take in a minute: the coordinator leaves min(reserve, cap - 1) slots of every window to callers
+    that cannot wait (SharedPostgresBudget._booking_slot, IMMEDIATE_RESERVE while it books), so the lanes, which book, get
+    (cap - that) of each window. With no reserve (a build that does not book, or a snapshot without it) the steady ceiling."""
+    kept = min(reserve, capacity - 1) if reserve and capacity > 1 else 0
+    return achievable_per_minute(capacity, window, guard) * (capacity - kept) / capacity
+
+
+def achievable_per_minute(capacity, window, guard):
+    """How many admissions the coordinator can grant in a minute under continuous demand. Each one occupies a slot of
+    the application window for the window plus a guard of at most a tenth of it (SharedPostgresBudget._span); a guard
+    the snapshot does not carry (the SQL twin, a build without one) is taken at that maximum, so no guard the
+    coordinator can use makes the budget alert unreachable."""
+    tenth = window / 10.0
+    guard = tenth if guard is None else min(max(float(guard), 0.0), tenth)
+    return capacity * 60.0 / (window + guard)
+
+
 def _over(value, warn, page):
     """'page' when value >= page, 'warn' when value >= warn, else None (None thresholds are off)."""
     if value is None:
@@ -71,36 +112,91 @@ def _over(value, warn, page):
 
 # --- the six classes ---------------------------------------------------------------------------------------------------
 
+PAUSED = ('Discord is paused on the serving build (its execution or authorization is off): posts wait until it resumes, '
+          'and a post needs a new approval from about 55 minutes after its scheduled time. ')
+
+
+def discord_paused(snapshot):
+    """A known pause (W-02 lane.paused): the serving build's Discord execution or authorization is off, or the shards
+    said so (stoppedBy discord_paused). Waiting work is then expected: the backlog and halt rules warn, never page."""
+    config = snapshot.get('config') if isinstance(snapshot.get('config'), dict) else {}
+    fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else {}
+    return (config.get('executionEnabled') is False or config.get('authorizationV2') is False
+            or bool((fleet.get('laneStops') or {}).get('discord_paused')))
+
+
+def _lower(level, cap):
+    return cap if level == 'page' and cap == 'warn' else level
+
+
 def backlog(snapshot, t, out):
     queue = _section(snapshot, 'queue')
     lag = _number(queue.get('oldestDueLagSeconds')) if queue else None
     t = t['backlog']
     level = None if lag is None else 'page' if lag > t['page_lag_seconds'] else 'warn' if lag > t['warn_lag_seconds'] else None
+    fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else {}
+    split = fleet.get('lag') if isinstance(fleet.get('lag'), dict) else {}
+    creates, readbacks = _number(split.get('createSeconds')), _number(split.get('readbackSeconds'))
+    if lag is not None and lag <= t['create_warn_seconds']:
+        # The projection covers every workspace from the same nextAt as the lanes' sample, so nothing is late now: the
+        # newest lagging line (written only while work is late) is from before a recovery and is not read.
+        creates = readbacks = None
+    if creates is not None and readbacks is not None:
+        # The lanes' own split (discord.lane.lagging, W-02 M5): creates are late past create_warn_seconds; read-backs,
+        # which a long burst defers, only past readback_warn_seconds. The projection cannot tell them apart, so when the
+        # split shows that deferral (read-backs late, no create late) its lag is judged at the read-back threshold.
+        deferral = readbacks > t['create_warn_seconds'] and creates <= t['create_warn_seconds']
+        if deferral and lag is not None:
+            level = 'warn' if lag > t['readback_warn_seconds'] else None
+        for value, warn_at, page_at in ((creates, t['create_warn_seconds'], t['page_lag_seconds']),
+                                        (readbacks, t['readback_warn_seconds'], None)):
+            found = 'page' if page_at is not None and value > page_at else 'warn' if value > warn_at else None
+            if found and (level is None or found == 'page'):
+                level = found
+    paused = discord_paused(snapshot)
+    if paused:
+        level = _lower(level, 'warn')
     if level:
         out.append(_alert('BACKLOG_LAG', 'BACKLOG', level,
-                          'The oldest due Discord work is %d s late (warn above %d s, page above %d s). During a declared '
-                          'burst the warn level is expected; the page level is not.' % (lag, t['warn_lag_seconds'], t['page_lag_seconds']),
-                          oldestDueLagSeconds=lag, dueWorkspaces=queue.get('dueWorkspaces')))
+                          '%sThe oldest due Discord work is %s s late (warn above %d s, page above %d s; from the lanes: '
+                          'creates late above %d s, read-backs above %d s). During a declared burst the warn level is '
+                          'expected; the page level is not.' % (PAUSED if paused else '', 'unknown' if lag is None else '%d' % lag,
+                                                                 t['warn_lag_seconds'], t['page_lag_seconds'],
+                                                                 t['create_warn_seconds'], t['readback_warn_seconds']),
+                          oldestDueLagSeconds=lag, dueWorkspaces=queue.get('dueWorkspaces') if queue else None,
+                          oldestCreateLagSeconds=creates, oldestReadbackLagSeconds=readbacks,
+                          lateKinds=split.get('lateKinds') or None, discordPaused=paused or None))
 
 
-def delivery(snapshot, t, out):
+def delivery(snapshot, t, out, memory=None):
     d = _section(snapshot, 'deliveries')
     traffic = (snapshot.get('coordinator') or {}).get('traffic') if isinstance(snapshot.get('coordinator'), dict) else None
+    unresolved = _section(snapshot, 'unresolved') or {}
+    open_uncertain = int(unresolved.get('uncertainPublishes') or 0)
+    open_stuck = int(unresolved.get('stuckSentPublishes') or 0)
     t = t['delivery']
+    attempts = upstream = 0
     if d:
         uncertain = int(d.get('uncertain') or 0)
         stuck = int(d.get('stuckSent') or 0)
+        # 5xx answers to creates are Discord's side (or something between us and Discord), counted apart from ours
+        # (second review N-9); a payload without the field counts them in rejectedSystem, as before.
+        upstream = int(d.get('rejectedUpstream') or 0)
         system = int(d.get('rejectedSystem') or 0) + uncertain + stuck
         customer = int(d.get('rejectedCustomer') or 0)
-        attempts = (int(d.get('accepted') or 0) + customer + int(d.get('rejectedSystem') or 0)
+        attempts = (int(d.get('accepted') or 0) + customer + int(d.get('rejectedSystem') or 0) + upstream
                     + int(d.get('rateLimited') or 0) + uncertain + stuck)
         partial = None if d.get('windowCovered', True) else 'the sample did not reach back 15 minutes: counts are lower bounds'
         level = _over(uncertain, t['uncertain_warn'], t['uncertain_page'])
+        if level is None and open_uncertain > 0:
+            level = 'warn'
         if level:
             out.append(_alert('DELIVERY_UNCERTAIN', 'DELIVERY', level,
-                              '%d Discord creates in 15 minutes may have reached Discord with no answer recorded. Never '
-                              'resend; reconcile by read-back only. Three or more is a stop condition.' % uncertain,
-                              uncertain=uncertain, attempts=attempts, note=partial))
+                              '%d Discord creates in 15 minutes may have reached Discord with no answer recorded, and %d such '
+                              'admissions are unresolved in all. Never resend; reconcile by read-back only. Three or more in '
+                              '15 minutes is a stop condition; the warning stays until each one is reviewed (W-02 '
+                              'OPEN-QUESTIONS Q3).' % (uncertain, open_uncertain),
+                              uncertain=uncertain, unresolved=open_uncertain or None, attempts=attempts, note=partial))
         share = system / attempts if attempts else 0.0
         level = None
         if attempts >= t['min_attempts_for_share']:
@@ -109,9 +205,11 @@ def delivery(snapshot, t, out):
             level = 'warn'
         if level:
             out.append(_alert('DELIVERY_SYSTEM_FAILURES', 'DELIVERY', level,
-                              '%d of %d Discord create attempts in 15 minutes failed for a reason on our side (%.1f%%).'
-                              % (system, attempts, 100 * share), systemFailures=system, attempts=attempts,
-                              share=round(share, 4), rejectedSystem=d.get('rejectedSystem'), uncertain=uncertain,
+                              '%d of %d Discord create attempts in 15 minutes failed for a reason on our side (%.1f%%)%s.'
+                              % (system, attempts, 100 * share, '; Discord\'s own 5xx answers are counted apart (%d, '
+                                 'DELIVERY_DISCORD_5XX)' % upstream if upstream else ''),
+                              systemFailures=system, attempts=attempts, share=round(share, 4),
+                              rejectedSystem=d.get('rejectedSystem'), rejectedUpstream=upstream or None, uncertain=uncertain,
                               stuckSent=stuck, note=partial))
         if attempts >= t['min_attempts_for_share'] and customer / attempts >= t['customer_share_warn']:
             out.append(_alert('DELIVERY_CUSTOMER_FAILURES', 'DELIVERY', 'warn',
@@ -119,11 +217,31 @@ def delivery(snapshot, t, out):
                               'or 404). Shown to each customer with the reason; this many may mean the permission check '
                               'before sending is not working.' % (customer, attempts),
                               rejectedCustomer=customer, attempts=attempts))
-        if stuck >= t['stuck_sent_warn']:
+        if max(stuck, open_stuck) >= t['stuck_sent_warn']:
             out.append(_alert('DELIVERY_STUCK_SENT', 'DELIVERY', 'warn',
                               '%d creates were sent and never answered for over two minutes (a process stopped '
-                              'mid-request). Reconcile by read-back; see docs/w02/monitoring.sql M5.' % stuck,
-                              stuckSent=stuck, stuckSentTotal=d.get('stuckSentTotal')))
+                              'mid-request), %d in 15 minutes. Reconcile by read-back; see docs/w02/monitoring.sql M5.'
+                              % (max(stuck, open_stuck), stuck),
+                              stuckSent=stuck, stuckSentTotal=d.get('stuckSentTotal'), unresolved=open_stuck or None))
+    elif open_uncertain > 0 or open_stuck >= t['stuck_sent_warn']:
+        # The 15-minute ledger is unavailable but the unresolved counts were read: they still stand.
+        if open_uncertain > 0:
+            out.append(_alert('DELIVERY_UNCERTAIN', 'DELIVERY', 'warn', '%d Discord create admissions are uncertain and '
+                              'unresolved. Never resend; reconcile by read-back only.' % open_uncertain, unresolved=open_uncertain))
+        if open_stuck >= t['stuck_sent_warn']:
+            out.append(_alert('DELIVERY_STUCK_SENT', 'DELIVERY', 'warn', '%d creates were sent and never answered. Reconcile '
+                              'by read-back; see docs/w02/monitoring.sql M5.' % open_stuck, unresolved=open_stuck))
+    platform = _section(snapshot, 'platform') or {}
+    before = ((memory or {}).get('platform') or {}) if isinstance(memory, dict) else {}
+    for name, rule, limit, what in (('publicationHeld', 'DELIVERY_HELD_GROWTH', t['held_growth_warn'],
+                                     'became held (an approval ran out or a rate wait outlasted it: each needs the '
+                                     'customer to approve again)'),
+                                    ('publicationFailed', 'DELIVERY_FAILED_GROWTH', t['failed_growth_warn'], 'failed')):
+        now_count, then_count = _number(platform.get(name)), _number(before.get(name))
+        if now_count is not None and then_count is not None and now_count - then_count >= limit:
+            out.append(_alert(rule, 'DELIVERY', 'warn', '%d more publications %s since the previous check (all platforms; '
+                              'the platform snapshot of migration 060).' % (now_count - then_count, what),
+                              growth=now_count - then_count, total=now_count))
     if isinstance(traffic, dict) and traffic.get('status', 'observed') != 'unavailable':
         unauthorized = int(traffic.get('unauthorized') or 0)
         if unauthorized >= t['unauthorized_page']:
@@ -131,12 +249,23 @@ def delivery(snapshot, t, out):
                               'Discord answered 401 to %d requests in 15 minutes: the bot token may have been reset or '
                               'leaked. The coordinator holds that credential, so Discord work stops (RUNBOOK-INCIDENT 4.D).'
                               % unauthorized, unauthorized=unauthorized))
+    responses = errors = 0
+    if isinstance(traffic, dict) and traffic.get('status', 'observed') != 'unavailable':
         responses, errors = int(traffic.get('responses5m') or 0), int(traffic.get('serverErrors5m') or 0)
-        if responses >= t['min_responses_for_server_errors'] and errors / responses > t['server_error_share_warn']:
-            out.append(_alert('DELIVERY_DISCORD_5XX', 'DELIVERY', 'warn',
-                              'Discord server errors are %.1f%% of %d responses in 5 minutes. Usually a Discord outage: '
-                              'do not roll back (RUNBOOK-INCIDENT 4.A).' % (100 * errors / responses, responses),
-                              serverErrors=errors, responses=responses))
+    by_traffic = responses >= t['min_responses_for_server_errors'] and errors / responses > t['server_error_share_warn']
+    by_creates = attempts >= t['min_attempts_for_share'] and upstream / attempts > t['server_error_share_warn']
+    if by_traffic or by_creates:
+        out.append(_alert('DELIVERY_DISCORD_5XX', 'DELIVERY', 'warn',
+                          'Server errors: %s. Discord answered 5xx, or a request failed before an answer (the coordinator '
+                          'records a failed read as 503). A Discord outage if discordstatus.com shows one, otherwise our '
+                          'side or the network; either way do not roll back for this alone, and it does not page '
+                          '(RUNBOOK-INCIDENT 4.A).' % '; '.join(
+                              part for part in (('%.1f%% of %d responses in 5 minutes' % (100 * errors / responses, responses))
+                                                if by_traffic else '',
+                                                ('%d of %d create attempts in 15 minutes answered 5xx' % (upstream, attempts))
+                                                if by_creates else '') if part),
+                          serverErrors=errors if responses else None, responses=responses or None,
+                          createsAnswered5xx=upstream or None, createAttempts=attempts or None))
 
 
 def rate_limit(snapshot, t, out):
@@ -150,15 +279,37 @@ def rate_limit(snapshot, t, out):
         # The process view knows the reviewed policy; the SQL twin reads the same numbers from the policy row.
         capacity = _number(policy.get('appCapacity')) or _number(row.get('limit'))
         window = _number(policy.get('appWindowSeconds')) or _number(row.get('windowSeconds'))
-        admitted = _number(traffic.get('admissions60s'))
+        admitted = _number(traffic.get('admissions60s'))     # the bot's class alone while a bearer budget exists
+        guard = _number(policy.get('slotGuardSeconds'))
+        reserve = _number(policy.get('immediateReserve'))
         if capacity and window and admitted is not None:
-            saturation = admitted / (capacity * 60.0 / window)
+            achievable = achievable_per_minute(capacity, window, guard)
+            # The lanes book (rate_limits.booking): a window keeps IMMEDIATE_RESERVE slots for callers that cannot wait, so
+            # bookings take at most (cap - reserve) a window. Spent is measured against that, read from the build; without
+            # it (the SQL twin, a build that does not book) the steady ceiling.
+            bookable = bookable_per_minute(capacity, window, guard, reserve)
+            saturation = admitted / bookable
             if saturation >= t['saturation_warn']:
                 out.append(_alert('RATE_APP_BUDGET_SPENT', 'RATE_LIMIT', 'warn',
-                                  'The application request budget was spent for the whole last minute (%d of %d '
-                                  'admissions). Expected during a declared burst; otherwise something is sending more '
-                                  'than it should.' % (admitted, capacity * 60 / window),
-                                  admissions60s=admitted, saturation=round(saturation, 3)))
+                                  'The application request budget was spent for the whole last minute (%d admissions of '
+                                  'the %.0f the lanes can book in a minute, %.0f with the reserve for callers that cannot '
+                                  'wait; nominal %d). Expected during a declared burst; otherwise something is sending more '
+                                  'than it should.' % (admitted, bookable, achievable, capacity * 60 / window),
+                                  admissions60s=admitted, achievable60s=round(achievable, 1), bookable60s=round(bookable, 1),
+                                  immediateReserve=reserve, saturation=round(saturation, 3), slotGuardSeconds=guard,
+                                  guard='build' if guard is not None else 'assumed_largest'))
+        bearer_cap, bearer_window = _number(policy.get('bearerCapacity')), _number(policy.get('bearerWindowSeconds'))
+        bearer = _number(traffic.get('bearerAdmissions60s'))
+        if bearer_cap and bearer_window and bearer is not None:
+            # The bearer class is the same exact sliding window, with the same guard and reserve (rate_limits._window_state,
+            # _booking_slot): 10 a second over 1 s is 571.4 a minute at a 0.05 s guard, not 600, which only 99.7% could reach.
+            ceiling = bookable_per_minute(bearer_cap, bearer_window, guard, reserve)
+            if bearer / ceiling >= t['saturation_warn']:
+                out.append(_alert('RATE_BEARER_BUDGET_SPENT', 'RATE_LIMIT', 'warn',
+                                  'The bearer budget (the person\'s own OAuth calls: grant checks, profile and server reads) '
+                                  'was spent for the whole last minute (%d of %d). Those calls wait; the bot\'s budget is '
+                                  'separate.' % (bearer, ceiling), bearerAdmissions60s=bearer, ceiling60s=round(ceiling, 1),
+                                  saturation=round(bearer / ceiling, 3)))
         invalid = int(traffic.get('invalid10m') or 0)
         if invalid > t['invalid_10m_page']:
             out.append(_alert('RATE_INVALID_REQUESTS', 'RATE_LIMIT', 'page',
@@ -209,8 +360,13 @@ def rate_limit(snapshot, t, out):
                             - int((kinds.get(kind) or {}).get('persistentCircuits') or 0)) for kind in ('route', 'resource'))
         if transient >= t['transient_route_circuits_warn']:
             out.append(_alert('RATE_ROUTE_CIRCUITS', 'RATE_LIMIT', 'warn',
-                              '%d Discord routes have a short circuit open after repeated server errors.' % transient,
+                              '%d Discord routes have a short circuit open: repeated server errors, or (limiter B2) a '
+                              '403 refusal on that route. Many 403s at once usually mean the bot lost access to servers.'
+                              % transient,
                               transientCircuits=transient))
+    retention(snapshot, t, out)
+    booking_and_busy(snapshot, t, out)
+    lock_bound(snapshot, t, out)
     if config and config.get('rateLimitsV1'):
         policy = config.get('policy') or {}
         days = _number(policy.get('daysLeft'))
@@ -225,7 +381,119 @@ def rate_limit(snapshot, t, out):
                               'promotion (RUNBOOK-INCIDENT 4.C).' % days, daysLeft=days))
 
 
-def silent_halt(snapshot, t, out, now=None):
+def malformed(snapshot):
+    """Why a snapshot that answered cannot be trusted as a whole (None when it can)."""
+    if snapshot.get('version') != 1:
+        return 'version'
+    source = snapshot.get('source')
+    if source not in REQUIRED:
+        return 'source'
+    if source != 'logs' and snapshot.get('kind') != KIND:
+        return 'kind'
+    missing = [name for name in REQUIRED[source]
+               if not isinstance(snapshot.get(name), list if name == 'errors' else dict)]
+    return 'missing:' + ','.join(missing) if missing else None
+
+
+def lock_bound(snapshot, t, out):
+    """COORD_LOCK_BOUND (informational, P2): the coordinator's row lock caps admissions at about 1000 / (fixed + round trips x
+    p50) a second (the limiter's analysis, docs/w02/OPEN-QUESTIONS.md Q22; the build carries both constants). Below what the
+    budget lets the lanes book, the lock and not the budget is the ceiling. The health route measures the p50 round trip
+    (coordinator.roundTrip); the SQL twin cannot."""
+    coordinator = _section(snapshot, 'coordinator') or {}
+    trip = coordinator.get('roundTrip') if isinstance(coordinator.get('roundTrip'), dict) else {}
+    p50 = _number(trip.get('selectP50Ms'))
+    fixed = _number(trip.get('lockBoundFixedMs'))
+    trips = _number(trip.get('lockBoundRoundTrips'))
+    if trip.get('status') != 'observed' or p50 is None or fixed is None or not trips:
+        return
+    config = snapshot.get('config') if isinstance(snapshot.get('config'), dict) else {}
+    policy = config.get('policy') or {}
+    row = (coordinator.get('guards') or {}).get('policy') or {}
+    capacity = _number(policy.get('appCapacity')) or _number(row.get('limit'))
+    window = _number(policy.get('appWindowSeconds')) or _number(row.get('windowSeconds'))
+    if not capacity or not window:
+        return
+    bookable = bookable_per_minute(capacity, window, _number(policy.get('slotGuardSeconds')),
+                                   _number(policy.get('immediateReserve'))) / 60.0
+    rate = 1000.0 / (fixed + trips * p50)
+    if rate < bookable:
+        out.append(_alert('COORD_LOCK_BOUND', 'RATE_LIMIT', 'info',
+                          'An estimate: at the measured p50 round trip of %.1f ms the coordinator\'s row lock lets about %.1f '
+                          'admissions a second through (1000 / (%.0f + %.1f x %.1f)), below the %.1f a second the budget lets '
+                          'the lanes book, so the lock, not the budget, is the ceiling. The fixed %.0f ms is a test-box figure '
+                          '(docs/w02/OPEN-QUESTIONS.md Q22), so read this as an estimate; the first read on the staged dark '
+                          'build is the real round trip (G5).' % (p50, rate, fixed, trips, p50, bookable, fixed),
+                          selectP50Ms=p50, lockBoundPerSecond=round(rate, 1), bookablePerSecond=round(bookable, 1),
+                          lockBoundFixedMs=fixed, lockBoundRoundTrips=trips, connectMs=trip.get('connectMs')))
+
+
+def booking_and_busy(snapshot, t, out):
+    """The final coordinator (limiter 0cb19962): the booked horizon, a database too slow to admit (coordinator_busy) and the
+    45 s degrade of a process. Not `remaining` alone: it is 0 whenever the last 1.1 s holds 24 sent wires, which the first
+    hosted run read in 21 of 35 busy readings with the horizon never full."""
+    coordinator = _section(snapshot, 'coordinator') or {}
+    booking = coordinator.get('booking') if isinstance(coordinator.get('booking'), dict) else {}
+    ahead, horizon = _number(booking.get('bookAheadSeconds')), _number(booking.get('horizonSeconds'))
+    if booking.get('status') == 'observed' and ahead and horizon is not None and horizon >= t['booking_full_ratio'] * ahead:
+        out.append(_alert('RATE_BOOKING_FULL', 'RATE_LIMIT', 'warn',
+                          'The booked horizon is full (%.2f s of %.2f s): callers that cannot wait, such as web requests, are '
+                          'refused, and lanes wait a whole horizon. Expected at the peak of a declared burst; otherwise more '
+                          'is being sent than the budget takes.' % (horizon, ahead),
+                          horizonSeconds=horizon, bookAheadSeconds=ahead, aheadNow=booking.get('aheadNow')))
+    fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else {}
+    window = _number(fleet.get('windowSeconds'))
+    degraded = int((fleet.get('laneStops') or {}).get('coordinator_degraded') or 0)
+    if degraded:
+        out.append(_alert('RATE_COORDINATOR_DEGRADED', 'RATE_LIMIT', 'warn',
+                          '%d lane runs stopped because their process had stopped using the coordinator: it failed to record '
+                          'an outcome, and the process waits 45 s before asking again (a setting that does not parse keeps it '
+                          'stopped for good). Find why the coordinator could not write (database load, locks).' % degraded,
+                          laneStops=degraded))
+    busy = (fleet.get('laneCounters') or {}).get('coordinatorBusy')
+    if busy and window:
+        per_5m = busy * 300.0 / window
+        if per_5m >= t['coordinator_busy_5m_warn']:
+            out.append(_alert('RATE_COORDINATOR_BUSY', 'RATE_LIMIT', 'warn',
+                              'The coordinator\'s database was too slow to admit %d times in %d s (%.1f in five minutes): '
+                              'each caller waited 1.5 s and nothing was sent. Repeated, it means lock or statement '
+                              'contention in the coordinator (database load).' % (busy, window, per_5m),
+                              coordinatorBusy=int(busy), windowSeconds=window, per5Minutes=round(per_5m, 1)))
+
+
+def retention(snapshot, t, out):
+    """The coordinator's admission retention (limiter B3, coordinator.retention and discord.lane.retention lines):
+    settled rows far past their retention, rows still due for deletion, or a purge that cannot delete."""
+    coordinator = _section(snapshot, 'coordinator') or {}
+    section = coordinator.get('retention') if isinstance(coordinator.get('retention'), dict) else {}
+    section = section if section.get('status', 'observed') == 'observed' else {}
+    fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else {}
+    logged = fleet.get('retention') if isinstance(fleet.get('retention'), dict) else {}
+    keep = section.get('retentionSeconds') if isinstance(section.get('retentionSeconds'), dict) else {}
+    reasons = []
+    for kind, age_key in (('reads', 'oldestSettledReadAgeSeconds'), ('publications', 'oldestSettledPublicationAgeSeconds')):
+        age, limit = _number(section.get(age_key)), _number(keep.get(kind))
+        if age is not None and limit and age > t['retention_age_factor_warn'] * limit:
+            reasons.append('the oldest settled %s is %.1f retentions old' % (kind[:-1], age / limit))
+    remaining = section.get('remaining') if isinstance(section.get('remaining'), dict) else {}
+    left = sum(int(remaining.get(k) or 0) for k in ('reads', 'publications'))
+    if left >= t['retention_remaining_warn']:
+        reasons.append('%d settled rows past their retention are still there' % left)
+    purged = section.get('purged') if isinstance(section.get('purged'), dict) else {}
+    failures = dict(logged.get('failures') or {})
+    if purged.get('status') in RETENTION_FAILURES:
+        failures[purged['status']] = failures.get(purged['status'], 0) + 1
+    if failures:
+        reasons.append('the purge could not delete (%s)' % ', '.join('%s %d' % kv for kv in sorted(failures.items())))
+    if reasons:
+        out.append(_alert('RATE_RETENTION_BEHIND', 'RATE_LIMIT', 'warn',
+                          'Retention of the coordinator\'s admissions is behind: %s. The table grows (about a third of a '
+                          'gigabyte a day at 100 posts a minute); nothing is lost and nothing is sent twice.' % '; '.join(reasons),
+                          remaining=left or None, failures=failures or None,
+                          purgedInWindow=(logged.get('purgedReads', 0) + logged.get('purgedPublications', 0)) if logged else None))
+
+
+def silent_halt(snapshot, t, out, now=None, previous=None):
     t = t['silent_halt']
     if not isinstance(snapshot, dict) or snapshot.get('unavailable'):
         reason = snapshot.get('reason') if isinstance(snapshot, dict) else 'missing'
@@ -233,6 +501,22 @@ def silent_halt(snapshot, t, out, now=None):
                           'The health payload did not answer (%s). Treat it as a halt until shown otherwise.' % reason,
                           reason=reason))
         return
+    wrong = malformed(snapshot)
+    if wrong:
+        out.append(_alert('SILENT_HALT_HEALTH_UNANSWERED', 'SILENT_HALT', 'page',
+                          'The health payload answered but is malformed (%s): its rules cannot be trusted. Treat it as a '
+                          'halt until shown otherwise.' % wrong, reason='malformed', detail=wrong))
+    for entry in snapshot.get('errors') if isinstance(snapshot.get('errors'), list) else []:
+        name = entry.get('section') if isinstance(entry, dict) else None
+        if not isinstance(name, str) or name == 'database' or not name.isidentifier() or name in INFORMATIONAL_SECTIONS:
+            continue
+        persistent = ('SILENT_HALT_SECTION', name) in (previous or {})
+        alert = _alert('SILENT_HALT_SECTION', 'SILENT_HALT', 'page' if persistent else 'warn',
+                       'The health payload could not read its %s section (%s)%s: the rules that need it are blind.'
+                       % (name, entry.get('error'), ' for two checks in a row' if persistent else ''),
+                       section=name, error=entry.get('error'))
+        alert['scope'] = name
+        out.append(alert)
     observed = _number(snapshot.get('observedAt'))
     if now is not None and observed is not None and now - observed > t['health_max_age_seconds']:
         out.append(_alert('SILENT_HALT_HEALTH_UNANSWERED', 'SILENT_HALT', 'page',
@@ -248,17 +532,34 @@ def silent_halt(snapshot, t, out, now=None):
                           'The Discord due-work projection cannot be read; the lane stops with "schema" and claims nothing.'))
     progress = snapshot.get('progress') if isinstance(snapshot.get('progress'), dict) else {}
     lag = _number(queue.get('oldestDueLagSeconds')) if queue else None
-    if lag is not None and lag > t['due_lag_seconds'] and progress.get('status') in ('observed', None):
+    held = bool((((coordinator or {}).get('guards') or {}).get('policy') or {}).get('hold'))
+    paused = discord_paused(snapshot)
+    if lag is not None and lag > t['due_lag_seconds']:
+        # An age the payload could not read (the ledger section failed) counts as no progress: absence is not proof.
         claim, admission = _number(progress.get('lastClaimAgeSeconds')), _number(progress.get('lastAdmissionAgeSeconds'))
         if (claim is None or claim > t['quiet_seconds']) and (admission is None or admission > t['quiet_seconds']):
-            held = bool((((coordinator or {}).get('guards') or {}).get('policy') or {}).get('hold'))
-            out.append(_alert('SILENT_HALT_NO_PROGRESS', 'SILENT_HALT', 'warn' if held else 'page',
-                              'Discord work has been due for %d s and nothing was claimed or admitted for %s. %s'
-                              % (lag, 'ever' if claim is None and admission is None else 'more than %d s' % t['quiet_seconds'],
-                                 'The operator hold explains it.' if held else
+            out.append(_alert('SILENT_HALT_NO_PROGRESS', 'SILENT_HALT', 'warn' if held or paused else 'page',
+                              '%sDiscord work has been due for %d s and nothing was claimed or admitted for %s. %s'
+                              % (PAUSED if paused else '', lag,
+                                 'ever' if claim is None and admission is None else 'more than %d s' % t['quiet_seconds'],
+                                 'The operator hold explains it.' if held else '' if paused else
                                  'The senders are not running (shard crons, the minute cron, or a stop).'),
                               oldestDueLagSeconds=lag, lastClaimAgeSeconds=claim, lastAdmissionAgeSeconds=admission,
-                              operatorHold=held or None))
+                              operatorHold=held or None, discordPaused=paused or None,
+                              ledger='unread' if progress.get('status') != 'observed' else None))
+        ages = [a for a in (_number(progress.get('lastAcceptedCreateAgeSeconds')), _number(progress.get('lastReadbackAgeSeconds')))
+                if a is not None]
+        quiet = min(ages) if ages else lag
+        level = _over(quiet, t['no_create_warn_seconds'], t['no_create_page_seconds'])
+        if level:
+            out.append(_alert('SILENT_HALT_NO_CREATE', 'SILENT_HALT', 'warn' if held or paused else level,
+                              '%sDiscord work has been due for %d s and no create was accepted and no read-back succeeded '
+                              'for %d s. %s' % (PAUSED if paused else '', lag, quiet,
+                                                'The operator hold explains it.' if held else '' if paused else
+                                                'Claims may continue, but nothing reaches Discord: refusals, rate waits '
+                                                'or a stuck worker.'),
+                              oldestDueLagSeconds=lag, quietSeconds=quiet, operatorHold=held or None,
+                              discordPaused=paused or None))
     lane = snapshot.get('lane') if isinstance(snapshot.get('lane'), dict) else None
     if lane and lane.get('enabled') and not lane.get('ready'):
         blocker = lane.get('blocker')
@@ -271,9 +572,16 @@ def silent_halt(snapshot, t, out, now=None):
                           blocker=blocker))
     guards = (coordinator or {}).get('guards') or {}
     if (guards.get('policy') or {}).get('hold'):
+        build = snapshot.get('config') if isinstance(snapshot.get('config'), dict) else {}
+        wait = _number(build.get('holdReadWaitSeconds'))
+        older = 'while the lane does not own Discord each created post\'s read-back is parked for 24 hours'
+        readbacks = ('read-backs wait (every %d s) and keep their checks' % wait if wait is not None else
+                     older if 'holdReadWaitSeconds' in build else      # the build says it has no read wait
+                     'read-backs wait if the serving build has the limiter\'s read wait; on an older build, ' + older)
         out.append(_alert('SILENT_HALT_OPERATOR_HOLD', 'SILENT_HALT', 'warn',
-                          'The operator hold is on: Discord sends nothing and posts wait. Approvals lapse after an hour, '
-                          'so long holds mean re-approvals. Lift it only on the Release Captain\'s word.'))
+                          'The operator hold is on: Discord sends nothing and posts wait. A post needs a new approval from '
+                          'about 55 minutes after its own scheduled time, and %s. Lift it only on the Release Captain\'s '
+                          'word.' % readbacks, holdReadWaitSeconds=wait))
     fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else None
     window = _number((fleet or {}).get('windowSeconds'))
     if fleet and lane and lane.get('enabled') and window is not None and window >= t['min_lane_window_seconds']:
@@ -282,10 +590,20 @@ def silent_halt(snapshot, t, out, now=None):
             out.append(_alert('SILENT_HALT_NO_SHARDS', 'SILENT_HALT', 'page',
                               'The lane flag is on and no shard invocation was logged in %d s: the shard crons do not '
                               'reach the function.' % window, windowSeconds=window))
-        abnormal = {k: v for k, v in (fleet.get('laneStops') or {}).items() if k not in QUIET_STOPS and v}
+        abnormal = {k: v for k, v in (fleet.get('laneStops') or {}).items()
+                    if k not in QUIET_STOPS and k not in OWN_RULE_STOPS and v}
         if abnormal:
             out.append(_alert('SILENT_HALT_LANE_STOPS', 'SILENT_HALT', 'warn',
                               'Shard invocations stopped for %s.' % ', '.join(sorted(abnormal)), stops=abnormal))
+    quarantine = (fleet or {}).get('quarantine') if isinstance((fleet or {}).get('quarantine'), dict) else {}
+    set_aside = max(int(quarantine.get('events') or 0), int(((fleet or {}).get('laneCounters') or {}).get('quarantined') or 0))
+    if set_aside:
+        out.append(_alert('SILENT_HALT_QUARANTINE', 'SILENT_HALT', 'warn',
+                          '%d time(s) in the window a lane set a workspace aside for 5 minutes because its job document '
+                          'could not be read (%s). Its Discord posts wait meanwhile; one that stays unreadable needs a '
+                          'person (the log lines carry the error class only).'
+                          % (set_aside, ', '.join(sorted(quarantine.get('errors') or {})) or 'error class not logged'),
+                          events=set_aside, errors=quarantine.get('errors') or None))
 
 
 def cross_tenant(snapshot, t, out):
@@ -299,7 +617,8 @@ def cross_tenant(snapshot, t, out):
     if level:
         out.append(_alert('CROSS_TENANT_PROBING', 'CROSS_TENANT', level,
                           'One member was refused other workspaces %d times in 10 minutes: probing, or a stuck client. '
-                          'Find the actor key in the logs; on page, hold first (RUNBOOK-INCIDENT 4.H).' % top,
+                          'Each refusal is the gate working (no data left). Find the actor key in the logs and check the '
+                          'isolation probe; hold only if the probe fails or exposure is confirmed (PHONE-RUNBOOK).' % top,
                           topActorDenials10m=top, scope='fleet_logs' if fleet.get('denials') else 'instance'))
     if discord >= t['discord_denials_warn']:
         out.append(_alert('CROSS_TENANT_DISCORD', 'CROSS_TENANT', 'warn',
@@ -310,11 +629,15 @@ def cross_tenant(snapshot, t, out):
         out.append(_alert('CROSS_TENANT_DISCORD_4XX', 'CROSS_TENANT', 'warn',
                           '%d client errors on Discord routes in 15 minutes (a superset of denials; tune after a '
                           'baseline).' % discord_4xx, responses4xx=discord_4xx))
+    # security.probe has NO producer in this build (second review N-5): neither the route nor the SQL twin writes it, so
+    # this rule cannot fire today. Its producer would be the Q-05 hosted isolation run, its result carried as
+    # security.probe {failed, ...} by the payload or merged into the snapshot by the scheduled runner. Until then a failing
+    # probe is seen only in that run's own receipt (PHONE-RUNBOOK row 1).
     probe = security.get('probe') if isinstance(security.get('probe'), dict) else None
     if probe and int(probe.get('failed') or 0) > 0:
         out.append(_alert('CROSS_TENANT_PROBE_FAILED', 'CROSS_TENANT', 'page',
-                          'The Q-05 isolation probe reports %d failing cases: a cross-tenant read or write was allowed.'
-                          % int(probe['failed']), failed=int(probe['failed'])))
+                          'The Q-05 isolation probe (security.probe, from the Q-05 hosted run) reports %d failing cases: a '
+                          'cross-tenant read or write was allowed.' % int(probe['failed']), failed=int(probe['failed'])))
 
 
 def config(snapshot, t, out, phase):
@@ -374,26 +697,50 @@ def config(snapshot, t, out, phase):
                               'The serving build is not the recorded one (%s differs).' % name, field=name))
 
 
-def evaluate(snapshot, thresholds, now=None, phase=None):
-    """Every alert the snapshot implies, pages first. Deterministic for equal inputs."""
-    phase = phase or thresholds.get('phase', 'pre_open')
+def _previous(previous):
+    """(alerts by (id, scope), memory) from a previous report, or from a bare list of alerts."""
+    if isinstance(previous, dict):
+        alerts, memory = previous.get('alerts') or [], previous.get('memory') or {}
+    else:
+        alerts, memory = previous or [], {}
+    keyed = {(a.get('id'), a.get('scope')): a.get('severity') for a in alerts if isinstance(a, dict)}
+    return keyed, memory if isinstance(memory, dict) else {}
+
+
+def memory(snapshot):
+    """What the next evaluation needs from this one: the platform counters (for growth)."""
+    platform = _section(snapshot, 'platform') if isinstance(snapshot, dict) else None
+    return {'platform': {k: platform[k] for k in ('publicationHeld', 'publicationFailed') if _number((platform or {}).get(k)) is not None}
+            if platform else {}}
+
+
+def evaluate(snapshot, thresholds, now=None, phase='open', previous=None):
+    """Every alert the snapshot implies, pages first. Deterministic for equal inputs. `phase` defaults to the strictest
+    ('open'); `previous` is the previous report (or its alert list) for persistence and growth."""
+    phase = phase or 'open'
     if phase not in PHASES:
         raise ValueError('unknown phase')
+    before, remembered = _previous(previous)
     out = []
-    silent_halt(snapshot, thresholds, out, now)
+    silent_halt(snapshot, thresholds, out, now, before)
     if isinstance(snapshot, dict) and not snapshot.get('unavailable'):
         backlog(snapshot, thresholds, out)
-        delivery(snapshot, thresholds, out)
+        delivery(snapshot, thresholds, out, remembered)
         rate_limit(snapshot, thresholds, out)
         cross_tenant(snapshot, thresholds, out)
         config(snapshot, thresholds, out, phase)
-    return sorted(out, key=lambda a: (SEVERITIES.index(a['severity']), CLASSES.index(a['class']), a['id']))
+    return sorted(out, key=lambda a: (SEVERITIES.index(a['severity']), CLASSES.index(a['class']), a['id'], a.get('scope') or ''))
+
+
+def _label(alert):
+    return alert['id'] + ('/' + alert['scope'] if alert.get('scope') else '')
 
 
 def transitions(previous, current):
-    """Which alert ids opened, continue or cleared between two evaluations (for notifying once, and for receipts)."""
-    before = {a['id']: a['severity'] for a in previous or []}
-    after = {a['id']: a['severity'] for a in current or []}
+    """Which alerts opened, continue or cleared between two evaluations (for notifying once, and for receipts). An alert
+    with a scope (one failing section) is labelled id/scope."""
+    before = {_label(a): a['severity'] for a in previous or []}
+    after = {_label(a): a['severity'] for a in current or []}
     return {'opened': sorted(set(after) - set(before)), 'continuing': sorted(set(after) & set(before)),
             'cleared': sorted(set(before) - set(after)),
             'escalated': sorted(k for k in set(after) & set(before)
@@ -404,22 +751,24 @@ def parse_logs(lines, window_seconds):
     """Fleet numbers from function log lines of one window (the caller selects the window): cross-tenant denials by
     family and by actor key (keys are counted, never returned), shard invocations and their stop reasons."""
     families, actors, stops, counters = {}, {}, {}, dict.fromkeys(LANE_COUNTERS, 0)
+    running, lag, quarantine = {}, {}, {'events': 0, 'errors': {}}
+    retention = {'lines': 0, 'purgedReads': 0, 'purgedPublications': 0, 'failures': {}, 'more': 0}
     lane_lines = lagging = 0
     for line in lines:
-        start = line.find('{')
-        if start < 0:
-            continue
-        try:
-            event = json.loads(line[start:])
-        except ValueError:
-            continue
-        if not isinstance(event, dict):
+        event = _event(line)
+        if event is None:
             continue
         if event.get('event') == DENIAL_EVENT:
-            count = 1 + int(event.get('suppressed') or 0)
             family = event.get('routeFamily') if event.get('routeFamily') in ('discord', 'connections', 'workspace') else 'other'
-            families[family] = families.get(family, 0) + count
             key = str(event.get('actorKey'))
+            if type(event.get('count')) is int and type(event.get('minute')) is int:
+                # Running count within one minute (lines at 1, 10, 100, 1,000 and on the minute's flush; the
+                # instance is part of the key): the largest one is that minute's total for the line's process.
+                slot = (key, family, event['minute'], str(event.get('instance')))
+                running[slot] = max(running.get(slot, 0), event['count'])
+                continue
+            count = 1 + int(event.get('suppressed') or 0)   # the earlier line format
+            families[family] = families.get(family, 0) + count
             actors[key] = actors.get(key, 0) + count
         elif event.get('event') == 'discord.lane.completed':
             lane_lines += 1
@@ -430,22 +779,86 @@ def parse_logs(lines, window_seconds):
                 counters[name] += value if type(value) is int else 0
         elif event.get('event') == 'discord.lane.lagging':
             lagging += 1
+            # The newest line wins: the lanes write one a minute while work is late, so it is the current lag.
+            lag = {'createSeconds': _number(event.get('oldestEligibleCreateLagSeconds')),
+                   'readbackSeconds': _number(event.get('oldestEligibleReadbackLagSeconds')),
+                   'projectedSeconds': _number(event.get('projectedLagSeconds')),
+                   'lateKinds': [k for k in event.get('lateKinds') or [] if k in ('creates', 'readbacks', 'projection', 'sample')],
+                   'laneOwnsDiscord': event.get('laneOwnsDiscord') if isinstance(event.get('laneOwnsDiscord'), bool) else None}
+        elif event.get('event') == 'discord.lane.quarantined':
+            quarantine['events'] += 1
+            error = event.get('error') if isinstance(event.get('error'), str) and event['error'].isidentifier() else 'unknown'
+            quarantine['errors'][error] = quarantine['errors'].get(error, 0) + 1
+        elif event.get('event') == 'discord.lane.retention':
+            retention['lines'] += 1
+            for key, field in (('purgedReads', 'reads'), ('purgedPublications', 'publications')):
+                retention[key] += event[field] if type(event.get(field)) is int else 0
+            status = event.get('status')
+            if status in RETENTION_FAILURES:
+                retention['failures'][status] = retention['failures'].get(status, 0) + 1
+            retention['more'] += 1 if event.get('more') is True else 0
+    for (key, family, _minute, _instance), count in running.items():
+        families[family] = families.get(family, 0) + count
+        actors[key] = actors.get(key, 0) + count
     return {'windowSeconds': window_seconds, 'laneLines': lane_lines, 'laneStops': stops, 'laneCounters': counters,
-            'lagging': lagging,
+            'lagging': lagging, 'lag': lag, 'quarantine': quarantine, 'retention': retention,
             'denials': {'scope': 'fleet_logs', 'denied': families, 'deniedTotal': sum(families.values()),
                         'actors10m': len(actors), 'topActorDenials10m': max(actors.values(), default=0)}}
 
 
+def _event(line):
+    """One JSON log event from a line, unwrapping a log drain's {"message": "..."} envelope; None when there is none."""
+    start = line.find('{') if isinstance(line, str) else -1
+    if start < 0:
+        return None
+    try:
+        event = json.loads(line[start:])
+    except ValueError:
+        return None
+    if isinstance(event, dict) and 'event' not in event and isinstance(event.get('message'), str):
+        return _event(event['message'])
+    return event if isinstance(event, dict) else None
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is an answer, not a new destination: the bearer is never sent anywhere else."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+MAX_BODY = 1_000_000
+
+
 def fetch(url, bearer, timeout=10.0):
-    """GET the health payload. Any failure becomes an 'unavailable' snapshot (an alarm), never an exception."""
+    """GET the health payload: https only (plain http only to this machine), no redirects, one overall deadline, at most
+    MAX_BODY bytes. Any failure becomes an 'unavailable' snapshot (an alarm), never an exception."""
+    parts = urllib.parse.urlsplit(str(url))
+    if not (parts.scheme == 'https' or (parts.scheme == 'http' and parts.hostname in LOOPBACK)):
+        return {'unavailable': True, 'reason': 'insecure_url'}
+    deadline = time.monotonic() + float(timeout)
     request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + bearer, 'Accept': 'application/json'})
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read(1_000_000))
+        with urllib.request.build_opener(_NoRedirect).open(request, timeout=timeout) as response:
+            body = b''
+            while True:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return {'unavailable': True, 'reason': 'deadline'}
+                try:
+                    response.fp.raw._sock.settimeout(left)   # each read may take only what is left of the deadline
+                except AttributeError:
+                    pass
+                chunk = response.read1(65536)          # what has arrived, at most one receive: the deadline holds
+                if not chunk:
+                    break
+                body += chunk
+                if len(body) > MAX_BODY:
+                    return {'unavailable': True, 'reason': 'too_large'}
+            return json.loads(body)
     except urllib.error.HTTPError as error:
         return {'unavailable': True, 'reason': 'http_%d' % error.code}
     except (urllib.error.URLError, TimeoutError, OSError):
-        return {'unavailable': True, 'reason': 'unreachable'}
+        return {'unavailable': True, 'reason': 'deadline' if time.monotonic() >= deadline else 'unreachable'}
     except ValueError:
         return {'unavailable': True, 'reason': 'not_json'}
 
@@ -456,10 +869,10 @@ def main(argv=None):
     run = commands.add_parser('evaluate')
     run.add_argument('snapshot', help='a snapshot JSON file, or - for standard input')
     run.add_argument('--thresholds', default=str(DEFAULT_THRESHOLDS))
-    run.add_argument('--phase', choices=PHASES)
+    run.add_argument('--phase', choices=PHASES, required=True)
     run.add_argument('--logs', help='function log lines of the window to add as fleet numbers')
     run.add_argument('--window-seconds', type=float, default=600.0, help='the window the --logs lines cover')
-    run.add_argument('--previous', help='the alerts JSON of the previous evaluation, to report transitions')
+    run.add_argument('--previous', help='the report of the previous evaluation: transitions, persistence and growth')
     run.add_argument('--now', type=float)
     get = commands.add_parser('fetch')
     get.add_argument('url')
@@ -470,20 +883,29 @@ def main(argv=None):
         bearer = os.environ.get('DISCORD_OPS_BEARER', '')
         print(json.dumps(fetch(args.url, bearer, args.timeout) if bearer else {'unavailable': True, 'reason': 'no_bearer'}))
         return 0
-    text = sys.stdin.read() if args.snapshot == '-' else Path(args.snapshot).read_text()
     try:
-        snapshot = json.loads(text)
-    except ValueError:
-        snapshot = {'unavailable': True, 'reason': 'not_json'}
-    if args.logs and isinstance(snapshot, dict) and not snapshot.get('unavailable'):
-        snapshot['fleet'] = parse_logs(Path(args.logs).read_text().splitlines(), args.window_seconds)
-    alerts = evaluate(snapshot, load_thresholds(args.thresholds), now=args.now if args.now is not None else time.time(),
-                      phase=args.phase)
-    report = {'alerts': alerts, 'worst': alerts[0]['severity'] if alerts else None}
-    if args.previous:
-        report['transitions'] = transitions(json.loads(Path(args.previous).read_text()).get('alerts', []), alerts)
+        text = sys.stdin.read() if args.snapshot == '-' else Path(args.snapshot).read_text()
+        try:
+            snapshot = json.loads(text)
+        except ValueError:
+            snapshot = {'unavailable': True, 'reason': 'not_json'}
+        if args.logs and isinstance(snapshot, dict) and not snapshot.get('unavailable'):
+            snapshot['fleet'] = parse_logs(Path(args.logs).read_text().splitlines(), args.window_seconds)
+        previous = json.loads(Path(args.previous).read_text()) if args.previous else None
+        alerts = evaluate(snapshot, load_thresholds(args.thresholds), now=args.now if args.now is not None else time.time(),
+                          phase=args.phase, previous=previous)
+        report = {'alerts': alerts, 'worst': alerts[0]['severity'] if alerts else None, 'memory': memory(snapshot)}
+        if previous is not None:
+            report['transitions'] = transitions(_previous_alerts(previous), alerts)
+    except Exception as error:   # exit 3: the check itself failed, which is never a mere warning
+        print(json.dumps({'error': type(error).__name__, 'worst': None}))
+        return 3
     print(json.dumps(report, indent=1, sort_keys=True))
     return 2 if any(a['severity'] == 'page' for a in alerts) else 1 if any(a['severity'] == 'warn' for a in alerts) else 0
+
+
+def _previous_alerts(previous):
+    return (previous.get('alerts') or []) if isinstance(previous, dict) else (previous or [])
 
 
 if __name__ == '__main__':

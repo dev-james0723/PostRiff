@@ -1,6 +1,6 @@
 # ALERT CHANNELS and the dead-man's switch (H-07)
 
-Written 2026-10-23 for owner reply 13 ("alerts ... and the real on-call hours and alert-receiving channels confirmed before public"). **Nothing here is configured, enabled or changed in Production by this branch; H-07 stays open until the owner confirms the hours and the channels below.** What exists in code is marked as such; what is only designed says so.
+Written 2026-10-23 for owner reply 13 ("alerts ... and the real on-call hours and alert-receiving channels confirmed before public"); owner reply 15 then adopted the on-call policy as the target (`H07-POLICY-MAP.md`, `H07-OPTIONS.md`). **Nothing here is configured, enabled or changed in Production by this branch; H-07 is BLOCKED until a named Primary and Backup cover P0 at night and the real tests pass (`H07-EVIDENCE.md`).** What exists in code is marked as such; what is only designed says so.
 
 ## 1. What the repository can already deliver to a person
 
@@ -17,7 +17,7 @@ Today's detectors in that pipeline are `publish_failure_rate` (all platforms, fr
 
 ## 2. What this branch implements, and why delivery is not wired
 
-Implemented: the protected read-only payload `GET /api/ops/discord/health` (cron secret), its SQL twin `docs/ops/discord-ops-snapshot.sql`, the rules and thresholds (`scripts/discord_ops_check.py`, `docs/ops/discord-alert-thresholds.json`), the cross-tenant log line `security.cross_tenant_denied`, the phone runbook and the isolated drills. **Not implemented: any delivery to a person.** The one channel that pages (founder incidents, then e-mail, push and a call) cannot take a new detector without (a) a migration, because `rafii_control.founder_incidents.detector` has a CHECK listing the four detectors above, (b) a line in `rafii_control/slices.py`, which this lane may not edit, and (c) a reviewed decision on phone-call cost. A flag alone would not have made it work, so it is a proposal (section 3).
+Implemented: the protected read-only payload `GET /api/ops/discord/health` (cron secret), its SQL twin `docs/ops/discord-ops-snapshot.sql`, the rules and thresholds (`scripts/discord_ops_check.py`, `docs/ops/discord-alert-thresholds.json`, 47 alert ids), the cross-tenant log line `security.cross_tenant_denied`, the phone runbook and the isolated drills; and, off and not wired, the on-call engine `src/rafii_control/oncall/` (routing, escalation, acknowledgement, audit, heartbeat; migration 140, not applied) with fake providers only. **Not implemented: any delivery to a person.** The one channel that pages (founder incidents, then e-mail, push and a call) cannot take a new detector without (a) a migration, because `rafii_control.founder_incidents.detector` has a CHECK listing the four detectors above, (b) a line in `rafii_control/slices.py`, which this lane may not edit, and (c) a reviewed decision on phone-call cost. A flag alone would not have made it work, so it is a proposal (section 3).
 
 Signals not yet covered: the cross-tenant line is written only by the membership gate (the uniform 403, the probe's
 "workspace-scope" style). The 404 and 409 object-binding refusals (another tenant's connection, identity, job or OAuth
@@ -33,7 +33,7 @@ reviewed with the final SHA. Until then those probes are visible only as 4xx cou
 2. **Dead-man's switch outside Vercel: a Discord watchdog workflow**, modelled on `founder-watchdog.yml`: every 10 minutes, a read-only database login runs the SQL twin, `discord_ops_check.py evaluate` fails the job on any `page` (GitHub notifies), and the job also fails when the query cannot run. It does not depend on the Vercel crons, the function, or the founder pipeline it watches.
 3. **Agent check-in (best effort, explicitly not 24/7 cover):** within the confirmed on-call hours, a scheduled session every 30 minutes runs the SQL twin through the Supabase connector (read-only), reads the last 15 minutes of Vercel runtime logs for `discord.lane.completed`, `discord.lane.lagging` and `security.cross_tenant_denied` lines, evaluates with `--logs` and `--previous` (so it notifies on new and cleared alerts only), and sends a push to the owner on a page, with the alert id and the runbook row. It never lifts a hold and changes nothing in Production; a missed run, an expired connector login or a usage limit means silence, which is why it is the third layer, not the first.
 
-Never give `CRON_SECRET` to an external uptime monitor: it also starts the worker and the 12 shards. A third-party poller would need its own read-only secret for the health route (a later reviewed change), or should use the SQL twin through a read-only login.
+Never give `CRON_SECRET` to an external uptime monitor: it also starts the worker and the 12 shards. The designed alternative (review finding M9, migration 141, **not applied**): `SELECT public.pr_discord_ops_snapshot()` through a dedicated login that can execute that one function and read no table; applying it and creating the login are owner steps (`H07-EVIDENCE.md` section 6).
 
 ## 4. The dead-man's switch: how the absence of alerts is detected
 
@@ -44,6 +44,7 @@ Each layer watches the one below it, so silence is never trusted:
 | Founder stage (proposed) | the Discord lane, the coordinator, the configuration | every rule of `discord_ops_check.py`; `SILENT_HALT_NO_PROGRESS` when due work has no claim and no admission for 3 minutes | itself, when the minute cron stops |
 | `founder-watchdog.yml` (exists; needs `RAFII_WATCHDOG_DSN`) | the founder cron heartbeat row (`source_health.cron`, stamped every minute) | the minute cron, or the founder stage, not running for 10 minutes | the shards; a database it cannot reach shows as a failure, which is right |
 | Discord watchdog workflow (proposed) | the database itself, without Vercel | the Discord rules from the SQL twin, every 10 minutes | process-only facts (gate, cap, flags); GitHub can delay or drop scheduled runs under load (and disables schedules in a public repository after 60 days without activity) |
+| On-call engine heartbeat (built, off) | the engine itself (`rafii_control.oncall_heartbeat`, migration 140) | a watchdog reading only that row (`rafii_control_watchdog`) fails when it is older than 180 s, a P0 is unacknowledged past the whole chain, the roster cannot carry P0, or deliveries failed (`engine.heartbeat_alerts`) | the evaluator below it, which the engine's own `SILENT_HALT_*` rules watch |
 | Daily all-clear (proposed, owner habit) | all of the above | the founder digest e-mail (or the check-in's daily summary) arriving at a fixed hour; **a missing all-clear is itself the alarm** | anything shorter than a day |
 
 Heartbeat rule for the owner: if neither the daily digest nor the check-in summary arrived by the agreed hour, treat it as an incident and open the phone runbook's `SNAPSHOT` statement.
@@ -52,11 +53,12 @@ Heartbeat rule for the owner: if neither the daily digest nor the check-in summa
 
 | Item | Owner's action | Cost | Privacy |
 |---|---|---|---|
-| On-call hours | name the hours (for example Hong Kong 09:00 to 24:00) and what happens outside them (nobody: accept the risk and keep the customer notice ready) | none | none |
+| On-call hours | reply 15 set the target: P0 24/7, routine handling 09:00 to 23:00 America/New_York every day. Name the Primary and Backup who carry it, and say honestly whether nights are covered (`H07-EVIDENCE.md`) | none | none |
 | Channels | choose e-mail, push and/or a call for critical; set the founder contact policy's live delivery (Founder Control, step-up) | e-mail cents, push free, calls per minute | notices carry fixed titles, counts and a link; never customer content |
 | Production variables for the chosen channels | approve the names in section 1 (each change needs a build; reply 13 requires item-by-item approval) | a build each | none |
 | Phone push subscription, verified number, ops workspace | from the owner's phone | none | the owner's own number only |
 | Watchdog secrets | create the read-only login for `RAFII_WATCHDOG_DSN`; for the proposed Discord watchdog, a second read-only login limited to the five tables the SQL twin reads (a reviewed migration) | GitHub Actions minutes | the login can read counts only through those tables' columns; never printed |
 | The proposed founder stage and its migration | approve the design in sections 3 and 4 for the final SHA | review time | counts and codes only |
-| Thresholds | confirm or change `docs/ops/discord-alert-thresholds.json`, and set `phase` at each stage (`canary`, then `open`) | none | none |
+| Thresholds | confirm or change `docs/ops/discord-alert-thresholds.json`; every run names its phase (`--phase canary`, then `open`) | none | none |
+| A stop that survives a restore | approve preparing the Discord-paused staged build (`PHONE-RUNBOOK.md` lever 2; the restore lane's `RESTORE-RUNBOOK-PROPOSAL.md` 4.J, a proposal not in force) | build minutes | none |
 | Check-in schedule | approve the agent's scheduled check-in for the on-call hours | the owner's plan usage | read-only aggregates |

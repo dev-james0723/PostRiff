@@ -8,12 +8,13 @@ import importlib.util
 import io
 import json
 import re
+import secrets
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from postriff_phase2.discord import lane, launch_gate, ops
+from postriff_phase2.discord import lane, launch_gate, ops, rate_limits
 from postriff_phase2.discord.rate_limits import SharedPostgresBudget, route_identity
 from postriff_phase2.hosted_app import HostedApplication
 from postriff_phase2.hosted_social import HostedSocial
@@ -25,7 +26,8 @@ POLICY_TOOL = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(POLICY_TOOL)
 APP = '123456789012345678'
 NOW = 1_800_000_000.0
-SECRET = 'h' * 24
+SECRET = secrets.token_hex(12)  # synthetic, generated per run (repo rule P2-SEC-CI-04)
+USER_SHAPED = 'prt_' + secrets.token_hex(8)
 WORKSPACE = '3f6c8d2e-1b7a-4c5d-9e8f-0a1b2c3d4e5f'
 LANE_ON = {'POSTRIFF_DISCORD_PARALLEL_WORKER_V1_ENABLED': 'true', 'POSTRIFF_DISCORD_WORKER_V1_ENABLED': 'true'}
 
@@ -89,18 +91,23 @@ class FakeDatabase:
                 raise RuntimeError('synthetic failure')
             self.result = [(6, NOW + .4, 40, 18.0, .9, NOW)]
             return
-        for name, marker in (('queue', 'pr_discord_worker_projection'), ('ledger', 'pr_discord_request_admissions'),
+        for name, marker in (('queue', 'pr_discord_worker_projection'), ('ledger', 'ORDER BY request_seq DESC LIMIT'),
+                             ('unresolved', "state = 'uncertain' AND is_publish"),
                              ('coordinator', 'pr_discord_rate_state'), ('servers', 'pr_encrypted_credentials'),
                              ('platform', 'FROM public.pr_operational_snapshots'), ('requests', 'FROM public.pr_request_metrics')):
             if marker in sql and name in self.fail:
                 raise RuntimeError('synthetic failure')
-        if sql.startswith('SELECT set_config'):
+        if sql == 'SELECT 1':
+            self.result = [(1,)]
+        elif sql.startswith('SELECT set_config'):
             self.result = [('2000ms', '500ms', NOW)]
         elif 'pr_discord_worker_projection' in sql:
             self.result = [(2, 1, 3, 420.5, NOW - 30)]
+        elif "state = 'uncertain' AND is_publish" in sql:
+            self.result = [(1, 0, 2, NOW - 4000)]
         elif 'pr_discord_request_admissions' in sql:
             self.result = [(120, NOW - 700, NOW - 2, 40, 33, 2, 1, 1, 2, 1, 0, 0, 0, 3, 0, 9, 60, 1, 80, 0, 0,
-                            NOW - 3, NOW - 1, 25)]
+                            NOW - 3, NOW - 1, 4, 25)]
         elif 'WHERE scope_key = ANY' in sql:
             keys = sorted(ops.guard_keys(self.adapter))
             kinds = [ops.GUARDS[key[:3]] for key in keys]
@@ -125,6 +132,9 @@ class FakeDatabase:
 
     def fetchone(self):
         return self.result[0]
+
+    def commit(self):
+        self.statements.append('COMMIT')
 
     def fetchall(self):
         return list(self.result)
@@ -152,7 +162,7 @@ class Authority(unittest.TestCase):
         return app
 
     def test_missing_wrong_or_user_tokens_never_start_the_runtime(self):
-        for authorization in ('', 'Bearer dev:someone', 'Bearer prt_not-cron-authority', 'Bearer ' + SECRET[:-1],
+        for authorization in ('', 'Bearer dev:someone', 'Bearer ' + USER_SHAPED, 'Bearer ' + SECRET[:-1],
                               SECRET, 'bearer ' + SECRET, 'Bearer ' + SECRET + ' ', 'Bearer é' + SECRET):
             with self.subTest(authorization=authorization):
                 app = self.app()
@@ -160,7 +170,7 @@ class Authority(unittest.TestCase):
                 app._runtime.assert_not_called()
 
     def test_a_short_or_absent_cron_secret_refuses_even_a_matching_bearer(self):
-        for secret in ('', 's' * 15):
+        for secret in ('', secrets.token_hex(8)[:15]):
             with self.subTest(length=len(secret)), patch.dict('os.environ', {'CRON_SECRET': secret}):
                 app = HostedApplication()
                 app._runtime = Mock(side_effect=AssertionError('runtime initialized'))
@@ -215,7 +225,7 @@ class Payload(unittest.TestCase):
     def test_the_payload_carries_counts_ages_booleans_and_codes_only(self):
         payload, _ = self.snapshot()
         allowed_text = {'rafii.discord.ops.health', 'health_route', 'observed', 'open', 'closed', 'list', 'instance',
-                        'production', 'attention', 'ok', 'no_coordinator', 'w02-health', 'not_installed'}
+                        'production', 'attention', 'ok', 'no_coordinator', 'w02-health', 'not_installed', 'worker_factory'}
         for path, value in leaves(payload):
             with self.subTest(path='.'.join(map(str, path))):
                 if isinstance(value, str):
@@ -269,6 +279,7 @@ class Payload(unittest.TestCase):
         deliveries = payload['deliveries']
         self.assertEqual((deliveries['creates'], deliveries['accepted'], deliveries['rejectedCustomer'],
                           deliveries['rejectedSystem'], deliveries['uncertain']), (40, 33, 2, 1, 2))
+        self.assertEqual(deliveries['rejectedUpstream'], 4, 'answers 5xx to creates: Discord\'s side (second review N-9)')
         self.assertTrue(deliveries['windowCovered'])
         guards = payload['coordinator']['guards']
         self.assertEqual(sorted(guards), ['bearer', 'credential', 'global', 'invalid', 'policy'])
@@ -355,6 +366,84 @@ class Payload(unittest.TestCase):
         self.assertEqual(payload['coordinator']['status'], 'no_coordinator')
         self.assertFalse([s for s in database.statements if 'scope_key = ANY' in s])
         self.assertFalse(payload['config']['policy']['present'])
+
+
+class SlotGuard(unittest.TestCase):
+    def test_the_payload_reports_the_guard_the_serving_coordinator_uses(self):
+        """RATE_APP_BUDGET_SPENT divides by what can be admitted: the payload carries the coordinator's own constant, so a
+        later guard change moves the alert with it instead of disarming it."""
+        adapter = provider()
+        payload = ops.snapshot(worker_for(adapter, FakeDatabase(adapter)), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
+        self.assertEqual(payload['config']['policy']['slotGuardSeconds'],
+                         getattr(adapter.rate_limiter, 'SLOT_GUARD_SECONDS', None))
+        self.assertEqual(payload['config']['policy']['slotGuardSeconds'], getattr(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', None))
+
+    def test_the_payload_says_whether_a_read_under_a_hold_waits(self):
+        """The operator-hold alert says what a hold does to read-backs on the serving build (rate_limits.HOLD_WAIT_SECONDS
+        where the build has the limiter's read wait; null where it does not)."""
+        adapter = provider()
+        payload = ops.snapshot(worker_for(adapter, FakeDatabase(adapter)), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
+        self.assertEqual(payload['config']['holdReadWaitSeconds'], getattr(rate_limits, 'HOLD_WAIT_SECONDS', None))
+
+    def test_the_payload_reports_the_reserve_bookings_leave(self):
+        """The budget alert divides by what bookings can take, (cap - reserve) / (window + guard): the reserve comes from the
+        serving coordinator (SharedPostgresBudget.IMMEDIATE_RESERVE while it books, 0 when BOOK_AHEAD_SECONDS is 0)."""
+        adapter = provider()
+        payload = ops.snapshot(worker_for(adapter, FakeDatabase(adapter)), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
+        limiter = adapter.rate_limiter
+        books = (getattr(limiter, 'BOOK_AHEAD_SECONDS', 0) or 0) > 0
+        self.assertEqual(payload['config']['policy']['immediateReserve'],
+                         getattr(limiter, 'IMMEDIATE_RESERVE', None) if books else 0)
+
+
+class RoundTrip(unittest.TestCase):
+    """The captain's round 3: the first Production health read prints the database round trip from the function, through the
+    coordinator's own connection path, so the lock bound of the limiter's Q22 can be judged on the real number (G5)."""
+
+    def test_five_selects_and_a_commit_through_a_new_connection_with_a_fake_clock(self):
+        adapter = provider()
+        ticks = iter([10.0, 10.030] + [t for i in range(5) for t in (11 + i, 11 + i + (0.002, 0.004, 0.003, 0.009, 0.001)[i])]
+                     + [20.0, 20.005, 20.010])
+        database = FakeDatabase(adapter)
+        section = ops.read_round_trip(database, lambda: next(ticks), NOW)
+        self.assertEqual(section, {'status': 'observed', 'sampledAt': NOW, 'statements': 5, 'connectMs': 30.0,
+                                   'selectP50Ms': 3.0, 'selectMaxMs': 9.0, 'commitMs': 5.0, 'elapsedMs': 10010.0,
+                                   'lockBoundFixedMs': ops.LOCK_BOUND_FIXED_MS, 'lockBoundRoundTrips': ops.LOCK_BOUND_ROUND_TRIPS})
+        self.assertEqual([sql for sql in database.statements if sql in ('SELECT 1', 'COMMIT')], ['SELECT 1'] * 5 + ['COMMIT'])
+        self.assertTrue(all(sql in ('SELECT 1', 'COMMIT') or sql.startswith("SELECT set_config('statement_timeout'")
+                            for sql in database.statements), database.statements)
+
+    def test_a_failure_is_an_unavailable_section_never_a_failed_snapshot(self):
+        adapter = provider()
+        section = ops.read_round_trip(FakeDatabase(adapter, raise_on_connect=True), lambda: 0.0, NOW)
+        self.assertEqual(section, {'status': 'unavailable', 'error': 'OSError'})
+        self.assertEqual(ops.read_round_trip(None, lambda: 0.0, NOW), {'status': 'unavailable', 'error': 'RuntimeError'})
+
+    def test_the_payload_opens_a_new_connection_to_the_applications_own_url(self):
+        adapter = provider()
+        pooled, worker_db = FakeDatabase(adapter), FakeDatabase(adapter)
+        url = 'postgresql://pooler.example.invalid:6543/postgres'      # no credentials: never a secret in a test
+        with patch('postriff_phase2.hosted_app.postgres_factory', return_value=pooled) as opener:
+            payload = ops.snapshot(worker_for(adapter, worker_db), {'POSTRIFF_DATABASE_URL': url}, clock=lambda: NOW,
+                                   monotonic=lambda: 0.0)
+        opener.assert_called_once_with(url, pooled=False)
+        section = payload['coordinator']['roundTrip']
+        self.assertEqual((section['status'], section['statements'], section['path']), ('observed', 5, 'new_connection'))
+        self.assertEqual(pooled.statements.count('SELECT 1'), 5)
+        self.assertNotIn('SELECT 1', worker_db.statements)
+        without = ops.snapshot(worker_for(adapter, worker_db), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
+        self.assertEqual(without['coordinator']['roundTrip']['path'], 'worker_factory')
+
+
+class ProbeProducer(unittest.TestCase):
+    def test_nothing_in_this_build_writes_the_isolation_probe(self):
+        """Second review N-5: CROSS_TENANT_PROBE_FAILED reads security.probe, which neither the route nor the SQL twin
+        writes. The runbook (row 1), H07-EVIDENCE and the policy map say so; when a producer lands (the Q-05 hosted run),
+        this fails and they must change."""
+        adapter = provider()
+        payload = ops.snapshot(worker_for(adapter, FakeDatabase(adapter)), {}, clock=lambda: NOW, monotonic=lambda: 0.0)
+        self.assertNotIn('probe', payload['security'])
+        self.assertNotIn("'probe'", (ROOT / 'docs/ops/discord-ops-snapshot.sql').read_text())
 
 
 class Constants(unittest.TestCase):

@@ -21,6 +21,9 @@ is read.
   row per workspace);
 - deliveries, traffic and progress: the newest SAMPLE_LIMIT coordinator admissions by request_seq (its unique index),
   filtered by time inside the database;
+- unresolved: every publish admission still uncertain, sent but unanswered, or holding a live permit, whatever its age,
+  through the partial index pr_discord_admission_unresolved (migration 124; these rows stay until a reviewed release,
+  W-02 OPEN-QUESTIONS Q3, so they are few);
 - coordinator: the four application-wide rows by primary key, and a count by kind of the rows that carry a hold, a
   block or a circuit (one pass over that operational table);
 - servers used: the connect gate's own count (Discord credential rows plus live installation starts; the statement
@@ -38,7 +41,7 @@ import time
 
 from postriff_alpha.domain import AlphaError
 
-from . import lane, launch_gate, worker as discord_worker
+from . import lane, launch_gate, rate_limits, worker as discord_worker
 
 ROUTE = '/api/ops/discord/health'
 PREFIX = '/api/ops/discord/'
@@ -144,6 +147,22 @@ def config_section(provider, now, values):
                              invalidWindowSeconds=policy.invalid_window_seconds,
                              bearerCapacity=policy.bearer_capacity or None,
                              bearerWindowSeconds=policy.bearer_window_seconds if policy.bearer_capacity else None)
+    # The coordinator's own slot guard (SharedPostgresBudget.SLOT_GUARD_SECONDS, where the build has one): the budget
+    # alert divides by what can be admitted, and reading the constant here means a later change moves the alert with it.
+    guard = getattr(limiter, 'SLOT_GUARD_SECONDS', None) if limiter is not None else None
+    out['policy']['slotGuardSeconds'] = float(guard) if discord_worker.finite(guard) else None
+    # The slots of each window that bookings leave to callers that cannot wait (SharedPostgresBudget.IMMEDIATE_RESERVE while
+    # the coordinator books, BOOK_AHEAD_SECONDS above 0; 0 otherwise): the lanes, which book, can take (cap - reserve) a window.
+    if limiter is not None:
+        book = getattr(limiter, 'BOOK_AHEAD_SECONDS', 0)
+        reserve = getattr(limiter, 'IMMEDIATE_RESERVE', 0)
+        books = discord_worker.finite(book) and book > 0
+        out['policy']['bookAheadSeconds'] = float(book) if discord_worker.finite(book) else None
+        out['policy']['immediateReserve'] = int(reserve) if books and discord_worker.finite(reserve) else 0
+    # What a read refused by a hold is told to wait (rate_limits.HOLD_WAIT_SECONDS, the limiter's B4), or null on a build
+    # without it, where a created post's read-back fails under the hold and is parked: the hold alert says which.
+    wait = getattr(rate_limits, 'HOLD_WAIT_SECONDS', None)
+    out['holdReadWaitSeconds'] = float(wait) if discord_worker.finite(wait) else None
     return out
 
 
@@ -182,7 +201,7 @@ SELECT count(*),
                           AND s.state = 'observed' AND s.status_code IN (403, 404)),
        count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - make_interval(secs => %(window)s)
                           AND s.state = 'observed' AND s.status_code NOT BETWEEN 200 AND 299
-                          AND s.status_code NOT IN (403, 404, 429)),
+                          AND s.status_code NOT IN (403, 404, 429) AND s.status_code < 500),
        count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - make_interval(secs => %(window)s)
                           AND s.state = 'observed' AND s.status_code = 429),
        count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - make_interval(secs => %(window)s)
@@ -212,6 +231,8 @@ SELECT count(*),
                                                       AND s.status_code BETWEEN 200 AND 299))::double precision,
        extract(epoch FROM max(s.outcome_at) FILTER (WHERE s.route_key = %(readback)s AND s.state = 'observed'
                                                       AND s.status_code BETWEEN 200 AND 299))::double precision,
+       count(*) FILTER (WHERE s.is_publish AND s.last_at > o.at - make_interval(secs => %(window)s)
+                          AND s.state = 'observed' AND s.status_code >= 500),
        count(*) FILTER (WHERE %(bearer)s AND s.credential_kind = 'user'
                           AND s.reserved_at > o.at - make_interval(secs => %(saturation)s))
 FROM sample s CROSS JOIN observed o'''
@@ -227,7 +248,7 @@ def read_ledger(cur, now, context):
                           'readback': READBACK_ROUTE_KEY, 'bearer': bearer})
     (sampled, oldest, newest, creates, accepted, customer, system, limited, uncertain, blocked, in_flight,
      stuck_new, stuck_all, r429, r429_global, invalid, responses, server_errors, admitted, uncertain_reads,
-     unauthorized, last_accepted, last_readback, bearer_admitted) = cur.fetchone()
+     unauthorized, last_accepted, last_readback, upstream, bearer_admitted) = cur.fetchone()
     sampled = int(sampled)
     span = _age(now, oldest) if sampled else None
     # The sample is the newest SAMPLE_LIMIT rows: a window is fully seen when the sample is not full or reaches back.
@@ -237,7 +258,9 @@ def read_ledger(cur, now, context):
         return not full or (span is not None and span >= seconds)
     deliveries = {'status': 'observed', 'windowSeconds': DELIVERY_WINDOW, 'windowCovered': covered(DELIVERY_WINDOW),
                   'sampled': sampled, 'sampleLimit': SAMPLE_LIMIT, 'creates': int(creates), 'accepted': int(accepted),
-                  'rejectedCustomer': int(customer), 'rejectedSystem': int(system), 'rateLimited': int(limited),
+                  'rejectedCustomer': int(customer), 'rejectedSystem': int(system),
+                  # 5xx answers to creates: Discord's side (or something between us and Discord), apart from ours (N-9)
+                  'rejectedUpstream': int(upstream), 'rateLimited': int(limited),
                   'uncertain': int(uncertain), 'blocked': int(blocked), 'inFlight': int(in_flight),
                   'stuckSent': int(stuck_new), 'stuckSentTotal': int(stuck_all)}
     traffic = {'responses429': int(r429), 'responses429Global': int(r429_global), 'invalid10m': int(invalid),
@@ -280,6 +303,24 @@ def guard_keys(provider):
     if bearer:
         found[bearer] = GUARDS[bearer[:3]]
     return found
+
+
+_UNRESOLVED = '''SELECT
+    (SELECT count(*) FROM public.pr_discord_request_admissions WHERE state = 'uncertain' AND is_publish),
+    (SELECT count(*) FROM public.pr_discord_request_admissions
+      WHERE state = 'sent' AND is_publish AND sent_at <= clock_timestamp() - make_interval(secs => %(stuck)s)),
+    (SELECT count(*) FROM public.pr_discord_request_admissions
+      WHERE state IN ('reserved', 'sealed') AND expires_at > clock_timestamp() AND is_publish),
+    (SELECT extract(epoch FROM min(coalesce(sent_at, reserved_at)))::double precision FROM public.pr_discord_request_admissions
+      WHERE is_publish AND (state = 'uncertain'
+                            OR state = 'sent' AND sent_at <= clock_timestamp() - make_interval(secs => %(stuck)s)))'''
+
+
+def read_unresolved(cur, now, context):
+    cur.execute(_UNRESOLVED, {'stuck': STUCK_SENT_SECONDS})
+    uncertain, stuck, live, oldest = cur.fetchone()
+    return {'status': 'observed', 'uncertainPublishes': int(uncertain), 'stuckSentPublishes': int(stuck),
+            'livePermits': int(live), 'oldestUnresolvedAgeSeconds': _age(now, oldest)}
 
 
 def _guard(row, now):
@@ -449,6 +490,60 @@ def _savepoint(cur, errors, name, read, now, context):
         return None
 
 
+# The coordinator's row lock bounds every admitter at about 1000 / (LOCK_BOUND_FIXED_MS + LOCK_BOUND_ROUND_TRIPS x round trip)
+# admissions a second: an admission holds the application row's lock for 10.8 database round trips plus a fixed 17 ms, the fixed
+# part measured on a loaded test box (the limiter's analysis, docs/w02/OPEN-QUESTIONS.md Q22, limiter c400cb9c). Nobody has
+# measured the round trip from a Vercel function to the Supabase pooler: read_round_trip does, and COORD_LOCK_BOUND reads it.
+LOCK_BOUND_FIXED_MS = 17.0
+LOCK_BOUND_ROUND_TRIPS = 10.8
+ROUND_TRIP_STATEMENTS = 5
+
+
+def read_round_trip(factory, timer, now):
+    """The database round trip from this function through `factory` (the coordinator's own connection path, the pooler URL the
+    application uses): milliseconds to open a new connection (TLS included), five sequential SELECT 1 (p50 and max) and one
+    COMMIT. Read-only, no table, no write, no lock, each statement under a 1 s timeout. A failure is this section's
+    'unavailable', never the snapshot's. The first read on the staged dark build is the real number (the G5 evidence)."""
+    def ms(seconds):
+        return round(seconds * 1000.0, 2)
+    try:
+        if factory is None:
+            raise RuntimeError('no connection factory')
+        started = timer()
+        with factory() as db:
+            opened = timer()
+            with db.cursor() as cur:
+                cur.execute("SELECT set_config('statement_timeout', '1000ms', true)")
+                cur.fetchone()
+                times = []
+                for _ in range(ROUND_TRIP_STATEMENTS):
+                    before = timer()
+                    cur.execute('SELECT 1')
+                    cur.fetchone()
+                    times.append(timer() - before)
+            before = timer()
+            db.commit()
+            commit = timer() - before
+        times.sort()
+        return {'status': 'observed', 'sampledAt': round(now, 3), 'statements': len(times), 'connectMs': ms(opened - started),
+                'selectP50Ms': ms(times[len(times) // 2]), 'selectMaxMs': ms(times[-1]), 'commitMs': ms(commit),
+                'elapsedMs': ms(timer() - started), 'lockBoundFixedMs': LOCK_BOUND_FIXED_MS,
+                'lockBoundRoundTrips': LOCK_BOUND_ROUND_TRIPS}
+    except Exception as error:
+        return {'status': 'unavailable', 'error': type(error).__name__}
+
+
+def round_trip_factory(values, fallback):
+    """A NEW connection to the application's own database URL (POSTRIFF_DATABASE_URL, the pooler the coordinator's row lock is
+    reached through), with the application's own options (hosted_app.postgres_factory, unpooled), so connectMs includes the
+    connection setup and TLS; without the URL (tests, a local build) the worker's factory."""
+    dsn = values.get('POSTRIFF_DATABASE_URL') if hasattr(values, 'get') else None
+    if dsn:
+        from ..hosted_app import postgres_factory
+        return postgres_factory(dsn, pooled=False), 'new_connection'
+    return fallback, 'worker_factory'
+
+
 def _unavailable(name, errors):
     error = next((e['error'] for e in errors if e['section'] in (name, 'database')), None)
     return {'status': 'unavailable', **({'error': error} if error else {})}
@@ -476,7 +571,7 @@ def snapshot(worker, values=None, *, clock=time.time, monotonic=time.monotonic):
                         "extract(epoch FROM clock_timestamp())::double precision", (STATEMENT_TIMEOUT,))
             db_now = float(cur.fetchone()[2])
             result['observedAt'] = round(db_now, 3)
-            for name, read in (('queue', read_queue), ('ledger', read_ledger), ('coordinator', read_coordinator),
+            for name, read in (('queue', read_queue), ('ledger', read_ledger), ('unresolved', read_unresolved), ('coordinator', read_coordinator),
                                ('retention', read_retention), ('booking', read_booking), ('servers', read_servers), ('platform', read_platform),
                                ('requests', read_requests)):
                 found[name] = _savepoint(cur, errors, name, read, db_now, context)
@@ -486,6 +581,7 @@ def snapshot(worker, values=None, *, clock=time.time, monotonic=time.monotonic):
     ledger = found.get('ledger')
     result['queue'] = queue[0] if queue else _unavailable('queue', errors)
     result['deliveries'] = ledger[0] if ledger else _unavailable('ledger', errors)
+    result['unresolved'] = found.get('unresolved') or _unavailable('unresolved', errors)
     progress = {'lastClaimAgeSeconds': None, 'lastAdmissionAgeSeconds': None, 'lastAcceptedCreateAgeSeconds': None,
                 'lastReadbackAgeSeconds': None, 'sampleSpanSeconds': None}
     progress.update(queue[1] if queue else {})
@@ -496,6 +592,14 @@ def snapshot(worker, values=None, *, clock=time.time, monotonic=time.monotonic):
     coordinator['traffic'] = ledger[1] if ledger else {'status': 'unavailable'}
     coordinator['retention'] = found.get('retention') or _unavailable('retention', errors)
     coordinator['booking'] = found.get('booking') or _unavailable('booking', errors)
+    round_trip_db, path = round_trip_factory(values, factory)
+    if any(e['section'] == 'database' for e in errors):     # no second wait for a database that did not answer
+        coordinator['roundTrip'] = dict(_unavailable('roundTrip', errors), path=path)
+    else:
+        round_trip = read_round_trip(round_trip_db, monotonic, now)
+        coordinator['roundTrip'] = dict(round_trip, path=path)
+        if round_trip['status'] != 'observed':
+            errors.append({'section': 'roundTrip', 'error': round_trip.get('error')})
     result['coordinator'] = coordinator
     config['servers'] = found.get('servers') or _unavailable('servers', errors)
     result['platform'] = found.get('platform') or _unavailable('platform', errors)

@@ -1,0 +1,4 @@
+{
+  "_format": "One entry per real test on real people and real destinations: {requirement, kind: real, result: pass|fail, people: real, destination: real, at: ISO time, reference: where the receipt is}. Requirement names are in src/rafii_control/oncall/readiness.py. Isolated drills (kind isolated) never count toward VERIFIED.",
+  "evidence": []
+}

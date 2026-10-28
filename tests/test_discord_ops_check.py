@@ -1,10 +1,15 @@
 """H-07 alert rules (scripts/discord_ops_check.py): every rule at and around its thresholds, the healthy baseline,
 transitions, the log parser and the command line. Pure: no database, network or credential."""
 import copy
+import http.server
 import importlib.util
 import io
 import json
+import math
+import secrets
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -33,7 +38,7 @@ def healthy():
                    'coordinatorDegraded': False,
                    'policy': {'present': True, 'valid': True, 'daysLeft': 20.0, 'revision': 'rafii-w1-20261101',
                               'appCapacity': 25, 'appWindowSeconds': 1, 'invalidCapacity': 2000,
-                              'invalidWindowSeconds': 600},
+                              'invalidWindowSeconds': 600, 'slotGuardSeconds': 0.1},
                    'servers': {'status': 'observed', 'counted': 120, 'inFlight': 3, 'used': 123, 'ratio': 0.0123}},
         'queue': {'status': 'observed', 'dueWorkspaces': 2, 'dueWithin5Min': 10, 'pendingWorkspaces': 12,
                   'oldestDueLagSeconds': 20.0},
@@ -90,7 +95,7 @@ class Baseline(unittest.TestCase):
                 self.assertEqual(alerts(snapshot, phase=phase), [])
 
     def test_the_thresholds_file_carries_every_value_the_rules_read(self):
-        self.assertIn(THRESHOLDS['phase'], check.PHASES)
+        self.assertNotIn('phase', THRESHOLDS, 'the phase is given on every run (review M3)')
         broken = healthy()
         broken['queue']['oldestDueLagSeconds'] = 10_000
         for section in ('backlog', 'delivery', 'rate_limit', 'silent_halt', 'cross_tenant', 'config'):
@@ -99,7 +104,7 @@ class Baseline(unittest.TestCase):
         self.assertTrue(alerts(broken))
 
     def test_pages_sort_before_warnings(self):
-        snapshot = with_(('queue', 'oldestDueLagSeconds'), 400.0)
+        snapshot = with_(('queue', 'oldestDueLagSeconds'), 1000.0)
         snapshot['coordinator']['traffic']['unauthorized'] = 1
         result = alerts(snapshot)
         self.assertEqual([a['severity'] for a in result], ['page', 'warn'])
@@ -120,7 +125,8 @@ class Baseline(unittest.TestCase):
 
 class Backlog(unittest.TestCase):
     def test_boundaries(self):
-        for lag, expected in ((300.0, None), (300.1, 'warn'), (900.0, 'warn'), (900.1, 'page')):
+        # Review M2: the standard burst drains in about 23 minutes and one workspace can need 40; page above 45.
+        for lag, expected in ((900.0, None), (900.1, 'warn'), (2400.0, 'warn'), (2700.0, 'warn'), (2700.1, 'page')):
             with self.subTest(lag=lag):
                 self.assertEqual(found(with_(('queue', 'oldestDueLagSeconds'), lag), 'BACKLOG_LAG'), expected)
 
@@ -145,6 +151,20 @@ class Delivery(unittest.TestCase):
             with self.subTest(attempts=accepted + system, system=system):
                 self.assertEqual(found(self.deliveries(accepted=accepted, rejectedSystem=system),
                                        'DELIVERY_SYSTEM_FAILURES'), expected)
+
+    def test_discord_5xx_on_creates_is_discords_side_and_never_pages(self):
+        """Second review N-9 (exp_503): Discord answering 503 to 29 of 30 creates paged DELIVERY_SYSTEM_FAILURES (P0) as a
+        reason on our side. 5xx answers to creates are counted apart (rejectedUpstream): a warning on Discord's side, while
+        a failure on our side (a 400, a request we built wrong) still pages."""
+        outage = self.deliveries(accepted=1, rejectedUpstream=29)
+        raised = {a['id']: a for a in alerts(outage)}
+        self.assertNotIn('DELIVERY_SYSTEM_FAILURES', raised)
+        self.assertEqual(raised['DELIVERY_DISCORD_5XX']['severity'], 'warn')
+        self.assertEqual(raised['DELIVERY_DISCORD_5XX']['evidence'].get('createsAnswered5xx'), 29)
+        self.assertEqual(found(self.deliveries(accepted=1, rejectedSystem=29), 'DELIVERY_SYSTEM_FAILURES'), 'page')
+        mixed = self.deliveries(accepted=81, rejectedUpstream=10, rejectedSystem=9)   # 9 of 100 (not of 90): warn, not page
+        alert = [a for a in alerts(mixed) if a['id'] == 'DELIVERY_SYSTEM_FAILURES'][0]
+        self.assertEqual((alert['severity'], alert['evidence']['attempts']), ('warn', 100), 'upstream counts in the attempts')
 
     def test_uncertain_and_stuck_creates_count_as_system_failures(self):
         alert = [a for a in alerts(self.deliveries(accepted=10, uncertain=1, stuckSent=2)) if a['id'] == 'DELIVERY_SYSTEM_FAILURES']
@@ -179,16 +199,64 @@ class Delivery(unittest.TestCase):
 
 
 class RateLimit(unittest.TestCase):
-    def test_application_budget_spent_for_a_minute(self):
+    # The coordinator holds each admission's slot for its window plus a guard of at most a tenth of it
+    # (SharedPostgresBudget._span), so under continuous demand 25 a second over 1 s with a 0.1 s guard admits at most
+    # 25 x 60 / 1.1 = 1363.6 a minute. "Budget nearly spent" is 95% of what can be admitted, not of the nominal 1,500.
+    ACHIEVABLE = 25 * 60 / 1.1
+
+    def spent(self, admitted, **policy):
+        snapshot = with_(('coordinator', 'traffic', 'admissions60s'), admitted)
+        for key, value in policy.items():
+            if value is None:
+                snapshot['config']['policy'].pop(key, None)
+            else:
+                snapshot['config']['policy'][key] = value
+        return found(snapshot, 'RATE_APP_BUDGET_SPENT')
+
+    def test_application_budget_spent_against_the_achievable_ceiling(self):
+        warn_at = math.ceil(0.95 * self.ACHIEVABLE)
+        for admitted, expected in ((warn_at - 1, None), (warn_at, 'warn'), (int(self.ACHIEVABLE), 'warn')):
+            with self.subTest(admitted=admitted):
+                self.assertEqual(self.spent(admitted, slotGuardSeconds=0.1), expected)
+
+    def test_continuous_demand_under_the_limiters_guard_is_reported(self):
+        # Review of D3 on the limiter head: at a 0.1 s guard the ledger shows 0.909 of the nominal ceiling at most, so a
+        # rule against the nominal ceiling and 0.95 could never fire again.
+        self.assertEqual(self.spent(int(1500 / 1.1), slotGuardSeconds=0.1), 'warn')
+
+    def test_without_a_guard_the_nominal_ceiling_is_the_achievable_one(self):
         for admitted, expected in ((1424, None), (1425, 'warn')):
             with self.subTest(admitted=admitted):
-                self.assertEqual(found(with_(('coordinator', 'traffic', 'admissions60s'), admitted),
-                                       'RATE_APP_BUDGET_SPENT'), expected)
+                self.assertEqual(self.spent(admitted, slotGuardSeconds=0.0), expected)
+
+    def test_a_guard_above_a_tenth_of_the_window_counts_as_a_tenth(self):
+        self.assertEqual(self.spent(int(self.ACHIEVABLE), slotGuardSeconds=5.0), 'warn')
+        self.assertEqual(self.spent(math.ceil(0.95 * self.ACHIEVABLE) - 1, slotGuardSeconds=5.0), None)
+
+    def test_an_unknown_guard_is_the_largest_the_coordinator_allows(self):
+        # A snapshot without the build's guard (the SQL twin, an older build) is judged against the smallest achievable
+        # ceiling, so no guard the coordinator can use makes the alert unreachable.
+        self.assertEqual(self.spent(math.ceil(0.95 * self.ACHIEVABLE), slotGuardSeconds=None), 'warn')
+        self.assertEqual(self.spent(math.ceil(0.95 * self.ACHIEVABLE) - 1, slotGuardSeconds=None), None)
+
+    def test_the_evaluators_ceiling_is_the_coordinators_span(self):
+        from types import SimpleNamespace
+        from postriff_phase2.discord.rate_limits import SharedPostgresBudget
+        span = getattr(SharedPostgresBudget, '_span', None)
+        guard = getattr(SharedPostgresBudget, 'SLOT_GUARD_SECONDS', None)
+        if span is None or guard is None:
+            self.skipTest('this build has no slot guard (the limiter line adds it)')
+        for window in (1.0, 0.5, 10.0):
+            with self.subTest(window=window):
+                expected = 25 * 60.0 / span(SimpleNamespace(SLOT_GUARD_SECONDS=guard), window)
+                self.assertAlmostEqual(check.achievable_per_minute(25, window, guard), expected)
 
     def test_the_sql_twin_reads_the_budget_from_the_policy_row(self):
         snapshot = with_(('coordinator', 'traffic', 'admissions60s'), 1500)
         del snapshot['config']
         self.assertEqual(found(snapshot, 'RATE_APP_BUDGET_SPENT'), 'warn')
+        snapshot['coordinator']['traffic']['admissions60s'] = math.ceil(0.95 * self.ACHIEVABLE) - 1
+        self.assertIsNone(found(snapshot, 'RATE_APP_BUDGET_SPENT'))
 
     def test_invalid_requests_in_ten_minutes(self):
         for count, expected in ((1000, None), (1001, 'page')):
@@ -405,6 +473,7 @@ class ConfigDrift(unittest.TestCase):
         for name in ('config', 'lane', 'build'):
             del snapshot[name]
         snapshot['source'] = 'sql'
+        snapshot['servers'] = {'status': 'observed', 'counted': 120, 'inFlight': 3, 'used': 123}
         self.assertEqual(alerts(snapshot), [])
 
 
@@ -441,8 +510,8 @@ class CommandLine(unittest.TestCase):
 
     def test_exit_codes_follow_the_worst_severity(self):
         self.assertEqual(self.run_cli(healthy(), '--phase', 'open')[0], 0)
-        self.assertEqual(self.run_cli(with_(('queue', 'oldestDueLagSeconds'), 400.0), '--phase', 'open')[0], 1)
-        code, report = self.run_cli({'unavailable': True, 'reason': 'http_503'})
+        self.assertEqual(self.run_cli(with_(('queue', 'oldestDueLagSeconds'), 1000.0), '--phase', 'open')[0], 1)
+        code, report = self.run_cli({'unavailable': True, 'reason': 'http_503'}, '--phase', 'open')
         self.assertEqual((code, report['worst']), (2, 'page'))
 
     def test_previous_alerts_give_transitions(self):
@@ -453,13 +522,454 @@ class CommandLine(unittest.TestCase):
         self.assertEqual((code, report['transitions']['cleared']), (0, ['BACKLOG_LAG']))
 
     def test_a_failed_fetch_is_an_unavailable_snapshot_and_the_bearer_is_never_printed(self):
-        with patch.dict('os.environ', {'DISCORD_OPS_BEARER': 'b' * 32}), patch('sys.stdout', io.StringIO()) as printed:
+        bearer = secrets.token_hex(16)
+        with patch.dict('os.environ', {'DISCORD_OPS_BEARER': bearer}), patch('sys.stdout', io.StringIO()) as printed:
             self.assertEqual(check.main(['fetch', 'http://127.0.0.1:9/api/ops/discord/health', '--timeout', '1']), 0)
         self.assertEqual(json.loads(printed.getvalue()), {'unavailable': True, 'reason': 'unreachable'})
-        self.assertNotIn('b' * 32, printed.getvalue())
+        self.assertNotIn(bearer, printed.getvalue())
         with patch.dict('os.environ', {}, clear=True), patch('sys.stdout', io.StringIO()) as printed:
             check.main(['fetch', 'http://127.0.0.1:9/'])
         self.assertEqual(json.loads(printed.getvalue())['reason'], 'no_bearer')
+
+
+class ReviewFindings(unittest.TestCase):
+    """The independent review of 8e76afdd (findings M1, M3, M4, M6, M8, L3): each test failed on the reviewed
+    evaluator and passes on this one (H07-EVIDENCE.md lists the before and after runs)."""
+
+    def test_M1_a_malformed_snapshot_is_an_alarm_not_silence(self):
+        for mutate, detail in ((lambda s: s.update(kind='something.else'), 'kind'),
+                               (lambda s: s.update(version=2), 'version'),
+                               (lambda s: s.update(source='unknown'), 'source'),
+                               (lambda s: s.pop('deliveries'), 'missing:deliveries'),
+                               (lambda s: s.pop('coordinator'), 'missing:coordinator'),
+                               (lambda s: s.update(errors=None), 'missing:errors')):
+            snapshot = healthy()
+            mutate(snapshot)
+            with self.subTest(detail=detail):
+                hits = [a for a in alerts(snapshot) if a['id'] == 'SILENT_HALT_HEALTH_UNANSWERED']
+                self.assertEqual([(a['severity'], a['evidence'].get('detail')) for a in hits], [('page', detail)])
+        self.assertEqual(alerts({}), [a for a in alerts({}) if a['id'] == 'SILENT_HALT_HEALTH_UNANSWERED'])
+        self.assertTrue(alerts({}))
+
+    def test_M1_each_failed_section_warns_then_pages_when_it_persists(self):
+        snapshot = healthy()
+        snapshot['errors'] = [{'section': 'ledger', 'error': 'QueryCanceled'}, {'section': 'servers', 'error': 'UndefinedTable'}]
+        first = [a for a in alerts(snapshot) if a['id'] == 'SILENT_HALT_SECTION']
+        self.assertEqual(sorted((a['scope'], a['severity']) for a in first), [('ledger', 'warn'), ('servers', 'warn')])
+        second = [a for a in check.evaluate(snapshot, THRESHOLDS, now=NOW, phase='open', previous={'alerts': first})
+                  if a['id'] == 'SILENT_HALT_SECTION']
+        self.assertEqual(sorted((a['scope'], a['severity']) for a in second), [('ledger', 'page'), ('servers', 'page')])
+        snapshot['errors'] = [{'section': 'ledger', 'error': 'QueryCanceled'}]
+        third = check.evaluate(snapshot, THRESHOLDS, now=NOW, phase='open', previous={'alerts': second})
+        self.assertEqual(check.transitions(second, third)['cleared'], ['SILENT_HALT_SECTION/servers'])
+
+    def test_M1_no_progress_still_pages_when_the_ledger_section_failed(self):
+        """Measured by the review (exp_missing): ledger unavailable, work 1,500 s overdue, last claim 4,000 s ago."""
+        snapshot = with_(('queue', 'oldestDueLagSeconds'), 1500.0)
+        snapshot['deliveries'] = {'status': 'unavailable', 'error': 'UndefinedTable'}
+        snapshot['progress'] = {'status': 'partial', 'lastClaimAgeSeconds': 4000.0, 'lastAdmissionAgeSeconds': None,
+                                'lastAcceptedCreateAgeSeconds': None, 'lastReadbackAgeSeconds': None, 'sampleSpanSeconds': None}
+        snapshot['errors'] = [{'section': 'ledger', 'error': 'UndefinedTable'}]
+        result = {(a['id'], a['severity']) for a in alerts(snapshot)}
+        self.assertIn(('SILENT_HALT_NO_PROGRESS', 'page'), result)
+        self.assertIn(('SILENT_HALT_SECTION', 'warn'), result)
+        snapshot['progress']['lastClaimAgeSeconds'] = 10.0          # claims continue: not a halt, but the ledger is blind
+        self.assertNotIn('SILENT_HALT_NO_PROGRESS', {a['id'] for a in alerts(snapshot)})
+
+    def test_M3_the_phase_is_required_on_the_command_line_and_the_function_defaults_to_open(self):
+        closed = with_(('config', 'gate'), {'mode': 'closed', 'workspaces': 0, 'misconfigured': False})
+        self.assertIn('CONFIG_GATE', {a['id'] for a in check.evaluate(closed, THRESHOLDS, now=NOW)})
+        with tempfile.TemporaryDirectory() as folder, patch('sys.stderr', io.StringIO()):
+            path = Path(folder) / 'snapshot.json'
+            path.write_text(json.dumps(closed))
+            with self.assertRaises(SystemExit):
+                check.main(['evaluate', str(path), '--now', str(NOW)])
+
+    def test_M4_an_unresolved_uncertain_admission_keeps_the_warning_after_its_window(self):
+        snapshot = healthy()
+        snapshot['unresolved'] = {'status': 'observed', 'uncertainPublishes': 2, 'stuckSentPublishes': 1, 'livePermits': 0,
+                                  'oldestUnresolvedAgeSeconds': 5400.0}
+        result = {a['id']: a for a in alerts(snapshot)}
+        self.assertEqual(result['DELIVERY_UNCERTAIN']['severity'], 'warn')
+        self.assertEqual(result['DELIVERY_UNCERTAIN']['evidence']['unresolved'], 2)
+        self.assertEqual(result['DELIVERY_STUCK_SENT']['evidence']['unresolved'], 1)
+        snapshot['deliveries'] = {'status': 'unavailable'}             # the 15-minute ledger failed: the counts still stand
+        self.assertEqual({a['id'] for a in alerts(snapshot)} & {'DELIVERY_UNCERTAIN', 'DELIVERY_STUCK_SENT'},
+                         {'DELIVERY_UNCERTAIN', 'DELIVERY_STUCK_SENT'})
+
+    def test_M6_held_and_failed_growth_against_the_previous_report(self):
+        before = healthy()
+        before['platform'].update(publicationHeld=4, publicationFailed=10)
+        memory = check.memory(before)
+        after = healthy()
+        after['platform'].update(publicationHeld=7, publicationFailed=12)
+        result = {a['id']: a for a in check.evaluate(after, THRESHOLDS, now=NOW, previous={'alerts': [], 'memory': memory})}
+        self.assertEqual(result['DELIVERY_HELD_GROWTH']['evidence']['growth'], 3)
+        self.assertNotIn('DELIVERY_FAILED_GROWTH', result)               # +2 is under the threshold of 3
+        after['platform']['publicationFailed'] = 13
+        self.assertIn('DELIVERY_FAILED_GROWTH', {a['id'] for a in check.evaluate(after, THRESHOLDS, now=NOW, previous={'memory': memory})})
+        self.assertNotIn('DELIVERY_HELD_GROWTH', {a['id'] for a in check.evaluate(after, THRESHOLDS, now=NOW)})
+
+    def test_M6_work_due_and_nothing_reaching_discord(self):
+        snapshot = with_(('queue', 'oldestDueLagSeconds'), 1200.0)
+        snapshot['progress'].update(lastClaimAgeSeconds=5.0, lastAdmissionAgeSeconds=2.0,     # claims and admissions go on
+                                    lastAcceptedCreateAgeSeconds=1900.0, lastReadbackAgeSeconds=650.0)
+        self.assertEqual(found(snapshot, 'SILENT_HALT_NO_CREATE'), 'warn')
+        snapshot['progress']['lastReadbackAgeSeconds'] = 1850.0
+        self.assertEqual(found(snapshot, 'SILENT_HALT_NO_CREATE'), 'page')
+        snapshot['coordinator']['guards']['policy']['hold'] = True
+        self.assertEqual(found(snapshot, 'SILENT_HALT_NO_CREATE'), 'warn')
+        self.assertIsNone(found(with_(('queue', 'oldestDueLagSeconds'), 60.0), 'SILENT_HALT_NO_CREATE'))
+
+    def test_M5_the_probing_message_no_longer_says_hold_first(self):
+        snapshot = healthy()
+        snapshot['security']['instance']['topActorDenials10m'] = 40
+        message = [a['message'] for a in alerts(snapshot) if a['id'] == 'CROSS_TENANT_PROBING'][0]
+        self.assertNotIn('hold first', message)
+        self.assertIn('hold only if the probe fails or exposure is confirmed', message)
+
+    def test_M8_fetch_refuses_plain_http_to_another_machine(self):
+        bearer = secrets.token_hex(16)
+        with patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('no request may be made')):
+            for url in ('http://rafii.example.invalid/api/ops/discord/health', 'ftp://rafii.example.invalid/', 'file:///etc/hosts'):
+                with self.subTest(url=url):
+                    self.assertEqual(check.fetch(url, bearer), {'unavailable': True, 'reason': 'insecure_url'})
+
+    def test_M8_fetch_never_follows_a_redirect_and_never_sends_the_bearer_elsewhere(self):
+        bearer = secrets.token_hex(16)
+        seen = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append((self.path, self.headers.get('Authorization')))
+                if self.path.startswith('/moved'):
+                    self.send_response(302)
+                    self.send_header('Location', 'http://127.0.0.1:%d/elsewhere' % self.server.server_address[1])
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b'{}')
+
+            def log_message(self, *args):
+                pass
+        server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            got = check.fetch('http://127.0.0.1:%d/moved' % server.server_address[1], bearer, timeout=5)
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertEqual(got, {'unavailable': True, 'reason': 'http_302'})
+        self.assertEqual([path for path, _auth in seen], ['/moved'])
+
+    def test_M8_fetch_has_one_overall_deadline(self):
+        bearer = secrets.token_hex(16)
+
+        class Slow(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                try:
+                    for _ in range(40):              # a byte every 0.1 s: each read is quick, the whole is not
+                        self.wfile.write(b' ')
+                        self.wfile.flush()
+                        time.sleep(0.1)
+                except OSError:
+                    pass
+
+            def log_message(self, *args):
+                pass
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Slow)
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            started = time.monotonic()
+            got = check.fetch('http://127.0.0.1:%d/' % server.server_address[1], bearer, timeout=1.0)
+            took = time.monotonic() - started
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertEqual(got, {'unavailable': True, 'reason': 'deadline'})
+        self.assertLess(took, 2.5)
+
+    def test_L3_an_internal_error_exits_3_and_a_log_drain_envelope_is_read(self):
+        with tempfile.TemporaryDirectory() as folder, patch('sys.stdout', io.StringIO()) as printed, \
+                patch.object(check, 'evaluate', side_effect=RuntimeError('bug')):
+            path = Path(folder) / 'snapshot.json'
+            path.write_text(json.dumps(healthy()))
+            self.assertEqual(check.main(['evaluate', str(path), '--phase', 'open', '--now', str(NOW)]), 3)
+        self.assertEqual(json.loads(printed.getvalue()), {'error': 'RuntimeError', 'worst': None})
+        line = json.dumps({'message': json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'idle', 'counters': {}})})
+        self.assertEqual(check.parse_logs([line], 600)['laneLines'], 1)
+
+
+def lagging(creates=None, readbacks=None, projected=None, late=(), owns=True):
+    return json.dumps({'event': 'discord.lane.lagging', 'oldestEligibleLagSeconds': max(creates or 0, readbacks or 0),
+                       'oldestEligibleCreateLagSeconds': creates, 'oldestEligibleReadbackLagSeconds': readbacks,
+                       'projectedLagSeconds': projected, 'thresholdSeconds': 300, 'readbackThresholdSeconds': 3600,
+                       'lateKinds': list(late), 'report': 'sample', 'projection': 'read', 'laneOwnsDiscord': owns,
+                       'laneBlocker': None if owns else 'disabled'})
+
+
+def with_fleet(lines, snapshot=None, window=600):
+    snapshot = snapshot or healthy()
+    snapshot['fleet'] = check.parse_logs(lines, window)
+    return snapshot
+
+
+class LaterBranches(unittest.TestCase):
+    """What the W-02 head (090c7ce6) and the limiter head (e6aa7db8) added that the rules read: the lane's new counters,
+    stop reason and events, the lag split of discord.lane.lagging, failed reads as observed 503, and retention."""
+
+    def test_the_lane_counters_include_quarantined_and_positions_kept(self):
+        line = json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'idle',
+                           'counters': {'claimed': 4, 'quarantined': 1, 'positionsKept': 2}})
+        fleet = check.parse_logs([line, line], 600)
+        self.assertEqual((fleet['laneCounters']['quarantined'], fleet['laneCounters']['positionsKept']), (2, 4))
+
+    def test_a_quarantined_workspace_is_a_warning_with_its_error_class_only(self):
+        line = json.dumps({'event': 'discord.lane.quarantined', 'error': 'JSONDecodeError', 'quarantineSeconds': 300})
+        fleet = check.parse_logs([line, line], 600)
+        self.assertEqual(fleet['quarantine'], {'events': 2, 'errors': {'JSONDecodeError': 2}})
+        alert = [a for a in alerts(with_fleet([line])) if a['id'] == 'SILENT_HALT_QUARANTINE']
+        self.assertEqual([(a['severity'], a['evidence']['events']) for a in alert], [('warn', 1)])
+        self.assertNotIn('SILENT_HALT_QUARANTINE', {a['id'] for a in alerts(with_fleet([]))})
+
+    def test_late_creates_use_the_lanes_split_at_300_seconds_and_page_at_the_backlog_page(self):
+        # The projection covers every workspace and measures from the same nextAt, so it is at least the lanes' lag.
+        cases = [(290, lagging(creates=290, readbacks=10), None),
+                 (301, lagging(creates=301, readbacks=10, late=['creates']), 'warn'),
+                 (2701, lagging(creates=2701, readbacks=10, late=['creates']), 'page')]
+        for lag, line, expected in cases:
+            with self.subTest(line=line):
+                self.assertEqual(found(with_fleet([line], with_(('queue', 'oldestDueLagSeconds'), float(lag))), 'BACKLOG_LAG'),
+                                 expected)
+
+    def test_a_lagging_line_from_before_the_recovery_does_not_keep_the_alert(self):
+        # The lanes write the line only while work is late, and the newest one stays in the log window after a recovery;
+        # a projection lag at or below the create threshold says nothing is late now, so the old line is not read.
+        stale = with_fleet([lagging(creates=2800, readbacks=10, late=['creates'])], with_(('queue', 'oldestDueLagSeconds'), 40.0))
+        self.assertIsNone(found(stale, 'BACKLOG_LAG'))
+        unread = with_fleet([lagging(creates=2800, readbacks=10, late=['creates'])], with_(('queue', 'status'), 'unavailable'))
+        self.assertEqual(found(unread, 'BACKLOG_LAG'), 'page', 'without a projection the lanes\' line is all there is')
+
+    def test_read_backs_deferred_by_a_burst_warn_only_past_an_hour(self):
+        deferred = with_fleet([lagging(creates=100, readbacks=3000)], with_(('queue', 'oldestDueLagSeconds'), 3000.0))
+        self.assertIsNone(found(deferred, 'BACKLOG_LAG'), 'the projection cannot tell them apart; the split shows a deferral')
+        late = with_fleet([lagging(creates=100, readbacks=3601, late=['readbacks'])], with_(('queue', 'oldestDueLagSeconds'), 3601.0))
+        self.assertEqual(found(late, 'BACKLOG_LAG'), 'warn')
+        self.assertEqual(found(with_(('queue', 'oldestDueLagSeconds'), 3000.0), 'BACKLOG_LAG'), 'page', 'without the split: as before')
+
+    def test_the_newest_lagging_line_is_the_one_read(self):
+        snapshot = with_fleet([lagging(creates=2800, readbacks=10, late=['creates']), lagging(creates=20, readbacks=10)])
+        self.assertIsNone(found(snapshot, 'BACKLOG_LAG'))
+
+    def test_a_known_pause_never_pages_and_says_so(self):
+        paused = with_(('queue', 'oldestDueLagSeconds'), 3000.0)
+        paused['config']['executionEnabled'] = False
+        paused['progress'].update(lastClaimAgeSeconds=None, lastAdmissionAgeSeconds=None, lastAcceptedCreateAgeSeconds=None,
+                                  lastReadbackAgeSeconds=None)
+        result = {a['id']: a for a in alerts(paused)}
+        for rule in ('BACKLOG_LAG', 'SILENT_HALT_NO_PROGRESS', 'SILENT_HALT_NO_CREATE'):
+            with self.subTest(rule=rule):
+                self.assertEqual(result[rule]['severity'], 'warn')
+                self.assertIn('Discord is paused', result[rule]['message'])
+                self.assertTrue(result[rule]['evidence']['discordPaused'])
+        by_lanes = with_fleet([json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'discord_paused', 'counters': {}})],
+                              with_(('queue', 'oldestDueLagSeconds'), 3000.0))
+        self.assertEqual(found(by_lanes, 'BACKLOG_LAG'), 'warn')
+        self.assertNotIn('SILENT_HALT_LANE_STOPS', {a['id'] for a in alerts(by_lanes)}, 'a paused stop is not abnormal')
+
+    def test_the_create_and_read_back_thresholds_are_the_lanes_own(self):
+        from postriff_phase2.discord import lane
+        self.assertEqual(THRESHOLDS['backlog']['create_warn_seconds'], lane.LAG_WARNING_SECONDS)
+        if not hasattr(lane, 'READBACK_LAG_WARNING_SECONDS'):
+            self.skipTest('this build has no read-back lag threshold (the W-02 line adds it)')
+        self.assertEqual(THRESHOLDS['backlog']['readback_warn_seconds'], lane.READBACK_LAG_WARNING_SECONDS)
+
+    def test_server_errors_include_failed_reads_and_say_so(self):
+        snapshot = healthy()
+        snapshot['coordinator']['traffic'].update(responses5m=100, serverErrors5m=5, uncertainReads=0)
+        alert = [a for a in alerts(snapshot) if a['id'] == 'DELIVERY_DISCORD_5XX'][0]
+        self.assertIn('failed before an answer', alert['message'])
+        self.assertNotIn('Usually a Discord outage', alert['message'])
+
+    def test_the_hold_message_follows_what_the_serving_build_does_with_a_read_under_a_hold(self):
+        """With the limiter's read wait (rate_limits.HOLD_WAIT_SECONDS, B4) a read-back under a hold waits and keeps its
+        checks; without it five refusals park the post for a day. The page must not tell the older story on a newer build."""
+        held = with_(('coordinator', 'guards', 'policy', 'hold'), True)
+        held['config']['holdReadWaitSeconds'] = None
+        older = [a for a in alerts(held) if a['id'] == 'SILENT_HALT_OPERATOR_HOLD'][0]
+        self.assertIn('parked for 24 hours', older['message'])
+        self.assertNotIn('read-backs wait', older['message'])
+        twin = with_(('coordinator', 'guards', 'policy', 'hold'), True)
+        del twin['config']                      # the SQL twin has no process view: it cannot know the build
+        unknown = [a for a in alerts(twin) if a['id'] == 'SILENT_HALT_OPERATOR_HOLD'][0]
+        self.assertIn('read-backs wait if the serving build has', unknown['message'])
+        self.assertIn('parked for 24 hours', unknown['message'])
+        held['config']['holdReadWaitSeconds'] = 300.0
+        newer = [a for a in alerts(held) if a['id'] == 'SILENT_HALT_OPERATOR_HOLD'][0]
+        self.assertNotIn('parked', newer['message'])
+        self.assertIn('read-backs wait', newer['message'])
+        self.assertEqual(newer['evidence'].get('holdReadWaitSeconds'), 300.0)
+
+    def test_route_circuits_name_a_403_refusal_as_a_cause(self):
+        """On the limiter head a 403 opens a bounded route circuit too (7f8eacb6, B2): D3's sixteen 403 answers open
+        sixteen. The message must not call every circuit a server error."""
+        snapshot = with_(('coordinator', 'kinds'), {'route': {'holds': 0, 'blocks': 0, 'circuits': 16, 'persistentCircuits': 0,
+                                                              'openOver5Min': 0}})
+        alert = [a for a in alerts(snapshot) if a['id'] == 'RATE_ROUTE_CIRCUITS'][0]
+        self.assertIn('403', alert['message'])
+
+    def retention(self, **values):
+        snapshot = healthy()
+        snapshot['coordinator']['retention'] = {
+            'status': 'observed', 'retentionSeconds': {'reads': 3600, 'publications': 86400},
+            'oldestSettledReadAgeSeconds': 5000.0, 'oldestSettledPublicationAgeSeconds': 90000.0, 'liveRowsEstimate': 5400,
+            'deadRowsEstimate': 12, 'rowsDeletedTotal': 880, 'lastVacuumAgeSeconds': 120.0, **values}
+        return snapshot
+
+    def test_retention_behind_when_settled_rows_outlive_three_retentions(self):
+        self.assertIsNone(found(self.retention(), 'RATE_RETENTION_BEHIND'))
+        self.assertEqual(found(self.retention(oldestSettledReadAgeSeconds=3 * 3600 + 1), 'RATE_RETENTION_BEHIND'), 'warn')
+        self.assertEqual(found(self.retention(oldestSettledPublicationAgeSeconds=3 * 86400 + 1), 'RATE_RETENTION_BEHIND'), 'warn')
+
+    def test_retention_purged_and_remaining_counts_are_read_when_present(self):
+        snapshot = self.retention(remaining={'reads': 60000, 'publications': 0, 'capped': False})
+        self.assertEqual(found(snapshot, 'RATE_RETENTION_BEHIND'), 'warn')
+        purged = self.retention(purged={'status': 'denied', 'reads': 0, 'publications': 0, 'more': False, 'ageSeconds': 30.0})
+        self.assertEqual(found(purged, 'RATE_RETENTION_BEHIND'), 'warn')
+        line = json.dumps({'event': 'discord.lane.retention', 'status': 'ok', 'reads': 2000, 'publications': 5, 'rounds': 1,
+                           'more': False})
+        failed = json.dumps({'event': 'discord.lane.retention', 'status': 'timeout', 'reads': 0, 'publications': 0, 'rounds': 0,
+                             'more': False, 'error': 'QueryCanceled'})
+        fleet = check.parse_logs([line, line, failed], 600)
+        self.assertEqual(fleet['retention'], {'lines': 3, 'purgedReads': 4000, 'purgedPublications': 10,
+                                              'failures': {'timeout': 1}, 'more': 0})
+        self.assertEqual(found(with_fleet([failed], self.retention()), 'RATE_RETENTION_BEHIND'), 'warn')
+        self.assertIsNone(found(with_fleet([line], self.retention()), 'RATE_RETENTION_BEHIND'))
+
+
+class FinalCoordinator(unittest.TestCase):
+    """The coordinator as merged at 0cb19962 (the Release Captain's round 3): bookings leave a reserve to callers that cannot
+    wait, a bearer budget beside the bot's, the booked horizon, a busy database as a short wait, a 45 s degrade."""
+
+    def test_the_budget_divides_by_what_bookings_can_take(self):
+        # guard 0.05 s, reserve 1: (25 - 1) x 60 / 1.05 = 1371.4 a minute bookable (steady 25 x 60 / 1.05 = 1428.6)
+        bookable = 24 * 60 / 1.05
+        for admitted, expected in ((math.ceil(0.95 * bookable) - 1, None), (math.ceil(0.95 * bookable), 'warn')):
+            with self.subTest(admitted=admitted):
+                snapshot = with_(('coordinator', 'traffic', 'admissions60s'), admitted)
+                snapshot['config']['policy'].update(slotGuardSeconds=0.05, immediateReserve=1)
+                self.assertEqual(found(snapshot, 'RATE_APP_BUDGET_SPENT'), expected)
+        snapshot = with_(('coordinator', 'traffic', 'admissions60s'), 1400)
+        snapshot['config']['policy'].update(slotGuardSeconds=0.05, immediateReserve=1)
+        evidence = [a for a in alerts(snapshot) if a['id'] == 'RATE_APP_BUDGET_SPENT'][0]['evidence']
+        self.assertEqual((evidence['achievable60s'], evidence['bookable60s'], evidence['immediateReserve']), (1428.6, 1371.4, 1))
+
+    def test_the_reserve_never_takes_the_last_slot(self):
+        # _booking_slot keeps min(reserve, cap - 1): a cap of 1 books its one slot; a cap of 2 with a reserve of 3 books 1
+        for cap, reserve, admitted, expected in ((1, 1, 55, 'warn'), (1, 1, 54, None), (2, 3, 55, 'warn'), (2, 3, 54, None)):
+            with self.subTest(cap=cap, reserve=reserve, admitted=admitted):
+                snapshot = with_(('coordinator', 'traffic', 'admissions60s'), admitted)
+                snapshot['config']['policy'].update(appCapacity=cap, slotGuardSeconds=0.05, immediateReserve=reserve)
+                self.assertEqual(found(snapshot, 'RATE_APP_BUDGET_SPENT'), expected)
+
+    def test_the_bearer_budget_is_read_against_its_own_cap(self):
+        def bearer(admitted, **policy):
+            snapshot = with_(('coordinator', 'traffic', 'bearerAdmissions60s'), admitted)
+            snapshot['config']['policy'].update(policy)
+            return snapshot
+        # 10 a second over 1 s, guard 0.05, reserve 1: (10 - 1) x 60 / 1.05 = 514.3 a minute bookable; 95% is 488.6
+        self.assertEqual(found(bearer(489, bearerCapacity=10, bearerWindowSeconds=1, slotGuardSeconds=0.05, immediateReserve=1),
+                               'RATE_BEARER_BUDGET_SPENT'), 'warn')
+        self.assertIsNone(found(bearer(488, bearerCapacity=10, bearerWindowSeconds=1, slotGuardSeconds=0.05, immediateReserve=1),
+                                'RATE_BEARER_BUDGET_SPENT'))
+        self.assertEqual(found(bearer(570, bearerCapacity=10, bearerWindowSeconds=1), 'RATE_BEARER_BUDGET_SPENT'), 'warn')
+        self.assertIsNone(found(bearer(512, bearerCapacity=10, bearerWindowSeconds=1, slotGuardSeconds=0.05),
+                                'RATE_BEARER_BUDGET_SPENT'), 'no reserve: 95% of 571.4 is 542.9')
+        self.assertIsNone(found(bearer(570, bearerCapacity=None, bearerWindowSeconds=None), 'RATE_BEARER_BUDGET_SPENT'),
+                          'no bearer budget, no bearer alert')
+        self.assertIsNone(found(bearer(570, bearerCapacity=10, bearerWindowSeconds=1), 'RATE_APP_BUDGET_SPENT'),
+                          'the bearer class is not the bot class')
+
+    def test_a_bearer_embargo_is_reported_with_the_others(self):
+        snapshot = healthy()
+        snapshot['coordinator']['guards']['bearer'] = dict(snapshot['coordinator']['guards']['policy'], blocked=True,
+                                                           embargoSeconds=40.0)
+        alert = [a for a in alerts(snapshot) if a['id'] == 'RATE_EMBARGO'][0]
+        self.assertIn('bearer', alert['evidence']['kinds'])
+
+    def booking(self, horizon, ahead=1.0, **guard):
+        snapshot = healthy()
+        snapshot['coordinator']['booking'] = {'status': 'observed', 'bookAheadSeconds': ahead, 'aheadNow': 11,
+                                              'horizonSeconds': horizon, 'bookedReads60s': 40, 'bookedReadWaitSeconds60s': 18.0,
+                                              'meanBookedReadWaitSeconds60s': 0.45, 'maxBookedReadWaitSeconds60s': 0.9}
+        snapshot['coordinator']['guards']['policy'].update(guard)
+        return snapshot
+
+    def test_a_full_booked_horizon_means_callers_are_refused(self):
+        self.assertEqual(found(self.booking(0.96), 'RATE_BOOKING_FULL'), 'warn')
+        self.assertIsNone(found(self.booking(0.5), 'RATE_BOOKING_FULL'))
+        self.assertIsNone(found(self.booking(0.0, ahead=0.0), 'RATE_BOOKING_FULL'), 'booking off: no horizon')
+
+    def test_remaining_zero_alone_is_not_an_alert(self):
+        # The first hosted run read remaining 0 in 21 of 35 busy readings with the horizon never full.
+        quiet = self.booking(0.5, remaining=0, remainingRatio=0.0)
+        self.assertEqual({a['id'] for a in alerts(quiet) if a['severity'] in ('warn', 'page')}, set())
+
+    def test_a_degraded_coordinator_in_a_lane_process_is_its_own_alert(self):
+        line = json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'coordinator_degraded', 'counters': {}})
+        raised = {a['id']: a['severity'] for a in alerts(with_fleet([line]))}
+        self.assertEqual(raised.get('RATE_COORDINATOR_DEGRADED'), 'warn')
+        self.assertNotIn('SILENT_HALT_LANE_STOPS', raised, 'reported once, by its own rule')
+
+    def test_repeated_coordinator_busy_delays_in_five_minutes(self):
+        def lines(*busy):
+            return [json.dumps({'event': 'discord.lane.completed', 'stoppedBy': 'idle', 'counters': {'coordinatorBusy': n}})
+                    for n in busy]
+        fleet = check.parse_logs(lines(4, 6), 600)
+        self.assertEqual(fleet['laneCounters']['coordinatorBusy'], 10)
+        self.assertIsNone(found(with_fleet(lines(9, 10), window=600), 'RATE_COORDINATOR_BUSY'), '19 in 10 minutes: 9.5 in 5')
+        self.assertEqual(found(with_fleet(lines(10, 10), window=600), 'RATE_COORDINATOR_BUSY'), 'warn')
+        self.assertEqual(found(with_fleet(lines(10), window=300), 'RATE_COORDINATOR_BUSY'), 'warn')
+
+
+class LockBound(unittest.TestCase):
+    """The captain's round 3: the coordinator's row lock caps admissions at about 1000 / (17 + 10.8 x round trip) a second
+    (the limiter's Q22). Below what the budget lets the lanes book, the lock and not the budget is the ceiling."""
+
+    def snapshot(self, p50, **section):
+        snapshot = healthy()
+        snapshot['config']['policy'].update(slotGuardSeconds=0.05, immediateReserve=1)      # 24 / 1.05 = 22.86 a second
+        snapshot['coordinator']['roundTrip'] = {'status': 'observed', 'statements': 5, 'connectMs': 40.0, 'selectP50Ms': p50,
+                                                'selectMaxMs': p50 * 2, 'commitMs': p50, 'lockBoundFixedMs': 17.0,
+                                                'lockBoundRoundTrips': 10.8, 'path': 'new_connection', **section}
+        return snapshot
+
+    def test_the_lock_bound_from_the_measured_round_trip(self):
+        self.assertIsNone(found(self.snapshot(2.3), 'COORD_LOCK_BOUND'), '1000 / (17 + 24.8) = 23.9 a second')
+        alert = [a for a in alerts(self.snapshot(2.5)) if a['id'] == 'COORD_LOCK_BOUND'][0]    # 1000 / 44 = 22.7
+        self.assertEqual(alert['severity'], 'info')
+        self.assertEqual((alert['evidence']['lockBoundPerSecond'], alert['evidence']['bookablePerSecond']), (22.7, 22.9))
+        self.assertIn('test-box figure', alert['message'])
+        self.assertIn('estimate', alert['message'])
+        self.assertEqual(found(self.snapshot(20.0), 'COORD_LOCK_BOUND'), 'info', '1000 / 233 = 4.3 a second')
+
+    def test_the_constants_come_from_the_build(self):
+        self.assertIsNone(found(self.snapshot(2.5, lockBoundFixedMs=10.0), 'COORD_LOCK_BOUND'), '1000 / 37 = 27.0 a second')
+
+    def test_nothing_measured_nothing_said(self):
+        self.assertIsNone(found(self.snapshot(2.5, status='unavailable'), 'COORD_LOCK_BOUND'))
+        twin = healthy()
+        twin['coordinator']['roundTrip'] = {'status': 'not_measured', 'source': 'sql'}
+        self.assertIsNone(found(twin, 'COORD_LOCK_BOUND'))
+
+    def test_a_round_trip_that_could_not_be_measured_does_not_blind_the_evaluator(self):
+        snapshot = self.snapshot(2.0, status='unavailable')
+        snapshot['errors'] = [{'section': 'roundTrip', 'error': 'OperationalError'}]
+        self.assertNotIn('SILENT_HALT_SECTION', {a['id'] for a in alerts(snapshot)})
 
 
 if __name__ == '__main__':
