@@ -13,12 +13,18 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from postriff_phase2.discord import lane, rate_limits
-from postriff_phase2.discord.rate_limits import RequestIdentity, SharedPostgresBudget
+from postriff_phase2.discord.rate_limits import RateDelayed, RequestIdentity, SharedPostgresBudget
 from postriff_phase2.hosted_worker import PostgresWorker
 from postriff_phase2.social_connectors import DiscordProvider
 from test_discord_parallel_lane import FakeLane, ON, Outlook
 from test_discord_rate_ceiling import OK, T0, policy
 from test_discord_rate_limits import APP, MemoryLedger
+
+
+class DatabaseError(Exception):
+    def __init__(self, sqlstate):
+        super().__init__('synthetic database failure')
+        self.sqlstate = sqlstate
 
 
 class Seen:
@@ -108,12 +114,24 @@ class TheLaneBooksInFourPlacesOnly(unittest.TestCase):
 
     def test_the_lane_s_tally_counts_its_own_bookings(self):
         paced = lane.PacedSocial(Seen())
-        self.assertEqual(paced.booked, {'bookings': 0, 'bookedWaitSeconds': 0.0})
+        self.assertEqual(paced.booked, {'bookings': 0, 'bookedWaitSeconds': 0.0, 'horizonRefusals': 0, 'coordinatorBusy': 0})
         limiter = SharedPostgresBudget(MemoryLedger(now=T0).connection, APP, policy=policy(3, 1))
         with rate_limits.booking(1.0, paced.booked):
             limiter._count_booking(bookings=1, bookedWaitSeconds=.25)
-        limiter._count_booking(bookings=1, bookedWaitSeconds=.5)
-        self.assertEqual(paced.booked, {'bookings': 1, 'bookedWaitSeconds': .25})
+            limiter._count_booking(horizonRefusals=1)
+            limiter._count_booking(coordinatorBusy=2)
+            limiter._count_booking(gateStops=1)                      # the process keeps it; this lane's tally has no such name
+        limiter._count_booking(bookings=1, bookedWaitSeconds=.5, horizonRefusals=1, coordinatorBusy=1)
+        self.assertEqual(paced.booked, {'bookings': 1, 'bookedWaitSeconds': .25, 'horizonRefusals': 1, 'coordinatorBusy': 2})
+        self.assertEqual(limiter.booking_stats(), {'bookings': 2, 'bookedWaitSeconds': .75, 'gateStops': 1, 'horizonRefusals': 2,
+                                                   'coordinatorBusy': 3})
+
+    def test_a_tally_with_only_the_two_old_names_still_works(self):
+        tally = {'bookings': 0, 'bookedWaitSeconds': 0.0}
+        limiter = SharedPostgresBudget(MemoryLedger(now=T0).connection, APP, policy=policy(3, 1))
+        with rate_limits.booking(1.0, tally):
+            limiter._count_booking(bookings=1, bookedWaitSeconds=.25, horizonRefusals=1)
+        self.assertEqual(tally, {'bookings': 1, 'bookedWaitSeconds': .25})
 
     def test_booking_is_one_second_ahead_and_the_shard_count_is_unchanged(self):
         self.assertEqual(lane.BOOK_AHEAD_SECONDS, 1.0)
@@ -209,10 +227,55 @@ class TheLoopWithBlockingReservations(unittest.TestCase):
         self.assertAlmostEqual(counters['bookedSeconds'], fake.limiter.booking_stats()['bookedWaitSeconds'], places=2)
         self.assertEqual(counters['rateDelayed'], 0)
 
+    def test_the_horizon_refusals_and_the_busy_reservations_are_counters_of_the_result_an_alert_can_read(self):
+        self.assertIn('horizonRefusals', lane.COUNTERS)
+        self.assertIn('coordinatorBusy', lane.COUNTERS)
+
+        def prepare_survives_a_delay(fake):
+            def prepare(manifest, **kw):
+                try:
+                    fake.read()
+                except RateDelayed:
+                    pass                                         # what the worker does with a delay: the post keeps its place
+            return prepare
+
+        # (1) the database could not take three reservations in time: three busy delays, no refusal of the horizon
+        fake = BookingStep(pass_reads=1, fill=False)
+        failures = {'left': 3}
+        original = fake.ledger.execute
+
+        def execute(query, params=()):
+            if ' '.join(query.split()).startswith('WITH scope_lock AS MATERIALIZED') and failures['left']:
+                failures['left'] -= 1
+                raise DatabaseError('55P03')
+            return original(query, params)
+        fake.ledger.execute = execute
+        result = fake.run({lane.ENV_STEPS: '6'}, prepare=prepare_survives_a_delay(fake))
+        self.assertEqual((result['counters']['coordinatorBusy'], result['counters']['horizonRefusals']), (3, 0))
+        self.assertEqual(fake.limiter.booking_stats()['coordinatorBusy'], 3, 'every one was this lane\'s')
+
+        # (2) the booked horizon is full when the lane asks: it is refused, and that is counted
+        fake = BookingStep(pass_reads=1, fill=False)
+        for n in range(12):                                      # callers that booked at the same instant fill the second ahead
+            fake.ledger.now, fake.now = T0 + .1, 0.0
+            try:
+                fake.limiter.reserve_read('GET', '/guilds/%d' % (710000000000000000 + n), identity=fake.identity, book_ahead=1.0)
+            except RateDelayed:
+                break
+        else:
+            self.fail('the horizon never filled')
+        fake.ledger.now, fake.now = T0 + .1, 0.0
+        fake.limiter._booking['horizonRefusals'] = 0             # what the setting up counted is not the lane's
+        result = fake.run({lane.ENV_STEPS: '1'}, prepare=prepare_survives_a_delay(fake))
+        self.assertGreaterEqual(result['counters']['horizonRefusals'], 1)
+        self.assertEqual(result['counters']['horizonRefusals'], fake.limiter.booking_stats()['horizonRefusals'])
+        self.assertEqual(result['counters']['coordinatorBusy'], 0)
+
     def test_without_a_full_window_nothing_is_counted(self):
         fake = BookingStep(pass_reads=1, fill=False)
         result = fake.run({lane.ENV_STEPS: '1'})
         self.assertEqual((result['counters']['bookedWaits'], result['counters']['bookedSeconds']), (0, 0.0))
+        self.assertEqual((result['counters']['horizonRefusals'], result['counters']['coordinatorBusy']), (0, 0))
 
 
 class OutlookReadsTheBookedHorizon(unittest.TestCase):

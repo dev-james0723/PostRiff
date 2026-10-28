@@ -136,7 +136,8 @@ time [simulated]. It adds a new path that can multiply invocations, which the co
      misses or when nothing is due soon.
 5. One log line, `discord.lane.completed`: shard, `stoppedBy`, elapsed seconds and counts only (claimed, posted,
    verified, held, uncertain, rateDelayed, leaseLost, recoveries, retries, deadLetters, claimMisses, rejected, notSent,
-   uncertainCreates, rateWaits, idleWaits, permitWaits, quarantined, positionsKept, bookedWaits, bookedSeconds). No workspace, job, channel, content or lease owner id. An
+   uncertainCreates, rateWaits, idleWaits, permitWaits, quarantined, positionsKept, bookedWaits, bookedSeconds, horizonRefusals,
+   coordinatorBusy). No workspace, job, channel, content or lease owner id. An
    exception is logged with its class name only and re-raised, so the request returns 500 with its failure site.
 
 The behavioural addition inside a step has two layers. First, booking ("Booking", below): the preflight's reads, the create
@@ -505,7 +506,7 @@ which carries no status.
 | A loop dies inside a booked wait | nothing was sent: a booked read is stored `sent` but had not left, so it is never sent, keeps its slot until its scope's window plus 30 s (31 s on the application row) and then stops counting; a booked create's permit expires unused (5 s) and the post is released when its lease expires and sent once later. A loop is in one booked wait at a time: at most one slot per shard, 12 of 25 for at most 31 s if every shard dies at once |
 | Budget exhausted | the lane's reads and creates are booked the next exact slot, at most one second ahead, and wait for it inside the coordinator; beyond that horizon they wait for the next window (bounded) as before; web requests are refused as before ("Booking") |
 | Approval expires in the queue | held for a fresh approval when next claimed (monitor M7) |
-| Coordinator observation fails in a process | an observation (or the retirement of a request that was not sent) whose own lock or statement timed out is a rollback and is asked once more; a failure that remains makes that process's provider refuse every request for 45 seconds (`DEGRADED_SECONDS`), not for good: its loops stop with `coordinator_degraded` for that time and the next invocation, or the same process after the rest, asks again; its minute cron still leaves Discord to the lane (it could not send either); loops in other processes continue. A flag set at setup (the reviewed policy does not parse) is for good until the runtime attaches a coordinator |
+| Coordinator observation fails in a process | an observation (or the retirement of a request that was not sent) whose own lock or statement timed out is a rollback and is asked once more; a failure that remains makes that process's provider refuse every request for 45 seconds (`DEGRADED_SECONDS`), not for good, and leaves one WARNING line, `discord.coordinator.degraded`, when the rest begins (not again while it goes on): `processKind` (`lane`, `cron`, `web`, from the request's path; `other` outside a request), `reason` (the class the coordinator raised: `RateCoordinatorBusy` for a lock or statement timeout, `RateCoordinatorUnavailable` for anything else) and `restSeconds`, never a message, request or identifier. Its loops stop with `coordinator_degraded` for that time and the next invocation, or the same process after the rest, asks again; its minute cron still leaves Discord to the lane (it could not send either); loops in other processes continue. A flag set at setup (the reviewed policy does not parse) is for good until the runtime attaches a coordinator |
 | The database does not give a reservation its lock in 2 s, or does not finish its statement in 5 s | nothing was admitted and nothing sent: a `RateDelayed` of 1.5 s, cause `coordinator_busy`, scope `application` (it was a `RateCoordinatorUnavailable`, which a worker turns into a release of 300 s); the lane waits for it as for a spent window and keeps the post's place; a read through the provider is released after 1.5 s with nothing sent. The same timeout in an observation, a seal or a consume is a failure of the coordinator (`RateCoordinatorBusy`, a `RateCoordinatorUnavailable`), as before [measured on PostgreSQL: `test_discord_coordinator_busy_postgres.py`] |
 | Database unavailable | the loop's exception is logged and the request returns 500; leases expire and are recovered |
 | Flag on, projection missing | `schema`, nothing claimed (migration 126 is applied in production); the minute cron cannot see it without a query, so it still leaves Discord to the lane and `discord.lane.lagging` fires after five minutes |
@@ -553,7 +554,7 @@ The `discord.lane.completed` log lines (12 a minute; sum `posted`, `verified`, `
 `leaseLost` per minute; any `stoppedBy` other than `idle`, `time_budget` or `rate_wait`), and `docs/w02/monitoring.sql`:
 M1 oldest due lag, M2 leases expired but still owned, M3 busiest second, M4 rate waits, M5 unanswered admissions (Q3),
 M6 holds on the application-wide rows (the four, and the bearer budget's), M7 posts held for an expired approval. The launch monitors Q1 to Q13 still apply. The lane's
-`bookedWaits` and `bookedSeconds` and the health payload's `coordinator.booking` show the booking ("Booking", below).
+`bookedWaits`, `bookedSeconds`, `horizonRefusals` and `coordinatorBusy` and the health payload's `coordinator.booking` show the booking ("Booking", below).
 The lines' `held` (like the minute cron's `discordWorker.counters.held`) misses a post held by a rate-wait release,
 one whose wait outlasts its approval: `discord_worker.release_unsent` sets the state before the event that counts it
 (unchanged worker code, the same in `2a5a523d`) [measured: 3 such holds counted 0]. M7's `held_total` and
@@ -782,7 +783,13 @@ limit, G2E-B-10). One more statement in the consume transaction, which holds onl
 seconds.
 
 *The lane.* The counters `bookedWaits` and `bookedSeconds` (in `lane.COUNTERS`; summed in the invocation result and the
-`discord.lane.completed` line) count the lane's own bookings. Nothing else changes: the loop budget (a step's seven requests
+`discord.lane.completed` line) count the lane's own bookings. Two more are what an alert reads: `horizonRefusals`, the calls the
+lane made that the booked horizon refused (it was full: callers are being refused again; the process total is
+`booking_stats()['horizonRefusals']`), and `coordinatorBusy`, the reservations the database could not take in time and the lane was
+told to ask again for (`RateDelayed`, cause `coordinator_busy`, 1.5 s: the lock or statement timeout of NEW-1). Each counts an event,
+not a post: a busy reservation that the lane waited out and then made still counts, which `rateDelayed` (posts released for a rate
+reason) does not. Both come through the tally of `booking()`, so they are this lane's own; the web and the minute cron have them in
+their process only (`booking_stats()`). Nothing else changes: the loop budget (a step's seven requests
 may each wait one second, so a step may take seven seconds longer; `STEP_RESERVE_SECONDS` 160 holds it, 147 of 160), the
 lease and its renewal, F2 (a post refused beyond the horizon keeps its place), the pause and K1, the quarantine, the frozen
 path, the shard count (12).

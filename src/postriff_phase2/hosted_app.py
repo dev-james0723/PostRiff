@@ -631,6 +631,10 @@ class HostedApplication:
         device_binding = device_trust.bind(environ)
         # RAP-016/076: the sign-in details a first sighting may record (RAFII_SIGN_IN_DETAILS; nothing while off).
         details_binding = account_protection.bind_request(environ)
+        # What kind of process this request is (the lane, the minute cron, the web), for the one line a failure of the request
+        # coordinator leaves when a process stops asking it (DiscordProvider._coordinator_failed). Nothing but the kind is kept.
+        from .discord.rate_limits import bind_process_kind, process_kind_of, release_process_kind
+        kind_binding = bind_process_kind(process_kind_of(environ.get('PATH_INFO', '/')))
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -667,6 +671,7 @@ class HostedApplication:
             _REQUEST_LABEL.reset(label_binding)
             device_trust.reset(device_binding)
             account_protection.reset_request(details_binding)
+            release_process_kind(kind_binding)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()

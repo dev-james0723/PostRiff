@@ -98,6 +98,37 @@ def web_booked(call, *args, **kwargs):
         return call(*args, **kwargs)
 
 
+# What kind of process a request is made in, for the one line a coordinator failure leaves (DiscordProvider._coordinator_failed): the
+# lane (`/api/cron/discord-worker/N`), the minute cron (the other cron routes) or the web. Bound once per request by the hosted app;
+# 'other' where nothing bound it (a script, a test).
+PROCESS_KINDS = ('lane', 'cron', 'web', 'other')
+_PROCESS_KIND = contextvars.ContextVar('postriff_discord_process_kind', default='other')
+
+
+def process_kind_of(path):
+    """The kind of process that answers a request for `path`."""
+    if not isinstance(path, str):
+        return 'other'
+    if path.startswith('/api/cron/discord-worker/'):
+        return 'lane'
+    if path.startswith('/api/cron/'):
+        return 'cron'
+    return 'web'
+
+
+def bind_process_kind(kind):
+    """Bind the kind for the rest of this context; pass the token to release_process_kind."""
+    return _PROCESS_KIND.set(kind if kind in PROCESS_KINDS else 'other')
+
+
+def release_process_kind(token):
+    _PROCESS_KIND.reset(token)
+
+
+def current_process_kind():
+    return _PROCESS_KIND.get()
+
+
 NICKNAME_TEMPLATE = 'PATCH:/guilds/{id}/members/@me'   # the one Discord write the sender-name feature makes
 NICKNAME_ENV = 'POSTRIFF_DISCORD_BOT_NICKNAME_ENABLED'
 _ID = re.compile(r'^[0-9]{5,25}$')
@@ -498,8 +529,9 @@ class SharedPostgresBudget:
         self._sleep, self._monotonic = sleep, monotonic
         self._booking_lock = threading.Lock()
         # Counts since this process started, read by the lane (booking_stats): bookings made, the seconds they were booked
-        # ahead in all, booked reads stopped at the gate, and bookings refused because the horizon was full.
-        self._booking = {'bookings': 0, 'bookedWaitSeconds': 0.0, 'gateStops': 0, 'horizonRefusals': 0}
+        # ahead in all, booked reads stopped at the gate, bookings refused because the horizon was full, and reservations the
+        # database could not take in time (told to ask again, `coordinator_busy`).
+        self._booking = {'bookings': 0, 'bookedWaitSeconds': 0.0, 'gateStops': 0, 'horizonRefusals': 0, 'coordinatorBusy': 0}
         # The legacy runtime constructor can attach an inert coordinator. OAuth
         # attaches the reviewed policy before use; absence never enables a request.
         self.policy = SafetyPolicy.parse(policy) if policy is not None else None
@@ -1112,7 +1144,9 @@ class SharedPostgresBudget:
 
     def booking_stats(self):
         """Counts since this process started: bookings made, the seconds they were booked ahead in all, booked reads stopped at
-        the gate (an embargo, circuit or hold began while they waited) and calls refused because the booked horizon was full."""
+        the gate (an embargo, circuit or hold began while they waited), calls refused because the booked horizon was full, and
+        reservations refused because the database did not give the lock or finish the statement in time (`coordinator_busy`).
+        The lane carries the last two into its `discord.lane.completed` counters through the tally of booking()."""
         with self._booking_lock:
             return dict(self._booking)
 
@@ -1121,9 +1155,10 @@ class SharedPostgresBudget:
             for name, amount in increments.items():
                 self._booking[name] += amount
         tally = _BOOK_AHEAD.get()[1]
-        if tally is not None and 'bookings' in increments:  # the caller's own count (booking(tally=...)): this thread's context
-            tally['bookings'] += increments['bookings']
-            tally['bookedWaitSeconds'] += increments['bookedWaitSeconds']
+        if tally is not None:   # the caller's own count (booking(tally=...)): this thread's context, the names it keeps
+            for name, amount in increments.items():
+                if name in tally:
+                    tally[name] += amount
 
     def _reserve(self, method, path, *, identity, binding=None, valid_until=None, read_sent=False, book_ahead=0.0):
         """Admit one request (or reserve one permit), and for a booking wait for its slot. A database that gives the reservation
@@ -1134,6 +1169,7 @@ class SharedPostgresBudget:
             return self._reserve_once(method, path, identity=identity, binding=binding, valid_until=valid_until,
                                       read_sent=read_sent, book_ahead=book_ahead)
         except RateCoordinatorBusy:
+            self._count_booking(coordinatorBusy=1)
             raise RateDelayed(BUSY_WAIT_SECONDS, cause='coordinator_busy', scope='application') from None
 
     def _reserve_once(self, method, path, *, identity, binding=None, valid_until=None, read_sent=False, book_ahead=0.0):

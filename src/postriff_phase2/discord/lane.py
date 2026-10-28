@@ -96,7 +96,7 @@ _CLAIMABLE = '''SELECT extract(epoch from clock_timestamp())::double precision,m
     WHERE next_at IS NOT NULL AND last_claimed_at<=extract(epoch from clock_timestamp())::double precision'''
 COUNTERS = ('steps', 'claimed', 'posted', 'verified', 'held', 'uncertain', 'rateDelayed', 'leaseLost', 'recoveries',
             'retries', 'deadLetters', 'claimMisses', 'rejected', 'notSent', 'uncertainCreates', 'rateWaits', 'idleWaits',
-            'permitWaits', 'quarantined', 'positionsKept', 'bookedWaits', 'bookedSeconds')
+            'permitWaits', 'quarantined', 'positionsKept', 'bookedWaits', 'bookedSeconds', 'horizonRefusals', 'coordinatorBusy')
 _QUARANTINED = [0]  # workspaces this process has set aside since it started; a count, never an identifier
 _QUARANTINE_LOCK = threading.Lock()
 # Retention of the coordinator's admissions (rate_limits.SharedPostgresBudget.purge_settled): an invocation that had work
@@ -167,7 +167,9 @@ class PacedSocial:
     def __init__(self, social, *, wait_seconds=1.0, sleep=time.sleep, monotonic=time.monotonic):
         self._social, self._wait, self._sleep, self._monotonic = social, wait_seconds, sleep, monotonic
         self.permit_waits = 0
-        self.booked = {'bookings': 0, 'bookedWaitSeconds': 0.0}  # this lane's own bookings (rate_limits.booking(tally=...))
+        # this lane's own bookings, the calls the booked horizon refused and the reservations the database could not take in time
+        # (rate_limits.booking(tally=...)): the last two are what an alert on a full horizon and on a slow lock reads
+        self.booked = {'bookings': 0, 'bookedWaitSeconds': 0.0, 'horizonRefusals': 0, 'coordinatorBusy': 0}
 
     def __getattr__(self, name):
         return getattr(self._social, name)
@@ -694,7 +696,8 @@ def run(worker, number, values=None, *, started=None, request_id=None, sleep=tim
                       rateDelayed=stats['rateDelays'], leaseLost=stats['leaseLost'], recoveries=stats['recoveries'],
                       retries=stats['retries'], deadLetters=stats['deadLetters'], claimMisses=stats['claimMisses'],
                       permitWaits=lane.social.permit_waits, quarantined=stats['quarantined'], **lane.lane_counts,
-                      bookedWaits=lane.social.booked['bookings'], bookedSeconds=round(lane.social.booked['bookedWaitSeconds'], 3))
+                      bookedWaits=lane.social.booked['bookings'], bookedSeconds=round(lane.social.booked['bookedWaitSeconds'], 3),
+                      horizonRefusals=lane.social.booked['horizonRefusals'], coordinatorBusy=lane.social.booked['coordinatorBusy'])
         result = {'version': 1, 'lane': 'discord', 'enabled': True, 'shard': number, 'stoppedBy': stopped,
                   'elapsedSeconds': round(monotonic() - started, 3), 'processed': counts['claimed'],
                   'budget': {'maxSeconds': seconds, 'maxSteps': max_steps}, 'counters': counts,

@@ -4,7 +4,7 @@
 -- and returns counts, ages and states only: no workspace, job, channel, message, token or customer content. Record
 -- results as counts. The lane's own per-invocation counters are in the function logs, one line per invocation:
 -- event "discord.lane.completed" with stoppedBy, claimed, posted, verified, held, uncertain, rateDelayed, leaseLost,
--- rateWaits, idleWaits, permitWaits, bookedWaits and bookedSeconds (see AS-BUILT.md).
+-- rateWaits, idleWaits, permitWaits, bookedWaits, bookedSeconds, horizonRefusals and coordinatorBusy (see AS-BUILT.md).
 --
 -- Thresholds (starting points; tune after the first busy hour):
 --   M1  oldest due lag                  > 10 minutes            the lane is not keeping up, or is stopped (read M6)

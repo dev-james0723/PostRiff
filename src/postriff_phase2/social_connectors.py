@@ -354,7 +354,19 @@ class DiscordProvider(OAuthProvider):
             self._degraded_until = 0.0
 
     def _coordinator_failed(self):
+        """This process stops asking the coordinator for DEGRADED_SECONDS. Entering that rest leaves one WARNING line, whatever kind
+        of process it is (the lane, the minute cron or the web, which have no other report of it): the event, the kind of process
+        and the CLASS of the failure being handled, never its message, a request, an identifier or a number from the database."""
+        entering = not self.rate_coordinator_degraded
         self._degraded_until = time.monotonic() + self.DEGRADED_SECONDS
+        if entering:
+            import logging
+            import sys
+            from .discord.rate_limits import current_process_kind
+            caught = sys.exc_info()[1]
+            logging.getLogger('postriff.request').warning(json.dumps({
+                'event': 'discord.coordinator.degraded', 'processKind': current_process_kind(),
+                'reason': type(caught).__name__ if caught is not None else 'unknown', 'restSeconds': self.DEGRADED_SECONDS}))
 
     @staticmethod
     def _recorded(call):
