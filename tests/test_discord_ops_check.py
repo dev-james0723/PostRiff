@@ -723,11 +723,22 @@ class LaterBranches(unittest.TestCase):
         self.assertNotIn('SILENT_HALT_QUARANTINE', {a['id'] for a in alerts(with_fleet([]))})
 
     def test_late_creates_use_the_lanes_split_at_300_seconds_and_page_at_the_backlog_page(self):
-        cases = [(lagging(creates=290, readbacks=10), None), (lagging(creates=301, readbacks=10, late=['creates']), 'warn'),
-                 (lagging(creates=2701, readbacks=10, late=['creates']), 'page')]
-        for line, expected in cases:
+        # The projection covers every workspace and measures from the same nextAt, so it is at least the lanes' lag.
+        cases = [(290, lagging(creates=290, readbacks=10), None),
+                 (301, lagging(creates=301, readbacks=10, late=['creates']), 'warn'),
+                 (2701, lagging(creates=2701, readbacks=10, late=['creates']), 'page')]
+        for lag, line, expected in cases:
             with self.subTest(line=line):
-                self.assertEqual(found(with_fleet([line]), 'BACKLOG_LAG'), expected)
+                self.assertEqual(found(with_fleet([line], with_(('queue', 'oldestDueLagSeconds'), float(lag))), 'BACKLOG_LAG'),
+                                 expected)
+
+    def test_a_lagging_line_from_before_the_recovery_does_not_keep_the_alert(self):
+        # The lanes write the line only while work is late, and the newest one stays in the log window after a recovery;
+        # a projection lag at or below the create threshold says nothing is late now, so the old line is not read.
+        stale = with_fleet([lagging(creates=2800, readbacks=10, late=['creates'])], with_(('queue', 'oldestDueLagSeconds'), 40.0))
+        self.assertIsNone(found(stale, 'BACKLOG_LAG'))
+        unread = with_fleet([lagging(creates=2800, readbacks=10, late=['creates'])], with_(('queue', 'status'), 'unavailable'))
+        self.assertEqual(found(unread, 'BACKLOG_LAG'), 'page', 'without a projection the lanes\' line is all there is')
 
     def test_read_backs_deferred_by_a_burst_warn_only_past_an_hour(self):
         deferred = with_fleet([lagging(creates=100, readbacks=3000)], with_(('queue', 'oldestDueLagSeconds'), 3000.0))

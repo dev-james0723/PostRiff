@@ -125,6 +125,10 @@ def backlog(snapshot, t, out):
     fleet = snapshot.get('fleet') if isinstance(snapshot.get('fleet'), dict) else {}
     split = fleet.get('lag') if isinstance(fleet.get('lag'), dict) else {}
     creates, readbacks = _number(split.get('createSeconds')), _number(split.get('readbackSeconds'))
+    if lag is not None and lag <= t['create_warn_seconds']:
+        # The projection covers every workspace from the same nextAt as the lanes' sample, so nothing is late now: the
+        # newest lagging line (written only while work is late) is from before a recovery and is not read.
+        creates = readbacks = None
     if creates is not None and readbacks is not None:
         # The lanes' own split (discord.lane.lagging, W-02 M5): creates are late past create_warn_seconds; read-backs,
         # which a long burst defers, only past readback_warn_seconds. The projection cannot tell them apart, so when the
