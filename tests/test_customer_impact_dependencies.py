@@ -143,6 +143,10 @@ class DependencyMoves(unittest.TestCase):
     def test_pillow_13_renders_customer_images_exactly_as_the_live_pin(self):
         live_pin, rc_pin = pin(LIVE_REV, 'Pillow'), pin('HEAD', 'Pillow')
         old = os.environ.get('IMPACT_OLD_PILLOW_PYTHON', '/usr/bin/python3')
+        if not live_pin or not rc_pin:
+            # A shallow checkout (the CI default) has no copy of the live revision, so `git show` fails and both an unreadable
+            # pin and an interpreter without Pillow read as None: the comparison below would then see them as equal.
+            self.skipTest('cannot read the Pillow pin of %s or of HEAD' % LIVE_REV[:8])
         if version(sys.executable, 'PIL') != rc_pin or version(old, 'PIL') != live_pin or live_pin == rc_pin:
             self.skipTest('needs this interpreter on Pillow %s and %s on Pillow %s' % (rc_pin, old, live_pin))
         images(self.tmp)
