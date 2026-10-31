@@ -91,7 +91,9 @@ The browser journey needs Playwright's Chromium for the pinned `playwright` vers
 
 **One sound at a time.** Every new sound replaces the previous one: question, replay, hint, answer feedback, a learn-card
 tap, Next, leaving, any screen change, mute and unmount all fade out what is playing (25 ms) and stop its oscillators.
-Feedback cues play in the same schedule as the answer sound, so they cannot stack either.
+Feedback cues play in the same schedule as the answer sound, so they cannot stack either. Sound requests are tokened
+(`synth.request()`). If the AudioContext is still resuming when something newer happens (a sound, stop, mute,
+navigation or unmount), the older request is dropped and never plays.
 
 Answer lock: answers wait while a question's first sound plays only when that sound is ≤ 3.5 s (DESIGN §9). Rhythm
 questions (count-in + rhythm ≈ 6 s) are never locked. Answering one of those cuts the rhythm off and plays the answer
