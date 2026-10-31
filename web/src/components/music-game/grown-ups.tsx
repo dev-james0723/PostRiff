@@ -38,7 +38,8 @@ export function GrownUps({
       <h1 className={styles.heading} tabIndex={-1} data-screen-heading>
         For grown-ups
       </h1>
-      {/* Only what the game itself guarantees (decision D3). Site hosting and analytics follow the wider Rafii site. */}
+      {/* Only what the game guarantees (D3). /play sends no analytics or telemetry (D1). A Privacy link waits for the
+          site policy's children's section (privacy F4: docs/music-game/PRIVACY-NOTICE-DRAFT.md, for counsel). */}
       <p className={styles.body}>
         <span className={styles.line}>Note Garden has no accounts.</span>
         <span className={styles.line}>It never asks for names or personal details.</span>
