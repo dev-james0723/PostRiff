@@ -90,12 +90,9 @@ export function NoteGarden() {
     return next;
   };
 
+  // request() schedules only if no newer sound, stop, mute or unmount happened while the AudioContext was resuming.
   const sound = useCallback(
-    async (events: SoundEvent[], options?: { delay?: number; cue?: 'correct' | 'try-again' }) => {
-      const synth = getSynth();
-      if (!(await synth.unlock())) return;
-      await synth.play(events, options);
-    },
+    (events: SoundEvent[], options?: { delay?: number; cue?: 'correct' | 'try-again' }) => getSynth().request(events, options),
     [getSynth]
   );
 
