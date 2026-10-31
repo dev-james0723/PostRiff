@@ -26,7 +26,7 @@ async function open(browser) {
   await context.route('**/*', (route) => {
     const url = route.request().url();
     if (url.startsWith('data:') || url.startsWith('blob:')) return route.continue();
-    log.push({ url, offOrigin: new URL(url).origin !== origin });
+    log.push({ url, offOrigin: new URL(url).origin !== origin, body: route.request().postData() || '' });
     return new URL(url).origin === origin ? route.continue() : route.abort();
   });
   const page = await context.newPage();
@@ -36,6 +36,38 @@ async function open(browser) {
 const sentryLoaded = (page) => page.evaluate(() => typeof window.__SENTRY__ === 'object' && window.__SENTRY__ !== null);
 const analyticsScript = (page) => page.evaluate(() => [...document.scripts].some((s) => (s.src || '').includes('/_vercel/insights/')));
 const telemetryIn = (log, from = 0) => log.slice(from).filter((r) => isTelemetry(r.url)).map((r) => r.url);
+/** Page views queued for Vercel Analytics (locally the script 404s, so the queue keeps every call). */
+const queuedPageviews = (page) => page.evaluate(() => (window.vaq || []).filter(([kind]) => kind === 'pageview').map(([, p]) => p?.path ?? p?.route ?? '?'));
+
+/** What the browser does when a tab is hidden or closed: Sentry flushes client reports then. */
+async function hidePage(page) {
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+  });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    delete document.visibilityState;
+    delete document.hidden;
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+}
+
+/** Answer `count` questions with the mouse (first open answer until Next). */
+async function answerQuestions(page, count) {
+  for (let q = 0; q < count; q++) {
+    await page.waitForFunction(() => {
+      const group = document.querySelector('[aria-label="Answers"]');
+      return group?.getAttribute('aria-busy') !== 'true' && [...group.querySelectorAll('button')].some((b) => !b.disabled);
+    }, null, { timeout: 15000 });
+    while (!(await page.getByRole('button', { name: 'Next', exact: true }).isVisible())) {
+      await page.locator('[aria-label="Answers"] button:not([disabled])').first().click();
+    }
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+  }
+}
 
 async function playABit(page) {
   await page.getByRole('button', { name: 'Play' }).click();
@@ -88,21 +120,39 @@ async function playABit(page) {
       assert.equal(new URL(page.url()).pathname, '/play/note-garden', 'client-side navigation (no reload)');
       assert.equal(await sentryLoaded(page), true, 'same page session: SDK already loaded from /pricing');
       await playABit(page);
-      // Try the analytics queue directly too: beforeSend must drop it on /play.
-      await page.evaluate(() => window.va?.('event', { name: 'probe' }));
+      await answerQuestions(page, 3);
+      // Client-side navigation within /play, then the tab is hidden and closed (client_report flush on hide).
+      await page.evaluate(() => window.next.router.push('/play/note-garden?again=1'));
+      await page.waitForFunction(() => location.search === '?again=1');
+      // Same route, new search params: the game keeps the child's place in the level.
+      await page.getByText(/^(Question \d+ of \d+|\d+ of \d+)$/).waitFor();
+      await hidePage(page);
       await page.waitForTimeout(1000);
-      assert.deepEqual(telemetryIn(log, mark), [], 'no analytics/telemetry after client-side navigation into /play');
+      assert.deepEqual(telemetryIn(log, mark), [], 'no /monitoring, /_vercel/* or collector request during the whole /play stay');
       assert.deepEqual(log.slice(mark).filter((r) => r.offOrigin), [], 'no off-origin requests on /play');
-      pass(`client-side /pricing -> /play/note-garden: ${log.length - mark} requests, 0 telemetry, 0 off-origin`);
+      const playViews = (await queuedPageviews(page)).filter((p) => p.startsWith('/play'));
+      assert.deepEqual(playViews, [], 'no /play page view is even queued for Vercel Analytics');
+      pass(`client-side /pricing -> /play/note-garden, 3+ questions, nav within /play, hide: ${log.length - mark} requests, 0 telemetry, 0 off-origin, 0 /play page views queued`);
 
-      // Leaving /play restores the other routes' telemetry exactly as before.
+      // Leaving /play: the other route's analytics resume. Expected exactly: the Analytics component mounts again and
+      // queues a /pricing page view; Sentry sends errors again. The one Sentry session envelope emitted at the moment
+      // of leaving (while the address bar still shows /play) is dropped by design.
       const back = log.length;
       await page.evaluate(() => window.next.router.push('/pricing'));
       await page.waitForFunction(() => location.pathname === '/pricing');
+      await page.waitForFunction(() => (window.vaq || []).some(([kind, p]) => kind === 'pageview' && (p?.path ?? p?.route) === '/pricing'));
       await page.evaluate(() => setTimeout(() => { throw new Error('telemetry probe back on /pricing'); }, 0));
       await page.waitForTimeout(2000);
-      assert.ok(telemetryIn(log, back).length > 0, 'telemetry resumes after leaving /play');
-      pass(`client-side /play -> /pricing: telemetry resumes (${telemetryIn(log, back).length} request(s), aborted locally)`);
+      assert.ok(telemetryIn(log, back).length > 0, 'Sentry resumes after leaving /play');
+      assert.deepEqual((await queuedPageviews(page)).filter((p) => p.startsWith('/play')), [], 'still no /play page view queued');
+      // Hiding the tab on /pricing flushes Sentry's client_report as usual, minus any tally of what was dropped on /play.
+      const beforeHide = log.length;
+      await hidePage(page);
+      await page.waitForTimeout(1000);
+      const reports = log.slice(beforeHide).map((r) => r.body).filter((body) => body.includes('"client_report"'));
+      assert.ok(reports.length > 0, 'positive control: a client_report is flushed on hide off /play');
+      assert.ok(reports.every((body) => !body.includes('"before_send"')), `no count of /play drops in later client reports: ${reports.join(' ').slice(0, 300)}`);
+      pass(`client-side /play -> /pricing: /pricing page view queued, Sentry resumes (${telemetryIn(log, back).length} request(s)), client_report on hide carries no /play tally`);
       await context.close();
     }
   } finally {
