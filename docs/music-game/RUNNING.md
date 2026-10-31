@@ -206,6 +206,10 @@ sessions plus sampled-out transactions. The page also referenced `/manifest.webm
 After D12, the server sends nothing for that visit within the 70 s window, while a home visit still produces its 42
 sessions and client_report.
 
+A cold start's first request runs before Sentry has a request scope for it. A `tracesSampler` (identical to
+`tracesSampleRate: 0`) recognises `/play` from the span's `http.target`, so those sampled-out spans are not tallied
+either. The sink test passes with a readiness check that polls `/play` from the moment the server starts.
+
 Limits:
 - Next always adds the root `app/favicon.ico` link on every page, including `/play`. A real browser's `/favicon.ico`
   request is excluded when it carries a `/play` Referer, and counted (counts only, no URL) when it carries none.
