@@ -1,0 +1,21 @@
+{
+  "corpus": "rafii-ui-planner-holdout/v1",
+  "note": "Held-out cases labelled 2026-10-14 BEFORE the first run and never used to tune rules. Engineer-authored labels; owner review required. Report results as observed; do not relabel to pass.",
+  "cases": [
+    {"id": "H01", "text": "Show me my drafts", "tools": [["content_search", "verified"]], "expect": {"eligible": true, "form": "table"}},
+    {"id": "H02", "text": "Is my Friday post scheduled?", "tools": [["calendar_range", "verified"]], "expect": {"eligible": false, "form": "text"}},
+    {"id": "H03", "text": "What went wrong with yesterday's publish?", "tools": [["job_get", "verified"]], "refs": [["job", "job-1"]], "expect": {"eligible": true, "form": "recovery"}},
+    {"id": "H04", "text": "Give me a quick summary of last week's performance", "tools": [["publishing_summary", "verified"]], "expect": {"eligible": false, "form": "text"}},
+    {"id": "H05", "text": "TikTok vs Instagram, which did better last month?", "tools": [["publishing_summary", "verified"]], "expect": {"eligible": true, "form": "comparison"}},
+    {"id": "H06", "text": "Can you chart my follower growth?", "tools": [["publishing_summary", "verified"]], "expect": {"eligible": true, "form": "chart"}},
+    {"id": "H07", "text": "嗨 Rafii", "tools": [], "expect": {"eligible": false, "form": "text"}},
+    {"id": "H08", "text": "Show posts that failed this week", "tools": [["queue_summary", "verified"]], "expect": {"eligible": true, "form": "table"}},
+    {"id": "H09", "text": "給我看看下週的發文日曆", "tools": [["calendar_range", "verified"]], "expect": {"eligible": true, "form": "calendar"}},
+    {"id": "H10", "text": "Find photos from the recital in my library", "tools": [["library_search", "verified"]], "refs": [["library_file", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1"], ["library_file", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2"], ["library_file", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb3"]], "expect": {"eligible": true, "form": "cards"}},
+    {"id": "H11", "text": "Why is my automation paused?", "tools": [["automation_get", "verified"]], "refs": [["automation", "auto-2"]], "expect": {"eligible": true, "form": "recovery"}},
+    {"id": "H12", "text": "When is my next post going out?", "tools": [["queue_summary", "verified"]], "expect": {"eligible": false, "form": "text"}},
+    {"id": "H13", "text": "Move my Tuesday post to Thursday", "tools": [["schedule_propose", "verified"]], "approvals": ["reschedule_post"], "refs": [["post", "post-1"]], "expect": {"eligible": true, "form": "approval"}},
+    {"id": "H14", "modality": "voice", "text": "Compare Instagram and TikTok", "tools": [["publishing_summary", "verified"]], "expect": {"eligible": true, "form": "comparison"}},
+    {"id": "H15", "text": "What did other pianists post about recitals this week? Just the highlights", "tools": [["web_research", "verified"]], "expect": {"eligible": false, "form": "text"}}
+  ]
+}
