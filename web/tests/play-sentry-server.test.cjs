@@ -28,7 +28,7 @@ function transpile(relative, stubs) {
 
 const items = (envelope) => envelope[1].map(([header, payload]) => ({ type: header.type, payload }));
 
-test('server: a /play request sends no event, no tally of its drop and no request session; /pricing reports as usual', async () => {
+test('server: a /play request and the assets it loads send nothing; other pages (incl. leaving /play) report as usual', async () => {
   // instrumentation.ts reads these when it is evaluated, so set them first (dummy local DSN; nothing leaves the process).
   process.env.NEXT_PUBLIC_SENTRY_DSN = 'https://public@127.0.0.1/1';
   process.env.NEXT_RUNTIME = 'nodejs';
@@ -40,7 +40,6 @@ test('server: a /play request sends no event, no tally of its drop and no reques
   const sentryStub = new Proxy(Sentry, { get: (target, key) => (key === 'makeNodeTransport' ? () => memoryTransport : target[key]) });
   const playPath = transpile('lib/play-path.ts', {});
   const stubs = { '@sentry/nextjs': sentryStub, '@/lib/play-path': playPath, '@/lib/telemetry': transpile('lib/telemetry.ts', {}) };
-  if (fs.existsSync(path.join(__dirname, '..', 'src', 'lib', 'sentry-play-filter.ts'))) stubs['@/lib/sentry-play-filter'] = transpile('lib/sentry-play-filter.ts', {});
   const instrumentation = transpile('instrumentation.ts', stubs);
 
   await instrumentation.register();
@@ -53,9 +52,17 @@ test('server: a /play request sends no event, no tally of its drop and no reques
     Sentry.captureException(new Error(`boom on ${req.url}`));
   });
   diagnostics.channel(Sentry.HTTP_ON_SERVER_REQUEST ?? 'http.server.request.start').publish({ server });
-  for (const url of ['/play/note-garden', '/pricing']) {
+  const play = 'http://127.0.0.1:3117/play/note-garden';
+  const requests = [
+    { url: '/play/note-garden' }, // the game page: excluded
+    { url: '/_next/static/chunks/app.js', referer: play }, // an asset the game page loads: excluded (D12)
+    { url: '/pricing' }, // counted
+    { url: '/_next/static/chunks/app.js', referer: 'http://127.0.0.1:3117/' }, // the same asset for another page: counted
+    { url: '/', referer: play } // leaving the game for the home page: counted
+  ];
+  for (const { url, referer } of requests) {
     const req = new http.IncomingMessage(new net.Socket());
-    Object.assign(req, { url, method: 'GET', headers: { host: '127.0.0.1:3117' } });
+    Object.assign(req, { url, method: 'GET', headers: { host: '127.0.0.1:3117', ...(referer ? { referer } : {}) } });
     const res = new http.ServerResponse(req);
     server.emit('request', req, res);
     res.emit('close');
@@ -66,13 +73,13 @@ test('server: a /play request sends no event, no tally of its drop and no reques
 
   const all = sent.flatMap(items);
   const events = all.filter((i) => i.type === 'event');
-  assert.equal(events.length, 1, `exactly one error sent (the /pricing one), got ${events.length}`);
+  assert.equal(events.length, 3, `errors sent for the three non-play requests only, got ${events.length}`);
   assert.match(String(events[0].payload.exception?.values?.[0]?.type ?? ''), /Error/, 'positive control: the /pricing error reports');
   const tallies = all.filter((i) => i.type === 'client_report').flatMap((i) => i.payload.discarded_events ?? []);
   assert.deepEqual(tallies.filter((d) => d.reason === 'before_send'), [], `no tally of the /play drop: ${JSON.stringify(tallies)}`);
   const sampledOut = tallies.filter((d) => d.reason === 'sample_rate' && d.category === 'transaction').reduce((n, d) => n + d.quantity, 0);
-  assert.equal(sampledOut, 1, `only the /pricing request's sampled-out transaction is tallied: ${JSON.stringify(tallies)}`);
+  assert.equal(sampledOut, 2, `only /pricing and / have sampled-out transactions tallied (static assets create none): ${JSON.stringify(tallies)}`);
   const aggregates = all.filter((i) => i.type === 'sessions').flatMap((i) => i.payload.aggregates ?? []);
   const counted = aggregates.reduce((sum, a) => sum + (a.exited ?? 0) + (a.errored ?? 0) + (a.crashed ?? 0), 0);
-  assert.equal(counted, 1, `only the /pricing request is a request session: ${JSON.stringify(aggregates)}`);
+  assert.equal(counted, 3, `only the three non-play requests are request sessions: ${JSON.stringify(aggregates)}`);
 });

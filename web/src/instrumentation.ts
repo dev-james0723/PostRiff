@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
-import { isPlayEvent, isPlayUrl } from '@/lib/play-path';
+import { isPlayAssetRequest, isPlayEvent, isPlayUrl } from '@/lib/play-path';
 import { scrubTelemetry } from '@/lib/telemetry';
 
 const sentryOptions: Sentry.NodeOptions | Sentry.EdgeOptions = {
@@ -15,17 +15,24 @@ const sentryOptions: Sentry.NodeOptions | Sentry.EdgeOptions = {
   // Adjust this value in production, or use tracesSampler for greater control
   tracesSampleRate: 0,
   // D1: nothing from the children's /play area is sent; other routes keep the existing scrubbing.
-  beforeSend: (event) => (isPlayEvent(event) ? null : scrubTelemetry(event)),
-  beforeSendTransaction: (event) => (isPlayEvent(event) ? null : event),
+  beforeSend: (event) => (isPlayEvent(event) || inPlayRequest() ? null : scrubTelemetry(event)),
+  beforeSendTransaction: (event) => (isPlayEvent(event) || inPlayRequest() ? null : event),
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false
 };
 
-/** True while handling a /play request: the request's isolation scope carries its URL. */
+type RequestInfo = { url?: string; headers?: Record<string, string | string[] | undefined> };
+
+/** /play traffic: the page itself, or an asset/metadata file a /play page loads (its Referer is /play, D12). */
+function isPlayRequest(request: RequestInfo | undefined): boolean {
+  const referer = request?.headers?.referer;
+  return isPlayUrl(request?.url) || isPlayAssetRequest(request?.url, Array.isArray(referer) ? referer[0] : referer);
+}
+
+/** True while handling /play traffic: the request's isolation scope carries its URL and headers. */
 function inPlayRequest(): boolean {
-  const request = Sentry.getIsolationScope().getScopeData().sdkProcessingMetadata.normalizedRequest as { url?: string } | undefined;
-  return isPlayUrl(request?.url);
+  return isPlayRequest(Sentry.getIsolationScope().getScopeData().sdkProcessingMetadata.normalizedRequest as RequestInfo | undefined);
 }
 
 /**
@@ -39,7 +46,7 @@ function excludePlayRequests() {
   const client = Sentry.getClient();
   if (!client) return;
   client.on('httpServerRequest', (_request, _response, normalizedRequest) => {
-    if (isPlayUrl(normalizedRequest.url)) Sentry.getIsolationScope().setSDKProcessingMetadata({ requestSession: undefined });
+    if (isPlayRequest(normalizedRequest)) Sentry.getIsolationScope().setSDKProcessingMetadata({ requestSession: undefined });
   });
   const record = client.recordDroppedEvent.bind(client);
   client.recordDroppedEvent = (...args: Parameters<typeof record>) => {
