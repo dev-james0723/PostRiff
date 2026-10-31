@@ -37,6 +37,14 @@ async function open(browser) {
 
 const sentryLoaded = (page) => page.evaluate(() => typeof window.__SENTRY__ === 'object' && window.__SENTRY__ !== null);
 const analyticsScript = (page) => page.evaluate(() => [...document.scripts].some((s) => (s.src || '').includes('/_vercel/insights/')));
+/** No telemetry request left while the page was on /play. Every request must carry the page URL it was sent from. */
+function assertNothingFromPlay(log, label) {
+  const unknown = log.filter((r) => !r.pageUrl);
+  assert.deepEqual(unknown.map((r) => r.url), [], `${label}: every request records the page URL at send time`);
+  const fromPlay = log.filter((r) => isTelemetry(r.url) && new URL(r.pageUrl).pathname.startsWith('/play'));
+  assert.deepEqual(fromPlay.map((r) => `${r.url} (page ${r.pageUrl})`), [], `${label}: no telemetry request left while the page was on /play`);
+}
+
 const telemetryIn = (log, from = 0) => log.slice(from).filter((r) => isTelemetry(r.url)).map((r) => r.url);
 /** Page views queued for Vercel Analytics (locally the script 404s, so the queue keeps every call). */
 const queuedPageviews = (page) => page.evaluate(() => (window.vaq || []).filter(([kind]) => kind === 'pageview').map(([, p]) => p?.path ?? p?.route ?? '?'));
@@ -130,6 +138,7 @@ async function playABit(page) {
       await page.getByText(/^(Question \d+ of \d+|\d+ of \d+)$/).waitFor();
       await hidePage(page);
       await page.waitForTimeout(1000);
+      assertNothingFromPlay(log, '/pricing -> /play stay');
       assert.deepEqual(telemetryIn(log, mark), [], 'no /monitoring, /_vercel/* or collector request during the whole /play stay');
       assert.deepEqual(log.slice(mark).filter((r) => r.offOrigin), [], 'no off-origin requests on /play');
       const playViews = (await queuedPageviews(page)).filter((p) => p.startsWith('/play'));
@@ -177,8 +186,7 @@ async function playABit(page) {
       await page.evaluate(() => setTimeout(() => { throw new Error('telemetry probe after leaving /play'); }, 0));
       await page.waitForTimeout(2000);
       assert.ok(telemetryIn(log, beforeError).length > 0, `Sentry sends from ${target} after a session that began on /play`);
-      const fromPlay = log.filter((r) => isTelemetry(r.url) && new URL(r.pageUrl || base).pathname.startsWith('/play'));
-      assert.deepEqual(fromPlay.map((r) => r.url), [], 'no telemetry request left while the page was on /play, including the moment of leaving');
+      assertNothingFromPlay(log, `/play boot -> ${target}`);
       pass(`direct /play boot -> client-side ${target}: Sentry initialised, analytics script loaded, page views ${JSON.stringify(views)}, error sent, 0 requests while on /play`);
       await context.close();
     }
