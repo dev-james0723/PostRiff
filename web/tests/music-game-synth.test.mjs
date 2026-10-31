@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { MAX_MASTER_GAIN, VOLUME_GAIN, createSynth } from '../src/lib/music-game/synth.ts';
 
 /** A minimal AudioContext stand-in. Records every value each gain node is asked to reach. */
-function fakeAudio() {
+function fakeAudio({ deferResume = false } = {}) {
+  const pendingResumes = [];
   const made = [];
   const param = (log) => {
     const p = { value: 0 };
@@ -23,7 +24,12 @@ function fakeAudio() {
       closed: false,
       resumed: 0,
       destination: node(),
-      async resume() { ctx.resumed++; ctx.state = 'running'; },
+      resume() {
+        ctx.resumed++;
+        if (!deferResume) { ctx.state = 'running'; return Promise.resolve(); }
+        // Deferred: the test decides when the browser finishes resuming.
+        return new Promise((resolve) => pendingResumes.push(() => { ctx.state = 'running'; resolve(); }));
+      },
       async suspend() { ctx.state = 'suspended'; },
       async close() { ctx.closed = true; ctx.state = 'closed'; },
       createGain() { const log = []; const g = node({ gain: param(log), log }); ctx.gains.push(g); return g; },
@@ -49,7 +55,11 @@ function fakeAudio() {
     made.push(ctx);
     return ctx;
   };
-  return { factory, made };
+  const finishResume = async () => {
+    for (const done of pendingResumes.splice(0)) done();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+  return { factory, made, finishResume };
 }
 
 test('volume levels follow DESIGN: medium 0.20, soft 0.10, hard ceiling 0.25', () => {
@@ -203,4 +213,69 @@ test('a browser without Web Audio degrades to silence instead of throwing', asyn
   const none = createSynth({ createContext: undefined });
   assert.equal(none.supported(), false);
   assert.equal(await none.unlock(), false);
+});
+
+/** Frequencies of every oscillator the synth scheduled (two partials per tone, one per click). */
+const scheduledHz = (fake) => (fake.made[0]?.sources ?? []).map((o) => Math.round(o.frequency.value));
+const C4 = 262; // fundamental of C4
+const G5 = 784; // fundamental of G5
+
+test('pending unlock: stop() before resume finishes means the stale request never schedules', async () => {
+  const fake = fakeAudio({ deferResume: true });
+  const synth = createSynth({ createContext: fake.factory });
+  const a = synth.request([tone('C4')]);
+  synth.stop();
+  await fake.finishResume();
+  await a;
+  assert.deepEqual(scheduledHz(fake), [], 'A never schedules');
+  const b = synth.request([tone('G5')]);
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.ok(scheduledHz(fake).includes(G5), 'a later request still plays');
+  for (const s of fake.made[0].sources) s.end();
+  await b;
+});
+
+test('pending unlock: a newer request replaces an older one; only the latest schedules', async () => {
+  const fake = fakeAudio({ deferResume: true });
+  const synth = createSynth({ createContext: fake.factory });
+  const a = synth.request([tone('C4')]);
+  const b = synth.request([tone('G5')]);
+  await fake.finishResume();
+  await a;
+  assert.ok(!scheduledHz(fake).includes(C4), 'A never schedules');
+  assert.ok(scheduledHz(fake).includes(G5), 'B schedules');
+  for (const s of fake.made[0].sources) s.end();
+  await b;
+});
+
+test('pending unlock: a direct play() also invalidates an older pending request', async () => {
+  const fake = fakeAudio({ deferResume: true });
+  const synth = createSynth({ createContext: fake.factory });
+  const a = synth.request([tone('C4')]);
+  synth.play([tone('G5')]); // not running yet: schedules nothing, but A is now stale
+  await fake.finishResume();
+  await a;
+  assert.deepEqual(scheduledHz(fake), []);
+});
+
+test('pending unlock: muting before resume finishes means nothing schedules, even after unmuting later', async () => {
+  const fake = fakeAudio({ deferResume: true });
+  const synth = createSynth({ createContext: fake.factory });
+  const a = synth.request([tone('C4')]);
+  synth.setMuted(true);
+  await fake.finishResume();
+  await a;
+  synth.setMuted(false);
+  assert.deepEqual(scheduledHz(fake), [], 'the muted-era request stays dead');
+});
+
+test('pending unlock: close() (unmount) before resume finishes means nothing schedules', async () => {
+  const fake = fakeAudio({ deferResume: true });
+  const synth = createSynth({ createContext: fake.factory });
+  const a = synth.request([tone('C4')]);
+  synth.close();
+  await fake.finishResume();
+  await a;
+  assert.deepEqual(scheduledHz(fake), []);
+  assert.equal(synth.ready(), false);
 });

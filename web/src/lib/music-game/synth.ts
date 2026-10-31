@@ -4,7 +4,9 @@
  * inside a tap or key handler, so nothing sounds before a child presses something. Sounds are scheduled on the audio
  * clock (no JS timers). Chain: voice -> schedule bus -> master gain (capped) -> limiter -> speakers.
  * Only one schedule sounds at a time: every new sound, stop, mute or close fades the previous bus out and stops its
- * oscillators, so replays, hints, answers and the next question never pile up.
+ * oscillators, so replays, hints, answers and the next question never pile up. `request()` is the safe entry point
+ * for the UI: it waits for the AudioContext to resume and schedules only if nothing newer (a sound, stop, mute or
+ * close) happened while it waited.
  * No imports, so node's test runner loads it directly (`web/tests/music-game-synth.test.mjs`).
  */
 
@@ -39,6 +41,8 @@ export type Synth = {
    * Resolves when the last note has ended, when a newer sound replaces it, or at once if silent.
    */
   play(events: SynthEvent[], options?: { delay?: number; cue?: 'correct' | 'try-again' }): Promise<void>;
+  /** unlock() then play(), unless a newer sound, stop, mute or close happened while the context was resuming. */
+  request(events: SynthEvent[], options?: { delay?: number; cue?: 'correct' | 'try-again' }): Promise<void>;
   /** Fades out and stops every queued or sounding note. */
   stop(): void;
   setMuted(muted: boolean): void;
@@ -58,6 +62,8 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
   /** The one schedule allowed to sound: its own bus into the master, and every oscillator it started. */
   let current: { bus: GainNode; sources: OscillatorNode[] } | null = null;
   let waiting: Array<() => void> = [];
+  /** Bumped by every play, stop, mute and close; a request scheduled under an older value is stale. */
+  let generation = 0;
 
   const running = () => !!ctx && !!master && !muted && ctx.state === 'running';
 
@@ -68,6 +74,7 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
   }
 
   function stopAll() {
+    generation++;
     if (current && ctx) {
       const now = ctx.currentTime;
       const { bus, sources } = current;
@@ -150,63 +157,78 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
     return { last, end };
   }
 
-  return {
-    async unlock() {
-      if (muted || failed || !options.createContext) return false;
-      try {
-        if (!ctx) {
-          ctx = options.createContext();
-          master = ctx.createGain();
-          master.gain.setValueAtTime(masterLevel(volume), ctx.currentTime);
-          const limiter = ctx.createDynamicsCompressor();
-          limiter.threshold.setValueAtTime(-12, ctx.currentTime);
-          limiter.knee.setValueAtTime(0, ctx.currentTime);
-          limiter.ratio.setValueAtTime(20, ctx.currentTime);
-          limiter.attack.setValueAtTime(0.003, ctx.currentTime);
-          limiter.release.setValueAtTime(0.1, ctx.currentTime);
-          master.connect(limiter);
-          limiter.connect(ctx.destination);
-        }
-        if (ctx.state !== 'running') await ctx.resume();
-        master!.gain.cancelScheduledValues(ctx.currentTime);
-        master!.gain.setValueAtTime(masterLevel(volume), ctx.currentTime);
-        return ctx.state === 'running';
-      } catch {
-        failed = true;
-        ctx = null;
-        master = null;
-        return false;
+  async function unlock(): Promise<boolean> {
+    if (muted || failed || !options.createContext) return false;
+    try {
+      if (!ctx) {
+        ctx = options.createContext();
+        master = ctx.createGain();
+        master.gain.setValueAtTime(masterLevel(volume), ctx.currentTime);
+        const limiter = ctx.createDynamicsCompressor();
+        limiter.threshold.setValueAtTime(-12, ctx.currentTime);
+        limiter.knee.setValueAtTime(0, ctx.currentTime);
+        limiter.ratio.setValueAtTime(20, ctx.currentTime);
+        limiter.attack.setValueAtTime(0.003, ctx.currentTime);
+        limiter.release.setValueAtTime(0.1, ctx.currentTime);
+        master.connect(limiter);
+        limiter.connect(ctx.destination);
       }
-    },
-    play(events, opts = {}) {
-      stopAll();
-      if (!running() || (events.length === 0 && !opts.cue)) return Promise.resolve();
-      const bus = ctx!.createGain();
-      bus.connect(master!);
-      current = { bus, sources: [] };
-      // Feedback cue at 70% of voice level: a rising C-E-G for correct, one soft low G for "try again".
-      const cue: SynthEvent[] =
-        opts.cue === 'correct'
-          ? ['C5', 'E5', 'G5'].map((note, i) => ({ kind: 'tone', note, at: i * 0.09, seconds: 0.09 }))
-          : opts.cue === 'try-again'
-            ? [{ kind: 'tone', note: 'G4', at: 0, seconds: 0.2 }]
-            : [];
-      const lead = schedule(cue, 0, 0.7);
-      const main = schedule(events, opts.delay ?? 0, 1);
-      const last = main.last && main.end >= lead.end ? main.last : (lead.last ?? main.last);
-      if (!last) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        waiting.push(resolve);
-        last.addEventListener(
-          'ended',
-          () => {
-            waiting = waiting.filter((r) => r !== resolve);
-            resolve();
-          },
-          { once: true }
-        );
-      });
-    },
+      const resuming = ctx;
+      if (resuming.state !== 'running') await resuming.resume();
+      // Closed or muted while resume() was pending: nothing to set up.
+      if (ctx !== resuming || !master || muted) return false;
+      master.gain.cancelScheduledValues(ctx.currentTime);
+      master.gain.setValueAtTime(masterLevel(volume), ctx.currentTime);
+      return ctx.state === 'running';
+    } catch {
+      failed = true;
+      ctx = null;
+      master = null;
+      return false;
+    }
+  }
+
+  function play(events: SynthEvent[], opts: { delay?: number; cue?: 'correct' | 'try-again' } = {}): Promise<void> {
+    stopAll();
+    if (!running() || (events.length === 0 && !opts.cue)) return Promise.resolve();
+    const bus = ctx!.createGain();
+    bus.connect(master!);
+    current = { bus, sources: [] };
+    // Feedback cue at 70% of voice level: a rising C-E-G for correct, one soft low G for "try again".
+    const cue: SynthEvent[] =
+      opts.cue === 'correct'
+        ? ['C5', 'E5', 'G5'].map((note, i) => ({ kind: 'tone', note, at: i * 0.09, seconds: 0.09 }))
+        : opts.cue === 'try-again'
+          ? [{ kind: 'tone', note: 'G4', at: 0, seconds: 0.2 }]
+          : [];
+    const lead = schedule(cue, 0, 0.7);
+    const main = schedule(events, opts.delay ?? 0, 1);
+    const last = main.last && main.end >= lead.end ? main.last : (lead.last ?? main.last);
+    if (!last) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      waiting.push(resolve);
+      last.addEventListener(
+        'ended',
+        () => {
+          waiting = waiting.filter((r) => r !== resolve);
+          resolve();
+        },
+        { once: true }
+      );
+    });
+  }
+
+  async function request(events: SynthEvent[], opts: { delay?: number; cue?: 'correct' | 'try-again' } = {}): Promise<void> {
+    const token = ++generation;
+    const ok = await unlock();
+    if (!ok || token !== generation) return;
+    return play(events, opts);
+  }
+
+  return {
+    unlock,
+    play,
+    request,
     stop: stopAll,
     setMuted(next) {
       muted = next;
