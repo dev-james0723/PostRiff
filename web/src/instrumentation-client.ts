@@ -4,7 +4,10 @@ import { scrubTelemetry } from '@/lib/telemetry';
 // D1: the children's /play area sends no telemetry. Booting there never loads the SDK; after a client-side visit to
 // /play from another route, the transport drops every envelope (events, transactions, sessions) and the hooks drop
 // /play events, so nothing leaves while a /play page is open.
-const onPlay = () => isPlayPath(window.location.pathname);
+// Next calls onRouterTransitionStart before a client-side navigation changes the address bar, and Sentry starts the
+// next session from its pushState hook at that same moment, so the destination has to count as "on /play" too.
+let headingToPlay = false;
+const onPlay = () => headingToPlay || isPlayPath(window.location.pathname);
 
 // Disabled/unconfigured deployments must not download or initialize the SDK.
 const sdk = !process.env.NEXT_PUBLIC_SENTRY_DISABLED && process.env.NEXT_PUBLIC_SENTRY_DSN && !onPlay()
@@ -27,6 +30,7 @@ const sdk = !process.env.NEXT_PUBLIC_SENTRY_DISABLED && process.env.NEXT_PUBLIC_
   : null;
 
 export function onRouterTransitionStart(href: string, navigationType: string) {
-  if (isPlayUrl(href)) return;
+  headingToPlay = isPlayUrl(href);
+  if (headingToPlay) return;
   void sdk?.then((Sentry) => Sentry?.captureRouterTransitionStart(href, navigationType));
 }
