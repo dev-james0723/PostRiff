@@ -124,13 +124,47 @@ Not changed, by decision:
 - **Announcement timing (m6):** Next is described by the feedback, but a real screen reader was not used
   (**NOT_TESTED** with VoiceOver, NVDA or TalkBack).
 
-## Release prerequisites (not done here)
+## No analytics or telemetry on /play (decision D1 = exclude, done)
 
-- **D3, Grown-ups copy:** the panel no longer claims "nothing is sent anywhere". Whether the site may say more depends
-  on D1.
-- **D1, analytics:** the root layout mounts Vercel Web Analytics when `NEXT_PUBLIC_VERCEL_ANALYTICS=1`. It records page
-  views for every route, including `/play/note-garden`. Per the orchestrator's decision D1, the root layout was **not**
-  edited. Before a public release, decide whether to exclude `/play/*` (for example with `beforeSend`).
+Nothing analytics or telemetry is sent from `/play` or anything below it. Every other route keeps exactly the analytics
+it had. One helper, `web/src/lib/play-path.ts` (`isPlayPath`), decides what counts as `/play`. It matches `/play`,
+`/play/` and `/play/note-garden`, but not `/player`, `/playground` or `/app/play`.
+
+| Surface | What happens on /play | Where |
+|---|---|---|
+| Vercel Web Analytics (when `NEXT_PUBLIC_VERCEL_ANALYTICS=1`) | `<Analytics>` is not rendered, so a direct visit never loads the script. `beforeSend` (the documented API in `@vercel/analytics` 1.6.1) drops `/play` page views and events after a client-side visit | `web/src/components/layout/site-analytics.tsx`, `web/src/app/layout.tsx` |
+| Sentry browser SDK (when a DSN is set) | Booting on `/play` never loads or initialises the SDK. After a client-side visit, a transport gate drops every envelope (events, transactions, sessions) while on `/play` or heading there. `beforeSend`/`beforeSendTransaction` also drop `/play` events, and router transitions into `/play` are not recorded | `web/src/instrumentation-client.ts` |
+| Sentry server SDK | `beforeSend`/`beforeSendTransaction` drop events whose request URL or transaction is `/play`, and `onRequestError` skips `/play` request paths | `web/src/instrumentation.ts` |
+| Speed Insights | Not installed; not added | — |
+
+Sentry starts a new session from its `pushState` hook before the address bar changes. The client gate therefore also
+uses the destination that Next passes to `onRouterTransitionStart`. Leaving `/play` resets it.
+
+**Check it** (production build with telemetry switched on and a dummy local DSN; the test aborts every off-origin
+request, so nothing reaches a real collector):
+
+```sh
+NEXT_PUBLIC_VERCEL_ANALYTICS=1 NEXT_PUBLIC_SENTRY_DSN=https://public@127.0.0.1/1 node_modules/.bin/next build
+NEXT_PUBLIC_VERCEL_ANALYTICS=1 NEXT_PUBLIC_SENTRY_DSN=https://public@127.0.0.1/1 node_modules/.bin/next start -p 3117 -H 127.0.0.1
+RAFII_TELEMETRY_URL=http://127.0.0.1:3117 node tests/play-telemetry-browser.cjs
+node --test tests/play-telemetry.test.mjs        # unit tests for the helper
+```
+
+The browser test checks five things:
+1. A direct `/play/note-garden` load has no analytics script, no Sentry, 0 telemetry requests and 0 off-origin requests.
+2. `/pricing` still requests `/_vercel/insights/script.js`, initialises Sentry and sends an error, as a positive control.
+3. A client-side navigation from `/pricing` into `/play` sends nothing.
+4. Navigating back to `/pricing` resumes telemetry.
+5. Rebuild without those variables before the normal game journey, or run the journey against this build: it passed
+   with 0 off-origin requests on 2026-10-31.
+
+Not observed end to end: a server-side error during a `/play` request. The server path is covered by the helper's unit
+tests and the hook code above.
+
+## Release notes (not done here)
+
+- **D3, Grown-ups copy:** the panel claims only what the game guarantees. Since D1 is now done, the site may also say
+  that `/play` sends no analytics.
 - `src/proxy.ts` still runs `updateSession` for `/play/*`. This only refreshes an existing Rafii session cookie. The game
   sets no cookies.
 - The route renders dynamically (`ƒ`) because the root layout reads the theme cookie.
