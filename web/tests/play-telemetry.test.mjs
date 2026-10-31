@@ -3,9 +3,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dropPlayPageview, isPlayEvent, isPlayPath, isPlayUrl } from '../src/lib/play-path.ts';
 
-test('isPlayPath: /play and everything under it, nothing that merely starts with "play"', () => {
-  for (const path of ['/play', '/play/', '/play/note-garden', '/play/note-garden/', '/play//x', '/PLAY/note-garden']) assert.equal(isPlayPath(path), true, path);
+test('isPlayPath: exactly /play or under /play/, nothing that merely starts with "play"', () => {
+  for (const path of ['/play', '/play/', '/play/note-garden', '/play/note-garden/', '/play//x']) assert.equal(isPlayPath(path), true, path);
   for (const path of ['/player', '/playground', '/app/play', '/plays', '/', '', '/pricing', 'play', undefined, null]) assert.equal(isPlayPath(path), false, String(path));
+});
+
+test('isPlayPath is case-sensitive and does not decode: Next serves the game only at the literal lowercase path', () => {
+  // Observed on `next start` (2026-10-31): /PLAY/note-garden, /Play/note-garden and /%70lay/note-garden are 404 pages
+  // without the game, so they are ordinary site pages and keep the site's analytics.
+  for (const path of ['/PLAY/note-garden', '/Play/note-garden', '/%70lay/note-garden']) assert.equal(isPlayPath(path), false, path);
+  // An encoded segment below /play/ is still inside the play area (a 404 there sends nothing either).
+  assert.equal(isPlayPath('/play/%6Eote-garden'), true);
 });
 
 test('isPlayUrl: absolute or relative URLs, with query and hash', () => {

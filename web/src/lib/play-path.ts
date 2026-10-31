@@ -4,11 +4,12 @@
  * Pure (no imports) so node's test runner can load it directly (`web/tests/play-telemetry.test.mjs`).
  */
 
-const PLAY = /^\/play(\/|$)/i;
-
-/** True for /play, /play/ and anything below it; false for /player, /playground, /app/play. */
+/**
+ * True for exactly /play or anything under /play/; false for /player, /playground, /app/play. Case-sensitive and not
+ * decoded, like Next's routing: the game renders only at the literal lowercase path (/PLAY/… and /%70lay/… are 404s).
+ */
 export function isPlayPath(pathname: string | null | undefined): boolean {
-  return typeof pathname === 'string' && PLAY.test(pathname);
+  return typeof pathname === 'string' && (pathname === '/play' || pathname.startsWith('/play/'));
 }
 
 /** Same test for a full or relative URL (query and hash ignored). */
