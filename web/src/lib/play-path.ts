@@ -33,3 +33,20 @@ export function isPlayEvent(event: { request?: { url?: string }; transaction?: s
   const name = event.transaction?.replace(/^[A-Z]+\s+/, '');
   return isPlayPath(name);
 }
+
+/** Files a page loads rather than pages: build assets, optimised images and the site metadata files. */
+const ASSET = /^\/(_next\/(static|image)\b|manifest\.webmanifest$|favicon\.ico$|icon\b|apple-icon\b)/;
+
+/**
+ * D12: an asset or metadata request made by a /play page (its Referer is /play). Such requests are /play traffic for
+ * server telemetry. Page and RSC requests are never matched, so leaving /play still counts as a visit to the next
+ * page. A request without a Referer cannot be attributed and is not matched.
+ */
+export function isPlayAssetRequest(url: string | null | undefined, referer: string | null | undefined): boolean {
+  if (!url || !isPlayUrl(referer)) return false;
+  try {
+    return ASSET.test(new URL(url, 'http://local.invalid').pathname);
+  } catch {
+    return false;
+  }
+}

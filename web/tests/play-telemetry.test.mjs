@@ -1,7 +1,7 @@
 /** Decision D1 = exclude: nothing analytics or telemetry may leave the /play/* routes (children's games). */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dropPlayPageview, isPlayEvent, isPlayPath, isPlayUrl } from '../src/lib/play-path.ts';
+import { dropPlayPageview, isPlayAssetRequest, isPlayEvent, isPlayPath, isPlayUrl } from '../src/lib/play-path.ts';
 
 test('isPlayPath: exactly /play or under /play/, nothing that merely starts with "play"', () => {
   for (const path of ['/play', '/play/', '/play/note-garden', '/play/note-garden/', '/play//x']) assert.equal(isPlayPath(path), true, path);
@@ -35,4 +35,17 @@ test('Sentry events are recognised as /play by request URL or transaction name',
   assert.equal(isPlayEvent({ request: { url: 'https://rafii.io/pricing' }, transaction: 'GET /pricing' }), false);
   assert.equal(isPlayEvent({ transaction: 'GET /playground' }), false);
   assert.equal(isPlayEvent({}), false);
+});
+
+test('isPlayAssetRequest: files a /play page loads (assets, metadata) are play traffic; pages and RSC requests are not', () => {
+  const play = 'http://127.0.0.1:3117/play/note-garden';
+  for (const url of ['/_next/static/chunks/app.js', '/_next/static/media/geist.woff2', '/_next/image?url=x', '/manifest.webmanifest', '/favicon.ico', '/icon?abc', '/apple-icon?abc']) {
+    assert.equal(isPlayAssetRequest(`http://127.0.0.1:3117${url}`, play), true, url);
+  }
+  // Leaving /play ("Back to Rafii") is a visit to the next page and keeps being counted, even with a /play Referer.
+  for (const url of ['/', '/pricing', '/pricing?_rsc=abc', '/app/drafts']) assert.equal(isPlayAssetRequest(`http://127.0.0.1:3117${url}`, play), false, url);
+  // The same assets loaded by any other page stay counted; no Referer means no attribution (documented limit).
+  for (const referer of ['http://127.0.0.1:3117/', 'http://127.0.0.1:3117/player', undefined, '']) {
+    assert.equal(isPlayAssetRequest('http://127.0.0.1:3117/_next/static/chunks/app.js', referer), false, String(referer));
+  }
 });
