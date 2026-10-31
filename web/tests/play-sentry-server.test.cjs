@@ -73,7 +73,7 @@ test('server: a /play request and the assets it loads send nothing; other pages 
 
   // Interleaving (rafii-6 D12-3): a /play decision that inherits "sampled" records no drop; the next non-play root's
   // drop must still be tallied (a leftover /play flag must never suppress it).
-  const traceId = '1234567890abcdef1234567890abcdef';
+  const traceId = 'abababababababababababababababab';
   const withParent = (parent, sampleRate, rand, fn) => {
     if (parent === undefined) return fn();
     const baggage = [`sentry-trace_id=${traceId}`, `sentry-sample_rand=${rand}`, ...(sampleRate ? [`sentry-sample_rate=${sampleRate}`] : [])].join(',');
