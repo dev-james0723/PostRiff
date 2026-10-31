@@ -97,7 +97,9 @@ The browser journey needs Playwright's Chromium for the pinned `playwright` vers
 tap, Next, leaving, any screen change, mute and unmount all fade out what is playing (25 ms) and stop its oscillators.
 Feedback cues play in the same schedule as the answer sound, so they cannot stack either. Sound requests are tokened
 (`synth.request()`). If the AudioContext is still resuming when something newer happens (a sound, stop, mute,
-navigation or unmount), the older request is dropped and never plays.
+navigation or unmount), the older request is dropped and never plays. Resuming is single-flight: there is one shared `resume()` per context. A failure is handled once and
+only for the current context. After a failure, the next sound builds a fresh context, with no permanent "failed"
+state. An exhaustive orderings test (2,775 sequences) checks these rules.
 
 Answer lock: answers wait while a question's first sound plays only when that sound is ≤ 3.5 s (DESIGN §9). Rhythm
 questions (count-in + rhythm ≈ 6 s) are never locked. Answering one of those cuts the rhythm off and plays the answer
