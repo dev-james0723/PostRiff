@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
+import { isPlayEvent, isPlayUrl } from '@/lib/play-path';
 import { scrubTelemetry } from '@/lib/telemetry';
 
 const sentryOptions: Sentry.NodeOptions | Sentry.EdgeOptions = {
@@ -13,7 +14,9 @@ const sentryOptions: Sentry.NodeOptions | Sentry.EdgeOptions = {
 
   // Adjust this value in production, or use tracesSampler for greater control
   tracesSampleRate: 0,
-  beforeSend: scrubTelemetry,
+  // D1: nothing from the children's /play area is sent; other routes keep the existing scrubbing.
+  beforeSend: (event) => (isPlayEvent(event) ? null : scrubTelemetry(event)),
+  beforeSendTransaction: (event) => (isPlayEvent(event) ? null : event),
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false
@@ -33,4 +36,7 @@ export async function register() {
   }
 }
 
-export const onRequestError = Sentry.captureRequestError;
+export const onRequestError: typeof Sentry.captureRequestError = (error, request, context) => {
+  if (isPlayUrl(request.path)) return;
+  return Sentry.captureRequestError(error, request, context);
+};
