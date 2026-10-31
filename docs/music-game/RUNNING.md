@@ -53,11 +53,19 @@ RAFII_NOTE_GARDEN_URL=http://127.0.0.1:3117 node tests/music-game-browser.cjs
 RAFII_NOTE_GARDEN_URL=http://127.0.0.1:3117 NOTE_GARDEN_SHOTS=/tmp/note-garden-shots node tests/music-game-browser.cjs
 ```
 
+**Known baseline failure (not caused by the game).** On a machine without the Python package `psycopg`, the whole-suite
+command ends with one failure: `tests/visual-analysis.test.cjs` → `ModuleNotFoundError: No module named 'psycopg'`. The
+repo's `:jcb` script normally installs Python first. On 2026-10-31 the same command on `consumer-saas` 5670ce3c, in a
+temporary worktree that was removed afterwards, gave exit 1 with 935/936 passing and the same test failing with the
+same error. This branch gives 981/982: the extra 46 are the game's own tests, and all of them pass.
+
 The browser journey needs Playwright's Chromium for the pinned `playwright` version. If it is missing:
 `node_modules/.bin/playwright install chromium`. The journey covers these checks:
 - level 1 played with the keyboard only
 - levels 2–3 with the mouse and level 4 by touch, on a phone viewport
 - mute and reset, both persisted
+- one sound at a time: a replay mid-sound and leaving mid-sound stop every earlier oscillator (checked on the
+  audio clock)
 - AudioContext created only after a gesture
 - sound-off pictures
 - reduced motion
@@ -81,8 +89,13 @@ The browser journey needs Playwright's Chromium for the pinned `playwright` vers
 | 9 | Title copy only | Decorative row of 12 flowers on the title, one per star earned | Makes the "grow flowers" promise visible; `aria-hidden`, the map states stars in words |
 | 10 | Analyser-node check that peaks stay ≤ −6 dBFS | Not built. Gain caps and limiter settings are unit-tested | **NOT_TESTED**. The real output level needs a listening/analyser check |
 
+**One sound at a time.** Every new sound replaces the previous one: question, replay, hint, answer feedback, a learn-card
+tap, Next, leaving, any screen change, mute and unmount all fade out what is playing (25 ms) and stop its oscillators.
+Feedback cues play in the same schedule as the answer sound, so they cannot stack either.
+
 Answer lock: answers wait while a question's first sound plays only when that sound is ≤ 3.5 s (DESIGN §9). Rhythm
-questions (count-in + rhythm ≈ 6 s) are never locked.
+questions (count-in + rhythm ≈ 6 s) are never locked. Answering one of those cuts the rhythm off and plays the answer
+feedback. The lock is decided along with the question, so answers never flash enabled and then disabled.
 
 ## Release prerequisites (not done here)
 
