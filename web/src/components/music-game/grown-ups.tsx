@@ -38,8 +38,12 @@ export function GrownUps({
       <h1 className={styles.heading} tabIndex={-1} data-screen-heading>
         For grown-ups
       </h1>
+      {/* Only what the game itself guarantees (decision D3). Site hosting and analytics follow the wider Rafii site. */}
       <p className={styles.body}>
-        Note Garden works without accounts. Nothing is sent anywhere. Progress stays on this device only.
+        <span className={styles.line}>Note Garden has no accounts.</span>
+        <span className={styles.line}>It never asks for names or personal details.</span>
+        <span className={styles.line}>Progress is saved only on this device.</span>
+        <span className={styles.line}>There are no ads.</span>
       </p>
 
       <section className={styles.card} aria-labelledby='ng-sound'>

@@ -171,11 +171,17 @@ export function NoteGarden() {
               <button type='button' className={styles.button} onClick={() => go('hello')}>
                 Play
               </button>
-              <button type='button' className={styles.linkButton} onClick={openGrownUps}>
-                Grown-ups
-              </button>
             </div>
           </main>
+        )}
+
+        {screen === 'title' && (
+          // Kept away from Play so children are less likely to wander in; reset and open-all still ask to confirm.
+          <footer className={styles.footer}>
+            <button type='button' className={styles.linkButton} onClick={openGrownUps}>
+              Grown-ups
+            </button>
+          </footer>
         )}
 
         {screen === 'hello' && (

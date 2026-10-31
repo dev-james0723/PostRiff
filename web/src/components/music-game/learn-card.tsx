@@ -6,11 +6,12 @@ import { Pip, Rhythm, Staff } from './drawings';
 import type { PlaySound } from './play-screen';
 import styles from './note-garden.module.css';
 
-const INTRO: Record<LevelNumber, string> = {
-  1: 'High sounds are up like birds. Low sounds are down like frogs. Tap them!',
-  2: 'The music staff has 5 lines and 4 spaces. Notes sit on a line or in a space. Tap a note to hear its name!',
-  3: 'Music has a steady beat, like walking. Some notes last 1 beat, some last longer!',
-  4: 'A step goes to the next stone. A skip jumps over a stone!'
+/** SPEC learn-card copy, one sentence per line so no line runs past 12 words. */
+const INTRO: Record<LevelNumber, string[]> = {
+  1: ['High sounds are up like birds.', 'Low sounds are down like frogs.', 'Tap them!'],
+  2: ['The music staff has 5 lines and 4 spaces.', 'Notes sit on a line or in a space.', 'Tap a note to hear its name!'],
+  3: ['Music has a steady beat, like walking.', 'Some notes last 1 beat.', 'Some last longer!'],
+  4: ['A step goes to the next stone.', 'A skip jumps over a stone!']
 };
 
 const SYMBOLS: { token: Token; name: string; caption: string }[] = [
@@ -48,7 +49,7 @@ function Tiles({ level, sound }: { level: LevelNumber; sound: PlaySound }) {
   }
   if (level === 2) {
     return (
-      <div className={styles.learnGrid}>
+      <div className={styles.learnGrid} data-staves='true'>
         {LEARN_NOTES.map((note) => {
           const shown = named.includes(note);
           return (
@@ -119,7 +120,13 @@ export function LearnCard({ level, sound, onPlay, onBack }: { level: LevelNumber
       </h1>
       <div className={styles.speech}>
         <Pip mood='happy' className={styles.pip} />
-        <p className={styles.bubble}>{INTRO[level]}</p>
+        <p className={styles.bubble}>
+          {INTRO[level].map((line) => (
+            <span key={line} className={styles.line}>
+              {line}
+            </span>
+          ))}
+        </p>
       </div>
       <Tiles level={level} sound={sound} />
       <div className={styles.row}>
