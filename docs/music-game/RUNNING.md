@@ -64,6 +64,10 @@ The browser journey needs Playwright's Chromium for the pinned `playwright` vers
 - level 1 played with the keyboard only
 - levels 2–3 with the mouse and level 4 by touch, on a phone viewport
 - mute and reset, both persisted
+- Help me keeps keyboard focus, the hint is announced in a status region, and on a phone it scrolls into view
+- while the first sound plays, answers keep their look: `aria-busy` plus a "Listen…" cue, and taps are ignored
+- Next is described by the feedback text
+- loudness after the limiter stays ≤ −6 dBFS, even with mashed replays, an answer and Next
 - one sound at a time: a replay mid-sound and leaving mid-sound stop every earlier oscillator (checked on the
   audio clock)
 - AudioContext created only after a gesture
@@ -87,7 +91,7 @@ The browser journey needs Playwright's Chromium for the pinned `playwright` vers
 | 7 | Desktop: stage beside answers for find-note / hear-rhythm | One stacked column at all widths | Simpler and the same order for every question (DESIGN "fixed zones") |
 | 8 | Pip bob stops after 10 s, pauses when hidden | CSS bob runs 3 × 3 s then stops; none with reduced motion | Same effect without JS |
 | 9 | Title copy only | Decorative row of 12 flowers on the title, one per star earned | Makes the "grow flowers" promise visible; `aria-hidden`, the map states stars in words |
-| 10 | Analyser-node check that peaks stay ≤ −6 dBFS | Not built. Gain caps and limiter settings are unit-tested | **NOT_TESTED**. The real output level needs a listening/analyser check |
+| 10 | Analyser-node check that peaks stay ≤ −6 dBFS | Built into the browser journey: an AnalyserNode after the limiter, at Medium | Measured −10.4 dBFS for mashed replays + answer + Next, and −10.0 dBFS for the L3 learn sounds (Chromium headless). The review measured −5 dBFS at 0b0348d4, before one-sound-at-a-time |
 
 **One sound at a time.** Every new sound replaces the previous one: question, replay, hint, answer feedback, a learn-card
 tap, Next, leaving, any screen change, mute and unmount all fade out what is playing (25 ms) and stop its oscillators.
@@ -99,8 +103,29 @@ Answer lock: answers wait while a question's first sound plays only when that so
 questions (count-in + rhythm ≈ 6 s) are never locked. Answering one of those cuts the rhythm off and plays the answer
 feedback. The lock is decided along with the question, so answers never flash enabled and then disabled.
 
+## UX/accessibility review follow-ups (rafii-5, reviewed 0b0348d4)
+
+Fixed: M1 Help me focus · M2 hint announced and scrolled into view · M3 overlap loudness (one sound at a time, measured
+above) · M4 Grown-ups copy (decision D3: only what the game guarantees) · M5 30ch lines, one sentence per line on learn
+cards · M6 L2 learn staves full-width on phones · M7 listening cue instead of greyed answers · m1 picture icons for
+Same/Different · m2 🦘 for Skip, so 🐸 means only "low" · m3 praise per skill · m4 "Sound on/off" text · m5 sticky Next
+in landscape, focus without scrolling · m6 Next described by the feedback · m7 Grown-ups link moved off the Play row
+to a footer · m8 larger ✓ with a Yes/Answer chip.
+
+Not changed, by decision:
+- **Read-aloud (M5 v2 idea):** not added. Some browsers send `speechSynthesis` text to cloud voices, so it is deferred
+  to v2.
+- **Grown-up gate (m7):** only the link was moved. A reading or maths gate adds friction and protects no data: reset and
+  open-all already ask to confirm.
+- **Site notifications region (m9):** the root layout's Sonner toaster appears in the accessibility tree. The root layout
+  is out of scope and was not edited.
+- **Announcement timing (m6):** Next is described by the feedback, but a real screen reader was not used
+  (**NOT_TESTED** with VoiceOver, NVDA or TalkBack).
+
 ## Release prerequisites (not done here)
 
+- **D3, Grown-ups copy:** the panel no longer claims "nothing is sent anywhere". Whether the site may say more depends
+  on D1.
 - **D1, analytics:** the root layout mounts Vercel Web Analytics when `NEXT_PUBLIC_VERCEL_ANALYTICS=1`. It records page
   views for every route, including `/play/note-garden`. Per the orchestrator's decision D1, the root layout was **not**
   edited. Before a public release, decide whether to exclude `/play/*` (for example with `beforeSend`).
