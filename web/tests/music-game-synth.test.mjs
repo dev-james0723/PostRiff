@@ -38,7 +38,9 @@ function fakeAudio() {
           type: '', frequency: param(), started: false, stopped: false, listeners: [],
           addEventListener(type, fn) { if (type === 'ended') o.listeners.push(fn); },
           end() { for (const fn of o.listeners.splice(0)) fn(); },
-          start() { o.started = true; }, stop() { o.stopped = true; }
+          start() { o.started = true; },
+          // Records the latest requested stop time; a superseded schedule gets pulled forward to the fade.
+          stop(t = 0) { o.stopped = true; o.stopAt = t; }
         });
         ctx.sources.push(o);
         return o;
@@ -85,12 +87,12 @@ test('the master gain never goes above the hard ceiling, whatever the volume', a
     const synth = createSynth({ createContext: fake.factory, volume });
     await synth.unlock();
     synth.setVolume('medium');
-    synth.play([{ kind: 'tone', note: 'G5', at: 0, seconds: 3 }, { kind: 'click', at: 0, accent: true }]);
-    synth.feedback('correct');
+    synth.play([{ kind: 'tone', note: 'G5', at: 0, seconds: 3 }, { kind: 'click', at: 0, accent: true }], { cue: 'correct' });
     const master = fake.made[0].gains[0];
     assert.ok(master.log.length > 0);
     for (const v of master.log) assert.ok(v <= MAX_MASTER_GAIN, `${volume}: ${v}`);
-    for (const g of fake.made[0].gains.slice(1)) for (const v of g.log) assert.ok(v <= 0.6 + 1e-9, 'voice peak 0.6');
+    // Voices peak at 0.6 and schedule buses sit at unity, all before the capped master.
+    for (const g of fake.made[0].gains.slice(1)) for (const v of g.log) assert.ok(v <= 1, `${v}`);
   }
 });
 
@@ -126,7 +128,7 @@ test('muting mid-sound ramps the master to 0, stops queued sources and settles w
   await pending;
   const ctx = fake.made[0];
   assert.equal(ctx.gains[0].log.at(-1), 0);
-  assert.ok(ctx.sources.every((s) => s.stopped));
+  assert.ok(ctx.sources.every((s) => s.stopAt <= FADE_END), 'queued notes stopped at once');
   const count = ctx.sources.length;
   synth.play([{ kind: 'tone', note: 'C4', at: 0, seconds: 0.6 }]);
   assert.equal(ctx.sources.length, count, 'nothing new while muted');
@@ -134,6 +136,54 @@ test('muting mid-sound ramps the master to 0, stops queued sources and settles w
   await synth.unlock();
   synth.play([{ kind: 'tone', note: 'C4', at: 0, seconds: 0.6 }]);
   assert.ok(ctx.sources.length > count);
+});
+
+const FADE_END = 0.031;
+const tone = (note, at = 0, seconds = 0.6) => ({ kind: 'tone', note, at, seconds });
+
+test('replay during playback: the earlier schedule is faded and stopped, only the new one stays active', async () => {
+  const fake = fakeAudio();
+  const synth = createSynth({ createContext: fake.factory });
+  await synth.unlock();
+  const ctx = fake.made[0];
+  let firstSettled = false;
+  const first = synth.play([tone('C4'), tone('G4', 1), { kind: 'click', at: 0, accent: true }]).then(() => { firstSettled = true; });
+  const firstSources = ctx.sources.slice();
+  const firstBus = ctx.gains[1];
+  synth.play([tone('C4'), tone('G4', 1)]);
+  const secondSources = ctx.sources.slice(firstSources.length);
+  await first;
+  assert.equal(firstSettled, true, 'the superseded play() settles, so a first-play answer lock is released');
+  assert.ok(firstSources.every((s) => s.stopAt <= FADE_END), 'old notes stop within the fade');
+  assert.equal(firstBus.log.at(-1), 0, 'old bus fades to silence');
+  assert.ok(secondSources.length > 0 && secondSources.every((s) => s.stopAt > 0.3), 'new notes keep their full length');
+});
+
+test('a feedback cue and the answer sound form one schedule, replaced by the next sound', async () => {
+  const fake = fakeAudio();
+  const synth = createSynth({ createContext: fake.factory });
+  await synth.unlock();
+  const ctx = fake.made[0];
+  synth.play([tone('E4')], { cue: 'correct', delay: 0.35 });
+  const answer = ctx.sources.slice();
+  assert.ok(answer.length >= 8, 'three cue notes plus the answer note, two partials each');
+  synth.play([], { cue: 'try-again' });
+  assert.ok(answer.every((s) => s.stopAt <= FADE_END));
+  assert.ok(ctx.sources.length > answer.length, 'the try-again cue plays on its own');
+});
+
+test('question transition / leaving: stop() silences the active schedule and later sounds start clean', async () => {
+  const fake = fakeAudio();
+  const synth = createSynth({ createContext: fake.factory });
+  await synth.unlock();
+  const ctx = fake.made[0];
+  const pending = synth.play([tone('C5', 0, 2.5)]);
+  synth.stop();
+  await pending;
+  assert.ok(ctx.sources.every((s) => s.stopAt <= FADE_END));
+  const before = ctx.sources.length;
+  synth.play([tone('D4')]);
+  assert.ok(ctx.sources.slice(before).every((s) => s.stopAt > 0.3));
 });
 
 test('close() releases the context (route unmount)', async () => {

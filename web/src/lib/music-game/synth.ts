@@ -2,7 +2,9 @@
  * Note Garden synth (docs/music-game/DESIGN.md §9): soft "garden bell" tones and beat clicks made with Web Audio.
  * No audio files and no network. The AudioContext is created and resumed only from `unlock()`, which the UI calls
  * inside a tap or key handler, so nothing sounds before a child presses something. Sounds are scheduled on the audio
- * clock (no JS timers). Chain: voice -> master gain (capped) -> limiter -> speakers.
+ * clock (no JS timers). Chain: voice -> schedule bus -> master gain (capped) -> limiter -> speakers.
+ * Only one schedule sounds at a time: every new sound, stop, mute or close fades the previous bus out and stops its
+ * oscillators, so replays, hints, answers and the next question never pile up.
  * No imports, so node's test runner loads it directly (`web/tests/music-game-synth.test.mjs`).
  */
 
@@ -18,6 +20,8 @@ const DECAY = 0.15;
 const SUSTAIN = 0.55;
 const RELEASE = 0.28;
 const LEAD_IN = 0.05;
+/** Fade for superseded sound: quick enough to feel instant, slow enough not to click. */
+const FADE = 0.025;
 const SEMITONES: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 
 function frequency(note: string): number {
@@ -30,10 +34,12 @@ const masterLevel = (volume: string) => Math.min(MAX_MASTER_GAIN, VOLUME_GAIN[vo
 export type Synth = {
   /** Call from a user gesture. Resolves true when sound can play. */
   unlock(): Promise<boolean>;
-  /** Schedules events (times in seconds from now). Resolves when the last one has ended, or at once if silent. */
-  play(events: SynthEvent[], options?: { delay?: number; level?: number }): Promise<void>;
-  feedback(kind: 'correct' | 'try-again'): void;
-  /** Stops every queued or sounding note. */
+  /**
+   * Replaces whatever is playing with `events` (times in seconds from now), optionally led by a short feedback cue.
+   * Resolves when the last note has ended, when a newer sound replaces it, or at once if silent.
+   */
+  play(events: SynthEvent[], options?: { delay?: number; cue?: 'correct' | 'try-again' }): Promise<void>;
+  /** Fades out and stops every queued or sounding note. */
   stop(): void;
   setMuted(muted: boolean): void;
   setVolume(volume: SynthVolume): void;
@@ -49,8 +55,8 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
   let muted = options.muted === true;
   let volume = options.volume ?? 'medium';
   let failed = false;
-  let busyUntil = 0;
-  const live = new Set<OscillatorNode>();
+  /** The one schedule allowed to sound: its own bus into the master, and every oscillator it started. */
+  let current: { bus: GainNode; sources: OscillatorNode[] } | null = null;
   let waiting: Array<() => void> = [];
 
   const running = () => !!ctx && !!master && !muted && ctx.state === 'running';
@@ -62,15 +68,21 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
   }
 
   function stopAll() {
-    for (const osc of live) {
-      try {
-        osc.stop();
-      } catch {
-        // Already stopped.
+    if (current && ctx) {
+      const now = ctx.currentTime;
+      const { bus, sources } = current;
+      bus.gain.cancelScheduledValues(now);
+      bus.gain.setValueAtTime(bus.gain.value, now);
+      bus.gain.linearRampToValueAtTime(0, now + FADE);
+      for (const osc of sources) {
+        try {
+          osc.stop(now + FADE + 0.005);
+        } catch {
+          // Already stopped.
+        }
       }
     }
-    live.clear();
-    busyUntil = 0;
+    current = null;
     settleAll();
   }
 
@@ -81,8 +93,7 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
     osc.connect(into);
     osc.start(at);
     osc.stop(until);
-    live.add(osc);
-    osc.addEventListener('ended', () => live.delete(osc), { once: true });
+    current?.sources.push(osc);
     return osc;
   }
 
@@ -103,7 +114,7 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
     voice.gain.setValueAtTime(peak * SUSTAIN, at + held);
     voice.gain.linearRampToValueAtTime(0, at + held + RELEASE);
     voice.connect(filter);
-    filter.connect(master!);
+    filter.connect(current!.bus);
     const end = at + held + RELEASE + 0.02;
     const overtone = c.createGain();
     overtone.gain.setValueAtTime(0.15, at);
@@ -118,12 +129,13 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
     gain.gain.setValueAtTime(0, at);
     gain.gain.linearRampToValueAtTime(0.25, at + 0.002);
     gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
-    gain.connect(master!);
+    gain.connect(current!.bus);
     return source('sine', accent ? 1600 : 1200, at, at + 0.08, gain);
   }
 
   function schedule(events: SynthEvent[], delay: number, level: number): { last: OscillatorNode | null; end: number } {
     const start = ctx!.currentTime + LEAD_IN + delay;
+    if (events.length === 0) return { last: null, end: start };
     let last: OscillatorNode | null = null;
     let end = start;
     for (const event of events) {
@@ -167,9 +179,21 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
       }
     },
     play(events, opts = {}) {
-      if (!running() || events.length === 0) return Promise.resolve();
-      const { last, end } = schedule(events, opts.delay ?? 0, opts.level ?? 1);
-      busyUntil = Math.max(busyUntil, end);
+      stopAll();
+      if (!running() || (events.length === 0 && !opts.cue)) return Promise.resolve();
+      const bus = ctx!.createGain();
+      bus.connect(master!);
+      current = { bus, sources: [] };
+      // Feedback cue at 70% of voice level: a rising C-E-G for correct, one soft low G for "try again".
+      const cue: SynthEvent[] =
+        opts.cue === 'correct'
+          ? ['C5', 'E5', 'G5'].map((note, i) => ({ kind: 'tone', note, at: i * 0.09, seconds: 0.09 }))
+          : opts.cue === 'try-again'
+            ? [{ kind: 'tone', note: 'G4', at: 0, seconds: 0.2 }]
+            : [];
+      const lead = schedule(cue, 0, 0.7);
+      const main = schedule(events, opts.delay ?? 0, 1);
+      const last = main.last && main.end >= lead.end ? main.last : (lead.last ?? main.last);
       if (!last) return Promise.resolve();
       return new Promise<void>((resolve) => {
         waiting.push(resolve);
@@ -182,15 +206,6 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
           { once: true }
         );
       });
-    },
-    feedback(kind) {
-      // Optional cue at 70% of voice level, skipped while the question's own sound is playing.
-      if (!running() || ctx!.currentTime < busyUntil) return;
-      const events: SynthEvent[] =
-        kind === 'correct'
-          ? ['C5', 'E5', 'G5'].map((note, i) => ({ kind: 'tone', note, at: i * 0.09, seconds: 0.09 }))
-          : [{ kind: 'tone', note: 'G4', at: 0, seconds: 0.2 }];
-      schedule(events, 0, 0.7);
     },
     stop: stopAll,
     setMuted(next) {
