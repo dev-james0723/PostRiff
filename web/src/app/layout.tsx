@@ -1,5 +1,6 @@
 import Providers from '@/components/layout/providers';
 import { SiteAnalytics } from '@/components/layout/site-analytics';
+import { SentryRouteStart } from '@/components/layout/sentry-route-start';
 import { Toaster } from '@/components/ui/sonner';
 import { fontVariables, uiFontFamily } from '@/components/themes/font.config';
 import { DEFAULT_THEME, THEME_COOKIE, THEMES } from '@/components/themes/theme.config';
@@ -92,6 +93,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* Vercel Web Analytics only when the project has it enabled; otherwise its script request 404s on every page.
             Never on the children's /play area (D1): see SiteAnalytics. */}
         {process.env.NEXT_PUBLIC_VERCEL_ANALYTICS === '1' && <SiteAnalytics />}
+        {/* Starts browser Sentry on committed non-play routes (a visit that began on /play has none until then). */}
+        <SentryRouteStart />
       </body>
     </html>
   );
