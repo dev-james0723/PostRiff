@@ -31,11 +31,18 @@ const LOCK_LIMIT_SECONDS = 3.5;
 
 const soundLength = (events: SoundEvent[]) => events.reduce((end, e) => Math.max(end, e.at + (e.kind === 'tone' ? e.seconds : 0.06)), 0);
 
-/** Shown while the question's first sound plays; a tap during it wobbles the ear instead of looking broken. */
-function ListenCue({ nudges }: { nudges: number }) {
+/**
+ * Sits right above the answers (where a child taps) in a slot that keeps its height, so nothing jumps when it goes.
+ * Shown while the question's first sound plays; a tap during it wobbles the ear instead of looking broken.
+ */
+function ListenCue({ active, nudges }: { active: boolean; nudges: number }) {
   return (
-    <p key={nudges} className={styles.listenCue} data-nudged={nudges > 0}>
-      <span aria-hidden='true'>👂</span> Listen…
+    <p key={nudges} className={styles.listenCue} data-nudged={active && nudges > 0}>
+      {active && (
+        <>
+          <span aria-hidden='true'>👂</span> Listen…
+        </>
+      )}
     </p>
   );
 }
@@ -45,15 +52,13 @@ function Stage({
   settled,
   showPicture,
   hint,
-  soundOff,
-  listening
+  soundOff
 }: {
   q: Question;
   settled: boolean;
   showPicture: boolean;
   hint: boolean;
   soundOff: string | null;
-  listening: React.ReactNode;
 }) {
   const stage = q.stage;
   const listen = (
@@ -92,11 +97,10 @@ function Stage({
       picture = settled || showPicture ? <RhythmBlocks tokens={stage.tokens} label={q.stageLabel} /> : listen;
       break;
     case 'none':
-      return listening ? <div className={styles.stage}>{listening}</div> : null;
+      return null;
   }
   return (
     <div className={styles.stage}>
-      {listening}
       {picture}
       {soundOff && isSoundPicture && showPicture && <p className={styles.notice}>{soundOff}</p>}
     </div>
@@ -159,7 +163,9 @@ export function PlayScreen({
     setFeedback(null);
     setShake(null);
     setNudges(0);
-    promptRef.current?.focus();
+    // Start each question at the top (stage, prompt, cue and answers in view), then focus the prompt in place.
+    window.scrollTo(0, 0);
+    promptRef.current?.focus({ preventScroll: true });
     if (silent || q.sound.length === 0) return;
     // Released when this sound ends, or as soon as a replay, an answer, mute or leaving replaces it.
     void sound(q.sound).finally(() => setLockedId((id) => (id === q.id ? null : id)));
@@ -231,7 +237,8 @@ export function PlayScreen({
           <span aria-hidden='true'>←</span> Back
         </button>
         <p className={styles.counter}>
-          Question {round.index + 1} of {round.questions.length}
+          <span className={styles.counterWord}>Question </span>
+          {round.index + 1} of {round.questions.length}
         </p>
         <SoundToggle muted={muted} onToggle={onToggleMute} />
       </nav>
@@ -241,11 +248,12 @@ export function PlayScreen({
           Level {level}: {title}
         </h1>
         <div className={styles.playGrid}>
-          <Stage q={q} settled={settled} showPicture={showPicture} hint={hint} soundOff={soundOff} listening={locked && !settled ? <ListenCue nudges={nudges} /> : null} />
+          <Stage q={q} settled={settled} showPicture={showPicture} hint={hint} soundOff={soundOff} />
           <div className={styles.screen} style={{ animation: 'none' }}>
             <h2 ref={promptRef} tabIndex={-1} className={styles.prompt}>
               {q.prompt}
             </h2>
+            <ListenCue active={locked && !settled} nudges={nudges} />
             <div ref={answersRef} className={styles.answers} data-count={q.options.length} role='group' aria-label='Answers' aria-busy={locked && !settled}>
               {q.options.map((option) => {
                 const tried = round.tried.includes(option.id);

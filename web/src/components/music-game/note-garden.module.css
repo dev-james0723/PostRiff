@@ -142,6 +142,7 @@
 }
 
 .iconButton {
+  white-space: nowrap;
   background: var(--ng-card);
   color: var(--ng-ink);
   border: 2px solid var(--ng-ink);
@@ -252,6 +253,7 @@
 
 .listenCue {
   margin: 0;
+  min-height: 2rem;
   font-size: 1.375rem;
   font-weight: 700;
   color: var(--ng-sky-deep);
@@ -634,6 +636,18 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Narrow phones: "1 of 6" on screen; screen readers still hear "Question 1 of 6". */
+@media (max-width: 419px) {
+  .counterWord {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
 }
 
 @media (min-width: 640px) {
