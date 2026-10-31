@@ -24,6 +24,7 @@ stores or sends.
 | No analytics or error telemetry from `/play` | Decision D1 = exclude. Vercel Web Analytics is not loaded and drops `/play` page views. Sentry is not loaded when a visit starts on `/play`, and every envelope is dropped while on `/play` (`web/src/instrumentation-client.ts`, `web/src/instrumentation.ts`). Checked by `web/tests/play-telemetry-browser.cjs` |
 | Sound is made in the browser; no microphone | Web Audio synthesis only (`web/src/lib/music-game/synth.ts`). No recording or audio read-back APIs |
 | The page is still served by a host | Like any web page, loading it sends a request (IP address, browser type, page address) to the hosting provider, which keeps request logs. **[COUNSEL/JAMES: confirm the provider, the log contents and the retention period]** |
+| The host may set its own cookies | The game and the site's own code set none on `/play`. The hosting provider or its security layer (for example bot or DDoS protection) may still set strictly necessary security cookies of its own. Not observed locally. **[COUNSEL/JAMES: confirm with the provider before claiming "no cookies"]** |
 
 ## Proposed wording (plain English, for parents)
 
@@ -37,7 +38,8 @@ little as possible:
 - **Progress stays on your device.** The game saves only stars, finished levels, the sound setting and the volume in
   your browser's local storage, under the name `rafii.noteGarden.v1`. It is not sent to us. To delete it, open
   "Grown-ups" and choose "Reset progress", or clear this site's data in your browser.
-- **No tracking.** We do not run analytics or error reporting on the game's pages, and the game sets no cookies.
+- **No tracking.** We do not run analytics or error reporting on the game's pages, and the game itself sets no
+  cookies. Our hosting provider may set strictly necessary security cookies. **[COUNSEL: confirm]**
 - **Sound stays on your device.** The music is made in your browser. The game does not use the microphone.
 - **Like every website,** our hosting provider receives basic technical information (such as your IP address and
   browser type) when the page loads, in order to deliver it. **[COUNSEL: provider name, what is logged, retention]**

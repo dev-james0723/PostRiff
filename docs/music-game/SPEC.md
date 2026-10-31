@@ -155,7 +155,7 @@ stone!" There are two buttons: *Show a step* (C4→D4 plays and Pip steps) and *
 | Leave dialog | "Leave this level? Your flowers will wait for you next time." · **Keep playing** · **Leave** |
 | Sound off notice | "Sound is off. Here is a picture of the sound." |
 | No audio support | "Sound can't play on this device. You can still play with pictures." |
-| Grown-ups panel | "For grown-ups: Note Garden works without accounts. Nothing is sent anywhere. Progress stays on this device only." · toggle **Sound** · **Volume: Soft / Medium** · **Open all levels** · **Reset progress** (confirm: "Delete stars on this device?" **Delete** / **Cancel**) · **Back to Rafii** |
+| Grown-ups panel | As shipped (decision D3; the original "Nothing is sent anywhere" over-claimed, because pages are still served by a host): "For grown-ups" · "Note Garden has no accounts. It never asks for names or personal details. Progress is saved only on this device. There are no ads." · toggle **Sound** · **Volume: Soft / Medium** · **Open all levels** · **Reset progress** (confirm: "Delete stars on this device?" **Delete** / **Cancel**) · **Back to Rafii** |
 
 Never use: "Wrong", "Fail", "Game over", timers, countdowns, lives, streaks, "Don't stop now", or ads.
 

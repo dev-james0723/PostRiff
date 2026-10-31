@@ -140,17 +140,27 @@ Observed with `next start` on 2026-10-31: only the literal `/play/note-garden` r
 |---|---|---|
 | Vercel Web Analytics (when `NEXT_PUBLIC_VERCEL_ANALYTICS=1`) | `<Analytics>` is not rendered, so a direct visit never loads the script. `beforeSend` (the documented API in `@vercel/analytics` 1.6.1) drops `/play` page views and events after a client-side visit | `web/src/components/layout/site-analytics.tsx`, `web/src/app/layout.tsx` |
 | Sentry browser SDK (when a DSN is set) | Booting on `/play` never loads or initialises the SDK. After a client-side visit, a transport gate drops every envelope (event, transaction, session, client_report and any other type) while on `/play` or heading there. `beforeSend`/`beforeSendTransaction` drop `/play` events. Router transitions into `/play` are not recorded. The tally of events dropped on `/play` is also subtracted from the next client_report sent elsewhere | `web/src/instrumentation-client.ts` |
-| Sentry server SDK | `beforeSend`/`beforeSendTransaction` drop events whose request URL or transaction is `/play`. `onRequestError` skips `/play` request paths | `web/src/instrumentation.ts` |
+| Sentry server SDK | `beforeSend`/`beforeSendTransaction` drop events whose request URL or transaction is `/play`, and `onRequestError` skips `/play` request paths. While a `/play` request is handled, no outcome is recorded, so there's no tally in a later client_report (no dropped error, no sampled-out transaction). The request is also not counted in the request-session aggregates | `web/src/instrumentation.ts`, test `web/tests/play-sentry-server.test.cjs` |
 | Sign-in session (Supabase) | The proxy returns before the session refresh: no `getUser()` call, and no auth cookie set or refreshed, even for a signed-in parent on the same device. The legacy-host redirect still runs first | `web/src/proxy.ts`, test `web/tests/play-proxy.test.cjs` |
 | Speed Insights | Not installed; not added | — |
 
-Timing details:
-- Sentry starts a new session from its `pushState` hook before the address bar changes. The client gate therefore also
-  uses the destination that Next passes to `onRouterTransitionStart`.
-- When a child leaves `/play` for another page, the one session envelope Sentry emits at that moment is dropped, because
-  the address bar still shows `/play`.
-- After that, the other page behaves exactly as before. The Analytics component mounts again and records its page view,
-  Sentry sends errors, and client_reports flush on hide, minus any tally of `/play` drops.
+Precise behaviour around `/play` (browser):
+- **Entering `/play` by client-side navigation:** Sentry starts a new session from its `pushState` hook before the
+  address bar changes. The gate therefore also uses the destination that Next passes to `onRouterTransitionStart`, and
+  that session envelope is dropped.
+- **Leaving `/play` after a visit that started elsewhere** (privacy N2): the one session envelope Sentry emits at the
+  moment of leaving is dropped by design, because the address bar still shows `/play`. From then on the page reports
+  as usual:
+  - the Analytics component mounts again and records that page's view
+  - Sentry sends errors
+  - client_reports flush on hide, minus the tally of events dropped on `/play`
+
+  That page therefore has no session-start envelope for this navigation.
+- **Leaving `/play` after a visit that began on `/play`** (privacy N1): Sentry was never loaded. It is loaded and
+  initialised with the normal options on the first navigation out, once the address bar shows the new page, so it
+  starts exactly as a direct visit to that page would. Vercel Analytics records one page view, for that page only.
+- **Not observed end to end:** a server-side error inside a real `/play` request under `next start`. The server path
+  is covered by `tests/play-sentry-server.test.cjs`, which uses the installed SDK with an in-memory transport.
 
 **Check it** (production build with telemetry switched on and a dummy local DSN; the test aborts every off-origin
 request, so nothing reaches a real collector):
@@ -159,7 +169,7 @@ request, so nothing reaches a real collector):
 NEXT_PUBLIC_VERCEL_ANALYTICS=1 NEXT_PUBLIC_SENTRY_DSN=https://public@127.0.0.1/1 node_modules/.bin/next build
 NEXT_PUBLIC_VERCEL_ANALYTICS=1 NEXT_PUBLIC_SENTRY_DSN=https://public@127.0.0.1/1 node_modules/.bin/next start -p 3117 -H 127.0.0.1
 RAFII_TELEMETRY_URL=http://127.0.0.1:3117 node tests/play-telemetry-browser.cjs
-node --test tests/play-telemetry.test.mjs tests/play-proxy.test.cjs   # helper and proxy unit tests
+node --test tests/play-telemetry.test.mjs tests/play-proxy.test.cjs tests/play-sentry-server.test.cjs   # helper, proxy, server SDK
 ```
 
 The browser test checks:
@@ -170,12 +180,12 @@ The browser test checks:
    no `/play` page view is queued for Vercel Analytics.
 4. **Back to `/pricing`:** a `/pricing` page view is queued, Sentry sends again, and the client_report flushed on hide
    contains no `/play` tally.
+5. **A visit that begins on `/play`, then navigates client-side to `/pricing` (and, separately, to `/`):** Sentry
+   initialises and the analytics script loads there, with page views only for that page. An error is sent, and no
+   telemetry request leaves while the page shows `/play`.
 
 Rebuild without those two variables before the normal game journey, or run the journey against this build. Both
 passed with 0 off-origin requests on 2026-10-31.
-
-Not observed end to end: a server-side error during a `/play` request. That path is covered by the helper's unit tests
-and the hook code above.
 
 ## Release notes (not done here)
 
