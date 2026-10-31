@@ -58,7 +58,8 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
   let master: GainNode | null = null;
   let muted = options.muted === true;
   let volume = options.volume ?? 'medium';
-  let failed = false;
+  /** The one resume() in flight for the current context, shared by every caller (single flight). */
+  let resuming: Promise<void> | null = null;
   /** The one schedule allowed to sound: its own bus into the master, and every oscillator it started. */
   let current: { bus: GainNode; sources: OscillatorNode[] } | null = null;
   let waiting: Array<() => void> = [];
@@ -157,44 +158,70 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
     return { last, end };
   }
 
-  async function unlock(): Promise<boolean> {
-    if (muted || failed || !options.createContext) return false;
-    // The context this call is resuming. Success and failure are both judged against it, so a stale call never
-    // touches a context that a newer call already brought up.
-    let resuming: AudioContext | null = null;
+  /** Builds a context with its master gain and limiter. A device without working Web Audio just stays silent. */
+  function build(): boolean {
     try {
-      if (!ctx) {
-        ctx = options.createContext();
-        master = ctx.createGain();
-        master.gain.setValueAtTime(masterLevel(volume), ctx.currentTime);
-        const limiter = ctx.createDynamicsCompressor();
-        limiter.threshold.setValueAtTime(-12, ctx.currentTime);
-        limiter.knee.setValueAtTime(0, ctx.currentTime);
-        limiter.ratio.setValueAtTime(20, ctx.currentTime);
-        limiter.attack.setValueAtTime(0.003, ctx.currentTime);
-        limiter.release.setValueAtTime(0.1, ctx.currentTime);
-        master.connect(limiter);
-        limiter.connect(ctx.destination);
-      }
-      resuming = ctx;
-      if (resuming.state !== 'running') await resuming.resume();
-      // Closed or muted while resume() was pending: nothing to set up.
-      if (ctx !== resuming || !master || muted) return false;
-      master.gain.cancelScheduledValues(ctx.currentTime);
-      master.gain.setValueAtTime(masterLevel(volume), ctx.currentTime);
-      return ctx.state === 'running';
+      const c = options.createContext!();
+      const m = c.createGain();
+      m.gain.setValueAtTime(masterLevel(volume), c.currentTime);
+      const limiter = c.createDynamicsCompressor();
+      limiter.threshold.setValueAtTime(-12, c.currentTime);
+      limiter.knee.setValueAtTime(0, c.currentTime);
+      limiter.ratio.setValueAtTime(20, c.currentTime);
+      limiter.attack.setValueAtTime(0.003, c.currentTime);
+      limiter.release.setValueAtTime(0.1, c.currentTime);
+      m.connect(limiter);
+      limiter.connect(c.destination);
+      ctx = c;
+      master = m;
+      return true;
     } catch {
-      // Stale failure: the context was closed/replaced meanwhile, or another resume() already got it running.
-      if (resuming && (resuming !== ctx || resuming.state === 'running')) return false;
-      // This call owned the current context and it cannot run (or could not be built): release it, never orphan it.
-      failed = true;
-      stopAll();
-      const dead = ctx;
       ctx = null;
       master = null;
-      if (dead) void dead.close().catch(() => {});
       return false;
     }
+  }
+
+  /** Stops the current context's sound and closes it. Only ever applied to the current context. */
+  function release() {
+    stopAll();
+    const dead = ctx;
+    ctx = null;
+    master = null;
+    resuming = null;
+    if (dead) void dead.close().catch(() => {});
+  }
+
+  /**
+   * Single flight: at most one resume() per context, stored here and awaited by every caller. Its failure is handled
+   * once, by that shared promise, and only if its context is still the current one and never came up. Nothing latches:
+   * after a failure the next call builds a fresh context and tries again.
+   */
+  async function unlock(): Promise<boolean> {
+    if (muted || !options.createContext) return false;
+    if (!ctx && !build()) return false;
+    const owned = ctx!;
+    if (owned.state !== 'running') {
+      if (!resuming) {
+        const flight: Promise<void> = owned
+          .resume()
+          .then(
+            () => undefined,
+            () => {
+              if (ctx === owned && owned.state !== 'running') release();
+            }
+          )
+          .then(() => {
+            if (resuming === flight) resuming = null;
+          });
+        resuming = flight;
+      }
+      await resuming;
+    }
+    if (ctx !== owned || !master || muted || owned.state !== 'running') return false;
+    master.gain.cancelScheduledValues(owned.currentTime);
+    master.gain.setValueAtTime(masterLevel(volume), owned.currentTime);
+    return true;
   }
 
   function play(events: SynthEvent[], opts: { delay?: number; cue?: 'correct' | 'try-again' } = {}): Promise<void> {
@@ -227,11 +254,21 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
     });
   }
 
-  async function request(events: SynthEvent[], opts: { delay?: number; cue?: 'correct' | 'try-again' } = {}): Promise<void> {
+  /** Waits for the shared resume, then schedules only if nothing newer (sound, stop, mute, close) happened meanwhile. */
+  function request(events: SynthEvent[], opts: { delay?: number; cue?: 'correct' | 'try-again' } = {}): Promise<void> {
     const token = ++generation;
-    const ok = await unlock();
-    if (!ok || token !== generation) return;
-    return play(events, opts);
+    return new Promise<void>((resolve) => {
+      // Released at once by stop, mute, close or a newer sound, so a resume that never settles cannot hang a caller.
+      waiting.push(resolve);
+      void unlock().then((ok) => {
+        if (!ok || token !== generation) {
+          resolve();
+          return;
+        }
+        waiting = waiting.filter((r) => r !== resolve);
+        void play(events, opts).then(resolve);
+      });
+    });
   }
 
   return {
@@ -254,12 +291,7 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
       volume = next;
       if (ctx && master && !muted) master.gain.setValueAtTime(masterLevel(volume), ctx.currentTime);
     },
-    close() {
-      stopAll();
-      if (ctx) void ctx.close().catch(() => {});
-      ctx = null;
-      master = null;
-    },
+    close: release,
     ready() {
       return running();
     },
