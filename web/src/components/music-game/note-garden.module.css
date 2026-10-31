@@ -457,6 +457,8 @@
 
 .hero {
   display: grid;
+  /* minmax(0, 1fr): the column follows the screen width, not the 12-flower row's natural width. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   justify-items: start;
 }
