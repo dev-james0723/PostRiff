@@ -1,6 +1,8 @@
 # Note Garden — running, testing and known limits
 
-Route: **`/play/note-garden`** (public, no sign-in, client-only). Spec: `SPEC.md`, `DESIGN.md`, `RESEARCH.md` in this
+Route: **`/play/note-garden`** (public, no sign-in, client-only). **Off by default:** every `/play` route is a 404
+unless the server runs with `RAFII_PLAY_ENABLED=1` (set it for `next dev`, or for both `next build` and `next start`).
+It stays off in production until James and counsel approve `PRIVACY-NOTICE-DRAFT.md`. Spec: `SPEC.md`, `DESIGN.md`, `RESEARCH.md` in this
 folder. Task `ao-rafii-20261031-bf90f0`.
 
 ## Where the code lives
@@ -25,13 +27,18 @@ All commands run from `web/` with Node 24 (`.nvmrc`). On the M3 Max, Homebrew `n
 export PATH=/opt/homebrew/opt/node@24/bin:$PATH
 cd web
 npm ci                                   # repo lockfile, no new packages
-node_modules/.bin/next dev -p 3107 -H 127.0.0.1      # dev, then open http://127.0.0.1:3107/play/note-garden
+RAFII_PLAY_ENABLED=1 node_modules/.bin/next dev -p 3107 -H 127.0.0.1      # dev, then open http://127.0.0.1:3107/play/note-garden
 # or production mode:
-node_modules/.bin/next build
-node_modules/.bin/next start -p 3117 -H 127.0.0.1    # http://127.0.0.1:3117/play/note-garden
+RAFII_PLAY_ENABLED=1 node_modules/.bin/next build
+RAFII_PLAY_ENABLED=1 node_modules/.bin/next start -p 3117 -H 127.0.0.1    # http://127.0.0.1:3117/play/note-garden
 ```
 
-No `.env` is needed: the route does not touch Supabase or any provider. Stop the server when done. Don't run
+Launch-switch check over HTTP (`tests/play-launch-http.cjs`, against a production server on port 3127): build and start
+without the flag and run `PLAY_EXPECT=off node tests/play-launch-http.cjs` (every /play route a 404 that names nothing of
+the game; a query, header or cookie cannot turn it on); build and start with `RAFII_PLAY_ENABLED=1` and run
+`PLAY_EXPECT=on node tests/play-launch-http.cjs`.
+
+No other `.env` value is needed: the route does not touch Supabase or any provider. Stop the server when done. Don't run
 `next build` in the same `web/` folder while a dev server is running there.
 
 ## Test it
