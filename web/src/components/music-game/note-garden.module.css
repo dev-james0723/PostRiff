@@ -185,7 +185,8 @@
 
 .counter {
   font-variant-numeric: tabular-nums;
-  font-size: 1.125rem;
+  white-space: nowrap;
+  font-size: 1rem;
   color: var(--ng-muted);
   margin: 0;
 }
@@ -447,10 +448,40 @@
   animation-delay: 300ms;
 }
 
-.pip {
+.pip,
+.stage svg.pip {
   width: 96px;
   height: 96px;
   flex: none;
+}
+
+.hero {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}
+
+.hero .pip {
+  width: 128px;
+  height: 128px;
+}
+
+.titleGarden {
+  width: 100%;
+  max-width: 560px;
+  justify-content: flex-start;
+}
+
+/* Twelve flowers share the row on narrow phones instead of overflowing it. */
+.titleGarden .flower {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 40px;
+}
+
+.titleGarden .flower svg {
+  width: 100%;
+  height: auto;
 }
 
 .pipBob {
@@ -565,6 +596,9 @@
   }
   .prompt {
     font-size: 2rem;
+  }
+  .counter {
+    font-size: 1.125rem;
   }
   .answers {
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

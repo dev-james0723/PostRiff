@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LEVEL_DONE, LEVELS, isLevelUnlocked, type LevelNumber, type Round, type SoundEvent } from '@/lib/music-game/curriculum';
 import { defaultProgress, loadProgress, recordRun, resetProgress, saveProgress, withAllOpen, withMuted, withVolume, type Progress, type Volume } from '@/lib/music-game/progress';
 import { createSynth, type Synth } from '@/lib/music-game/synth';
-import { Pip } from './drawings';
+import { Flower, Pip } from './drawings';
 import { GrownUps } from './grown-ups';
 import { LearnCard } from './learn-card';
 import { StarRow } from './parts';
@@ -144,17 +144,26 @@ export function NoteGarden() {
   }
 
   const allDone = LEVELS.every((l) => progress.done[l.number]);
+  const totalStars = LEVELS.reduce((sum, l) => sum + (progress.best[l.number] ?? 0), 0);
 
   return (
     <div ref={rootRef} className={styles.root} lang='en'>
       <div className={styles.shell}>
         {screen === 'title' && (
-          <main className={styles.screen}>
+          <main className={`${styles.screen} ${styles.hero}`}>
             <Pip mood='happy' className={`${styles.pip} ${styles.pipBob}`} />
             <h1 className={styles.title} tabIndex={-1} data-screen-heading>
               Note Garden
             </h1>
             <p className={styles.tagline}>Grow flowers with music</p>
+            {/* One flower for every star earned (12 in all). Decorative: the map states the stars in words. */}
+            <div className={`${styles.garden} ${styles.titleGarden}`} aria-hidden='true'>
+              {Array.from({ length: 12 }, (_, i) => (
+                <span key={i} className={styles.flower}>
+                  <Flower grown={i < totalStars} hue={i} />
+                </span>
+              ))}
+            </div>
             <div className={styles.row}>
               <button type='button' className={styles.button} onClick={() => setScreen('hello')}>
                 Play
