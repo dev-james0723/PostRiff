@@ -127,18 +127,30 @@ Not changed, by decision:
 ## No analytics or telemetry on /play (decision D1 = exclude, done)
 
 Nothing analytics or telemetry is sent from `/play` or anything below it. Every other route keeps exactly the analytics
-it had. One helper, `web/src/lib/play-path.ts` (`isPlayPath`), decides what counts as `/play`. It matches `/play`,
-`/play/` and `/play/note-garden`, but not `/player`, `/playground` or `/app/play`.
+it had. One helper, `web/src/lib/play-path.ts` (`isPlayPath`), decides what counts as `/play`:
+`pathname === '/play' || pathname.startsWith('/play/')`. The match is case-sensitive and nothing is decoded.
+
+Observed with `next start` on 2026-10-31: only the literal `/play/note-garden` renders the game.
+- `/PLAY/note-garden`, `/Play/note-garden` and `/%70lay/note-garden` are ordinary 404 pages and keep the site's
+  analytics.
+- `/play/` and `/play/note-garden/` redirect (308) to the slash-less path.
+- `/play/%6Eote-garden` is a 404 inside the play area, so it sends nothing either.
 
 | Surface | What happens on /play | Where |
 |---|---|---|
 | Vercel Web Analytics (when `NEXT_PUBLIC_VERCEL_ANALYTICS=1`) | `<Analytics>` is not rendered, so a direct visit never loads the script. `beforeSend` (the documented API in `@vercel/analytics` 1.6.1) drops `/play` page views and events after a client-side visit | `web/src/components/layout/site-analytics.tsx`, `web/src/app/layout.tsx` |
-| Sentry browser SDK (when a DSN is set) | Booting on `/play` never loads or initialises the SDK. After a client-side visit, a transport gate drops every envelope (events, transactions, sessions) while on `/play` or heading there. `beforeSend`/`beforeSendTransaction` also drop `/play` events, and router transitions into `/play` are not recorded | `web/src/instrumentation-client.ts` |
-| Sentry server SDK | `beforeSend`/`beforeSendTransaction` drop events whose request URL or transaction is `/play`, and `onRequestError` skips `/play` request paths | `web/src/instrumentation.ts` |
+| Sentry browser SDK (when a DSN is set) | Booting on `/play` never loads or initialises the SDK. After a client-side visit, a transport gate drops every envelope (event, transaction, session, client_report and any other type) while on `/play` or heading there. `beforeSend`/`beforeSendTransaction` drop `/play` events. Router transitions into `/play` are not recorded. The tally of events dropped on `/play` is also subtracted from the next client_report sent elsewhere | `web/src/instrumentation-client.ts` |
+| Sentry server SDK | `beforeSend`/`beforeSendTransaction` drop events whose request URL or transaction is `/play`. `onRequestError` skips `/play` request paths | `web/src/instrumentation.ts` |
+| Sign-in session (Supabase) | The proxy returns before the session refresh: no `getUser()` call, and no auth cookie set or refreshed, even for a signed-in parent on the same device. The legacy-host redirect still runs first | `web/src/proxy.ts`, test `web/tests/play-proxy.test.cjs` |
 | Speed Insights | Not installed; not added | — |
 
-Sentry starts a new session from its `pushState` hook before the address bar changes. The client gate therefore also
-uses the destination that Next passes to `onRouterTransitionStart`. Leaving `/play` resets it.
+Timing details:
+- Sentry starts a new session from its `pushState` hook before the address bar changes. The client gate therefore also
+  uses the destination that Next passes to `onRouterTransitionStart`.
+- When a child leaves `/play` for another page, the one session envelope Sentry emits at that moment is dropped, because
+  the address bar still shows `/play`.
+- After that, the other page behaves exactly as before. The Analytics component mounts again and records its page view,
+  Sentry sends errors, and client_reports flush on hide, minus any tally of `/play` drops.
 
 **Check it** (production build with telemetry switched on and a dummy local DSN; the test aborts every off-origin
 request, so nothing reaches a real collector):
@@ -147,26 +159,33 @@ request, so nothing reaches a real collector):
 NEXT_PUBLIC_VERCEL_ANALYTICS=1 NEXT_PUBLIC_SENTRY_DSN=https://public@127.0.0.1/1 node_modules/.bin/next build
 NEXT_PUBLIC_VERCEL_ANALYTICS=1 NEXT_PUBLIC_SENTRY_DSN=https://public@127.0.0.1/1 node_modules/.bin/next start -p 3117 -H 127.0.0.1
 RAFII_TELEMETRY_URL=http://127.0.0.1:3117 node tests/play-telemetry-browser.cjs
-node --test tests/play-telemetry.test.mjs        # unit tests for the helper
+node --test tests/play-telemetry.test.mjs tests/play-proxy.test.cjs   # helper and proxy unit tests
 ```
 
-The browser test checks five things:
-1. A direct `/play/note-garden` load has no analytics script, no Sentry, 0 telemetry requests and 0 off-origin requests.
-2. `/pricing` still requests `/_vercel/insights/script.js`, initialises Sentry and sends an error, as a positive control.
-3. A client-side navigation from `/pricing` into `/play` sends nothing.
-4. Navigating back to `/pricing` resumes telemetry.
-5. Rebuild without those variables before the normal game journey, or run the journey against this build: it passed
-   with 0 off-origin requests on 2026-10-31.
+The browser test checks:
+1. **Direct `/play/note-garden` load:** no analytics script, no Sentry, 0 telemetry requests and 0 off-origin requests.
+2. **`/pricing` (positive control):** requests `/_vercel/insights/script.js`, initialises Sentry and sends an error.
+3. **Client-side navigation `/pricing` → `/play`:** while playing questions, navigating within `/play` and hiding the
+   page (`visibilitychange` and `pagehide`), there are 0 `/monitoring`, 0 `/_vercel/*` and 0 off-origin requests, and
+   no `/play` page view is queued for Vercel Analytics.
+4. **Back to `/pricing`:** a `/pricing` page view is queued, Sentry sends again, and the client_report flushed on hide
+   contains no `/play` tally.
 
-Not observed end to end: a server-side error during a `/play` request. The server path is covered by the helper's unit
-tests and the hook code above.
+Rebuild without those two variables before the normal game journey, or run the journey against this build. Both
+passed with 0 off-origin requests on 2026-10-31.
+
+Not observed end to end: a server-side error during a `/play` request. That path is covered by the helper's unit tests
+and the hook code above.
 
 ## Release notes (not done here)
 
-- **D3, Grown-ups copy:** the panel claims only what the game guarantees. Since D1 is now done, the site may also say
-  that `/play` sends no analytics.
-- `src/proxy.ts` still runs `updateSession` for `/play/*`. This only refreshes an existing Rafii session cookie. The game
-  sets no cookies.
+- **Privacy policy (privacy F4, decision D9):** the site policy's section 11 says Rafii is not directed at anyone under 18,
+  which contradicts this game. Proposed wording and open questions for counsel are in
+  [`PRIVACY-NOTICE-DRAFT.md`](PRIVACY-NOTICE-DRAFT.md). The policy page itself was not edited.
+- **Grown-ups Privacy link (F5):** held back until the policy has a children's section. Otherwise the link would point
+  at the contradicting text.
+- **D3, Grown-ups copy:** the panel claims only what the game guarantees. The page description now says "No sign-in, no
+  ads, no tracking. Progress stays on this device." (F3)
 - The route renders dynamically (`ƒ`) because the root layout reads the theme cookie.
 - No deploy was made. Hosted previews are off by project policy (`CLAUDE.md`).
 
