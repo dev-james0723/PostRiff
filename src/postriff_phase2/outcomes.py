@@ -15,7 +15,7 @@ def valid_receipt_url(url, platform):
             'X': ({'x.com', 'twitter.com'}, r'/[A-Za-z0-9_]{1,15}/status/[0-9]{1,25}/?'),
             'Bluesky': ({'bsky.app'}, r'/profile/[A-Za-z0-9.:_-]{3,253}/post/[a-z2-7]{13}/?'),
             'Discord': ({'discord.com'}, r'/channels/[0-9]{5,25}/[0-9]{5,25}/[0-9]{5,25}/?'),
-            'Telegram': ({'t.me'}, r'/[A-Za-z0-9_]{4,32}/[0-9]{1,15}/?'),
+            'Telegram': ({'t.me'}, r'/(?:[A-Za-z0-9_]{4,32}|c/[0-9]{1,15})/[0-9]{1,15}/?'),
             'Facebook': ({'www.facebook.com', 'facebook.com'}, r'/[A-Za-z0-9.]{1,100}/posts/[A-Za-z0-9_]{1,100}/?'),
             'YouTube': ({'youtu.be', 'www.youtube.com'}, r'/[A-Za-z0-9_-]{11}|/watch'),
             'TikTok': ({'www.tiktok.com'}, r'/@[A-Za-z0-9_.]{1,24}/video/[0-9]{5,25}/?'),
@@ -92,6 +92,15 @@ def normalize_result(result, job, reconciliation=False):
                 return unknown('Invalid publishing progress; manual review required')
             normalized['progress'] = {'version': 1, 'stage': progress['stage']}
     normalized['schema'] = 'postriff.result.v1'
+    if job.get('manifest', {}).get('platform') == 'Telegram':
+        telegram = result.get('telegram')
+        if telegram is not None:
+            from .telegram.receipts import validated
+            receipt = validated(telegram, reference)
+            if receipt is None: return unknown('Invalid Telegram message-group receipt; do not resubmit')
+            normalized['telegram'] = receipt
+        retry = result.get('retryAfter')
+        if type(retry) is int and 0 < retry <= 86400: normalized['retryAfter'] = retry
     for key, value in (('reference', reference), ('container', container), ('url', url)):
         if value is not None:
             normalized[key] = value

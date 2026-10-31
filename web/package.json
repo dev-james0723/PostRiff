@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "build": "python3 ../scripts/check_social_release_binding.py && next build",
     "start": "next start",
     "lint": "oxlint src",
     "lint:fix": "oxlint --fix src",
@@ -33,7 +33,11 @@
     "test:evidence-mode": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/evidence-mode-validation.sh",
     "ci:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh all",
     "test:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh backend",
-    "e2e:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh frontend"
+    "e2e:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh frontend",
+    "ci:telegram:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-telegram-validation.sh",
+    "test:telegram:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-telegram-validation.sh backend",
+    "test:telegram:upgrade:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-telegram-upgrade.sh",
+    "e2e:telegram:jcb": "bash ../scripts/cloud-telegram-validation.sh frontend"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

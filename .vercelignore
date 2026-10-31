@@ -16,7 +16,8 @@ studio-install-manifest.json
 /desktop/
 /docs/
 /migrations/
-/scripts/
+/scripts/*
+!/scripts/check_social_release_binding.py
 /templates/
 /tests/
 /vendor/

@@ -1,0 +1,20 @@
+feature,implementation_state,limitation_or_gate
+Identity OIDC/PKCE,Implemented candidate,BotFather configured and private credentials saved; real Rafii login not run; production environment pending
+Channel/group ownership and permissions,Implemented candidate,Two private destinations verified; saved visible UI minimum rights; API still reports channel restrict-members and group topics/tags rights; strict minimum FAIL; real own-message lifecycle PASS
+Public connection without developer intervention,Versioned public release qualification candidate,Reviewed real A–D receipts required; not installed; every new destination still needs actual ownership and live rights
+"Text, entities, images, videos, albums, poll",Implemented candidate,Real acceptance required per capability
+Documents/audio/voice,Recorded Telegram file IDs supported,New general binary upload flow unfinished
+Rafii publish/schedule/reschedule,Implemented candidate,Real publish and due-job delivery not run
+Edit/delete/pin/reply,Preview and exact human approval implemented,Real direct API own-message send/edit/delete and group reply passed; Rafii lifecycle acceptance and pin not run
+Sequences/recurring publication,Uses shared jobs and recurring engine,Sequence orchestration and real concurrency unverified
+Bot-observed activity and reactions,Implemented with explicit provenance,"No native views, full history or invented metrics"
+Secretary incoming/context/reply,"Separate consent, rights/window/revocation candidate","James confirmed, no username; no authorized Secretary grant or independent eligible incoming test; mode enabled alone is insufficient"
+Conversation retention,Configured bounded purge and context cutoff,Synthetic PostgreSQL checks passed; real retention acceptance not run
+Automation publish consent and emergency pause,Server-enforced candidate,AI generation and actual pause flow not run
+AI welcome/auto-reply/moderation,Unfinished,No autonomous execution exposed
+Official managed bots,Official creation/owner event/connection and access-settings preview/confirmation candidate; BYOB supported,Bot Management enabled; PostgreSQL fences and synthetic desktop/mobile browser passed; real managed-bot creation not run
+Agent/Brand Brain/Studio/Queue,Existing writer plus account/activity tools,Real agent round trip pending
+Multi-tenant webhook deduplication and recovery,PostgreSQL integration tests,Synthetic PostgreSQL checks passed; no real authenticated webhook configured
+"1,000 simulated users",Cloud bounded worker scenario,Not a real Telegram throughput claim
+MTProto passwords/codes/private sessions,Excluded,No user-session credentials requested
+Paid broadcasts/payments,Excluded,No billing authorization

@@ -1,0 +1,181 @@
+/** Real Chromium/Next UI with synthetic APIs. No external Telegram activity. */
+const assert=require('node:assert/strict');
+const {readFileSync,writeFileSync,mkdirSync}=require('node:fs');
+const {resolve}=require('node:path');
+const {chromium}=require('playwright');
+const base=process.env.TELEGRAM_WEB_URL,out=process.env.TELEGRAM_EVIDENCE_DIR;
+assert.ok(base&&new URL(base).hostname==='127.0.0.1'&&out,'Isolated loopback URL and evidence directory required');
+mkdirSync(out,{recursive:true});
+const fixture=JSON.parse(readFileSync(resolve(__dirname,'fixtures/wp04a-workspace.json'),'utf8'));
+const cap=(enabled)=>({enabled,state:enabled?'available':'requires_e2e',implemented:true,e2eTested:enabled,api:'synthetic',connectionType:'bot',missingRights:[],limitation:''});
+(async()=>{
+ const browser=await chromium.launch({headless:true}),results=[];
+ try{
+ for(const width of [1024,390]){
+  const context=await browser.newContext({viewport:{width,height:1000},reducedMotion:'reduce'});
+  await context.addCookies([{name:'postriff_dev',value:'1',url:base}]);
+  await context.addInitScript(()=>{const id='00000000-0000-0000-0000-000000000001';localStorage.setItem('postriff-dev-principal',id);localStorage.setItem('postriff-onboarding:'+id,JSON.stringify({completed:{},dismissed:{welcome:1},nudged:{'brand-tips':1}}));});
+  const snapshot=structuredClone(fixture.snapshot),wid=snapshot.state.workspace.id;
+  snapshot.state.sources=[];snapshot.state.speaker.provisional=null;
+  const caps=Object.fromEntries(['identity','publish','text','photo','album','video','poll','reply','edit_own','delete_own','pin','schedule','comments_read','engagement','reactions','forward','copy'].map(k=>[k,cap(true)]));
+  caps.story_publish={...cap(false),state:'requires_advanced_connection'};
+  const destination={connectionId:'telegram-fixture',connectionType:'bot',chatId:'-100123',title:'Synthetic Telegram channel',username:'rafii_test',destinationType:'public_channel',membership:'administrator',administrator:true,administratorRights:{can_post_messages:true,can_edit_messages:false},chatPermissions:{},lastVerifiedAt:1791000000,availableCapabilities:17,totalCapabilities:18,capabilities:caps,schedulingMode:'rafii',readiness:'qualified'};
+  const channel={id:'telegram-fixture',platform:'Telegram',providerAccountId:'-100123',account:'Synthetic Telegram channel',connectionState:'publish_verified',displayState:'Ready for posting',accountType:'channel',configured:true,identityVerified:true,capabilityVerified:true,scopes:['can_post_messages'],capabilities:{},evidenceSource:'synthetic_browser_fixture'};
+  snapshot.state.phase2.channels=[channel];
+  snapshot.state.variants=snapshot.state.variants.map(v=>({...v,platform:'Telegram',channelId:'telegram-fixture',sourceIds:[],unknowns:[],warnings:[],needsReview:false,media:[]}));
+  snapshot.state.phase2.jobs=[];snapshot.state.phase2.reviews=[];
+  const calls=[],unexpected=[],errors=[],page=await context.newPage();page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(e.message));
+  let prepared=0,executed=0,dmPrepared=0,dmConsented=0,reschedulePrepared=0,accessPrepared=0,accessChanged=0;
+  let botAccess={restricted:false,addedUserIds:[]};
+  await context.route('**/*',async route=>{
+   const req=route.request(),url=new URL(req.url()),path=url.pathname;
+   if(url.origin!==base)return route.abort();
+   if(!path.startsWith('/api/'))return route.continue();
+   const send=(data,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
+   const body=req.method()==='POST'?req.postDataJSON():null;calls.push({method:req.method(),path,body});
+   if(path.endsWith('/telegram/managed-bots/222333/access/prepare')){assert.deepEqual(body,{restricted:true,addedUserIds:[501]});accessPrepared++;return send({preview:{botId:'222333',username:'SyntheticChildBot',before:botAccess,after:body,ownerAlwaysHasAccess:true},proof:'synthetic-encrypted-preview',keyId:'synthetic-key'});}
+   if(path.endsWith('/telegram/managed-bots/222333/access/execute')){assert.deepEqual(body,{proof:'synthetic-encrypted-preview',keyId:'synthetic-key',confirmed:true});accessChanged++;botAccess={restricted:true,addedUserIds:[501]};return send({state:'confirmed',settings:botAccess});}
+   if(path.endsWith('/telegram/managed-bots/222333/access')&&req.method()==='GET')return send({botId:'222333',username:'SyntheticChildBot',ownerAlwaysHasAccess:true,...botAccess});
+   if(path.endsWith('/time-savings/activity')&&req.method()==='POST')return send({recorded:true});
+   if(path.endsWith('/telegram/connections/telegram-fixture/channel-dm-authorize')){assert.equal(body.enabled,true);if(body.confirmed){dmConsented++;return send({enabled:true});}dmPrepared++;return send({preview:{parentChatId:'-100123',title:destination.title,requiredRight:'can_manage_direct_messages',effect:'Receive accessible Channel DM conversations after consent'},requiresConfirmation:true});}
+   if(path.endsWith('/telegram/connections/telegram-fixture/prepare')){assert.equal(body.action,'edit_text');assert.equal(body.messageId,30);assert.equal(body.text,'Reviewed edit');prepared++;return send({operationId:'synthetic-op',digest:'a'.repeat(64),preview:{action:body.action,payload:{text:body.text}}});}
+   if(path.endsWith('/telegram/connections/telegram-fixture/execute')){assert.equal(body.confirmed,true);assert.equal(body.operationId,'synthetic-op');executed++;return send({state:'confirmed',messageId:30});}
+   if(path.endsWith('/telegram/connections/telegram-fixture/verify'))return send(destination);
+   if(path.endsWith('/actions')&&body?.action==='p2_telegram_reschedule'){
+    assert.equal(body.payload.jobId,'telegram-schedule');assert.equal(body.payload.timeZone,'UTC');
+    assert.ok(Date.parse(body.payload.localTime+'Z')>Date.now());reschedulePrepared++;
+    const original=snapshot.state.phase2.jobs[0];assert.equal(original.state,'scheduled');assert.equal(original.cancelRequested,false);
+    const manifest={...structuredClone(original.manifest),replacesJobId:original.id,idempotencyKey:'replacement-key',timing:{local:body.payload.localTime,timeZone:'UTC',utc:body.payload.localTime+'Z'},expiresAt:Date.now()/1000+7200};
+    snapshot.state.phase2.reviews=[{id:'replacement-review',manifest,digest:'b'.repeat(64),status:'needs_review'}];snapshot.revision++;return send(snapshot);
+   }
+   if(req.method()!=='GET'){unexpected.push(req.method()+' '+path);return send({error:'Unexpected synthetic mutation'},403);}
+   if(path==='/api/catalog')return send({authMode:'dev',execution:'dev-synthetic',phase2:true,templates:[],routes:[],profileMetadata:{}});
+   if(path==='/api/workspaces')return send({workspaces:[{workspaceId:wid,membership:snapshot.membership,name:'Telegram browser fixture',plan:'studio',memberCounts:{owner:1}}]});
+   if(path==='/api/me')return send({userId:'00000000-0000-0000-0000-000000000001',displayName:'Synthetic owner',preferences:{timeZone:'UTC',locale:'en',alertNewDevice:false},mfa:{}});
+   if(path===`/api/workspaces/${wid}`)return send(snapshot);
+   if(path.endsWith('/telegram/bots'))return send({bots:[]});
+   if(path.endsWith('/telegram/channel-dm'))return send({conversations:[],coverage:'updates_after_explicit_consent',unreadState:'unavailable'});
+   if(path.endsWith('/telegram/business-connections'))return send({connections:[]});
+   if(path.endsWith('/telegram/business-inbox'))return send({conversations:[]});
+   if(path.endsWith('/telegram/managed-bots'))return send({available:true,requests:[],bots:[{botId:'222333',username:'SyntheticChildBot'}],requiresVerifiedIdentity:true});
+   if(path.endsWith('/telegram/identities'))return send({configured:false,identities:[]});
+   if(path.endsWith('/telegram/controls'))return send({paused:true,approvalPolicy:'always',allowedConnections:[],allowedActions:[],retentionDays:7,revision:0});
+   if(path.endsWith('/telegram'))return send({destinations:[destination],productionReady:false});
+   if(path.endsWith('/telegram/connections/telegram-fixture/inspect'))return send(destination);
+   if(path.endsWith('/telegram/connections/telegram-fixture/inbox'))return send({messages:[{message:{message_id:30,date:1791000000,chat:{id:-100123},text:'Published fixture post'},deleted:false,rafiiJobId:'fixture-job'}],topics:[],coverage:'bot_observed_updates',ordinaryDeletionDetection:'unavailable'});
+   if(path.endsWith('/telegram/connections/telegram-fixture/files'))return send({files:[]});
+   if(path.endsWith('/telegram/connections/telegram-fixture/analytics'))return send({metrics:[],deliveryReceipts:{value:1,source:'rafii_derived'},observedReplies:{value:0,source:'bot_observed'},nativeViews:{value:null,source:'unavailable'}});
+   if(path.endsWith('/channels'))return send({channels:[channel],providers:[]});
+   if(path.endsWith('/usage'))return send({subscription:{plan:'studio',status:'active'},trial:{},balances:[]});
+   if(path.endsWith('/memory'))return send(fixture.memory);
+   if(path.endsWith('/memory/proposals'))return send({pending:[],recent:[],learning:{items:[]}});
+   if(path.endsWith('/ideas/conversations'))return send({conversations:[]});
+   if(path.endsWith('/agent/status'))return send({enabled:false,status:'disabled',preferences:{}});
+   if(path.endsWith('/coworker/status'))return send({enabled:false,status:'disabled',preferences:{}});
+   if(path.endsWith('/phone'))return send({status:'disabled',enabled:false,calls:[]});
+   if(path.endsWith('/audit'))return send({entries:[]});
+   unexpected.push('GET '+path);return send({error:'Unhandled synthetic route'},404);
+  });
+  await page.goto(base+'/app/telegram');
+  await page.getByRole('heading',{name:'Telegram',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Connect Telegram identity',exact:true}).waitFor();
+  const automation=page.getByLabel('Telegram automation consent',{exact:true});
+  await automation.getByText('reply · unavailable',{exact:true}).waitFor();
+  assert.equal(await automation.locator('label').filter({hasText:'reply · unavailable'}).locator('[data-slot="checkbox"]').isDisabled(),true);
+  assert.equal(await automation.locator('label').filter({hasText:'moderate · unavailable'}).locator('[data-slot="checkbox"]').isDisabled(),true);
+  await page.getByRole('button',{name:'Read @SyntheticChildBot access',exact:true}).click();
+  await page.getByLabel('Access audience for @SyntheticChildBot',{exact:true}).selectOption('restricted');
+  await page.getByLabel('Additional users for @SyntheticChildBot',{exact:true}).fill('501');
+  await page.getByRole('button',{name:'Preview @SyntheticChildBot access change',exact:true}).click();
+  await page.getByLabel('Access preview for @SyntheticChildBot',{exact:true}).waitFor();assert.equal(accessChanged,0);
+  const cancelAccess=page.getByRole('button',{name:'Cancel @SyntheticChildBot access change',exact:true});
+  await cancelAccess.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));
+  console.log('TELEGRAM_UI_LAYOUT '+JSON.stringify(await cancelAccess.evaluate(el=>({button:el.getBoundingClientRect().toJSON(),ancestors:Array.from((function*(node){while(node){yield node;node=node.parentElement;}})(el)).map(n=>({tag:n.tagName,overflow:getComputedStyle(n).overflow,position:getComputedStyle(n).position,scrollTop:n.scrollTop,height:n.clientHeight,scrollHeight:n.scrollHeight})),headers:Array.from(document.querySelectorAll('header')).map(n=>n.getBoundingClientRect().toJSON())}))));
+  console.log('TELEGRAM_UI_DIAGNOSTIC '+Buffer.from(await page.screenshot({fullPage:false})).toString('base64'));
+  await cancelAccess.click();assert.equal(accessChanged,0);
+  await page.getByRole('button',{name:'Preview @SyntheticChildBot access change',exact:true}).click();
+  const confirmAccess=page.getByRole('button',{name:'Confirm @SyntheticChildBot access change',exact:true});
+  await confirmAccess.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));
+  await confirmAccess.click();
+  await page.getByText('Telegram confirmed access: Owner only, plus Telegram user IDs 501',{exact:true}).waitFor();assert.equal(accessPrepared,2);assert.equal(accessChanged,1);
+  assert.equal(await page.getByLabel('Advanced Telegram phone').count(),0);
+  assert.equal(await page.getByText('Telegraph disabled pending account setup',{exact:false}).count(),0);
+  await page.getByLabel('Channel DM parent',{exact:true}).selectOption('telegram-fixture');
+  await page.getByRole('button',{name:'Preview conversation discovery',exact:true}).click();
+  await page.getByLabel('Channel DM authorization preview',{exact:true}).waitFor();assert.equal(dmConsented,0);
+  await page.getByRole('button',{name:'Cancel Channel DM authorization',exact:true}).click();assert.equal(dmConsented,0);
+  await page.getByRole('button',{name:'Preview conversation discovery',exact:true}).click();
+  await page.getByRole('button',{name:'Confirm Channel DM authorization',exact:true}).click();
+  await page.getByLabel('Channel DM authorization preview',{exact:true}).waitFor({state:'hidden'});assert.equal(dmConsented,1);
+  await page.locator('summary').filter({hasText:'Synthetic Telegram channel'}).click();
+  await page.getByText('Native views: unavailable',{exact:true}).waitFor();
+  await page.getByLabel('Telegram operation message').selectOption('30');
+  await page.getByLabel('Telegram operation action').selectOption('edit_text');
+  await page.getByLabel('Telegram operation text').fill('Reviewed edit');
+  await page.getByRole('button',{name:'Prepare Telegram action',exact:true}).click();
+  await page.getByLabel('Telegram action preview').waitFor();assert.equal(prepared,1);assert.equal(executed,0);
+  await page.getByRole('button',{name:'Cancel action',exact:true}).click();assert.equal(executed,0);
+  await page.getByRole('button',{name:'Prepare Telegram action',exact:true}).click();
+  await page.getByRole('button',{name:'Confirm edit text',exact:true}).click();
+  await page.getByText('Telegram: confirmed',{exact:true}).waitFor();assert.equal(executed,1);
+  await page.getByRole('button',{name:'Reverify permissions',exact:true}).click();
+  await page.getByText('Telegram rights reverified',{exact:true}).waitFor();
+  await page.screenshot({path:resolve(out,`telegram-${width}.png`),fullPage:true});
+  // Exercise the actual shared scheduler with Telegram controls. Merely filling
+  // this form must never prepare, approve, or publish a post.
+  await page.goto(base+'/app/queue');
+  await page.getByRole('button',{name:'Schedule a draft',exact:true}).click();
+  const dialog=page.getByRole('dialog');const expectPrepare=async wanted=>{await page.waitForFunction(w=>{const b=document.querySelector('[data-tour="schedule-prepare"]');return b&&b.disabled===!w;},wanted);assert.equal(await dialog.getByRole('button',{name:'Prepare review',exact:true}).isEnabled(),wanted);};await dialog.getByLabel('Draft',{exact:true}).click();
+  await page.getByRole('option').filter({hasText:'Telegram'}).first().click();
+  await dialog.getByLabel('Telegram format',{exact:true}).waitFor();
+  await dialog.getByRole('checkbox',{name:'Publish as soon as I approve the review',exact:true}).check();
+  await dialog.getByRole('checkbox',{name:'I have the rights to publish this text on this account.',exact:true}).check();
+  await dialog.getByRole('button',{name:'Prepare review',exact:true}).waitFor({state:'visible'});
+  await expectPrepare(true);
+  await dialog.getByLabel('Telegram formatting',{exact:true}).selectOption('HTML');
+  await expectPrepare(false);
+  await dialog.getByLabel('Telegram formatting',{exact:true}).selectOption('plain');
+  await dialog.getByLabel('Telegram format',{exact:true}).selectOption('poll');
+  await expectPrepare(false);
+  await dialog.getByLabel('Telegram poll options',{exact:true}).fill('First choice\nSecond choice');
+  await dialog.getByRole('checkbox',{name:'Multiple answers',exact:true}).check();
+  await dialog.getByRole('checkbox',{name:'Allow revoting',exact:true}).check();
+  await dialog.getByRole('checkbox',{name:'Shuffle options',exact:true}).check();
+  await dialog.getByRole('button',{name:'Prepare review',exact:true}).waitFor({state:'visible'});
+  await expectPrepare(true);
+  await dialog.getByLabel('Telegram format',{exact:true}).selectOption('video_note');
+  await expectPrepare(false);
+  await dialog.getByRole('checkbox',{name:'Omit the draft text: Video Notes cannot carry captions.',exact:true}).check();
+  await dialog.getByLabel('Telegram preview',{exact:true}).getByText('Circular video · caption omitted by your choice',{exact:true}).waitFor();
+  assert.equal(prepared,2);assert.equal(executed,1);
+  await page.screenshot({path:resolve(out,`telegram-composer-${width}.png`),fullPage:true});
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  caps.text={...cap(false),state:'permission_required',missingRights:['can_post_messages']};caps.publish={...caps.text};
+  destination.administratorRights.can_post_messages=false;
+  await page.reload();await page.getByRole('button',{name:'Schedule a draft',exact:true}).click();
+  await dialog.getByLabel('Draft',{exact:true}).click();await page.getByRole('option').filter({hasText:'Telegram'}).first().click();
+  await dialog.getByLabel('Telegram format',{exact:true}).waitFor();
+  await dialog.getByRole('checkbox',{name:'I have the rights to publish this text on this account.',exact:true}).check();
+  await expectPrepare(false);
+  await dialog.getByText('permission required can_post_messages',{exact:false}).waitFor();
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  const scheduled=structuredClone(fixture.snapshot.state.phase2.jobs[0]);
+  scheduled.id='telegram-schedule';scheduled.state='scheduled';scheduled.cancelRequested=false;
+  scheduled.manifest={...scheduled.manifest,platform:'Telegram',channelId:'telegram-fixture',account:channel.account,variantId:snapshot.state.variants[0].id,payload:{text:'Frozen scheduled Telegram post',language:'English'},media:[],timing:{local:new Date(Date.now()+7200000).toISOString().slice(0,16),timeZone:'UTC',utc:new Date(Date.now()+7200000).toISOString()},expiresAt:Date.now()/1000+10800};
+  snapshot.state.phase2.jobs=[scheduled];snapshot.state.phase2.reviews=[];
+  await page.goto(base+'/app/queue?job=telegram-schedule');
+  await page.getByRole('button',{name:'Reschedule',exact:true}).click();
+  await page.getByRole('heading',{name:'Reschedule Telegram post',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(reschedulePrepared,0);
+  await page.goto(base+'/app/queue?job=telegram-schedule');await page.getByRole('button',{name:'Reschedule',exact:true}).click();
+  await page.getByRole('button',{name:'Prepare replacement review',exact:true}).click();
+  await page.getByRole('heading',{name:'Reschedule Telegram post',exact:true}).waitFor({state:'hidden'});
+  assert.equal(reschedulePrepared,1);assert.equal(scheduled.state,'scheduled');assert.equal(scheduled.cancelRequested,false);
+  await page.getByText('Approval replaces the original Telegram schedule.',{exact:false}).waitFor();
+  assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
+  results.push({width,passed:true,prepared,executed,dmPrepared,dmConsented,reschedulePrepared,rescheduleRetainsApproval:true,channelDmConsent:true,composer:true,publishNowRetainsApproval:true,pollNativeControls:true,videoNoteExplicitOmission:true,unqualifiedFormattingBlocked:true,permissionLossBlocked:true,privateSessionsUnavailable:true,execution:'synthetic_browser_only'});
+  await context.close();
+ }
+ }finally{await browser.close();}
+ writeFileSync(resolve(out,'browser-tests.json'),JSON.stringify({realTelegramE2E:false,results},null,2)+'\n');console.log(JSON.stringify(results));
+})().catch(e=>{console.error(e);process.exitCode=1;});

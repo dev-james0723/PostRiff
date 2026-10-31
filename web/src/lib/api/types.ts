@@ -183,6 +183,8 @@ export interface Manifest {
   expiresAt: number;
   idempotencyKey: string;
   execution: string;
+  replacesJobId?: string;
+  replacesIdempotencyKey?: string;
 }
 
 export interface Job {

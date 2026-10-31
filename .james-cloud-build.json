@@ -8,15 +8,17 @@
     "lint": "lint",
     "typecheck": "typecheck",
     "build": "build",
-    "test": "test:jcb",
-    "ci": "ci:youtube:jcb",
-    "e2e": "ci:youtube:frontend:jcb"
+    "test": "test:telegram:jcb",
+    "ci": "ci:telegram:jcb",
+    "e2e": "e2e:telegram:jcb"
   },
   "runner": {
     "validation": "depot-ubuntu-24.04-8",
     "build": "depot-ubuntu-24.04-16"
   },
-  "outputs": [],
+  "outputs": [
+    ".jcb-artifacts/telegram"
+  ],
   "envAllowlist": [],
   "localFallback": false,
   "environment": {
