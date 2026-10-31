@@ -70,6 +70,46 @@ test('server: a /play request and the assets it loads send nothing; other pages 
   // A cold start's first request runs before Sentry has a request scope for it; its spans still carry the path.
   Sentry.startInactiveSpan({ name: 'GET', attributes: { 'http.target': '/play/note-garden', 'http.method': 'GET' } }).end();
   Sentry.startInactiveSpan({ name: 'GET', attributes: { 'http.target': '/pricing', 'http.method': 'GET' } }).end();
+
+  // Interleaving (rafii-6 D12-3): a /play decision that inherits "sampled" records no drop; the next non-play root's
+  // drop must still be tallied (a leftover /play flag must never suppress it).
+  const traceId = '1234567890abcdef1234567890abcdef';
+  const withParent = (parent, sampleRate, rand, fn) => {
+    if (parent === undefined) return fn();
+    const baggage = [`sentry-trace_id=${traceId}`, `sentry-sample_rand=${rand}`, ...(sampleRate ? [`sentry-sample_rate=${sampleRate}`] : [])].join(',');
+    return Sentry.continueTrace({ sentryTrace: `${traceId}-1234567890abcdef-${parent ? 1 : 0}`, baggage }, fn);
+  };
+  withParent(true, '0.1', '0.9', () => Sentry.startInactiveSpan({ name: 'GET', attributes: { 'http.target': '/play/note-garden' } }).end());
+  Sentry.startInactiveSpan({ name: 'GET', attributes: { 'http.target': '/pricing', 'http.method': 'GET' } }).end();
+
+  // Parity (codex D13-1): non-play spans sample exactly as the old { tracesSampleRate: 0 } options, per the installed
+  // SDK's own sampleSpan; /play is never sampled, whatever the parent says.
+  const core = require('@sentry/core');
+  for (const c of [
+    { parent: undefined, sampleRate: undefined, rand: '0.9' },
+    { parent: true, sampleRate: '0.1', rand: '0.9' },
+    { parent: true, sampleRate: undefined, rand: '0.9' },
+    { parent: false, sampleRate: '0.5', rand: '0.1' },
+    { parent: false, sampleRate: undefined, rand: '0.1' }
+  ]) {
+    const actual = withParent(c.parent, c.sampleRate, c.rand, () => {
+      const span = Sentry.startInactiveSpan({ name: 'GET', attributes: { 'http.target': '/pricing', 'http.method': 'GET' } });
+      const sampled = core.spanIsSampled(span);
+      span.end();
+      return sampled;
+    });
+    const [expected] = core.sampleSpan({ tracesSampleRate: 0 }, { name: 'GET', attributes: {}, parentSampled: c.parent, parentSampleRate: c.sampleRate ? Number(c.sampleRate) : undefined }, Number(c.rand));
+    assert.equal(actual, expected, `non-play ${JSON.stringify(c)}: sampled ${actual}, old options ${expected}`);
+    const play = withParent(c.parent, c.sampleRate, c.rand, () => {
+      const span = Sentry.startInactiveSpan({ name: 'GET', attributes: { 'http.target': '/play/note-garden', 'http.method': 'GET' } });
+      const sampled = core.spanIsSampled(span);
+      span.end();
+      return sampled;
+    });
+    // Without a sampled parent a /play span is not sampled at all. Under a sampled parent (only a crafted request could
+    // send one: our browser samples nothing) it may be recorded, but its transaction is dropped before sending (below).
+    if (c.parent !== true) assert.equal(play, false, `/play ${JSON.stringify(c)} is not sampled`);
+  }
   await Sentry.flush(2000);
   // Outcomes recorded after the first flush go out with the next one; close() flushes them too.
   await Sentry.close(2000);
@@ -78,11 +118,16 @@ test('server: a /play request and the assets it loads send nothing; other pages 
   const events = all.filter((i) => i.type === 'event');
   assert.equal(events.length, 3, `errors sent for the three non-play requests only, got ${events.length}`);
   assert.match(String(events[0].payload.exception?.values?.[0]?.type ?? ''), /Error/, 'positive control: the /pricing error reports');
+  const playTransactions = all.filter((i) => i.type === 'transaction' && /^\/play(\/|$)/.test(String(i.payload?.contexts?.trace?.data?.['http.target'] ?? i.payload?.transaction ?? '')));
+  assert.deepEqual(playTransactions.map((i) => i.payload?.transaction), [], 'no /play transaction is ever sent');
   const tallies = all.filter((i) => i.type === 'client_report').flatMap((i) => i.payload.discarded_events ?? []);
   assert.deepEqual(tallies.filter((d) => d.reason === 'before_send'), [], `no tally of the /play drop: ${JSON.stringify(tallies)}`);
   const sampledOut = tallies.filter((d) => d.reason === 'sample_rate' && d.category === 'transaction').reduce((n, d) => n + d.quantity, 0);
-  assert.equal(sampledOut, 3, `only /pricing, / and the out-of-scope /pricing span are tallied as sampled out (not /play, not static assets): ${JSON.stringify(tallies)}`);
+  // Non-play roots the old options leave unsampled (the SDK-core span path tallies each one): /pricing and / requests,
+  // the out-of-scope /pricing, the interleaved /pricing, and the three unsampled non-play parity cases = 7. /play adds 0.
+  assert.equal(sampledOut, 7, `only non-play roots are tallied (never /play, never static assets): ${JSON.stringify(tallies)}`);
   const aggregates = all.filter((i) => i.type === 'sessions').flatMap((i) => i.payload.aggregates ?? []);
   const counted = aggregates.reduce((sum, a) => sum + (a.exited ?? 0) + (a.errored ?? 0) + (a.crashed ?? 0), 0);
   assert.equal(counted, 3, `only the three non-play requests are request sessions: ${JSON.stringify(aggregates)}`);
 });
+

@@ -13,12 +13,7 @@ const sentryOptions: Sentry.NodeOptions | Sentry.EdgeOptions = {
   sendDefaultPii: false,
 
   // Adjust this value in production, or use tracesSampler for greater control
-  // Same as tracesSampleRate: 0 (inherit a parent's decision, else 0), but notes when the decision is for /play.
-  tracesSampler: (context) => {
-    const target = context.attributes?.['http.target'];
-    samplingPlay = inPlayRequest() || isPlayUrl(typeof target === 'string' ? target : undefined);
-    return context.inheritOrSampleWith(0);
-  },
+  tracesSampleRate: 0,
   // D1: nothing from the children's /play area is sent; other routes keep the existing scrubbing.
   beforeSend: (event) => (isPlayEvent(event) || inPlayRequest() ? null : scrubTelemetry(event)),
   beforeSendTransaction: (event) => (isPlayEvent(event) || inPlayRequest() ? null : event),
@@ -26,13 +21,6 @@ const sentryOptions: Sentry.NodeOptions | Sentry.EdgeOptions = {
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false
 };
-
-/**
- * True when the sampling decision the SDK is about to record is for /play. The SDK calls tracesSampler and then,
- * synchronously, records the sample_rate drop. Even the first request after a cold start, which runs before Sentry has
- * a request scope for it, carries its path in the span's `http.target` attribute.
- */
-let samplingPlay = false;
 
 type RequestInfo = { url?: string; headers?: Record<string, string | string[] | undefined> };
 
@@ -52,8 +40,8 @@ function inPlayRequest(): boolean {
  * - Request sessions: core counts a request when its response closes, only if `requestSession` is still set on the
  *   request's isolation scope, so it is cleared for /play as the request starts (`httpServerRequest`).
  * - Client reports: outcomes (dropped by beforeSend, sampled out, …) are not recorded while handling /play, so no
- *   tally of the request reaches a later client_report. Sampled-out /play spans are recognised by their path too
- *   (tracesSampler), which also covers a cold start's first request. Every other route reports exactly as before.
+ *   tally of the request reaches a later client_report. /play spans are dropped before sampling (beforeSampling), which
+ *   also covers a cold start's first request. Every other route reports exactly as before.
  */
 function excludePlayRequests() {
   const client = Sentry.getClient();
@@ -61,11 +49,27 @@ function excludePlayRequests() {
   client.on('httpServerRequest', (_request, _response, normalizedRequest) => {
     if (isPlayRequest(normalizedRequest)) Sentry.getIsolationScope().setSDKProcessingMetadata({ requestSession: undefined });
   });
+  // Per sampling decision. beforeSampling runs synchronously at the start of EVERY root-span decision, so the mark is
+  // reset for each one and can never outlive it (a concurrent request cannot inherit it). A /play span is recognised by
+  // the request scope or, for a cold start's first request (no request scope yet), by its own http.target.
+  // - OTel spans (what Next uses): decision=false means the span is neither sampled nor tallied as sampled out.
+  // - SDK-core spans ignore that decision, so their sample_rate drop, recorded synchronously right after, is skipped.
+  // Non-play decisions are untouched: sampling is exactly tracesSampleRate: 0, including inherited parent decisions.
+  let decisionIsPlay = false;
+  client.on('beforeSampling', ({ spanAttributes }, samplingDecision) => {
+    const target = spanAttributes['http.target'];
+    decisionIsPlay = inPlayRequest() || isPlayUrl(typeof target === 'string' ? target : undefined);
+    if (decisionIsPlay) samplingDecision.decision = false;
+  });
   const record = client.recordDroppedEvent.bind(client);
   client.recordDroppedEvent = (...args: Parameters<typeof record>) => {
-    const sampledOutPlay = args[0] === 'sample_rate' && samplingPlay;
-    if (args[0] === 'sample_rate') samplingPlay = false;
-    if (!sampledOutPlay && !inPlayRequest()) record(...args);
+    const [reason] = args;
+    const sampledOutPlay = reason === 'sample_rate' && decisionIsPlay;
+    if (reason === 'sample_rate') decisionIsPlay = false;
+    // 'before_send' outcomes come only from beforeSend/beforeSendTransaction above, which return null ONLY for /play
+    // (scrubTelemetry never drops). So every such outcome is a /play drop. Keep this true if those hooks change.
+    if (sampledOutPlay || reason === 'before_send' || inPlayRequest()) return;
+    record(...args);
   };
 }
 
