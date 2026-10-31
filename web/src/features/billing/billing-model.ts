@@ -12,6 +12,11 @@ import type { ChannelView, LedgerEntry, Member, PlanTerms, Usage } from '@/lib/a
 import { isConnected } from '@/lib/channels/state';
 import { daysUntil } from '@/lib/time';
 
+/** Read the server entitlement; an email, role, or absent numeric limit grants nothing. */
+export function hasUnlimitedFounderAccess(usage: Pick<Usage, 'entitlement'>): boolean {
+  return usage.entitlement.source === 'internal' && usage.entitlement.unlimited === true;
+}
+
 /* ---------- lifecycle ---------- */
 
 /** Tones shared with `AnimatedBadge` (minus `loading`, which only the checkout confirmation uses). */

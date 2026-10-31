@@ -2,7 +2,7 @@
 export function publishingSupport(platform: string): string {
   switch (platform) {
     case 'LinkedIn':
-      return 'Profile posts, text only. Needs publish permission; check the post on LinkedIn afterwards.';
+      return 'Text posts on your profile. Needs publish permission. No images, Company pages or comments yet.';
     case 'Threads':
       return 'Text or one image. Needs publish permission. No video, carousels or replies yet.';
     case 'Instagram':

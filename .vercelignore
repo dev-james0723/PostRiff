@@ -72,3 +72,9 @@ requirements-dev.txt
 /api/control.py
 /requirements-control.txt
 /vercel.control.json
+
+# Exclude private-tooling symlink entries as well as directories.
+/.claude
+/.agents
+/.codex
+/.token-pilot

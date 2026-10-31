@@ -19,8 +19,8 @@ from .text_measure import measure
 from . import publish_options
 
 TERMINAL = ("verified", "failed", "canceled")
-IN_FLIGHT = ("processing", "submitting", "provider_accepted", "published", "uncertain")
-# Official per-account publish limits per 24 h (connector-audit.md); enforced at approval time.
+IN_FLIGHT = ("native_scheduled", "processing", "submitting", "provider_accepted", "published", "uncertain")
+# Conservative Rafii approval caps, separate from provider-native quotas; not evidence of a LinkedIn API allowance.
 DAILY_LIMITS = {"Instagram": 100, "Threads": 250, "LinkedIn": 150}
 # Why a person does not want a draft (variant_feedback). General vocabulary; the note is the person's own words.
 FEEDBACK_REASONS = ("wrong_facts", "not_my_voice", "too_long", "too_short", "wrong_angle", "wrong_language", "other")
@@ -76,7 +76,11 @@ class Phase2Store(Store):
         result["state"]["contentTypes"] = content_projection(result["state"])
         p = result["state"].get("phase2")
         if p:
-            p["trial"]["status"] = "active" if self.clock() < p["trial"]["expiresAt"] else "expired"
+            # Hosted billing is authoritative. Internal and paid workspaces can
+            # have no legacy trial; presenting them must not invent one.
+            trial = p.get("trial")
+            if isinstance(trial, dict) and isinstance(trial.get("expiresAt"), (int, float)):
+                trial["status"] = "active" if self.clock() < trial["expiresAt"] else "expired"
             p["art"]["providerBrief"] = self.art_brief(state)
             p["art"]["briefHash"] = digest(p["art"]["providerBrief"]) if p["art"]["providerBrief"] else None
             p["plans"] = [{"id": key, **value} for key, value in PLANS.items()]
@@ -93,12 +97,12 @@ class Phase2Store(Store):
         return "Ready for posting"
 
     def channel_reverification_due(self, c):
-        """Hosted YouTube age checks defer a job; they never authorize dispatch.
+        """Hosted YouTube and LinkedIn age checks defer a job; they never authorize dispatch.
 
         A worker must refresh and verify this exact vault grant before applying
         channel_state and the immutable approval checks again.
         """
-        return bool(getattr(self, 'hosted_entitlements', False) and c.get('platform') == 'YouTube'
+        return bool(getattr(self, 'hosted_entitlements', False) and c.get('platform') in ('YouTube', 'LinkedIn')
                     and c.get('configured') and not c.get('revoked')
                     and c.get('identityVerified') and c.get('capabilityVerified') and c.get('scopes')
                     and (c.get('expiresAt', 0) <= self.clock() or c.get('verifiedAt', 0) + 3600 < self.clock()))
@@ -276,7 +280,14 @@ class Phase2Store(Store):
             art = data["art"]
             art.update({"selected": None, "candidates": [], "cacheHash": None, "status": "deleted_local_fallback", "deletedAt": now})
         elif action == "media_upload":
-            data["assets"].append(decode_upload(p))
+            if p.get("mime") == "application/pdf":
+                from .social_documents import decode_pdf
+                data["assets"].append(decode_pdf(p))
+            elif p.get('mime') == 'image/gif':
+                from .social_documents import decode_gif
+                data['assets'].append(decode_gif(p))
+            else:
+                data["assets"].append(decode_upload(p))
         elif action == "media_delete":
             asset = find(data["assets"], p.get("assetId"))
             if any(j["state"] in IN_FLIGHT and any(m["id"] == asset["id"] for m in j["manifest"]["media"]) for j in data["jobs"]):
@@ -322,6 +333,9 @@ class Phase2Store(Store):
             if review["digest"] != p.get("digest") or p.get("confirmed") is not True or review["status"] not in ("needs_review", "approved"):
                 raise AlphaError("Review and explicitly approve this exact destination manifest.", 409)
             manifest = review["manifest"]
+            if (getattr(self, 'worker_binding', None) is not None
+                    and manifest.get('workerBinding') != self.worker_binding):
+                raise AlphaError('This review belongs to another deployment. Prepare a new review.', 409)
             if not self.current(s, manifest) or manifest["expiresAt"] <= now or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= now) or self.channel_state(find(data["channels"], manifest["channelId"])) != "Ready for posting":
                 raise AlphaError("This approval is stale. Prepare a new review.", 409)
             existing = next((j for j in data["jobs"] if j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"]), None)
@@ -336,12 +350,18 @@ class Phase2Store(Store):
             limit = DAILY_LIMITS.get(channel["platform"])
             recent = [j for j in data["jobs"] if j["manifest"]["channelId"] == manifest["channelId"] and j.get("approvedAt", 0) > now - 86400 and j["state"] not in ("canceled", "failed")]
             if limit and len(recent) >= limit:
-                raise AlphaError(f"{channel['platform']} allows {limit} posts per 24 hours for this account; this approval would exceed it.", 409)
+                raise AlphaError(f"Rafii's local safety cap for {channel['platform']} is {limit} approvals per 24 hours. Provider quotas may be lower.", 409)
             review["status"] = "approved"
             youtube_early = manifest['platform'] == 'YouTube' and (manifest.get('publishOptions', {}).get('publishAt') or manifest.get('publishOptions', {}).get('publicationMode') == 'now')
-            job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": now if youtube_early else manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}
+            job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": now if youtube_early or manifest.get("nativeScheduleAt") else manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}
             self.event(job, "approved", "Exact local fixture approval recorded")
-            self.event(job, "scheduled", "Waiting for the local durable worker")
+            if getattr(self, 'worker_binding', None) is not None:
+                # Older workers sharing staging storage skip held jobs. Only an authenticated,
+                # exact-job dispatch may release this preview approval under the same SQL lease.
+                job['previewDispatchPending'] = True
+                self.event(job, 'held', 'Approved preview post; choose Publish approved post when due.')
+            else:
+                self.event(job, "scheduled", "Waiting for the local durable worker")
             data["jobs"].append(job)
             review["jobId"] = job["id"]
         elif action == "approve_many":
@@ -359,6 +379,7 @@ class Phase2Store(Store):
             if job["state"] in TERMINAL:
                 return
             job["cancelRequested"] = True
+            job["nextAt"] = now
             self.event(job, "uncertain" if job["state"] in IN_FLIGHT else "canceled", "Cancellation cannot recall an accepted submission; reconcile" if job["state"] in IN_FLIGHT else "Canceled before submission")
         elif action == "variant_feedback":
             # "Don't use this draft": kept on the draft as a learning signal for a later phase, and it blocks
@@ -409,8 +430,12 @@ class Phase2Store(Store):
         if any(f and f != DEFAULT_FORMATS.get(c["platform"]) for f in (v.get("format"), native_format)):
             raise AlphaError(EXPORT_ONLY_NOTE, 409, code="format_not_publishable")
         text = v["text"]
+        omit_caption = (p.get('publishOptions') or {}).get('format') == 'story' and c['platform'] in ('Instagram', 'Facebook')
+        if omit_caption:
+            if p.get('omitCaption') is not True: raise AlphaError('Explicitly review this Story without its draft caption.', 400)
+            text = ''
         # Measured the way the platform counts (X weighs CJK and emoji as two), so an over-length post never reaches it.
-        if not text.strip() or measure(c["platform"], text)["used"] > LIMITS[c["platform"]]["characters"]:
+        if (not text.strip() and not omit_caption) or measure(c["platform"], text)["used"] > LIMITS[c["platform"]]["characters"]:
             raise AlphaError("The content exceeds this destination's versioned text limit.")
         # Threads rejects a post with more than 5 links (official posts guide, from 2025-12-22).
         if c["platform"] == "Threads" and len(re.findall(r"https?://", text)) > 5:
@@ -419,7 +444,11 @@ class Phase2Store(Store):
         if sorted(acknowledged) != sorted(v["warnings"]):
             raise AlphaError("Acknowledge every displayed draft warning.")
         media = []
-        if p.get("assetId"):
+        extended_media = ("assetIds" in p or (p.get("assetId") and c["platform"] in ("LinkedIn", "Threads", "Instagram", "Facebook", "X", "YouTube", "TikTok", "Pinterest")))
+        if extended_media:
+            from .social_formats import ordered_media
+            media = ordered_media(data["assets"], p, c["platform"])
+        elif p.get("assetId"):
             a = find(data["assets"], p["assetId"])
             if asset_kinds.kind_of(a) == "video":
                 if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou"):
@@ -467,12 +496,27 @@ class Phase2Store(Store):
         evidence = c.get("evidenceSource", "synthetic")
         selection = ensure_content_state(s)["selection"]
         manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": s["speaker"]["activeRevision"], "styleRevision": learning.revision(s), "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
+        if omit_caption:
+            manifest['captionOmitted'] = True
+            manifest['sourceTextDigest'] = digest(v['text'])
         manifest["briefRevision"] = s["brief"]["revision"]
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["voiceSourceDigest"] = self.voice_source_digest(s, v)
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
+        if c['platform'] == 'Facebook':
+            # The person subject is stable across Pages; freeze the exact selected Page separately.
+            if not c.get('destinationId') or c.get('accountType') != 'page':
+                raise AlphaError('Choose the Facebook Page for this connection before reviewing a post.', 409)
+            manifest['destinationId'] = c['destinationId']
         if options is not None:
             manifest["publishOptions"] = options
+            native_at = options.get('scheduledPublishTime')
+            if c['platform'] == 'YouTube' and options.get('publishAt'):
+                from datetime import datetime
+                native_at = datetime.fromisoformat(options['publishAt'].replace('Z', '+00:00')).timestamp()
+            if native_at is not None:
+                if abs(native_at-timing['timestamp']) > 1: raise AlphaError('Native publication time must match the time in this exact review.', 409)
+                manifest['nativeScheduleAt'] = native_at
         if c['platform'] == 'YouTube' and options.get('thumbnailAssetId'):
             image = find(data['assets'], options['thumbnailAssetId'])
             if image.get('deleted') or image.get('processing') != 'decoded' or not str(image.get('mime', '')).startswith('image/') or p.get('rightsConfirmed') is not True:
@@ -487,6 +531,8 @@ class Phase2Store(Store):
         from .growth.advice_context import prediction_current
         if prediction_current(advice, s, {**v, "text": text}):
             manifest["postDoctor"] = copy.deepcopy(advice)
+        if getattr(self, 'worker_binding', None) is not None:
+            manifest['workerBinding'] = copy.deepcopy(self.worker_binding)
         root_key = digest({**manifest, 'timing': {'mode': 'now'}, 'expiresAt': None}) if immediate_youtube else digest(manifest)
         if immediate_youtube:
             manifest['retryRoot'] = root_key
@@ -534,9 +580,11 @@ class Phase2Store(Store):
 
     def current(self, s, m):
         try:
-            if m.get('privacyErased'):
+            if m.get('privacyErased') or ('workerBinding' in m and m['workerBinding'] != getattr(self, 'worker_binding', None)):
                 return False
             v, c = self._variant(s, m["variantId"]), find(s["phase2"]["channels"], m["channelId"])
+            if c['platform'] == 'Facebook' and (not c.get('destinationId') or m.get('destinationId') != c['destinationId']):
+                return False
             if (m.get("workspaceId") != s["workspace"]["id"]
                     or m.get("brandHubId") != s["brandHub"]["id"]
                     or m.get("briefRevision") != s["brief"]["revision"]
@@ -552,10 +600,11 @@ class Phase2Store(Store):
             if m.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, m["trendLineage"]):
                 return False
             media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"] + m.get('youtubeAssets', []))
+            media_ok = media_ok and all(not a.get('poster') or all(find(s['phase2']['assets'],a['id']).get('poster',{}).get(k) == v for k,v in a['poster'].items()) for a in m['media'])
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}
             # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
             # next draft and leaves approved text alone (design decision A1).
-            return bool(media_ok and content_type_ok and not v["needsReview"] and not v.get("rejected") and not v["blockedByRetraction"] and not v.get("policyBlocked") and not source_policy.publication_issues(s, v["sourceIds"]) and not v["unknowns"] and v["revision"] == m["contentRevision"] and v["text"] == m["payload"]["text"] and v["language"] == m["payload"]["language"] and c["platform"] == v["platform"] and c["account"] == m["account"] and s["speaker"]["id"] == m["speakerId"] and s["speaker"]["activeRevision"] == m["voiceRevision"] and digest(s["brandHub"]) == m["brandDigest"] and c["capabilityVersion"] == m["capability"]["version"] and m["operation"] == LIMITS[c["platform"]]["operation"] and m["limitsVersion"] == LIMITS[c["platform"]]["version"] and self.voice_bindings_current(s, v) and m.get("voiceSourceDigest", digest([])) == self.voice_source_digest(s, v) and all(self._source(s, i)["active"] for i in v["sourceIds"]))
+            return bool(media_ok and content_type_ok and not v["needsReview"] and not v.get("rejected") and not v["blockedByRetraction"] and not v.get("policyBlocked") and not source_policy.publication_issues(s, v["sourceIds"]) and not v["unknowns"] and v["revision"] == m["contentRevision"] and (v["text"] == m["payload"]["text"] or (m.get("captionOmitted") is True and m["payload"]["text"] == "" and (m.get("publishOptions") or {}).get("format") == "story" and m["platform"] in ("Instagram", "Facebook") and m.get("sourceTextDigest") == digest(v["text"]))) and v["language"] == m["payload"]["language"] and c["platform"] == v["platform"] and c["account"] == m["account"] and s["speaker"]["id"] == m["speakerId"] and s["speaker"]["activeRevision"] == m["voiceRevision"] and digest(s["brandHub"]) == m["brandDigest"] and c["capabilityVersion"] == m["capability"]["version"] and m["operation"] == LIMITS[c["platform"]]["operation"] and m["limitsVersion"] == LIMITS[c["platform"]]["version"] and self.voice_bindings_current(s, v) and m.get("voiceSourceDigest", digest([])) == self.voice_source_digest(s, v) and all(self._source(s, i)["active"] for i in v["sourceIds"]))
         except (AlphaError, KeyError, TypeError, ValueError):
             return False
 

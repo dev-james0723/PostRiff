@@ -59,6 +59,23 @@ class Taxonomy(unittest.TestCase):
         self.assertEqual(channels.connection_state({**base, "revoked": True}, now), "reauthorization_required")
         self.assertEqual(channels.connection_state({**base, "configured": False}, now), "disconnected")
 
+    def test_latest_identity_read_time_does_not_renew_operation_evidence(self):
+        matrix = channels.unsupported_matrix()
+        channels.set_level(matrix, "identity", "Direct", "identity matched", 100.0, 1)
+        channels.set_level(matrix, "publish", "Direct", "separate publishing proof", 50.0, 1)
+        base = {"id": "member", "platform": "LinkedIn", "account": "Fixture member", "configured": True,
+                "identityVerified": True, "verifiedAt": 950.0, "evidenceSource": "live_provider",
+                "scopes": ["openid", "profile"], "expiresAt": 2000.0}
+        view = channels.customer_view(base, matrix, 1000.0)
+        self.assertEqual(view["identityVerifiedAt"], 950.0)
+        self.assertEqual(view["capabilities"]["identity"]["verifiedAt"], 100.0)
+        self.assertEqual(view["capabilities"]["publish"]["verifiedAt"], 50.0)
+        self.assertEqual(matrix["publish"]["verifiedAt"], 50.0)
+        for change in ({"identityVerified": False}, {"revoked": True}, {"evidenceSource": "synthetic"},
+                       {"verifiedAt": True}, {"verifiedAt": float("nan")}, {"verifiedAt": 1001.0}, {"verifiedAt": "950"}):
+            with self.subTest(change=change):
+                self.assertIsNone(channels.customer_view({**base, **change}, matrix, 1000.0)["identityVerifiedAt"])
+
     def test_resolve_time_records_tzdb(self):
         timing = resolve_time("2027-03-14T02:30:00", "UTC", None, 1_800_000_000)
         self.assertTrue(timing["tzdb"].startswith(("tzdata ", "system:")))

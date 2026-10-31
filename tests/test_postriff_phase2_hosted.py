@@ -114,6 +114,15 @@ def invoke(app, method, path, body=None, headers=None):
 
 
 class HostedPhase2Acceptance(unittest.TestCase):
+    def test_hosted_workspace_without_legacy_trial_can_be_presented(self):
+        state = initial_phase2_state("founder-workspace", "owner", "Owner", "studio", 1000, execution="hosted-candidate")
+        state["phase2"].pop("trial")
+        before = json.loads(json.dumps(state["phase2"]))
+        shown = HostedPhase2Commands(clock=lambda: 2000).present(state, 7)
+        self.assertEqual(shown["revision"], 7)
+        self.assertNotIn("trial", shown["state"]["phase2"])
+        self.assertEqual(state["phase2"], before)
+
     def test_hosted_command_engine_reuses_state_logic_and_blocks_backend_shortcuts(self):
         commands = HostedPhase2Commands(clock=lambda: 1_800_000_000)
         state = initial_phase2_state("00000000-0000-0000-0000-000000000010", "00000000-0000-0000-0000-000000000001", "Member", "studio", 1_800_000_000, execution="hosted-candidate")
