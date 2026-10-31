@@ -73,14 +73,15 @@ async function visit(browser, path, play) {
   const sink = await startSink();
   const browser = await chromium.launch({ headless: true });
   try {
-    // The page itself references only what it needs: no manifest and no server-hosted icons on /play.
+    // /play links no /icon or /apple-icon (inline icon instead); Next still adds the root manifest and favicon links.
     // (Only /play is touched before the /play window; the home page's HTML is checked in the home phase.)
     const playHtml = await (await fetch(`${base}/play/note-garden`)).text();
-    for (const ref of ['manifest.webmanifest', '/icon?', '/apple-icon']) assert.equal(playHtml.includes(ref), false, `/play/note-garden HTML references ${ref}`);
+    // /icon and /apple-icon are replaced by an inline icon; the root manifest and favicon links remain (Next adds them).
+    for (const ref of ['/icon?', '/apple-icon']) assert.equal(playHtml.includes(ref), false, `/play/note-garden HTML references ${ref}`);
     assert.match(playHtml, /rel="icon" href="data:image\/svg\+xml/, '/play offers an inline icon (no request)');
     // Next always adds the root app/favicon.ico link on every page; headless Chromium never fetches favicons, so a real
     // browser's /favicon.ico request from /play is not exercised here (documented in RUNNING.md).
-    pass('/play/note-garden references no manifest, /icon or /apple-icon (inline icon instead); / keeps them all');
+    pass('/play/note-garden has no /icon or /apple-icon link (inline icon instead); / keeps all its links');
 
     const playStart = Date.now();
     const playRequests = await visit(browser, '/play/note-garden', true);
