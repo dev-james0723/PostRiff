@@ -23,13 +23,15 @@ function isTelemetry(url) {
 async function open(browser) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const log = [];
+  let page = null;
   await context.route('**/*', (route) => {
     const url = route.request().url();
     if (url.startsWith('data:') || url.startsWith('blob:')) return route.continue();
-    log.push({ url, offOrigin: new URL(url).origin !== origin, body: route.request().postData() || '' });
+    // pageUrl: where the page was when the request left, so "nothing while on /play" can be checked per request.
+    log.push({ url, offOrigin: new URL(url).origin !== origin, body: route.request().postData() || '', pageUrl: page?.url() ?? '' });
     return new URL(url).origin === origin ? route.continue() : route.abort();
   });
-  const page = await context.newPage();
+  page = await context.newPage();
   return { context, page, log };
 }
 
@@ -153,6 +155,31 @@ async function playABit(page) {
       assert.ok(reports.length > 0, 'positive control: a client_report is flushed on hide off /play');
       assert.ok(reports.every((body) => !body.includes('"before_send"')), `no count of /play drops in later client reports: ${reports.join(' ').slice(0, 300)}`);
       pass(`client-side /play -> /pricing: /pricing page view queued, Sentry resumes (${telemetryIn(log, back).length} request(s)), client_report on hide carries no /play tally`);
+      await context.close();
+    }
+
+    // Positive control for a session that starts on /play (privacy N1): leaving /play for a normal page starts that
+    // page's analytics and Sentry exactly as a direct visit would, and nothing is sent while the page is on /play.
+    for (const target of ['/pricing', '/']) {
+      const { context, page, log } = await open(browser);
+      await page.goto(`${base}/play/note-garden`);
+      await page.waitForLoadState('networkidle');
+      await playABit(page);
+      assert.equal(await sentryLoaded(page), false);
+      assert.deepEqual(telemetryIn(log), [], 'nothing while on /play');
+      await page.evaluate((href) => window.next.router.push(href), target);
+      await page.waitForFunction((href) => location.pathname === href, target);
+      await page.waitForFunction(() => typeof window.__SENTRY__ === 'object', null, { timeout: 15000 });
+      await page.waitForFunction(() => [...document.scripts].some((s) => (s.src || '').includes('/_vercel/insights/')));
+      const views = await queuedPageviews(page);
+      assert.deepEqual(views, [target], `Vercel Analytics: one page view, for ${target} only (got ${JSON.stringify(views)})`);
+      const beforeError = log.length;
+      await page.evaluate(() => setTimeout(() => { throw new Error('telemetry probe after leaving /play'); }, 0));
+      await page.waitForTimeout(2000);
+      assert.ok(telemetryIn(log, beforeError).length > 0, `Sentry sends from ${target} after a session that began on /play`);
+      const fromPlay = log.filter((r) => isTelemetry(r.url) && new URL(r.pageUrl || base).pathname.startsWith('/play'));
+      assert.deepEqual(fromPlay.map((r) => r.url), [], 'no telemetry request left while the page was on /play, including the moment of leaving');
+      pass(`direct /play boot -> client-side ${target}: Sentry initialised, analytics script loaded, page views ${JSON.stringify(views)}, error sent, 0 requests while on /play`);
       await context.close();
     }
   } finally {
