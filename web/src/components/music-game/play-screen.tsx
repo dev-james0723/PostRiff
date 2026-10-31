@@ -140,6 +140,7 @@ export function PlayScreen({
   const [leaving, setLeaving] = useState(false);
   const [nudges, setNudges] = useState(0);
   const praise = useRef(0);
+  const lastPraise = useRef('');
   const nudge = useRef(0);
   const promptRef = useRef<HTMLHeadingElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
@@ -195,7 +196,9 @@ export function PlayScreen({
     // Each answer sound replaces the question sound, so a long rhythm prompt never plays under the feedback.
     if (step.outcome === 'correct') {
       void sound(q.answerSound, { delay: 0.35, cue: 'correct' });
-      setFeedback({ tone: 'right', lead: praiseFor(q, praise.current++), text: q.reveal });
+      const lead = praiseFor(q, praise.current++, lastPraise.current);
+      lastPraise.current = lead;
+      setFeedback({ tone: 'right', lead, text: q.reveal });
     } else if (step.outcome === 'try-again') {
       void sound([], { cue: 'try-again' });
       setShake(id);

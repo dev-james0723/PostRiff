@@ -303,3 +303,18 @@ test('praise fits the skill: listening, looking or counting, and never repeats b
   assert.ok(PRAISE.count.every((line) => !/listen|ear/i.test(line)), 'no listening praise on counting questions');
   assert.ok(PRAISE.look.every((line) => !/listen|ear/i.test(line)));
 });
+
+test('praise never repeats the line just shown, even when the skill changes between questions', () => {
+  const pick = (kind) => generateQuestions(...{ listen: [1, 1], look: [2, 1], count: [3, 1] }[kind]).find((q) => praiseKind(q) === kind);
+  const sample = { listen: pick('listen'), look: pick('look'), count: pick('count') };
+  for (const from of Object.keys(sample)) {
+    for (const to of Object.keys(sample)) {
+      for (let n = 0; n < 12; n++) {
+        const previous = praiseFor(sample[from], n);
+        const next = praiseFor(sample[to], n + 1, previous);
+        assert.notEqual(next, previous, `${from} -> ${to} at ${n}`);
+        assert.ok(PRAISE[to].includes(next));
+      }
+    }
+  }
+});

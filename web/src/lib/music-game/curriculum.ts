@@ -115,10 +115,14 @@ export function praiseKind(question: Question): PraiseKind {
   return 'listen';
 }
 
-/** The n-th praise line of the right kind; rotating means no line repeats back to back. */
-export function praiseFor(question: Question, n: number): string {
+/**
+ * The n-th praise line of the right kind. The lists differ in length and share lines, so a change of skill could land
+ * on the line just shown; pass `previous` and the next line is used instead.
+ */
+export function praiseFor(question: Question, n: number, previous?: string): string {
   const lines = PRAISE[praiseKind(question)];
-  return lines[n % lines.length];
+  const line = lines[n % lines.length];
+  return line === previous ? lines[(n + 1) % lines.length] : line;
 }
 export const TRY_AGAIN = ['Not quite. Try again!', 'So close! Have another go.', 'Hmm, listen once more.'];
 export const REVEAL_LEAD = "Let's see together.";
