@@ -69,7 +69,7 @@ export function SoundToggle({ muted, onToggle }: { muted: boolean; onToggle: () 
       <span aria-hidden='true' className={styles.icon}>
         {muted ? '🔇' : '🔊'}
       </span>
-      Sound
+      {muted ? 'Sound off' : 'Sound on'}
     </button>
   );
 }

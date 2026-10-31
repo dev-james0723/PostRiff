@@ -80,7 +80,7 @@
 
 .body {
   margin: 0;
-  max-width: 40ch;
+  max-width: 30ch;
 }
 
 .small {
@@ -245,8 +245,30 @@
   animation: shake 240ms ease-in-out;
 }
 
-.answer[data-locked='true'] {
-  opacity: 0.55;
+/* First-play lock: answers keep their normal look (they are not broken, just waiting). */
+.answers[aria-busy='true'] .answer {
+  cursor: default;
+}
+
+.listenCue {
+  margin: 0;
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--ng-sky-deep);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.listenCue[data-nudged='true'] span {
+  display: inline-block;
+  animation: wobble 400ms ease-in-out;
+}
+
+.check {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .mark {
@@ -314,6 +336,10 @@
 
 .feedbackRight strong {
   color: var(--ng-leaf);
+}
+
+.hint span {
+  max-width: 30ch;
 }
 
 .hint {
@@ -503,6 +529,12 @@
   padding: 12px 16px;
   margin: 0;
   font-size: 1.375rem;
+  max-width: 30ch;
+}
+
+/* One sentence per line keeps every line short for early readers (SPEC: 12 words or fewer). */
+.line {
+  display: block;
 }
 
 .learnGrid {
@@ -521,6 +553,21 @@
   width: 100%;
   max-width: 160px;
   height: auto;
+}
+
+/* L2 staves teach line vs space, so on phones each gets a full-width row (DESIGN §5: at least 280 px). */
+.learnGrid[data-staves='true'] {
+  grid-template-columns: 1fr;
+}
+
+.learnGrid[data-staves='true'] .learnTile svg {
+  max-width: 340px;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 32px;
 }
 
 .dialog {
@@ -618,7 +665,8 @@
   .beds {
     grid-template-columns: 1fr 1fr;
   }
-  .learnGrid {
+  .learnGrid,
+  .learnGrid[data-staves='true'] {
     grid-template-columns: repeat(3, 1fr);
   }
   .nextBar {
@@ -648,8 +696,9 @@
   .garden {
     display: none;
   }
+  /* Next stays in view (sticky) so moving focus to it never scrolls the ✓ card away. */
   .nextBar {
-    position: static;
+    position: sticky;
   }
 }
 
@@ -691,6 +740,15 @@
   }
 }
 
+@keyframes wobble {
+  25% {
+    transform: rotate(-14deg);
+  }
+  75% {
+    transform: rotate(14deg);
+  }
+}
+
 @keyframes bob {
   50% {
     transform: translateY(-2px);
@@ -702,6 +760,7 @@
   .answer[data-state='right'],
   .answer[data-shake='true'],
   .bigStars svg[data-on='true'],
+  .listenCue[data-nudged='true'] span,
   .pipBob {
     animation: none;
   }

@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  PRAISE,
   REVEAL_LEAD,
   TRY_AGAIN,
   answerRound,
   getLevel,
   nextQuestion,
   positionPhrase,
+  praiseFor,
   startRound,
   type LevelNumber,
   type Option,
@@ -24,13 +24,37 @@ type Feedback = { tone: 'right' | 'try' | 'reveal'; lead: string; text: string }
 /** Plays `events`, replacing anything still sounding (the synth keeps one schedule at a time). */
 export type PlaySound = (events: SoundEvent[], options?: { delay?: number; cue?: 'correct' | 'try-again' }) => Promise<void>;
 
-const ICONS: Record<NonNullable<Option['icon']>, string> = { same: '=', different: '≠', up: '↑ 🐦', down: '↓ 🐸', step: '👣', skip: '🐸' };
+/** Picture icons a 6-year-old can read (no maths signs), each meaning one thing only. Words always sit beside them. */
+const ICONS: Record<NonNullable<Option['icon']>, string> = { same: '🌼🌼', different: '🌼🍄', up: '↑ 🐦', down: '↓ 🐸', step: '👣', skip: '🦘' };
 /** DESIGN §9: lock answers only while a short prompt sound plays the first time. */
 const LOCK_LIMIT_SECONDS = 3.5;
 
 const soundLength = (events: SoundEvent[]) => events.reduce((end, e) => Math.max(end, e.at + (e.kind === 'tone' ? e.seconds : 0.06)), 0);
 
-function Stage({ q, settled, showPicture, hint, soundOff }: { q: Question; settled: boolean; showPicture: boolean; hint: boolean; soundOff: string | null }) {
+/** Shown while the question's first sound plays; a tap during it wobbles the ear instead of looking broken. */
+function ListenCue({ nudges }: { nudges: number }) {
+  return (
+    <p key={nudges} className={styles.listenCue} data-nudged={nudges > 0}>
+      <span aria-hidden='true'>👂</span> Listen…
+    </p>
+  );
+}
+
+function Stage({
+  q,
+  settled,
+  showPicture,
+  hint,
+  soundOff,
+  listening
+}: {
+  q: Question;
+  settled: boolean;
+  showPicture: boolean;
+  hint: boolean;
+  soundOff: string | null;
+  listening: React.ReactNode;
+}) {
   const stage = q.stage;
   const listen = (
     <>
@@ -68,10 +92,11 @@ function Stage({ q, settled, showPicture, hint, soundOff }: { q: Question; settl
       picture = settled || showPicture ? <RhythmBlocks tokens={stage.tokens} label={q.stageLabel} /> : listen;
       break;
     case 'none':
-      return null;
+      return listening ? <div className={styles.stage}>{listening}</div> : null;
   }
   return (
     <div className={styles.stage}>
+      {listening}
       {picture}
       {soundOff && isSoundPicture && showPicture && <p className={styles.notice}>{soundOff}</p>}
     </div>
@@ -109,10 +134,12 @@ export function PlayScreen({
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [shake, setShake] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const [nudges, setNudges] = useState(0);
   const praise = useRef(0);
   const nudge = useRef(0);
   const promptRef = useRef<HTMLHeadingElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
+  const hintRef = useRef<HTMLDivElement>(null);
   const answersRef = useRef<HTMLDivElement>(null);
   const announced = useRef('');
 
@@ -131,26 +158,38 @@ export function PlayScreen({
     setPicture(false);
     setFeedback(null);
     setShake(null);
+    setNudges(0);
     promptRef.current?.focus();
     if (silent || q.sound.length === 0) return;
     // Released when this sound ends, or as soon as a replay, an answer, mute or leaving replaces it.
     void sound(q.sound).finally(() => setLockedId((id) => (id === q.id ? null : id)));
   }, [q, silent, sound]);
 
-  // After an answer: focus Next when settled, else the first option still open.
+  // After an answer: focus Next when settled (without jumping the ✓ card off-screen), else the first option still open.
   useEffect(() => {
-    if (round.status !== 'asking') nextRef.current?.focus();
-    else if (round.tried.length > 0) answersRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    if (round.status !== 'asking') {
+      nextRef.current?.focus({ preventScroll: true });
+      nextRef.current?.scrollIntoView({ block: 'nearest' });
+    } else if (round.tried.length > 0) answersRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   }, [round.status, round.tried.length]);
 
+  // A new hint scrolls into view on small screens; the status region announces it and focus stays on Help me.
+  useEffect(() => {
+    if (hint) hintRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [hint]);
+
   function choose(id: string) {
+    if (locked && !settled) {
+      setNudges((n) => n + 1);
+      return;
+    }
     const step = answerRound(round, id);
     if (step.outcome === 'ignored') return;
     setRound(step.round);
     // Each answer sound replaces the question sound, so a long rhythm prompt never plays under the feedback.
     if (step.outcome === 'correct') {
       void sound(q.answerSound, { delay: 0.35, cue: 'correct' });
-      setFeedback({ tone: 'right', lead: PRAISE[praise.current++ % PRAISE.length], text: q.reveal });
+      setFeedback({ tone: 'right', lead: praiseFor(q, praise.current++), text: q.reveal });
     } else if (step.outcome === 'try-again') {
       void sound([], { cue: 'try-again' });
       setShake(id);
@@ -202,17 +241,18 @@ export function PlayScreen({
           Level {level}: {title}
         </h1>
         <div className={styles.playGrid}>
-          <Stage q={q} settled={settled} showPicture={showPicture} hint={hint} soundOff={soundOff} />
+          <Stage q={q} settled={settled} showPicture={showPicture} hint={hint} soundOff={soundOff} listening={locked && !settled ? <ListenCue nudges={nudges} /> : null} />
           <div className={styles.screen} style={{ animation: 'none' }}>
             <h2 ref={promptRef} tabIndex={-1} className={styles.prompt}>
               {q.prompt}
             </h2>
-            <div ref={answersRef} className={styles.answers} data-count={q.options.length} role='group' aria-label='Answers'>
+            <div ref={answersRef} className={styles.answers} data-count={q.options.length} role='group' aria-label='Answers' aria-busy={locked && !settled}>
               {q.options.map((option) => {
                 const tried = round.tried.includes(option.id);
                 const right = settled && option.id === q.answer;
                 const state = right ? 'right' : tried ? 'tried' : undefined;
-                const name = option.ariaLabel ? `${option.ariaLabel}${tried ? ', tried' : ''}${right ? ', the answer' : ''}` : undefined;
+                const chip = round.status === 'correct' ? 'Yes' : 'Answer';
+                const name = option.ariaLabel ? `${option.ariaLabel}${tried ? ', tried' : ''}${right ? `, ${chip}` : ''}` : undefined;
                 return (
                   <button
                     key={option.id}
@@ -220,10 +260,10 @@ export function PlayScreen({
                     className={styles.answer}
                     data-state={state}
                     data-shake={shake === option.id && tried}
-                    data-locked={locked && !settled}
                     data-letter={q.type === 'name-note'}
                     data-card={!!option.note || !!option.tokens}
-                    disabled={tried || settled || locked}
+                    disabled={tried || settled}
+                    aria-disabled={locked && !settled ? true : undefined}
                     aria-label={name}
                     onClick={() => choose(option.id)}
                   >
@@ -241,8 +281,11 @@ export function PlayScreen({
                       </span>
                     )}
                     {right && (
-                      <span className={`${styles.mark} ${styles.markRight}`} aria-hidden='true'>
-                        ✓
+                      <span className={`${styles.mark} ${styles.markRight}`}>
+                        <span aria-hidden='true' className={styles.check}>
+                          ✓
+                        </span>{' '}
+                        {chip}
                       </span>
                     )}
                   </button>
@@ -252,7 +295,7 @@ export function PlayScreen({
           </div>
         </div>
 
-        <div aria-live='polite' className={`${styles.feedback} ${feedbackClass}`}>
+        <div id='ng-feedback' aria-live='polite' className={`${styles.feedback} ${feedbackClass}`}>
           {feedback && (
             <p className={styles.body}>
               <strong>{feedback.lead}</strong> {feedback.text}
@@ -266,16 +309,19 @@ export function PlayScreen({
               <span aria-hidden='true'>🔊</span> Hear it again
             </button>
           )}
-          <button type='button' className={styles.ghost} onClick={help} disabled={hint || settled}>
+          {/* Never disabled while focused (focus would fall to <body>); pressing it again just keeps the hint showing. */}
+          <button type='button' className={styles.ghost} onClick={help} disabled={settled}>
             <span aria-hidden='true'>💡</span> Help me
           </button>
         </div>
-        {hint && !settled && (
-          <p className={styles.hint}>
-            <Pip mood='thinking' className={styles.pip} />
-            <span>{q.hint}</span>
-          </p>
-        )}
+        <div ref={hintRef} role='status' aria-live='polite'>
+          {hint && !settled && (
+            <p className={styles.hint}>
+              <Pip mood='thinking' className={styles.pip} />
+              <span>{q.hint}</span>
+            </p>
+          )}
+        </div>
 
         <div className={styles.garden} aria-hidden='true'>
           {round.questions.map((question, i) => (
@@ -287,7 +333,7 @@ export function PlayScreen({
 
         {settled && (
           <div className={styles.nextBar}>
-            <button ref={nextRef} type='button' className={styles.button} onClick={next}>
+            <button ref={nextRef} type='button' className={styles.button} onClick={next} aria-describedby='ng-feedback'>
               Next
             </button>
           </div>
