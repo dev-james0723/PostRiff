@@ -26,6 +26,23 @@ async function newPage(browser, options = {}) {
     window.__audioContexts = 0;
     const Real = window.AudioContext;
     if (Real) window.AudioContext = class extends Real { constructor(...args) { super(...args); window.__audioContexts++; window.__ctx = this; } };
+    // Loudness probe (DESIGN §9, -6 dBFS): an AnalyserNode on whatever feeds the speakers, i.e. after the limiter.
+    window.__peak = 0;
+    const connect = AudioNode.prototype.connect;
+    AudioNode.prototype.connect = function (target, ...rest) {
+      if (target instanceof AudioDestinationNode && !this.__tapped) {
+        this.__tapped = true;
+        const analyser = this.context.createAnalyser();
+        analyser.fftSize = 2048;
+        connect.call(this, analyser);
+        const buffer = new Float32Array(2048);
+        setInterval(() => {
+          analyser.getFloatTimeDomainData(buffer);
+          for (const v of buffer) if (Math.abs(v) > window.__peak) window.__peak = Math.abs(v);
+        }, 10);
+      }
+      return connect.call(this, target, ...rest);
+    };
     // Log every oscillator on the audio clock: when it was started, the stop first asked for, and the latest stop.
     window.__oscLog = [];
     const proto = window.AudioScheduledSourceNode?.prototype;
@@ -81,9 +98,9 @@ async function axe(page, label) {
 }
 
 /** Press Tab until the focused element's accessible text matches, then return. Keyboard only. */
-async function tabTo(page, pattern, max = 40) {
+async function tabTo(page, pattern, max = 40, key = 'Tab') {
   for (let i = 0; i < max; i++) {
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(key);
     const text = await page.evaluate(() => {
       const el = document.activeElement;
       if (!el) return '';
@@ -128,14 +145,29 @@ async function afterNext(page, before) {
 }
 
 async function waitForOpenAnswer(page) {
-  await page.waitForFunction(() => [...document.querySelectorAll('[aria-label="Answers"] button')].some((b) => !b.disabled), null, { timeout: 15000 });
+  await page.waitForFunction(
+    () => {
+      const group = document.querySelector('[aria-label="Answers"]');
+      return group?.getAttribute('aria-busy') !== 'true' && [...group.querySelectorAll('button')].some((b) => !b.disabled);
+    },
+    null,
+    { timeout: 15000 }
+  );
+}
+
+const dbfs = (v) => (v > 0 ? 20 * Math.log10(v) : -Infinity);
+async function peakSince(page, reset) {
+  if (reset) return page.evaluate(() => (window.__peak = 0));
+  return dbfs(await page.evaluate(() => window.__peak));
 }
 
 /** Keyboard: Tab from the focused prompt to the first open answer, Enter; keep going until Next, then Enter. */
-async function answerByKeyboard(page) {
+async function answerByKeyboard(page, { fromPrompt = true } = {}) {
   await waitForOpenAnswer(page);
-  assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'H2', 'focus starts on the question prompt');
-  await page.keyboard.press('Tab');
+  if (fromPrompt) {
+    assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'H2', 'focus starts on the question prompt');
+    await page.keyboard.press('Tab');
+  }
   for (let tries = 0; tries < 4; tries++) {
     await page.keyboard.press('Enter');
     // Either the question is settled (Next has focus) or it was "try again" (focus is back on an open option).
@@ -157,6 +189,12 @@ async function answerByKeyboard(page) {
   }
   await nextButton(page).waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'Next', 'focus moves to Next');
+  // Screen readers that only speak the focused button still hear the feedback: Next is described by it.
+  const described = await page.evaluate(() => {
+    const id = document.activeElement?.getAttribute('aria-describedby');
+    return id ? document.getElementById(id)?.textContent?.trim() : '';
+  });
+  assert.ok(described && described.length > 3, 'Next is described by the feedback text');
   const before = await counterText(page);
   await page.keyboard.press('Enter');
   await afterNext(page, before);
@@ -248,6 +286,17 @@ async function stored(page) {
         await axe(page, 'question');
         await targetsAtLeast48(page, 'question');
         await shoot(page, 'desktop-3-question.png');
+        // Help me: focus stays on the button and the hint is announced through the status region.
+        await tabTo(page, /^Help me$/);
+        await page.keyboard.press('Enter');
+        await page.getByRole('status').filter({ hasText: "Let's listen slowly." }).waitFor();
+        assert.equal(await page.evaluate(() => document.activeElement?.textContent?.replace(/[^A-Za-z ]/g, '').trim()), 'Help me', 'focus stays on Help me');
+        await axe(page, 'question with hint');
+        await tabTo(page, /^(Same|Different)$/, 10, 'Shift+Tab');
+        await answerByKeyboard(page, { fromPrompt: false });
+        pass('M1/M2 Help me keeps focus and the hint is announced');
+        questions++;
+        continue;
       }
       await answerByKeyboard(page);
       questions++;
@@ -270,11 +319,13 @@ async function stored(page) {
     await heading(page).filter({ hasText: 'For grown-ups' }).waitFor();
     await axe(page, 'grown-ups');
     await targetsAtLeast48(page, 'grown-ups');
-    const soundToggle = page.getByRole('button', { name: 'Sound' });
+    const soundToggle = page.getByRole('button', { name: /^Sound (on|off)$/ });
     assert.equal(await soundToggle.getAttribute('aria-pressed'), 'true');
-    await tabTo(page, /^Sound$/);
+    assert.equal((await soundToggle.textContent()).replace(/[^A-Za-z ]/g, '').trim(), 'Sound on');
+    await tabTo(page, /^Sound on$/);
     await page.keyboard.press('Enter');
     assert.equal(await soundToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal((await soundToggle.textContent()).replace(/[^A-Za-z ]/g, '').trim(), 'Sound off', 'state is visible as text');
     assert.equal((await stored(page)).muted, true);
     pass('AC6 mute toggled by keyboard and persisted');
 
@@ -320,8 +371,28 @@ async function stored(page) {
     await desktop.page.getByRole('button', { name: /High or Low\?/ }).click();
     await desktop.page.getByRole('button', { name: "Let's play" }).click();
     await desktop.page.waitForFunction(() => window.__oscLog.length > 0);
+    // First-play lock: answers look normal and stay enabled, the group is busy, a "Listen…" cue shows, taps are ignored.
+    const group = desktop.page.getByRole('group', { name: 'Answers' });
+    assert.equal(await group.getAttribute('aria-busy'), 'true');
+    // (Playwright treats aria-disabled as disabled, so read the DOM property and force the tap.)
+    assert.equal(await answers(desktop.page).first().evaluate((b) => b.disabled || getComputedStyle(b).opacity !== '1'), false, 'not greyed out while listening');
+    await desktop.page.getByText('Listen…').waitFor();
+    await answers(desktop.page).first().click({ force: true });
+    assert.equal(await desktop.page.getByText('Tried').count(), 0, 'a tap while listening is not an answer');
+    assert.equal(await nextButton(desktop.page).count(), 0);
+    pass('M7 first sound: answers keep their look, Listen… cue, aria-busy, taps ignored');
+    await peakSince(desktop.page, true);
     const replay = await supersedes(desktop.page, () => desktop.page.getByRole('button', { name: 'Hear it again' }).click(), 'replay');
     assert.ok(replay.started > 0, 'the replay itself plays');
+    // A child mashing "Hear it again", then answering and going straight on: the worst overlap case.
+    for (let i = 0; i < 5; i++) {
+      await desktop.page.getByRole('button', { name: 'Hear it again' }).click();
+      await desktop.page.waitForTimeout(120);
+    }
+    await waitForOpenAnswer(desktop.page);
+    while (!(await nextButton(desktop.page).isVisible())) await desktop.page.locator('[aria-label="Answers"] button:not([disabled])').first().click();
+    await nextButton(desktop.page).click();
+    await desktop.page.waitForTimeout(250);
     await supersedes(
       desktop.page,
       async () => {
@@ -331,6 +402,23 @@ async function stored(page) {
       'leave level'
     );
     pass('AC3 a replay or leaving cancels earlier sound (one schedule at a time)');
+    await desktop.page.waitForTimeout(500);
+    const mashPeak = await peakSince(desktop.page);
+    // Longest and densest sounds: the L3 learn card's whole note, then two eighth notes over clicks.
+    await peakSince(desktop.page, true);
+    await desktop.page.getByRole('button', { name: /Long and Short/ }).click();
+    await desktop.page.getByRole('button', { name: /Whole note/ }).click();
+    await desktop.page.waitForTimeout(3300);
+    await desktop.page.getByRole('button', { name: /Two eighth notes/ }).click();
+    await desktop.page.getByRole('button', { name: /Quarter note/ }).click();
+    await desktop.page.waitForTimeout(1500);
+    const learnPeak = await peakSince(desktop.page);
+    report.loudness = { mashReplayAnswerNext_dBFS: +mashPeak.toFixed(1), learnL3_dBFS: +learnPeak.toFixed(1) };
+    assert.ok(Number.isFinite(mashPeak) && Number.isFinite(learnPeak), 'sound was actually measured');
+    assert.ok(mashPeak <= -6, `replay mash + answer + next peaked at ${mashPeak.toFixed(1)} dBFS (limit -6)`);
+    assert.ok(learnPeak <= -6, `L3 learn sounds peaked at ${learnPeak.toFixed(1)} dBFS (limit -6)`);
+    pass(`M3 loudness after the limiter: mash ${mashPeak.toFixed(1)} dBFS, L3 learn ${learnPeak.toFixed(1)} dBFS (limit -6)`);
+    await desktop.page.getByRole('button', { name: 'Back', exact: true }).click();
     assert.equal(await playLevel(desktop.page, 'Note Names', 'mouse'), 8);
     await desktop.page.getByRole('button', { name: 'Garden map' }).click();
     assert.equal(
@@ -357,6 +445,10 @@ async function stored(page) {
     assert.equal(
       await playLevel(phone.page, 'Step or Skip', 'touch', async () => {
         await waitForOpenAnswer(phone.page);
+        await phone.page.getByRole('button', { name: 'Help me' }).tap();
+        const hintBox = await phone.page.getByRole('status').filter({ hasText: /\w/ }).locator('p').boundingBox();
+        assert.ok(hintBox && hintBox.y >= 0 && hintBox.y + hintBox.height <= 844 + 1, `hint scrolled into view on phone (${JSON.stringify(hintBox)})`);
+        pass('M2 hint scrolls into view on a phone');
         await targetsAtLeast48(phone.page, 'phone question');
         await axe(phone.page, 'phone question');
         await shoot(phone.page, 'phone-3-step-or-skip.png', true);
@@ -392,7 +484,7 @@ async function stored(page) {
     pass(`AC4 ${report.requests} requests, 0 off-origin`);
     assert.deepEqual(report.consoleErrors, [], 'no console errors');
     pass('AC6 0 console errors');
-    console.log(JSON.stringify({ requests: report.requests, offOrigin: report.offOrigin.length, consoleErrors: report.consoleErrors.length, axeScreens: report.axe.length, moderateOrMinor: report.axe.flatMap((s) => s.violations.map((v) => `${s.screen}:${v.id}:${v.impact}`)) }));
+    console.log(JSON.stringify({ loudness: report.loudness, requests: report.requests, offOrigin: report.offOrigin.length, consoleErrors: report.consoleErrors.length, axeScreens: report.axe.length, moderateOrMinor: report.axe.flatMap((s) => s.violations.map((v) => `${s.screen}:${v.id}:${v.impact}`)) }));
   } finally {
     await browser.close();
   }
