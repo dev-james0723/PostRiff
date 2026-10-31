@@ -139,7 +139,7 @@ Observed with `next start` on 2026-10-31: only the literal `/play/note-garden` r
 | Surface | What happens on /play | Where |
 |---|---|---|
 | Vercel Web Analytics (when `NEXT_PUBLIC_VERCEL_ANALYTICS=1`) | `<Analytics>` is not rendered, so a direct visit never loads the script. `beforeSend` (the documented API in `@vercel/analytics` 1.6.1) drops `/play` page views and events after a client-side visit | `web/src/components/layout/site-analytics.tsx`, `web/src/app/layout.tsx` |
-| Sentry browser SDK (when a DSN is set) | Booting on `/play` never loads or initialises the SDK. After a client-side visit, a transport gate drops every envelope (event, transaction, session, client_report and any other type) while on `/play` or heading there. `beforeSend`/`beforeSendTransaction` drop `/play` events. Router transitions into `/play` are not recorded. The tally of events dropped on `/play` is also subtracted from the next client_report sent elsewhere | `web/src/instrumentation-client.ts` |
+| Sentry browser SDK (when a DSN is set) | Booting on `/play` never loads or initialises the SDK. After a client-side visit, a transport gate drops every envelope (event, transaction, session, client_report and any other type) while on `/play` or heading there. `beforeSend`/`beforeSendTransaction` drop `/play` events. Router transitions into `/play` are not recorded. The tally of events dropped on `/play` is also subtracted from the next client_report sent elsewhere | `web/src/lib/sentry-client.ts`, `web/src/instrumentation-client.ts`, `web/src/components/layout/sentry-route-start.tsx` |
 | Sentry server SDK | `beforeSend`/`beforeSendTransaction` drop events whose request URL or transaction is `/play`, and `onRequestError` skips `/play` request paths. While a `/play` request is handled, no outcome is recorded, so there's no tally in a later client_report (no dropped error, no sampled-out transaction). The request is also not counted in the request-session aggregates | `web/src/instrumentation.ts`, test `web/tests/play-sentry-server.test.cjs` |
 | Sign-in session (Supabase) | The proxy returns before the session refresh: no `getUser()` call, and no auth cookie set or refreshed, even for a signed-in parent on the same device. The legacy-host redirect still runs first | `web/src/proxy.ts`, test `web/tests/play-proxy.test.cjs` |
 | Speed Insights | Not installed; not added | — |
@@ -156,9 +156,13 @@ Precise behaviour around `/play` (browser):
   - client_reports flush on hide, minus the tally of events dropped on `/play`
 
   That page therefore has no session-start envelope for this navigation.
-- **Leaving `/play` after a visit that began on `/play`** (privacy N1): Sentry was never loaded. It is loaded and
-  initialised with the normal options on the first navigation out, once the address bar shows the new page, so it
-  starts exactly as a direct visit to that page would. Vercel Analytics records one page view, for that page only.
+- **Leaving `/play` after a visit that began on `/play`** (privacy N1, D11): Sentry was never loaded.
+  `SentryRouteStart` (in the root layout, always mounted) calls `ensureSentryForPath` on every route React commits.
+  On the first non-play commit, the SDK is loaded and initialised with the normal options, exactly as a direct visit
+  to that page would. There is no timer or deadline. After the chunk loads, the current location is checked again:
+  if the child has gone back to `/play`, nothing initialises until the next non-play commit. There is one import and
+  at most one init (`src/lib/sentry-starter.ts`, tested with a deferred loader in `tests/sentry-starter.test.mjs`).
+  Vercel Analytics records one page view, for that page only.
 - **Not observed end to end:** a server-side error inside a real `/play` request under `next start`. The server path
   is covered by `tests/play-sentry-server.test.cjs`, which uses the installed SDK with an in-memory transport.
 
@@ -169,7 +173,7 @@ request, so nothing reaches a real collector):
 NEXT_PUBLIC_VERCEL_ANALYTICS=1 NEXT_PUBLIC_SENTRY_DSN=https://public@127.0.0.1/1 node_modules/.bin/next build
 NEXT_PUBLIC_VERCEL_ANALYTICS=1 NEXT_PUBLIC_SENTRY_DSN=https://public@127.0.0.1/1 node_modules/.bin/next start -p 3117 -H 127.0.0.1
 RAFII_TELEMETRY_URL=http://127.0.0.1:3117 node tests/play-telemetry-browser.cjs
-node --test tests/play-telemetry.test.mjs tests/play-proxy.test.cjs tests/play-sentry-server.test.cjs   # helper, proxy, server SDK
+node --test tests/play-telemetry.test.mjs tests/play-proxy.test.cjs tests/play-sentry-server.test.cjs tests/sentry-starter.test.mjs
 ```
 
 The browser test checks:
