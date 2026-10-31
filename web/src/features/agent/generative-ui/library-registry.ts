@@ -2,7 +2,8 @@
  * Which components make up each Rafii Generative UI library and which component groups each journey prompt uses.
  *
  * React-free (the asset generator and the trusted Node validator load it). Two libraries, never mixed:
- *   consumer  J01–J08: C's primitives + E's consumer journey components;
+ *   consumer  J01–J08 and J10: C's primitives + E's consumer journey components (J10, the interactive tool, uses only the
+ *             local layout/input/readout groups: no bound data, no selection, no registered actions);
  *   founder   J09: a read-only primitive subset + E's founder components, in its own chunk, prompt and schema.
  *
  * Lane E plugs in by exporting `JOURNEY_SPEC_MODULE: JourneySpecModule` from `components/journeys/specs.ts` (React-free)
@@ -10,7 +11,7 @@
  * points at them. The validator, prompts and hashes then include them automatically.
  */
 import { createLibrary, defineComponent, type Library, type LibrarySpec } from '@openuidev/lang-core';
-import { CONTRACT_VERSION, JOURNEYS, type JourneyId } from '@/lib/agent-runtime/ui-contracts';
+import { CONTRACT_VERSION, JOURNEYS, TOOL_JOURNEYS, type JourneyId } from '@/lib/agent-runtime/ui-contracts';
 import {
   CORE_GROUP_IDS,
   FOUNDER_CORE_GROUP_IDS,
@@ -20,6 +21,7 @@ import {
   PRIMITIVE_SPECS,
   RESERVED_NAMES,
   ROOT_COMPONENT,
+  TOOL_CORE_GROUP_IDS,
   type JourneySpecModule,
   type RafiiComponentSpec,
   type RafiiGroupSpec,
@@ -81,13 +83,20 @@ export const LIBRARY_DEFINITIONS: Readonly<Record<LibraryName, LibraryDefinition
  * Earlier library hashes this build still renders faithfully (additive changes only). An artifact whose libraryHash is
  * neither current nor listed here shows its stored native fallback instead of being re-generated or re-charged.
  */
-export const COMPATIBLE_LIBRARY_HASHES: Readonly<Record<LibraryName, readonly string[]>> = { consumer: [], founder: [] };
+export const COMPATIBLE_LIBRARY_HASHES: Readonly<Record<LibraryName, readonly string[]>> = {
+  // rafii-components/1.0.0 (before NumberField, Slider, Toggle and Readout were added; additive, every earlier prop unchanged).
+  consumer: ['bd5dfc59920f00b7694ff230ee4dbfb375a01bbf2750329fe314aabd47991b48'],
+  founder: [],
+};
 
-/** Journey → library and prompt groups. J09 is the founder journey; every other journey uses the consumer library. */
+/**
+ * Journey → library and prompt groups. J09 is the founder journey; every other journey uses the consumer library. J10 (the
+ * interactive tool) starts from TOOL_CORE_GROUP_IDS instead of the core groups: it never offers bound data or actions.
+ */
 export const JOURNEY_LIBRARIES: Readonly<Record<JourneyId, JourneyLibrary>> = Object.fromEntries(
   JOURNEYS.map((journey) => {
     const library: LibraryName = journey === 'J09' ? 'founder' : 'consumer';
-    const core = library === 'founder' ? FOUNDER_CORE_GROUP_IDS : CORE_GROUP_IDS;
+    const core = library === 'founder' ? FOUNDER_CORE_GROUP_IDS : (TOOL_JOURNEYS as readonly string[]).includes(journey) ? TOOL_CORE_GROUP_IDS : CORE_GROUP_IDS;
     const extra = journeys.journeys[journey] ?? [];
     const known = new Set(LIBRARY_DEFINITIONS[library].groups.map((g) => g.id));
     const groups = [...core, ...extra.filter((g) => !core.includes(g))].filter((g) => known.has(g));
@@ -132,6 +141,22 @@ export function registryProblems(): string[] {
     if (s.name === 'ActionButton' || s.name === 'Form') problems.push(`founder:write_control:${s.name}`);
   }
   for (const s of journeys.founder.specs) if (consumer.has(s.name)) problems.push(`founder_component_in_consumer:${s.name}`);
+  // A local-only tool journey never offers bound data, record selection or a registered action (defense in depth: the
+  // server's localOnly policy also refuses Query, @Run and action ids in its programs).
+  const boundOrWrite = new Set(['actions', 'data', 'selection']);
+  for (const journey of TOOL_JOURNEYS) {
+    const extra = journeys.journeys[journey as keyof JourneySpecModule['journeys']] ?? [];
+    for (const g of [...TOOL_CORE_GROUP_IDS, ...extra]) {
+      const group = LIBRARY_DEFINITIONS.consumer.groups.find((x) => x.id === g);
+      if (boundOrWrite.has(g)) problems.push(`tool_journey_group:${journey}.${g}`);
+      for (const name of group?.components ?? []) {
+        const spec = LIBRARY_DEFINITIONS.consumer.specs.find((x) => x.name === name);
+        if (spec && Object.values(spec.rules ?? {}).some((rule) => rule === 'query' || rule === 'action-id' || rule === 'bound')) {
+          problems.push(`tool_journey_component:${journey}.${name}`);
+        }
+      }
+    }
+  }
   return problems;
 }
 

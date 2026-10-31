@@ -476,6 +476,8 @@ export const JOURNEY_GROUPS: JourneySpecModule['journeys'] = {
   J07: ['journey_common', 'research', 'research_sources', 'consent'],
   J08: ['journey_common', 'automations', 'automation_history', 'recovery', 'queue', 'proposals', 'tasks'],
   J09: ['founder'],
+  // J10 interactive tool: C's local groups only (component-specs.ts TOOL_CORE_GROUP_IDS); no journey component reads data.
+  J10: [],
 };
 
 export const JOURNEY_SPEC_MODULE: JourneySpecModule = {

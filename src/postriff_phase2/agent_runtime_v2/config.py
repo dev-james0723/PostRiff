@@ -23,8 +23,15 @@ FLAGS = ("RAFII_AGENT_V2_ENABLED", "RAFII_VOICE_ENABLED", "RAFII_IMAGE_AGENT_ENA
          "RAFII_GENUI_ENABLED", "RAFII_GENUI_ACTIONS_ENABLED", "RAFII_GENUI_EDITS_ENABLED", "RAFII_GENUI_FOUNDER_ENABLED",
          "RAFII_AGENT_PERMISSIONS_ENABLED", "RAFII_AGENT_PERMISSIONS_ENFORCED",
          "RAFII_TASK_ENGINE_ENABLED", "RAFII_TASK_ENGINE_AUTHORITATIVE", "RAFII_TASK_ENGINE_BACKGROUND",
-         "RAFII_AGENT_LIBRARY_BROWSE_ENABLED")
+         "RAFII_AGENT_LIBRARY_BROWSE_ENABLED",
+         # Adaptive UI Planner (rafii-ui-plan/1): shadow unless _ACTIVE; only for workspaces in RAFII_GENUI_PLANNER_WORKSPACES.
+         "RAFII_GENUI_PLANNER_ENABLED", "RAFII_GENUI_PLANNER_ACTIVE",
+         # J10 interactive tools (default OFF, fail closed): lets the active planner propose a local tool view for a turn that read
+         # no workspace data, and lets that view's presenter see the person's request text (`toolBrief`). Egress change: see
+         # ui_projection.tool_brief — the text goes only to the provider the parent turn already used, only for J10.
+         "RAFII_GENUI_TOOLS_ENABLED")
 LIBRARY_BROWSE_WORKSPACES_ENV = "RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES"
+GENUI_PLANNER_WORKSPACES_ENV = "RAFII_GENUI_PLANNER_WORKSPACES"
 
 # --- model aliases (ADR-006) ------------------------------------------------------------------------------------------
 # Defaults are aliases for development. Pin dated snapshots in production only after the evals pass (ADR-006).
@@ -127,6 +134,7 @@ class RuntimeConfig:
     permissions_gate_reader: object = field(default=None, repr=False)
 
     library_browse_workspaces: frozenset = frozenset()   # empty: no workspace (fail closed), unlike genui_workspaces
+    genui_planner_workspaces: frozenset = frozenset()    # empty: no workspace (fail closed); "*" means every GenUI workspace
 
     # The key itself is never an attribute: `credential()` reads it when a request is made.
     _env: dict = field(default_factory=dict, repr=False)
@@ -172,6 +180,7 @@ class RuntimeConfig:
                    release_sha=str(values.get("VERCEL_GIT_COMMIT_SHA") or ""),
                    permissions_workspaces=frozenset(w.strip().lower() for w in str(values.get("RAFII_AGENT_PERMISSIONS_WORKSPACES") or "").split(",") if w.strip()),
                    library_browse_workspaces=_workspaces(values.get(LIBRARY_BROWSE_WORKSPACES_ENV)),
+                   genui_planner_workspaces=_workspaces(values.get(GENUI_PLANNER_WORKSPACES_ENV)),
                    _env={k: values.get(k) for k in ("OPENAI_API_KEY", "AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN")})
 
     # --- flags -------------------------------------------------------------------------------------------------------
@@ -187,6 +196,21 @@ class RuntimeConfig:
             on = on and self.enabled("RAFII_GENUI_FOUNDER_ENABLED")
         return {"enabled": on, "actions": on and self.enabled("RAFII_GENUI_ACTIONS_ENABLED"), "edits": on and self.enabled("RAFII_GENUI_EDITS_ENABLED"),
                 "canary": bool(self.genui_workspaces)}
+
+    def genui_tools_for(self, workspace_id: str | None, *, founder: bool = False) -> bool:
+        """J10 interactive tools (RAFII_GENUI_TOOLS_ENABLED): GenUI on for this workspace, never founder scope. Kept out of
+        genui_for() so the public /status contract is unchanged; the planner (own flags + allowlist) is the only way in."""
+        return bool(not founder and self.genui_for(workspace_id).get("enabled") and self.enabled("RAFII_GENUI_TOOLS_ENABLED"))
+
+    def genui_planner_for(self, workspace_id: str | None, *, founder: bool = False) -> str:
+        """off | shadow | active for the Adaptive UI Planner (ui_planner). Needs GenUI on for this workspace, the planner flag
+        and a listed workspace (fail closed). shadow records the plan beside the baseline decision and changes nothing;
+        active lets the plan decide eligibility and form. Neither grants a permission or a model call of its own."""
+        if not workspace_id or not self.enabled("RAFII_GENUI_PLANNER_ENABLED") or not self.genui_for(workspace_id, founder=founder).get("enabled"):
+            return "off"
+        if "*" not in self.genui_planner_workspaces and str(workspace_id).lower() not in self.genui_planner_workspaces:
+            return "off"
+        return "active" if self.enabled("RAFII_GENUI_PLANNER_ACTIVE") else "shadow"
 
     def task_engine_for(self, workspace_id: str | None) -> str:
         """CF-3 canonical switches only; legacy draft flags cannot activate execution."""
@@ -280,10 +304,10 @@ class RuntimeConfig:
 
     def public(self) -> dict:
         """What the browser and traces may see: flags, aliases and availability. Never a credential."""
-        # Permission/task rollout switches have dedicated authenticated endpoints.
+        # Permission/task/planner/tool rollout switches have dedicated authenticated endpoints or none.
         # Keeping them out preserves the existing off/shadow status contract.
         public_flags = {key: value for key, value in self.flags.items()
-                        if not key.startswith(("RAFII_AGENT_PERMISSIONS_", "RAFII_TASK_ENGINE_"))}
+                        if not key.startswith(("RAFII_AGENT_PERMISSIONS_", "RAFII_TASK_ENGINE_", "RAFII_GENUI_PLANNER_", "RAFII_GENUI_TOOLS_"))}
         return {"flags": public_flags, "models": dict(self.models), "provider": self.provider,
                 "voiceAvailable": self.has_openai_key and self.enabled("RAFII_VOICE_ENABLED"),
                 "imageAvailable": self.provider is not None and self.enabled("RAFII_IMAGE_AGENT_ENABLED")}

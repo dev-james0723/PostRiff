@@ -107,6 +107,10 @@ def validate_and_merge_ui(base_source: str | None, candidate_source: str, librar
     if answer.get("sourceHash") != contracts.sha256_text(canonical) or answer.get("libraryHash") != library_hash:
         # The seam answered for a different source or library build (version skew): never accept it.
         return _rejected("validation_unavailable")
+    if (policy or {}).get("localOnly") and (answer.get("queryNames") or answer.get("actionIds")):
+        # J10 tools are local-only. The Node validator already refuses Query/@Run/action ids under `localOnly`; an accepted
+        # answer that still names one means a seam that ignored the policy (version skew): never accept it.
+        return _rejected("local_only_violation")
     return {"accepted": True, "canonicalSource": canonical, "sourceHash": answer["sourceHash"],
             "statementCount": int(answer.get("statementCount") or 0), "queryNames": [str(q) for q in answer.get("queryNames") or []][:100],
             "actionIds": [str(a) for a in answer.get("actionIds") or []][:100], "componentNames": [str(c) for c in answer.get("componentNames") or []][:200],

@@ -36,6 +36,13 @@ export interface UiValidatorPolicy {
   readBindings: string[];
   actionIds: string[];
   founder?: boolean;
+  /**
+   * J10 interactive tools: the program may use local inputs, `$variables`, expressions and local Button steps only. Any
+   * `Query`, `Mutation`, `@Run`, or prop that names a registered action id (ActionButton and every `action-id` rule) is
+   * refused (`local_only_query`, `local_only_run`, `local_only_action`), whatever the component allowlist says. Defense in
+   * depth beyond the J10 prompt and component groups; the policy must then carry no read bindings and no action ids.
+   */
+  localOnly?: boolean;
 }
 
 export interface UiValidatorRequest {
@@ -319,6 +326,8 @@ function validRequest(request: UiValidatorRequest): string | null {
   for (const list of [policy.allowedComponents, policy.readBindings, policy.actionIds]) {
     if (!Array.isArray(list) || list.length > MAX_POLICY_ITEMS || !list.every((item) => typeof item === 'string')) return 'bad_request';
   }
+  if (policy.localOnly !== undefined && typeof policy.localOnly !== 'boolean') return 'bad_request';
+  if (policy.localOnly && (policy.readBindings.length > 0 || policy.actionIds.length > 0)) return 'bad_request';
   return null;
 }
 
@@ -381,9 +390,11 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
   const statements = statementsOf(merged);
   const asts = new Map<string, ASTNode>(statements.map((stmt) => [stmt.id, stmt.ast]));
   const readBindings = new Set(policy.readBindings);
+  const localOnly = policy.localOnly === true;
   const queryNames: string[] = [];
   for (const query of result.queryStatements) {
     const id = ident(query.statementId);
+    if (localOnly) errors.push(`local_only_query:${id}`);
     const tool = query.toolAST;
     if (!tool || tool.k !== 'Str' || !readBindings.has(tool.v)) errors.push(`query_binding_denied:${id}`);
     else if (!queryNames.includes(tool.v)) queryNames.push(tool.v);
@@ -570,8 +581,10 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
       }
       if (node.name === 'Query') {
         if (node !== top) errors.push(`query_inline:${id}`);
+        if (localOnly) errors.push(`local_only_query:${id}`);
         return;
       }
+      if (localOnly && node.name === 'Run') errors.push(`local_only_run:${id}`);
       if (isBuiltin(node.name)) return;
       components.add(node.name);
       const params = lib.params[node.name];
@@ -586,6 +599,12 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
         else if (!formNames.includes(formName.v)) formNames.push(formName.v);
       }
       const rules = lib.rules[node.name] ?? {};
+      if (localOnly) {
+        // A component that reads bound data or names a registered action never belongs in a local-only tool, even unfilled.
+        const kindsOfRule = Object.values(rules);
+        if (kindsOfRule.includes('action-id')) errors.push(`local_only_action:${id}`);
+        if (kindsOfRule.includes('query')) errors.push(`local_only_query:${id}`);
+      }
       for (const [prop, rule] of Object.entries(rules)) {
         const arg = node.args[params.indexOf(prop)];
         if (!arg || arg.k === 'Null') continue; // a missing required prop is the parser's error
@@ -593,6 +612,7 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
         if (rule === 'bound' && !isBound(arg)) errors.push(`bound_literal:${id}`);
         if (rule === 'safe-href' && !hrefOk(arg)) errors.push(`href_not_allowed:${id}`);
         if (rule === 'action-id') {
+          if (localOnly) errors.push(`local_only_action:${id}`);
           if (arg.k !== 'Str') errors.push(`action_id_not_literal:${id}`);
           else if (!allowedActions.has(arg.v)) errors.push(`action_denied:${ident(arg.v)}`);
           else if (!actionIds.includes(arg.v)) actionIds.push(arg.v);

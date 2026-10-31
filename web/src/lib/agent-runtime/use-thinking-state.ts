@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ThinkingOp } from '@/components/agents/thinking/thinking-op';
 import { useAgent } from './use-agent';
 import { latestThinkingOp, thinkingOrbsEnabled } from './thinking-state';
+import { noteRunEnded } from './turn-recovery';
 
 export interface LiveThinkingState {
   op: ThinkingOp;
@@ -62,6 +63,9 @@ export function useThinkingState(conversationId: string | null, pending: boolean
         const op = latestThinkingOp(result.events, latestOp.current);
         applyOp(op, runStartedAt);
         if (result.status === 'running') schedule(() => void pollEvents(), 400);
+        // The run ended while its POST is still pending: the panel reads the turn back now rather than waiting on a
+        // response a background tab may never receive.
+        else noteRunEnded();
       } catch {
         failures += 1;
         schedule(() => void pollEvents(), Math.min(4000, 400 * 2 ** Math.min(failures, 4)));

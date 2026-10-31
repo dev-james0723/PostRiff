@@ -92,14 +92,37 @@ class RealAssets(unittest.TestCase):
         import glob
         import os
         files = sorted(glob.glob(os.path.join(p.ASSET_DIR, "prompts", "*-generate.txt")))
-        self.assertEqual(len(files), 11)
+        self.assertEqual(len(files), 12)
         for path in files:
             with self.subTest(prompt=os.path.basename(path)):
                 with open(path, encoding="utf-8") as handle:
                     text = handle.read()
+                if os.path.basename(path) == "consumer-J10-generate.txt":
+                    # The interactive-tool prompt has no data example at all (no Query exists in J10).
+                    self.assertNotIn('Query("example_', text)
+                    self.assertNotIn("Totals, averages and other figures come from Query fields", text)
+                    self.assertIn("This tool has no Query", text)
+                    self.assertIn("CONTEXT.toolBrief", text)
+                    continue
                 self.assertIn('stats = Query("example_summary", {}, null)\ntrend = Query("example_trend", {}, null)', text)
                 self.assertNotIn('"2026-09-01"', text)
                 self.assertNotIn("$range = null", text)
+
+    def test_tool_journey_plan_is_local_only(self):
+        plan, manifest = self.check("J10", "workspace", "consumer")
+        self.assertEqual((manifest["queries"], manifest["actions"]), ([], []))
+        self.assertIs(plan.policy["localOnly"], True)
+        self.assertEqual((plan.policy["readBindings"], plan.policy["actionIds"]), ([], []))
+        for name in ("NumberField", "Slider", "Toggle", "Readout"):
+            self.assertIn(name, plan.policy["allowedComponents"])
+        for name in ("ActionButton", "ToolBoundTable", "Metric", "SelectionList", "AssetPreview"):
+            self.assertNotIn(name, plan.policy["allowedComponents"])
+        self.assertIn(p.TOOL_BINDINGS, plan.instructions)
+        self.assertIn("CONTEXT.toolBrief", plan.instructions)
+        self.assertNotIn("Query(\"", plan.instructions.split("## Rafii bindings", 1)[1])
+        for other in contracts.CONSUMER_JOURNEYS:
+            if other != "J10":
+                self.assertNotIn("localOnly", self.check(other, "workspace", "consumer")[0].policy, other)
 
     def test_founder_journey_uses_the_founder_library_and_is_read_only(self):
         plan, manifest = self.check("J09", "founder", "founder")

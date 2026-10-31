@@ -30,13 +30,51 @@ test('every journey maps to one library; J09 alone is founder and read-only', ()
   for (const journey of contracts.JOURNEYS) {
     const entry = registry.JOURNEY_LIBRARIES[journey];
     assert.equal(entry.library, journey === 'J09' ? 'founder' : 'consumer', journey);
-    assert.ok(entry.groups.includes('layout') && entry.groups.includes('data'), journey);
+    const tool = contracts.TOOL_JOURNEYS.includes(journey);
+    assert.ok(entry.groups.includes('layout') && entry.groups.includes(tool ? 'tool_readouts' : 'data'), journey);
     const components = registry.groupComponents(entry.library, entry.groups);
     assert.ok(components.includes('RafiiRoot'), journey);
     if (journey === 'J09') {
       assert.ok(!components.includes('ActionButton') && !components.includes('Form'), 'founder has no write controls');
     }
   }
+});
+
+test('J10 (interactive tool) offers local inputs and readouts only: no bound data, selection or registered action', () => {
+  assert.deepEqual([...contracts.TOOL_JOURNEYS], ['J10']);
+  const entry = registry.JOURNEY_LIBRARIES.J10;
+  assert.equal(entry.library, 'consumer');
+  for (const group of ['data', 'selection', 'actions']) assert.ok(!entry.groups.includes(group), group);
+  const components = registry.groupComponents('consumer', entry.groups);
+  for (const name of ['NumberField', 'Slider', 'Toggle', 'Readout', 'TextField', 'Select', 'Text', 'Button']) assert.ok(components.includes(name), name);
+  for (const name of ['ActionButton', 'ToolBoundTable', 'ToolBoundChart', 'Metric', 'SelectionList', 'AssetPreview', 'Commentary']) {
+    assert.ok(!components.includes(name), `${name} is not offered in a tool`);
+  }
+  for (const name of components) {
+    const spec = registry.LIBRARY_DEFINITIONS.consumer.specs.find((s) => s.name === name);
+    assert.ok(!Object.values(spec.rules ?? {}).some((rule) => rule === 'query' || rule === 'action-id' || rule === 'bound'), name);
+  }
+  // The tool primitives never join the read-only founder library (its hash and prompts stay as they were).
+  const founder = new Set(registry.LIBRARY_DEFINITIONS.founder.specs.map((s) => s.name));
+  for (const name of ['NumberField', 'Slider', 'Toggle', 'Readout']) assert.ok(!founder.has(name), name);
+  // Additive: the previous consumer library hash still renders.
+  assert.ok(registry.COMPATIBLE_LIBRARY_HASHES.consumer.includes('bd5dfc59920f00b7694ff230ee4dbfb375a01bbf2750329fe314aabd47991b48'));
+});
+
+test('the J10 prompt grounds a tool, not a data view', () => {
+  const entry = registry.JOURNEY_LIBRARIES.J10;
+  const library = registry.createSpecLibrary('consumer');
+  const allowed = new Set(registry.groupComponents('consumer', entry.groups));
+  const text = langCore.generateSystemPrompt({
+    library: registry.subsetSpec(library.toSpec(), allowed),
+    promptOptions: { toolCalls: false, bindings: true, preamble: prompts.preambleFor('J10'), additionalRules: prompts.rulesFor('consumer', 'J10') },
+  });
+  assert.ok(text.includes('CONTEXT.toolBrief'));
+  assert.ok(/Readout\(/.test(text) && /Slider\(/.test(text) && /NumberField\(/.test(text) && /Toggle\(/.test(text));
+  assert.ok(!/\bActionButton\(/.test(text), 'no write control in a tool prompt');
+  assert.ok(!/\bToolBoundTable\(/.test(text), 'no bound data component in a tool prompt');
+  assert.ok(!text.includes(prompts.PRESENTER_RULES[0]), 'the data grounding rule is replaced by the tool rule');
+  assert.deepEqual(prompts.rulesFor('consumer'), [...prompts.PRESENTER_RULES, prompts.ACTION_RULE], 'other journeys keep their rules');
 });
 
 test('positional props keep required props first (the parser maps arguments by key order)', () => {

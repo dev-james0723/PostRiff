@@ -1,0 +1,8 @@
+root = RafiiRoot([form, result, note], "Unit converter")
+$amount = 10
+$pair = "km_mi"
+form = Stack([amount, pair])
+amount = NumberField("amount", "Amount", $amount)
+pair = Select("pair", "Convert", [{value: "km_mi", label: "Kilometres to miles"}, {value: "mi_km", label: "Miles to kilometres"}, {value: "kg_lb", label: "Kilograms to pounds"}, {value: "lb_kg", label: "Pounds to kilograms"}, {value: "c_f", label: "Celsius to Fahrenheit"}, {value: "f_c", label: "Fahrenheit to Celsius"}], $pair)
+result = Readout("Result", $pair == "km_mi" ? $amount * 0.621371 : ($pair == "mi_km" ? $amount * 1.609344 : ($pair == "kg_lb" ? $amount * 2.204623 : ($pair == "lb_kg" ? $amount * 0.453592 : ($pair == "c_f" ? $amount * 9 / 5 + 32 : ($amount - 32) * 5 / 9)))), "number", $pair == "km_mi" ? "mi" : ($pair == "mi_km" ? "km" : ($pair == "kg_lb" ? "lb" : ($pair == "lb_kg" ? "kg" : ($pair == "c_f" ? "°F" : "°C")))))
+note = Text("Standard conversion factors, rounded to two decimals.", "muted")

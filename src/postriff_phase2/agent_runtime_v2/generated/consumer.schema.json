@@ -83,6 +83,18 @@
     "Button": {
       "$ref": "#/$defs/Button"
     },
+    "NumberField": {
+      "$ref": "#/$defs/NumberField"
+    },
+    "Slider": {
+      "$ref": "#/$defs/Slider"
+    },
+    "Toggle": {
+      "$ref": "#/$defs/Toggle"
+    },
+    "Readout": {
+      "$ref": "#/$defs/Readout"
+    },
     "ActionButton": {
       "$ref": "#/$defs/ActionButton"
     },
@@ -250,6 +262,10 @@
     "Select",
     "DateRange",
     "Button",
+    "NumberField",
+    "Slider",
+    "Toggle",
+    "Readout",
     "ActionButton",
     "Commentary",
     "TaskProgress",
@@ -1087,6 +1103,126 @@
       ],
       "additionalProperties": false,
       "description": "A local control that never changes saved data: Action([@Set($v, x)]), @Reset, @Run(query) to refresh, @ToAssistant(\"follow-up\") or @OpenUrl(\"/app/…\"). variant: primary | secondary | quiet."
+    },
+    "NumberField": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label"
+      ],
+      "additionalProperties": false,
+      "description": "A labelled number input. Bind value to a $variable declared with a starting number (for example $bill = 120) and use it in Readout expressions. min, max and step limit what can be entered; unit is a short suffix such as \"kg\" or \"%\"."
+    },
+    "Slider": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "value": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label",
+        "min",
+        "max"
+      ],
+      "additionalProperties": false,
+      "description": "A labelled slider between min and max (step defaults to 1). Bind value to a $variable declared with a starting number; moving it updates every Readout that uses the $variable. unit is a short suffix such as \"%\" or \"years\"."
+    },
+    "Toggle": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "label"
+      ],
+      "additionalProperties": false,
+      "description": "A labelled on/off switch. Bind value to a $variable declared true or false and use it in a ternary, for example $roundUp ? @Ceil($share) : $share."
+    },
+    "Readout": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "number",
+            "currency",
+            "percent"
+          ]
+        },
+        "unit": {
+          "type": "string"
+        },
+        "currency": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "additionalProperties": false,
+      "description": "Shows one value computed from $variables with + - * / and ternaries, for example ($bill * (1 + $tip / 100)) / $people. format: number | currency (with a 3-letter currency code) | percent (a ratio: 0.15 shows 15%). A value that cannot be computed shows \"—\"."
     },
     "ActionButton": {
       "type": "object",
