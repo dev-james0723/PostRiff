@@ -62,7 +62,7 @@ EXPIRING_SOON_SECONDS = 7 * 86400                           # web/src/lib/channe
 RECENT_SECONDS = 2 * 86400                                  # data newer than this reads as "recent"
 
 # Rafii reads post analytics in the background only for these (insights.INSIGHT_METRICS, growth/metric_schedule.py).
-COLLECTED_ANALYTICS = {"Threads": "threads", "Instagram": "instagram"}
+COLLECTED_ANALYTICS = {"Threads": "threads", "Instagram": "instagram", "Pinterest": "pinterest"}
 
 # Lane B1's GET payload (CF-2 §16): only these values pass through, anything else is dropped.
 AUTONOMY_MODES = ("shadow", "enforce")
@@ -275,6 +275,8 @@ def access(view, now):
         status = "expired"
     elif state == "reauthorization_required":
         status = "revoked"
+    elif not renews and expires is not None and expires <= now and state in (*VERIFIED, "identity_known", "scope_missing"):
+        status = "expired"
     elif state in VERIFIED and not renews and expires is not None and 0 < expires - now < EXPIRING_SOON_SECONDS:
         status = "expiring"
     elif state in VERIFIED or state in ("identity_known", "scope_missing"):

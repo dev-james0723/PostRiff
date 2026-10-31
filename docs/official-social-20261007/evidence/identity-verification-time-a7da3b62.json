@@ -1,0 +1,75 @@
+{
+  "observedAt": "2026-10-08T02:44:03.580154+00:00",
+  "execution": "Committed source candidate, cloud CI/browser PASS; callback hold cleared, authorized preview update next",
+  "candidateSha": "a7da3b62299f51e737aa2803750023a0b389fa18",
+  "parentDeployedSha": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
+  "branch": "codex/social-connection-recovery-20261007",
+  "pr": "https://github.com/dev-james0723/PostRiff/pull/131",
+  "change": "Expose latest real identity verification time separately from per-operation evidence; show it on account card.",
+  "permissionsChanged": false,
+  "providerReadinessChanged": false,
+  "productionChanged": false,
+  "files": {
+    "src/postriff_phase2/channels.py": "7187fc5b076d0cd607c3adbb87ff702bce73708dddc42083a7b91edd893c540c",
+    "tests/test_postriff_channels.py": "2768842fc491f39cac3356b6b40df37a3e12b542ae71f8bf3b6979f67e98c1b5",
+    "web/src/lib/api/types.ts": "a117046889f3d0ff77400024ddf4b77d8d8e00afb68c453f99e12c47d4f0a66f",
+    "web/src/features/channels/channel-card.tsx": "1bb1e5b7459409dae3e553f19fc3964e942e333f6094feb91646b42821dc8d20",
+    "scripts/social-validation-cloud.sh": "d60425f903e65ff3eff8715192219bfb93a2d5168bccd0462bf4c27ec696a68a",
+    "web/tests/official-social-browser.cjs": "1a5cae486b7cb6da641fabd01b99462714a3d871af255e97f994db9742dfb62d"
+  },
+  "localTargetedRegression": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests python3 -m unittest test_postriff_channels.Taxonomy.test_latest_identity_read_time_does_not_renew_operation_evidence",
+    "before": "RED KeyError identityVerifiedAt",
+    "after": "PASS",
+    "coverage": "Latest live identity read exposed; identity/publish operation timestamps preserved; invalid/synthetic/revoked timestamps withheld."
+  },
+  "remote": [
+    {
+      "task": "ci",
+      "provider": "depot",
+      "runId": "7m9ltm43nd",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/7m9ltm43nd",
+      "sourceHead": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
+      "exitCode": 0,
+      "remoteExitCode": 0,
+      "elapsedSeconds": 125.876,
+      "receiptPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T021505723971Z-ci.json",
+      "sourceFingerprint": "d5516ac01c16181914a44e467a46adcba61b2804bf21f03e4b868e8c757f9f1d",
+      "patchSha256": "c84250f4f3b4542c267c551f0f705671057f070e965e1d9ccdbac373f900ebec",
+      "patchBytes": 583530
+    },
+    {
+      "task": "e2e",
+      "provider": "depot",
+      "runId": "xhlskmbhtk",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/xhlskmbhtk",
+      "sourceHead": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
+      "exitCode": 0,
+      "remoteExitCode": 0,
+      "elapsedSeconds": 82.041,
+      "receiptPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T021536841489Z-e2e.json",
+      "sourceFingerprint": "d5516ac01c16181914a44e467a46adcba61b2804bf21f03e4b868e8c757f9f1d",
+      "patchSha256": "c84250f4f3b4542c267c551f0f705671057f070e965e1d9ccdbac373f900ebec",
+      "patchBytes": 583530
+    }
+  ],
+  "browser": {
+    "execution": "Synthetic provider responses only; desktop Chromium and 390px Chromium",
+    "latestIdentityVerificationShown": true,
+    "operationGatesRetained": true,
+    "realIPhone": false
+  },
+  "sourceBinding": "JCB ran the dirty patch over parent a2723673. These six exact files were committed without subsequent source edits; required PR checks apply to the new commit after push.",
+  "gitDiffCheck": "PASS; CSV line endings preserved after receipt-write correction",
+  "knownUnrelatedWarning": "Existing vendor submodule missing .gitmodules URL during runner cleanup; validation exit0, source untouched.",
+  "continuation": {
+    "sessionId": "01a114a0-509b-7a43-a3bc-8f52d884ea1a",
+    "revision": 469,
+    "activeHumanGate": "Owner must start a fresh normal Account only flow when ready; both existing reconnect callbacks expired safely",
+    "activeTransactionRefMd5": "2f9477eb8ddff84696f7b94775600e2e",
+    "transactionExpiresAt": "2026-10-08T02:24:29.090820Z",
+    "releaseHold": "Cleared after database/browser reconciliation: second transaction expired and unconsumed, B token absent. Authorized push/PR/preview only; no production.",
+    "tokenPilot": "Known registry cap; durable scoped receipt fallback, no deletion of other sessions",
+    "tokenCostCounters": "unknown; no savings claimed"
+  }
+}

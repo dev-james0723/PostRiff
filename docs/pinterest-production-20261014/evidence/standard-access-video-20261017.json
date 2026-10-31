@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "task": "Actual Standard Access recording by separate recording agent",
+  "execution_date": "2026-10-17",
+  "production_source_baseline": "e2e5169ff19ac268c0a0ad06994f67b41f69f949",
+  "pinterest_app_id": "1615884",
+  "canonical_supabase_project": "buoyhkbodnhzngaotoel",
+  "authorization": "User explicitly requested a different agent to perform screen recording; no platform upload/submission, OAuth grant, board or Pin write, flag, SQL, deployment, or paid action authorized by this recording task.",
+  "capture": {
+    "status": "PASS",
+    "method": "Kynlo / Open Remote Computer record_screen; visible Chrome window 4020",
+    "url": "https://developers.pinterest.com/apps/1615884/upgrade/",
+    "artifact": "standard-access-video/standard-upgrade-form-partial-20261017.mp4",
+    "bytes": 11561,
+    "sha256": "808c0c217a5f614b29c42750a1c7909e3495397edcf85c68d8beef2d8818a1d8",
+    "duration_seconds": 8,
+    "codec": "h264",
+    "width": 640,
+    "height": 366,
+    "frame_rate": "4/1",
+    "decoded_frames": 32,
+    "audio": false,
+    "content": "Actual live Upgrade to Standard access page, empty video-upload control, instructions. Static partial preparation evidence; no OAuth or API operation appears."
+  },
+  "privacy_review": {
+    "status": "PASS",
+    "method": "Decoded first frame visually inspected at native resolution and all 32 frames inspected in contact sheet; decode completed without error.",
+    "findings": "Only relevant Pinterest upgrade page and task-specific browser tabs visible. No secrets, codes, OAuth state, personal email, private tenant content or unrelated Twin page visible.",
+    "safe_to_include": [
+      "standard-access-video/standard-upgrade-form-partial-20261017.mp4",
+      "standard-access-video/README.md",
+      "evidence/standard-access-video-20261017.json",
+      "standard-access-video/StrictWindowRecorder.swift",
+      "standard-access-video/native-compile-attempt-20261017.json"
+    ],
+    "unrelated_capture_retained_in_worktree": false
+  },
+  "submission_format": {
+    "status": "FAIL",
+    "observed_requirement": "Current native upgrade form: MP4 recommended under 2GB; frame rate between 20 and 60 frames per second; demonstrate Pinterest user authentication and main user-facing features.",
+    "blocker": "ORC connector schema rejects fps=20 with 'fps [maximum]: Value 20.0 > maximum 4'. Captured partial is 4fps and must not be submitted or upsampled as proof of native 20fps capture."
+  },
+  "native_quality_attempt": {
+    "status": "BLOCKED",
+    "action": "cua.getApp('QuickTime Player')",
+    "result": "Launch tool remained blocked for approximately 686 seconds then was interrupted by parent to obtain bounded handoff. Launch outcome is unknown.",
+    "quicktime_recording_start_action_issued": false,
+    "quicktime_video_created": false,
+    "note": "No evidence of an active QuickTime recording was obtained; no recording-start command was issued. No further app actions or recording-stop actions were taken. This is not a confirmed macOS permission denial or human mission cancellation.",
+    "parent_reconciliation": "Parent subsequently queried Kynlo list_apps: structured apps[] despite earlier known Chrome presence, so native inventory could not verify QuickTime launch state. Parent reported shell ps read denied; no bypass or escalation attempted. This is an automation/inventory blocker, not a confirmed OS permission diagnosis."
+  },
+  "actual_form": {
+    "observed_at": "2026-10-17T20:54:15Z",
+    "app_name": "Rafii",
+    "company_name": "Rafii",
+    "prefilled_website": "https://postriff-phase2-private.vercel.app/",
+    "prefilled_privacy": "https://postriff-phase2-private.vercel.app/privacy",
+    "selected_use_case": [
+      "Pin creation & scheduling"
+    ],
+    "reporting_selected": false,
+    "selected_audiences": [
+      "Creators",
+      "Businesses"
+    ],
+    "video_upload_empty": true,
+    "fields_modified": false,
+    "submitted": false
+  },
+  "account_board_readonly": {
+    "observed_at": "2026-10-17T20:57:00Z",
+    "account": "@jamesaucreates",
+    "identity_evidence": [
+      "Account switcher James Au",
+      "Your profile link /jamesaucreates/",
+      "Visible jamesaucreates and Edit profile"
+    ],
+    "created_tab": "Create your first Pin",
+    "saved_url": "https://www.pinterest.com/jamesaucreates/_saved/",
+    "saved_text": "You haven't saved any Pins yet",
+    "observed_board_links": 0,
+    "eligible_destination_verified": false,
+    "scope": "Read-only native browser, no OAuth/API request, no board/Pin creation."
+  },
+  "limitations": {
+    "full_oauth_and_api_demo": "NOT RUN",
+    "production_actor_workspace_binding": "UNVERIFIED in current browser. Observed labels My workspace and Classical Music Life alone do not establish actor/workspace identifiers or a different tenant.",
+    "original_readonly_api_window": "Expired 2026-10-17T20:40:56Z; not extended.",
+    "prior_grant": "Previously disconnected and cleared; not re-authorized.",
+    "standard_submission": "NOT RUN",
+    "provider_writes": 0,
+    "payment": 0
+  },
+  "next_required": "Parent must prepare and obtain exact approval for renewed bounded OAuth/required scopes and approved live test content/destination, then capture actual OAuth, board discovery, approved API operation/read-back and disconnect at native 20–60fps with a functioning recorder. Review complete video before any separately approved upload/submission.",
+  "readonly_recorder_investigation": {
+    "status": "PASS_METADATA_ONLY",
+    "os_version": "27.2",
+    "installed_cli": "/usr/sbin/screencapture",
+    "sources": [
+      "Installed screencapture usage output",
+      "/usr/share/man/man1/screencapture.1",
+      "Installed macOS SDK ScreenCaptureKit.framework/Headers/SCStream.h and SCRecordingOutput.h"
+    ],
+    "documented_cli_flags": {
+      "-v": "video recording",
+      "-V<seconds>": "bounded recording duration",
+      "-l<windowid>": "capture specified window",
+      "audio": "optional -g/-G/-A; omit all"
+    },
+    "CGPreflightScreenCaptureAccess_current_exec_process": true,
+    "permission_note": "Read-only function call only. No authorization request or permission change. This says nothing about QuickTime or Kynlo attribution.",
+    "candidate_cli_after_root_review": "/usr/sbin/screencapture -v -V 8 -l <fresh verified owned Chrome window ID> -x <owned output path>.mov",
+    "cli_unknowns": [
+      "Combined video/window selector behavior has not been exercised",
+      "Native file frame rate and privacy isolation remain unverified"
+    ],
+    "strict_sdk_route": "SCContentFilter initWithDesktopIndependentWindow; SCStreamConfiguration minimumFrameInterval=1/30; capturesAudio=false; captureMicrophone=false; SCRecordingOutput configured for MP4.",
+    "sdk_metadata": "Installed header documents default minimumFrameInterval 1/60 (updates at or up to60fps), strict independent-window filter and native recording output; not a frame-rate acceptance result.",
+    "helper_status": "No helper written, compiled or run. Small helper would need reviewed implementation and allowed local compute route.",
+    "recording_started": false,
+    "native_20_to_60_fps_validation": "validation_unavailable: no exact surface/method recording probe approved by root in this investigation; metadata alone cannot verify actual fps or window isolation."
+  },
+  "strict_recorder_candidate": {
+    "status": "CANDIDATE_COMPILE_TIMED_OUT_NOT_EXECUTED",
+    "source": "standard-access-video/StrictWindowRecorder.swift",
+    "sha256": "16206868d81127b39db5d1fb267ed368f13dff78bd249a5aa4f3088847facd5a",
+    "native_api": "SCContentFilter(desktopIndependentWindow:) + SCRecordingOutput",
+    "frame_rate_requested": 30,
+    "actual_frame_rate": "UNVERIFIED",
+    "max_width": 960,
+    "audio": false,
+    "nominal_seconds": 6,
+    "hard_capture_process_limit_seconds": 8,
+    "required_identity": "Fresh<=30s explicit windowID, ChromePID/com.google.Chrome, exact title, on-screen; checked before and during capture",
+    "output_safety": "New MP4 directly in owned folder; UUID mode0700 staging; no overwrite; abort cleanup; saved output remains unreviewed",
+    "fallback": "None; no display capture, other-window fallback, UI automation or permission request",
+    "limitations": [
+      "Compile and runtime APIs unverified",
+      "Exact-title change aborts; short separate approved segments only, no continuous multi-title OAuth support",
+      "No fresh OAuth or Pin operation authorized/executed",
+      "All-frame privacy and actual20–60fps must be verified after an approved run",
+      "Allowed bounded native-only compile attempted once; timed out without compiler diagnostics or binary; runtime remains NOT RUN."
+    ],
+    "compiler_validation": "validation_unavailable: exactly one bounded native-only compilation hit12swall budget (actual12.072s), processgroupSIGTERM/exit-15, no diagnostics, no binary. No source error identified; no blind retry.",
+    "compile_attempt": "standard-access-video/native-compile-attempt-20261017.json",
+    "policy_basis": "cloud-build-router SKILL lines22/49 allow narrow Mac-only native checks. Single10KB Swift file, existingSDK/compiler, -Onone/-j1, lowpriority,12swall/8sper-processCPU bound; no install, fullapp, JS build, recording or OS permission changes."
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "observedAt": "2026-10-08T01:56:40.330906+00:00",
+  "freshSession": {
+    "state": "PASS",
+    "ownerReported": "still connected after requested sign-out/sign-in",
+    "serverLastSignInAt": "2026-10-08T01:52:28.752045Z",
+    "serverNewSessionCreatedAt": "2026-10-08T01:52:28.752140Z",
+    "browser": "Chrome, authenticated Tester B, same preview Channels and saved connection",
+    "credentialCreatedAtUnchanged": "2026-10-08T01:39:31.171685Z",
+    "credentialUpdatedAtUnchanged": "2026-10-08T01:39:31.171685Z",
+    "workspaceRefMd5": "249fd4ac7489aafd15b4fe6c6cc0b216",
+    "connectionRefMd5": "247a97cd88669d3bd8f327b71bac18c2",
+    "actualScopes": [
+      "openid",
+      "profile"
+    ],
+    "encryptedAccessPresent": true,
+    "revoked": false,
+    "observedAt": "2026-10-08T01:56:40.330906+00:00",
+    "limits": "Fresh Rafii authentication and retained connection verified; no provider renewal/expiry simulation or live cross-tenant negative test claimed."
+  },
+  "disconnectReconnectPlan": {
+    "state": "APPROVED_DISCONNECT_DONE_OWNER_START_REQUIRED",
+    "performed": true,
+    "provider": "linkedin",
+    "appId": "263833009",
+    "environment": "protected approved branch preview",
+    "sourceSha": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
+    "origin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+    "tester": "B",
+    "workspaceRefMd5": "249fd4ac7489aafd15b4fe6c6cc0b216",
+    "connectionRefMd5": "247a97cd88669d3bd8f327b71bac18c2",
+    "preflight": {
+      "importedPosts": 0,
+      "historyImportRecords": 0,
+      "importedWritingSamples": 0,
+      "allPublishJobsForConnection": 0,
+      "activeOrHeldPublishJobs": 0,
+      "liveConnectionsForSameProviderSubject": 1,
+      "testerA": "Separate provider subject/workspace; saved credential unchanged and unrevoked before test"
+    },
+    "effect": "Confirm normal Channels Disconnect; server removes local token custody and attempts official provider revocation. Imports/samples would be removed and approved jobs held, but counts are currently zero. Reconnect the same account with Account only.",
+    "reconnectScopes": [
+      "openid",
+      "profile"
+    ],
+    "providerReads": [
+      "LinkedIn member identity /v2/userinfo"
+    ],
+    "costAuthority": "No metered X call or new paid authority. No publication, upload or broader permission.",
+    "humanHandoff": "Normal Account only flow will be left before Continue/OAuth transaction start so owner controls the ten-minute consent window.",
+    "approvalReason": "AGENTS.md Candidate-First Changes and Authorization requires explicit authorization for credential/security changes; existing preview authorization is preserved and not repeated.",
+    "screenshotLocal": "/private/tmp/rafii-linkedin-b-disconnect-plan.jpg",
+    "screenshotSha256": "bd0ce341a126ccee849b32a3d60230682dcda73909fec6de1a68fcef341db817",
+    "observedAt": "2026-10-08T01:56:40.330906+00:00",
+    "authorization": {
+      "source": "Direct user response APPROve to exact prepared Tester B disconnect/reconnect test",
+      "scopes": [
+        "openid",
+        "profile"
+      ],
+      "effect": "One-time normal-UI disconnect and same-account reconnect; owner completes official consent",
+      "exclusions": "No production, other users grants, publishing, broader permission, X spending or provider settings"
+    }
+  },
+  "scope": "Historical fresh-session PASS preserved. Approved disconnect PASS; two expired callback rejections observed. B currently disconnected; fresh same-account reconnect remains pending.",
+  "latestObservedAt": "2026-10-08T02:44:03.580154+00:00",
+  "lifecycleExecutionEvidence": "linkedin-tester-b-lifecycle-20261008.json"
+}

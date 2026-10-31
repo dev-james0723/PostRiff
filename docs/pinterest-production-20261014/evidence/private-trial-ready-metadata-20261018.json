@@ -1,0 +1,117 @@
+{
+  "id": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ",
+  "url": "postriff-phase2-private-hgyvl2wz7-jamesau0723-6572s-projects.vercel.app",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "readyState": "READY",
+  "target": "production",
+  "meta": {
+    "gitCommitAuthorName": "James Au",
+    "gitCommitAuthorEmail": "jamesau0723@gmail.com",
+    "gitCommitMessage": "docs(pinterest): bind approved public board and private activation review",
+    "gitCommitRef": "codex/rafii-pinterest-production-prep-20261014",
+    "gitCommitSha": "4b4a6b070319f98179cb5bd1158a720fe738f4d8",
+    "gitRootDirectory": "",
+    "pinterestSourceCommit": "730d044078434638f31eb5ca0e57280307ff8317",
+    "pinterestReceiptCommit": "4b4a6b070319f98179cb5bd1158a720fe738f4d8",
+    "pinterestPilot": "private-bounded-four-capabilities",
+    "pinterestPolicyId": "7e355181-2714-46fb-abfe-26fc526d0809",
+    "actor": "codex",
+    "lambdaRuntimeStats": "{\"nodejs\":3,\"python\":2}"
+  },
+  "autoAssignCustomDomains": false,
+  "projectSettings": {
+    "buildCommand": null,
+    "devCommand": null,
+    "framework": null,
+    "commandForIgnoringBuildStep": "case \"${VERCEL_GIT_COMMIT_REF:-}\" in wip/no-vercel/*) [ \"${VERCEL_ENV:-}\" = preview ] && [ \"${VERCEL_TARGET_ENV:-preview}\" = preview ] && [ \"${VERCEL_GIT_PROVIDER:-}\" = github ] && [ -z \"${VERCEL_GIT_PULL_REQUEST_ID:-}\" ] && exit 0;; esac; exit 1",
+    "installCommand": null,
+    "outputDirectory": null,
+    "speedInsights": {
+      "id": "aGGjBePwkVWVhmuQUxnWareUiX5",
+      "hasData": false
+    },
+    "webAnalytics": {
+      "id": "xhnmgsRXbqUpoDFiTw36xJPf2"
+    },
+    "nodeVersion": "24.x"
+  },
+  "services": [
+    {
+      "schema": "experimentalServicesV2",
+      "name": "postriff_web",
+      "root": "web",
+      "framework": "nextjs",
+      "builder": {
+        "src": "web/package.json",
+        "use": "@vercel/next",
+        "config": {
+          "zeroConfig": true,
+          "framework": "nextjs",
+          "workspace": "web"
+        }
+      }
+    },
+    {
+      "schema": "experimentalServicesV2",
+      "name": "postriff_api",
+      "root": ".",
+      "framework": "python",
+      "runtime": "python",
+      "entrypoint": "api/index.py",
+      "builder": {
+        "src": "api/index.py",
+        "use": "@vercel/python",
+        "config": {
+          "zeroConfig": true,
+          "framework": "python",
+          "handlerFunction": "app"
+        }
+      },
+      "buildCommand": "python3 runtime/build_document_renderer.py && python3 runtime/provision_video_storage.py",
+      "functions": {
+        "api/index.py": {
+          "maxDuration": 300,
+          "excludeFiles": "{.venv/**,.phase3-build-venv/**,.env*,broker.key,*.command,desktop/**,vendor/**,src/james_au_social/**,**/__pycache__/**,web/**,tests/**,docs/**,studio/**}"
+        }
+      }
+    },
+    {
+      "schema": "experimentalServicesV2",
+      "name": "rafii_phone_media",
+      "root": ".",
+      "framework": "python",
+      "runtime": "python",
+      "entrypoint": "api/phone.py",
+      "builder": {
+        "src": "api/phone.py",
+        "use": "@vercel/python",
+        "config": {
+          "zeroConfig": true,
+          "framework": "python",
+          "handlerFunction": "app"
+        }
+      },
+      "functions": {
+        "api/phone.py": {
+          "maxDuration": 660,
+          "excludeFiles": "{.document-runtime/**,runtime/**,.venv/**,.phase3-build-venv/**,.env*,broker.key,*.command,desktop/**,vendor/**,src/james_au_social/**,**/__pycache__/**,web/**,tests/**,docs/**,studio/**}"
+        }
+      }
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/worker",
+      "schedule": "* * * * *"
+    }
+  ],
+  "alias": [
+    "postriff-phase2-private-jamesau0723-6572s-projects.vercel.app"
+  ],
+  "aliasAssigned": true,
+  "createdAt": 1792291307527,
+  "ready": 1792291448765,
+  "regions": [
+    "iad1"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "recordedAt": "2026-10-18T14:52:35.562651+00:00",
+  "status": "PASS_REAL_SINGLE_IMAGE_INGEST_AND_READBACK",
+  "sourceFile": "pin-previews/rafii-existing-og.png",
+  "sourceMime": "image/png",
+  "sourceBytes": 76554,
+  "uploadDispatchedAt": "2026-10-18T14:39:06.322Z",
+  "uploadToolCalls": 1,
+  "matchingAssets": 1,
+  "matchingStorageObjects": 1,
+  "workspaceRevisionBefore": 104,
+  "workspaceRevisionAfter": 105,
+  "asset": {
+    "assetId": "6c6ca81eae6843b5b28deaec96485925",
+    "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+    "sourceSha256": "8b0a4150bcf7adcbe8de83baa063b05f8f2246c3a3e918c3f40263b5e37dc030",
+    "sha256": "b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6",
+    "mime": "image/jpeg",
+    "bytes": 58781,
+    "width": 1200,
+    "height": 630,
+    "decoder": "pillow",
+    "execution": "hosted-private-storage",
+    "bucket": "postriff-private",
+    "bucketPublic": false,
+    "objectName": "6c6ca81eae6843b5b28deaec96485925-b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6.jpg",
+    "storagePath": "568699ad-d66e-42b8-a7f1-e86d0c35ab02/media/6c6ca81eae6843b5b28deaec96485925-b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6.jpg",
+    "createdAt": "2026-10-18T14:39:09.699981Z",
+    "deleted": false
+  },
+  "readback": {
+    "at": "2026-10-18T14:42:57.091Z",
+    "path": "/api/workspaces/568699ad-d66e-42b8-a7f1-e86d0c35ab02/media/6c6ca81eae6843b5b28deaec96485925",
+    "statusCode": 200,
+    "requestId": "sp5ps-1792334574313-d4ac625d4b6d",
+    "method": "Actual authenticated Library media request, Vercel runtime log on new deployment"
+  },
+  "directStorageSqlWrites": 0,
+  "realPinCreates": 0,
+  "note": "Normalization was performed by the existing hosted upload service. Source PNG is retained for review; final execution binds the stored JPEG asset and hash."
+}

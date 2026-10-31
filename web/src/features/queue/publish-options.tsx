@@ -28,7 +28,7 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { YouTubeOptions } from '@/features/youtube/youtube-options';
 
 /** Platforms whose review carries per-post choices; the server refuses a review without them. */
-export const NEEDS_OPTIONS = new Set(['TikTok', 'YouTube', 'Pinterest', 'Google Business Profile']);
+export const NEEDS_OPTIONS = new Set(['LinkedIn', 'Threads', 'Instagram', 'Facebook', 'X', 'TikTok', 'YouTube', 'Pinterest', 'Google Business Profile']);
 
 export type PublishOptionsValue = Record<string, unknown> | null;
 
@@ -140,14 +140,16 @@ function TikTokFields({ channelId, asset, text, onChange }: Props) {
     retry: false
   });
   const info = creator.data ?? null;
-  const durationSec = isVideo(asset) ? (asset?.duration ?? null) : null;
-  const video = isVideo(asset) ? { durationSec } : null;
+  const photo = Boolean(asset?.mime.startsWith('image/'));
+  const durationSec = isVideo(asset) ? (asset?.duration ?? null) : photo ? 1 : null;
+  const video = isVideo(asset) || photo ? { durationSec } : null;
   const issues = problems(choice, info, video);
   const branded = choice.commercial.enabled && choice.commercial.brandedContent;
 
   useEffect(() => {
-    onChange(toOptions(choice, info, isVideo(asset) ? { durationSec } : null));
-  }, [choice, info, asset, durationSec, onChange]);
+    const result = toOptions(choice, info, isVideo(asset) || photo ? { durationSec } : null);
+    onChange(result && photo ? { ...result, allowDuet: false, allowStitch: false, coverIndex: 0 } : result);
+  }, [choice, info, asset, durationSec, photo, onChange]);
 
   const interaction = (kind: 'comment' | 'duet' | 'stitch', key: 'allowComment' | 'allowDuet' | 'allowStitch', label: string) => (
     <Label className='flex items-center gap-2 text-sm font-normal'>
@@ -227,7 +229,7 @@ function TikTokFields({ channelId, asset, text, onChange }: Props) {
       <div className='flex flex-col gap-1'>
         <span className='text-muted-foreground text-xs'>Preview</span>
         <div className='rafii-quiet rounded-md p-2 text-sm whitespace-pre-wrap'>{text || 'No caption'}</div>
-        <span className='text-muted-foreground text-xs'>{isVideo(asset) ? `Video${durationSec ? ` · ${Math.round(durationSec)} s` : ''}` : 'No video chosen'}</span>
+        <span className='text-muted-foreground text-xs'>{isVideo(asset) ? `Video${durationSec ? ` · ${Math.round(durationSec)} s` : ''}` : photo ? 'Photo post' : 'No media chosen'}</span>
       </div>
 
       <Caution>{UNAUDITED_NOTICE}</Caution>
@@ -254,40 +256,62 @@ function PinterestFields({ channelId, asset, onChange }: Props) {
   const [board, setBoard] = useState('');
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
+  const [section, setSection] = useState('');
   const boards = useQuery({
     queryKey: ['pinterest-boards', workspaceId, channelId],
     queryFn: () => api.channelDestinations(workspaceId, channelId),
     retry: false
   });
-  const image = Boolean(asset && asset.mime.startsWith('image/'));
-  const linkOk = !link || /^https?:\/\/\S+$/i.test(link);
+  const sections = useQuery({
+    queryKey: ['pinterest-sections', workspaceId, channelId, board],
+    queryFn: () => api.channelDestinations(workspaceId, channelId, board),
+    enabled: Boolean(board), retry: false
+  });
+  const image = Boolean(asset && ['image/jpeg', 'image/png'].includes(asset.mime));
+  const linkOk = !link || validPinterestLink(link);
+  const boardOk = boards.data?.destinations.some((item) => item.id === board && item.eligible === true);
+  const sectionOk = !section || sections.data?.destinations.some((item) => item.id === section);
+
+  useEffect(() => { setBoard(''); setSection(''); }, [channelId]);
 
   useEffect(() => {
-    onChange(image && board && linkOk ? { boardId: board, title: title.trim(), link: link.trim() } : null);
-  }, [image, board, title, link, linkOk, onChange]);
+    onChange(image && boardOk && sectionOk && linkOk ? { boardId: board, title: title.trim(), link, ...(section ? { boardSectionId: section } : {}) } : null);
+  }, [image, board, boardOk, section, sectionOk, title, link, linkOk, onChange]);
 
   return (
     <section className='flex flex-col gap-3 rounded-[var(--rafii-radius-control)] border p-3' aria-labelledby='pinterest-options-title'>
       <h3 id='pinterest-options-title' className='text-sm font-medium'>
         Pinterest
       </h3>
-      {!image && <Caution>A Pin needs one image. Choose it above.</Caution>}
+      {!image && <Caution>A Pin needs one JPEG or PNG image of up to 10 MiB. Choose it above.</Caution>}
+      <p className='text-xs text-muted-foreground'>An eligible account and public board are required. Pinterest may restrict personal accounts. Secret and ad-only boards are unavailable in Rafii v1.</p>
       <div className='flex flex-col gap-1.5'>
         <Label htmlFor='pinterest-board'>Board</Label>
-        <Select value={board} onValueChange={(value) => setBoard(value ?? '')}>
+        <Select value={board} onValueChange={(value) => { setBoard(value ?? ''); setSection(''); }}>
           <SelectTrigger id='pinterest-board' className='w-full'>
             <SelectValue placeholder={boards.isLoading ? 'Loading boards…' : 'Choose a board'} />
           </SelectTrigger>
           <SelectContent>
             {(boards.data?.destinations ?? []).map((item) => (
-              <SelectItem key={item.id} value={item.id}>
-                {item.name}
+              <SelectItem key={item.id} value={item.id} disabled={item.eligible !== true}>
+                {item.name}{item.eligible !== true ? ' (unavailable)' : ''}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         {boards.isError && <Caution>{boards.error instanceof ApiError ? boards.error.message : 'Couldn’t load your boards. Try again.'}</Caution>}
       </div>
+      {board && <div className='flex flex-col gap-1.5'>
+        <Label htmlFor='pinterest-section'>Board section (optional)</Label>
+        <Select value={section || 'none'} onValueChange={(value) => setSection(value && value !== 'none' ? value : '')}>
+          <SelectTrigger id='pinterest-section' className='w-full'><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value='none'>No section</SelectItem>
+            {(sections.data?.destinations ?? []).map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {sections.isError && <Caution>{sections.error instanceof ApiError ? sections.error.message : 'Couldn’t load sections. Retry or publish to the board without a section.'}</Caution>}
+      </div>}
       <div className='flex flex-col gap-1.5'>
         <Label htmlFor='pinterest-title'>Title (optional)</Label>
         <Input id='pinterest-title' className='text-base md:text-sm' value={title} maxLength={100} onChange={(e) => setTitle(e.target.value)} />
@@ -299,4 +323,12 @@ function PinterestFields({ channelId, asset, onChange }: Props) {
       </div>
     </section>
   );
+}
+
+function validPinterestLink(value: string) {
+  if (value.length > 2048 || /\s|\\/.test(value) || Array.from(value).some((c) => c.charCodeAt(0) < 32)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && Boolean(url.hostname) && !url.username && !url.password && (!url.port || url.port === '443');
+  } catch { return false; }
 }

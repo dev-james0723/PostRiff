@@ -1,0 +1,1573 @@
+{
+  "checkedAt": "2026-10-18T02:47:52.535896+00:00",
+  "status": "PASS",
+  "productionAliasAndTarget": "dpl_2tFM29HomWyWcrzTqTtikWN6Pvti",
+  "environmentRecordCount": 173,
+  "comparedFields": [
+    "id",
+    "key",
+    "target",
+    "type",
+    "updatedAt"
+  ],
+  "diff": [],
+  "envs": [
+    {
+      "id": "jkJ8Cg1OfjtDqXGl",
+      "key": "POSTRIFF_OAUTH_THREADS_CLIENT_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1792247396201
+    },
+    {
+      "id": "5K3NuyWNCnixDqoy",
+      "key": "RAFII_SECURITY_RETENTION_DAYS",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1792115565444
+    },
+    {
+      "id": "ihLMxZIAXa2lgzOp",
+      "key": "RAFII_SECURITY_RETENTION",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1792202987353
+    },
+    {
+      "id": "6fR9ImhlKtOnaVUS",
+      "key": "RAFII_SIGN_IN_DETAILS",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1792115560866
+    },
+    {
+      "id": "2vdj6YQKtHIyvQ8z",
+      "key": "RAFII_SECURITY_INCIDENT_HOLD",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1792115558279
+    },
+    {
+      "id": "k0b7NSl6mj2bcFZp",
+      "key": "RAFII_DEVICE_TRUST_V2",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1792115554895
+    },
+    {
+      "id": "BbZe7J0l1wc1SfXm",
+      "key": "RAFII_DEVICE_COOKIE_KEYS",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1792115392682
+    },
+    {
+      "id": "v1TU1dHtr57XvDtf",
+      "key": "RAFII_CREATION_PROJECTION_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1792030476125
+    },
+    {
+      "id": "XXxAcEb7XB3OmybF",
+      "key": "RAFII_CREATION_ALL_PLATFORMS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1792030476125
+    },
+    {
+      "id": "APpO863SLqGuCHul",
+      "key": "RAFII_ACCOUNT_PROTECTION_V2_MODE",
+      "target": [
+        "production"
+      ],
+      "type": "plain",
+      "updatedAt": 1792026763784
+    },
+    {
+      "id": "ESzzVD4tBTcvFJsL",
+      "key": "POSTRIFF_OAUTH_THREADS_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791920242183
+    },
+    {
+      "id": "Yf711S6ZpSQhkPfX",
+      "key": "POSTRIFF_LINKEDIN_FLEET_MAX_SECONDS",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791823826255
+    },
+    {
+      "id": "splquNvyoClkDsFG",
+      "key": "POSTRIFF_LINKEDIN_FLEET_MAX_JOBS",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791823825288
+    },
+    {
+      "id": "HPoSA20q5Oo8yakr",
+      "key": "POSTRIFF_LINKEDIN_FLEET_WORKERS",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791823824251
+    },
+    {
+      "id": "yfyeScB4VbiuXjme",
+      "key": "POSTRIFF_LINKEDIN_FLEET_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791823823219
+    },
+    {
+      "id": "cfQPY3BzrbbrC9iK",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_CALLBACK_ORIGIN",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791821929121
+    },
+    {
+      "id": "x1OhWaxRAvYvP3Js",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_OFFICIAL_SOCIAL_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791821927589
+    },
+    {
+      "id": "amPV6eLQN78yuv3H",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_CONNECTION_REVIEW_JSON",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791821926390
+    },
+    {
+      "id": "mg2eDZQiVDJCkGoW",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_PRODUCT_APPROVALS_JSON",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791821924847
+    },
+    {
+      "id": "jIFwnXaDCMz2cVzq",
+      "key": "POSTRIFF_TELEGRAM_LOGIN_CLIENT_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791769146645
+    },
+    {
+      "id": "BTOnn2StsMH870bP",
+      "key": "POSTRIFF_TELEGRAM_LOGIN_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791769144498
+    },
+    {
+      "id": "hIRNCC1tDoL6SUvi",
+      "key": "NEXT_PUBLIC_BRAND_BRAIN_V11",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791663605923
+    },
+    {
+      "id": "4U1xy5paEfTNp8hd",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_STANDARD_CREDENTIAL_SOURCE",
+      "target": [
+        "production"
+      ],
+      "type": "plain",
+      "updatedAt": 1791662882850
+    },
+    {
+      "id": "rnaoA6YRCnQ5h8Em",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_CALLBACK_ORIGIN",
+      "target": [
+        "production"
+      ],
+      "type": "plain",
+      "updatedAt": 1791662853471
+    },
+    {
+      "id": "EiquigciWZWXmjpW",
+      "key": "RAFII_CONTEXT_LENS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "plain",
+      "updatedAt": 1791648942383
+    },
+    {
+      "id": "vEzCZ8YQ3nPfeyhi",
+      "key": "RAFII_CONTEXT_VISIBLE_STATE_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "plain",
+      "updatedAt": 1791648940225
+    },
+    {
+      "id": "8VHCq82wpoQ9ZXzA",
+      "key": "RAFII_CONTEXT_LENS_WORKSPACES",
+      "target": [
+        "production"
+      ],
+      "type": "plain",
+      "updatedAt": 1791648929608
+    },
+    {
+      "id": "c9rEwMgTOYcVINVH",
+      "key": "RAFII_AGENT_LIBRARY_BROWSE_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791647702898
+    },
+    {
+      "id": "dlxSgAflWkwgBFvS",
+      "key": "RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791647692988
+    },
+    {
+      "id": "UFZeL8Mhbh2f3MgZ",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_LEGACY_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "plain",
+      "updatedAt": 1791658794754
+    },
+    {
+      "id": "neH6vWJhZpGecdtL",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_AGENTIC_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "plain",
+      "updatedAt": 1791594623265
+    },
+    {
+      "id": "kwnh2BOVZi9IfLvM",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_PENDING_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "plain",
+      "updatedAt": 1791594621879
+    },
+    {
+      "id": "Zw6nXr8BWB8ofrOy",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_PENDING_CLIENT_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791594538195
+    },
+    {
+      "id": "xMwEbdJpeuJeAYAl",
+      "key": "RAFII_GENUI_VALIDATOR_URL",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791498914218
+    },
+    {
+      "id": "JqkZ4GFuyHZhGy6T",
+      "key": "RAFII_GENUI_WORKSPACES",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791528502882
+    },
+    {
+      "id": "xH3l8fJAXiW0PHMP",
+      "key": "RAFII_GENUI_FOUNDER_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791498908540
+    },
+    {
+      "id": "UMN56Z5knwNt3UQI",
+      "key": "RAFII_GENUI_EDITS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791498906039
+    },
+    {
+      "id": "zwKT0keWAFP6vX7g",
+      "key": "RAFII_GENUI_ACTIONS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791498902949
+    },
+    {
+      "id": "s6CQ7JnK6WmKAUC0",
+      "key": "RAFII_GENUI_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791498900436
+    },
+    {
+      "id": "eVOdI9rt1f2W0YUe",
+      "key": "RAFII_LEGACY_HOSTS",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791498632030
+    },
+    {
+      "id": "uvfi55vXh95AiPQV",
+      "key": "RAFII_LEGACY_HOST_REDIRECT",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791498632030
+    },
+    {
+      "id": "dgKvdXVuAHtgpwfj",
+      "key": "POSTRIFF_BLUESKY_CLIENT_ORIGIN",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791498076586
+    },
+    {
+      "id": "MRS0Vviqzg2vrAZ9",
+      "key": "NEXT_PUBLIC_PASSKEY_RP_ID",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791498076586
+    },
+    {
+      "id": "NuzZVSJq9PIZVCan",
+      "key": "POSTRIFF_OAUTH_X_CALLBACK_ORIGIN",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791498076586
+    },
+    {
+      "id": "w9i3KthlcHzh3vtt",
+      "key": "POSTRIFF_OAUTH_DISCORD_CALLBACK_ORIGIN",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791498076586
+    },
+    {
+      "id": "AjIOtnHUlJfXj8Ax",
+      "key": "POSTRIFF_OAUTH_THREADS_CALLBACK_ORIGIN",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791920332872
+    },
+    {
+      "id": "zwZBTPcCpqNDicox",
+      "key": "POSTRIFF_OAUTH_PINTEREST_CALLBACK_ORIGIN",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791498076586
+    },
+    {
+      "id": "BLujgi4aLqwjFcms",
+      "key": "POSTRIFF_YOUTUBE_AGENTIC_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791489767938
+    },
+    {
+      "id": "n1LAc1q2DtBNIgNR",
+      "key": "POSTRIFF_YOUTUBE_CREATOR_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791489761677
+    },
+    {
+      "id": "KUEJJyX50RRxbEHX",
+      "key": "RAFII_GENUI_VALIDATOR_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791480072723
+    },
+    {
+      "id": "eBhITAuo26XkTZ3x",
+      "key": "OPENUI_TELEMETRY_DISABLED",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791479385554
+    },
+    {
+      "id": "3Qs2t3FuBhbhXl7x",
+      "key": "POSTRIFF_PRODUCTION_PROJECT_REF",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791465401595
+    },
+    {
+      "id": "aczOqcMCaA0Q2Sb9",
+      "key": "RAFII_VIDEO_UPLOADS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791465345652
+    },
+    {
+      "id": "pzeu8mW7ckA7ZV5D",
+      "key": "VERCEL_SUPPORT_LARGE_FUNCTIONS",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791443002682
+    },
+    {
+      "id": "ySpKRl8aF7daiYsu",
+      "key": "RAFII_CAPTURE_SOURCE_SHA",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791164660901
+    },
+    {
+      "id": "CzLSsQgE51tPoGr9",
+      "key": "RAFII_REQUEST_CAPTURE_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791170354129
+    },
+    {
+      "id": "LXW8YbSAcvL4ivjb",
+      "key": "RAFII_CAPTURE_WORKSPACE_ID",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791164177882
+    },
+    {
+      "id": "5Gnegpoom8vlxUFV",
+      "key": "RAFII_CAPTURE_KEY_ID",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791164175980
+    },
+    {
+      "id": "X3qbZYV7kpmnzQxb",
+      "key": "RAFII_CAPTURE_SIGNING_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791164173787
+    },
+    {
+      "id": "OTCflhFWh7bluOCx",
+      "key": "RAFII_CAPTURE_ENCRYPTION_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791164169621
+    },
+    {
+      "id": "tdVObA046YCpyhYj",
+      "key": "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1792109142509
+    },
+    {
+      "id": "7fmSBmTYTxUnV2Re",
+      "key": "POSTRIFF_METRIC_READS",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1792109157381
+    },
+    {
+      "id": "tMXuPbrpeYMivwR7",
+      "key": "POSTRIFF_REPLY_SENDING_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791135925825
+    },
+    {
+      "id": "LNELM2mlAJJOvMgp",
+      "key": "POSTRIFF_HISTORY_IMPORT",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791154892034
+    },
+    {
+      "id": "mSBP8xCODlPMQZHN",
+      "key": "RAFII_TREND_ALLOWED_OPERATIONS",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076285128
+    },
+    {
+      "id": "fVnXywxqpWb1gAGS",
+      "key": "RAFII_TREND_OBJECTS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076282008
+    },
+    {
+      "id": "r8JIj36EYRjL2uJP",
+      "key": "RAFII_TREND_FORECASTS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076280411
+    },
+    {
+      "id": "WILM2bRJW062ecko",
+      "key": "RAFII_TREND_MULTIMODAL_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076278881
+    },
+    {
+      "id": "hmAajjaDqzr02Hx6",
+      "key": "RAFII_TREND_OPPORTUNITY_LAB_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076277333
+    },
+    {
+      "id": "rzIEeQZuQrqU4IkF",
+      "key": "RAFII_TREND_WHITESPACE_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076275764
+    },
+    {
+      "id": "Y4wU5xzkNgwluzQW",
+      "key": "RAFII_TREND_SATURATION_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076274017
+    },
+    {
+      "id": "hLP9nSePky1s0Ep9",
+      "key": "RAFII_TREND_GRAPH_GENOME_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076272501
+    },
+    {
+      "id": "iVtlN18ncHvyidlY",
+      "key": "RAFII_TREND_PROVIDER_OPERATIONS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076270913
+    },
+    {
+      "id": "FGeCKSvr16B91tCf",
+      "key": "RAFII_TREND_NOTIFICATIONS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076269329
+    },
+    {
+      "id": "omvibjF3gbsfQrnb",
+      "key": "RAFII_TREND_MODEL_ENRICHMENT_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076267824
+    },
+    {
+      "id": "bnYwjbT32g3Yr5wv",
+      "key": "RAFII_TREND_STAGE_CLAIMS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076266167
+    },
+    {
+      "id": "6MKmhyJ4bBBCTg7W",
+      "key": "RAFII_TREND_CALIBRATION_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076261458
+    },
+    {
+      "id": "c9jLpLgZ7Brtcvf4",
+      "key": "RAFII_TREND_ANALYTICS_RETENTION_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076259788
+    },
+    {
+      "id": "0jD7MueLBNq2aVer",
+      "key": "RAFII_CONTROL_READER_DSN",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790919605885
+    },
+    {
+      "id": "CeQ10cADm7j6HOfV",
+      "key": "RAFII_CONTROL_SESSION_DSN",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790919604387
+    },
+    {
+      "id": "90BgT6XtdfEVSxQp",
+      "key": "RAFII_CONTROL_PRODUCTION_PROJECT_REF",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790919603004
+    },
+    {
+      "id": "ZHaFdrp0wgUovTj9",
+      "key": "RAFII_CONTROL_SUPABASE_PUBLISHABLE_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790919601495
+    },
+    {
+      "id": "Z4KvUncPnfZQDVs4",
+      "key": "RAFII_CONTROL_SUPABASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790919600020
+    },
+    {
+      "id": "YDCe0Aq0sQ5u7yCr",
+      "key": "RAFII_CONTROL_ORIGINS",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791498053718
+    },
+    {
+      "id": "ESdqQlibGKd0r1nn",
+      "key": "RAFII_CONTROL_ENVIRONMENT",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790919596003
+    },
+    {
+      "id": "H4u0vX4d1s9hCcd6",
+      "key": "RAFII_CONTROL_MOUNT",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790919594474
+    },
+    {
+      "id": "c3BntqVf8m8VVtHo",
+      "key": "RAFII_CONTROL_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790919592997
+    },
+    {
+      "id": "lPDzoyceDw2uBOm4",
+      "key": "RAFII_TREND_TRUST_RECEIPTS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076258277
+    },
+    {
+      "id": "WyVxsyUC0b4TYOOh",
+      "key": "RAFII_TREND_RADAR_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076264098
+    },
+    {
+      "id": "ucG6GfRC6xUvP55b",
+      "key": "RAFII_TREND_INTELLIGENCE_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076256681
+    },
+    {
+      "id": "XCryhh4kaiPoBZV1",
+      "key": "RAFII_TREND_CURSOR_SIGNING_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790631261364
+    },
+    {
+      "id": "ezJ45pmLie1gPvOA",
+      "key": "NEXT_PUBLIC_PASSKEY_SIGN_IN",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790621438109
+    },
+    {
+      "id": "KdfErX8qHAkF9zFA",
+      "key": "RAFII_TREND_WORKSPACE_ALLOWLIST",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076286753
+    },
+    {
+      "id": "burPYEE9pmSuIHaj",
+      "key": "POSTRIFF_OAUTH_TIKTOK_CLIENT_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790579069015
+    },
+    {
+      "id": "KBHy6woUMmvrFOd0",
+      "key": "POSTRIFF_TELEGRAM_BOT_TOKEN",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790578264342
+    },
+    {
+      "id": "YALoLx7ou1mIDVsD",
+      "key": "RAFII_AI_UNLIMITED_USER_IDS",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790573664004
+    },
+    {
+      "id": "XnCmMfWb3LKtRGhf",
+      "key": "RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790567454737
+    },
+    {
+      "id": "D0A59FtkcCwUGFtK",
+      "key": "RAFII_PHONE_INBOUND_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790567451953
+    },
+    {
+      "id": "3sJGQaCDR6liFtld",
+      "key": "DIAL_WEBHOOK_SIGNING_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790550515668
+    },
+    {
+      "id": "LmBhthY4ubnYgj5F",
+      "key": "DIAL_AUDIO_SIGNING_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790549670765
+    },
+    {
+      "id": "Xr3WQN4pdmEukCNJ",
+      "key": "DIAL_PHONE_NUMBER",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790549554556
+    },
+    {
+      "id": "VQWmWGcmjDKy8ahN",
+      "key": "DIAL_VERIFICATION_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790549499668
+    },
+    {
+      "id": "UcryMLOqMcBcvKpK",
+      "key": "DIAL_API_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790549419645
+    },
+    {
+      "id": "PbyVZCGYdRposIHJ",
+      "key": "RAFII_PHONE_VERIFICATION_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790550903831
+    },
+    {
+      "id": "C8AJO1YTiDpqmMbr",
+      "key": "RAFII_PHONE_OUTBOUND_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790490243279
+    },
+    {
+      "id": "AwOjIAATna9oEhxD",
+      "key": "RAFII_PHONE_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790490239795
+    },
+    {
+      "id": "5RMAXhQxlMT92mzX",
+      "key": "TWILIO_PHONE_NUMBER",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790490003853
+    },
+    {
+      "id": "sGwjBxzLX2HwmJQq",
+      "key": "TWILIO_AUTH_TOKEN",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790489892026
+    },
+    {
+      "id": "jBE26it8le5Ae4Lf",
+      "key": "RAFII_PHONE_PROACTIVE_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790577340463
+    },
+    {
+      "id": "R1ZahSfrVnu89xI9",
+      "key": "RAFII_PHONE_SCHEDULED_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790569203587
+    },
+    {
+      "id": "FDQW02WWgU3ecgf0",
+      "key": "RAFII_PHONE_ALLOWED_COUNTRY_CODES",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790488644367
+    },
+    {
+      "id": "lGGFQ6fYb2wCpI3x",
+      "key": "RAFII_PHONE_DAILY_USD_MICRO",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790488639214
+    },
+    {
+      "id": "Q8eNo39nL1buM2SY",
+      "key": "RAFII_PHONE_USD_MICRO_PER_MINUTE",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790612127130
+    },
+    {
+      "id": "avrPnWpL7NvjfdXu",
+      "key": "RAFII_PHONE_MAX_SECONDS",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790547265175
+    },
+    {
+      "id": "1Pe8QQosKAul5ijs",
+      "key": "RAFII_PHONE_PUBLIC_BASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790488618010
+    },
+    {
+      "id": "lsKAfmqMtzMZBb53",
+      "key": "RAFII_PHONE_PROVIDER",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790550954828
+    },
+    {
+      "id": "LTvVqGTEKGffNX53",
+      "key": "TWILIO_VERIFY_SERVICE_SID",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790488608117
+    },
+    {
+      "id": "9ASENs21QUMsoyby",
+      "key": "TWILIO_ACCOUNT_SID",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790488604342
+    },
+    {
+      "id": "Si7MG7BhOLazmcVt",
+      "key": "POSTRIFF_VIDEO_MAX_BYTES",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790468924872
+    },
+    {
+      "id": "UYa7eDMTgbzalh3a",
+      "key": "RAFII_CHAT_ATTACHMENTS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790468902815
+    },
+    {
+      "id": "yl6VEE6A5yzFKrjv",
+      "key": "POSTRIFF_MODEL_PRICES",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790383596389
+    },
+    {
+      "id": "xb5ccGD42MWTngFd",
+      "key": "POSTRIFF_MODEL_IDS",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790383595150
+    },
+    {
+      "id": "MXHG5LwHtL73g1uR",
+      "key": "POSTRIFF_DISCORD_BOT_TOKEN",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1792267877511
+    },
+    {
+      "id": "nPzca1jQqyqGbAiJ",
+      "key": "POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790375799902
+    },
+    {
+      "id": "frZajrbYih3Nivzk",
+      "key": "POSTRIFF_OAUTH_DISCORD_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790376153568
+    },
+    {
+      "id": "DIr68thTqICtv6wg",
+      "key": "POSTRIFF_OAUTH_TIKTOK_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790373625150
+    },
+    {
+      "id": "3zb4fqgn3jvWSVA4",
+      "key": "POSTRIFF_OAUTH_FACEBOOK_CLIENT_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790371970986
+    },
+    {
+      "id": "dveyPavYyEWto5nj",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_CLIENT_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790371912537
+    },
+    {
+      "id": "h1gRp6g4kfAH42tM",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790371895597
+    },
+    {
+      "id": "XTwHjoJthu5V8xPH",
+      "key": "POSTRIFF_OAUTH_X_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791689386704
+    },
+    {
+      "id": "gLqjyeAAnxtU4p5r",
+      "key": "POSTRIFF_OAUTH_X_CLIENT_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791741300488
+    },
+    {
+      "id": "tsvPIHKWrA9HpnZH",
+      "key": "POSTRIFF_OAUTH_MASTODON_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790370697970
+    },
+    {
+      "id": "nCIWb619OPwa6b8y",
+      "key": "POSTRIFF_OAUTH_FACEBOOK_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790370695610
+    },
+    {
+      "id": "cN44tpc5BpungQrN",
+      "key": "POSTRIFF_TELEGRAM_WEBHOOK_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790370675491
+    },
+    {
+      "id": "YTpVSNOUghmeNT5A",
+      "key": "POSTRIFF_BLUESKY_CLIENT_JWK",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790370674127
+    },
+    {
+      "id": "TPdCquIONC8WfJOo",
+      "key": "POSTRIFF_MODEL_ID",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790366812745
+    },
+    {
+      "id": "yWnY1y5ixWFpf11B",
+      "key": "AI_GATEWAY_API_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790367651296
+    },
+    {
+      "id": "KDXaY47YEQxxkKew",
+      "key": "POSTRIFF_NOTIFICATION_SIGNING_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790359868383
+    },
+    {
+      "id": "UebVi8MRcDuD9Tps",
+      "key": "POSTRIFF_VAPID_PRIVATE_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790359866943
+    },
+    {
+      "id": "Avf2R45F4d63r2cA",
+      "key": "POSTRIFF_VAPID_SUBJECT",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359864999
+    },
+    {
+      "id": "DOmr16I5lhZltArs",
+      "key": "POSTRIFF_VAPID_PUBLIC_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359863680
+    },
+    {
+      "id": "Q17iSzs01p8bwrPP",
+      "key": "POSTRIFF_BUDGET_POLICY",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359862543
+    },
+    {
+      "id": "AdRA7NAWC2UM2gj0",
+      "key": "RAFII_GROWTH_EXPERIMENTS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359861288
+    },
+    {
+      "id": "Pq41FuyGYcuCxx3J",
+      "key": "RAFII_ENGAGEMENT_COPILOT_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359859824
+    },
+    {
+      "id": "Chxw71zf2jvZNQCF",
+      "key": "RAFII_LISTENING_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359858724
+    },
+    {
+      "id": "o55FqUkmYoees2Ku",
+      "key": "RAFII_PERFORMANCE_LEARNING_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359857570
+    },
+    {
+      "id": "vdjyA86xfOVosvfx",
+      "key": "RAFII_CREATIVE_AGENT_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359856396
+    },
+    {
+      "id": "6yejQUaqfSixqvMp",
+      "key": "RAFII_RESEARCH_BROKER_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359855246
+    },
+    {
+      "id": "wauxirZ1OW5zXmkj",
+      "key": "RAFII_WEEKLY_OPERATOR_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359854088
+    },
+    {
+      "id": "oFcBbJrqVeFfXFNB",
+      "key": "RAFII_ADAPTIVE_SKILLS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359852945
+    },
+    {
+      "id": "uXpKT6JyyjDUJtKt",
+      "key": "RAFII_WEB_PUSH_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359851438
+    },
+    {
+      "id": "bnYLuedCWWAcm0El",
+      "key": "RAFII_NOTIFICATIONS_V2_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791076283553
+    },
+    {
+      "id": "9UUnmAdobuG9ic5W",
+      "key": "RAFII_SKILL_REGISTRY_V2_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359849076
+    },
+    {
+      "id": "P8Fny0ZkAtftlMRb",
+      "key": "RAFII_PROACTIVE_V2_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359847818
+    },
+    {
+      "id": "QqGRjCN0IRINZhom",
+      "key": "RAFII_SPECIALISTS_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359846694
+    },
+    {
+      "id": "N1ME0kSk6LspvdZw",
+      "key": "RAFII_IMAGE_AGENT_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359845270
+    },
+    {
+      "id": "z3QXSQBhT5TYGOi1",
+      "key": "RAFII_VOICE_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359844139
+    },
+    {
+      "id": "TK71GHcUmbCLONBx",
+      "key": "RAFII_AGENT_V2_ENABLED",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1790359842927
+    },
+    {
+      "id": "QoAG7vmtW6eyrtql",
+      "key": "OPENAI_API_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790355497290
+    },
+    {
+      "id": "hMV6iiDawo9jXmHM",
+      "key": "POSTRIFF_OAUTH_INSTAGRAM_CLIENT_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790052307100
+    },
+    {
+      "id": "hQDTuhGbEHSwbHRY",
+      "key": "POSTRIFF_OAUTH_INSTAGRAM_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790052280930
+    },
+    {
+      "id": "pTmmPVydOL7h6oGo",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_CLIENT_ID",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790050528833
+    },
+    {
+      "id": "HnXibuz3uf27cGbA",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_CLIENT_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1790050528833
+    },
+    {
+      "id": "GEfsDgP8nJazVAm4",
+      "key": "NEXT_PUBLIC_APP_URL",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1791498050415
+    },
+    {
+      "id": "d5jh2ktUWmK5JgBo",
+      "key": "POSTRIFF_PUBLIC_BASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1791498052110
+    },
+    {
+      "id": "dkgMzxKKPV0aexiS",
+      "key": "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1789540984158
+    },
+    {
+      "id": "8TXZ6gy6crR3Owh0",
+      "key": "NEXT_PUBLIC_SUPABASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1789540970684
+    },
+    {
+      "id": "muH2vDY3GyA49En2",
+      "key": "POSTRIFF_CREDENTIAL_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1789540969380
+    },
+    {
+      "id": "vAAynW6UV7eMUQTC",
+      "key": "CRON_SECRET",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1789440759004
+    },
+    {
+      "id": "qCkLIS9O919xMoYb",
+      "key": "POSTRIFF_SUPABASE_SECRET_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1789440929472
+    },
+    {
+      "id": "lwWVSGX6ernJEx5G",
+      "key": "POSTRIFF_DATABASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "sensitive",
+      "updatedAt": 1789440755830
+    },
+    {
+      "id": "EACvver2EZFbdxlQ",
+      "key": "POSTRIFF_SUPABASE_PUBLISHABLE_KEY",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1789440754250
+    },
+    {
+      "id": "OXQPQmhzPkzdTpce",
+      "key": "POSTRIFF_SUPABASE_URL",
+      "target": [
+        "production"
+      ],
+      "type": "encrypted",
+      "updatedAt": 1789440752591
+    }
+  ]
+}

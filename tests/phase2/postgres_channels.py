@@ -216,22 +216,29 @@ clock[0] += 601
 denied(lambda: oauth.complete(wid_a, "one", "linkedin", late_state, "good-code"), 409)
 checks.append("expired transactions are refused")
 
-# 8. Disconnect requires step-up, revokes remotely, wipes ciphertext, holds approvals via invalidation.
+# 8. LinkedIn disconnect removes local authority atomically. Remote consent
+# revocation is explicitly deferred so a concurrent renewed grant is not revoked.
 auth_times["one"] = clock[0] - 3600
 denied(lambda: oauth.disconnect(wid_a, "one", done["connectionId"]), 403)
 auth_times["one"] = clock[0]
 gone = oauth.disconnect(wid_a, "one", done["connectionId"])
-assert gone["disconnected"] and gone["remoteRevoked"] and provider.revoked
+assert gone["disconnected"] is True
+assert gone["remoteRevoked"] is False and gone["remoteRevocationDeferred"] is True
+assert not provider.revoked, "Local LinkedIn disconnect must not revoke a renewed provider grant"
+assert "Remove Rafii in LinkedIn account settings" in gone["note"]
 with connection() as db:
     wiped = db.execute("SELECT access_ciphertext,revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s", (wid_a, done["connectionId"])).fetchone()
 assert wiped == ("", True)
+with connection() as db:
+    levels = db.execute("SELECT level FROM public.pr_channel_capabilities WHERE workspace_id=%s AND connection_id=%s", (wid_a, done["connectionId"])).fetchall()
+assert levels and all(row[0] == "Unsupported" for row in levels)
 denied(lambda: oauth.token_for_worker(wid_a, done["connectionId"]), 404)
 assert oauth.channels(wid_a, "one")["channels"][0]["connectionState"] == "reauthorization_required"
 assert oauth.channels(wid_a, "one")["channels"][0]["pictureDigest"] is None
 denied(lambda: oauth.picture(wid_a, "one", done["connectionId"]), 404)
 with connection() as db:
     assert db.execute("SELECT count(*) FROM public.pr_channel_pictures WHERE workspace_id=%s", (wid_a,)).fetchone()[0] == 0
-checks.append("disconnect needs step-up, revokes remotely, wipes ciphertext and the account picture, and the worker can no longer obtain a token")
+checks.append("LinkedIn disconnect needs step-up, removes local capabilities and ciphertext/picture, denies worker token access, and explicitly defers remote consent revocation")
 
 # 9. Audit trail present and content-free.
 events = service.audit_events(wid_a, "one")["events"]
@@ -271,9 +278,24 @@ view = next(c for c in oauth.channels(wid_a, 'one')['channels'] if c['id'] == ci
 assert view['scopes'] == ['openid'] and view['capabilities']['publish']['level'] == 'Unsupported'
 assert not next(c for c in service.get(wid_a, 'one')['state']['phase2']['channels'] if c['id'] == cid)['capabilityVerified']
 assert oauth.token_for_worker(wid_a, cid)['scopes'] == ['openid']
+# An unobservable grant is a temporary verification failure, not evidence of revocation.
+before_unavailable = service.get(wid_a, 'one')
 provider.inspect_scopes = lambda access, account: None
+assert oauth.verify(wid_a, 'one', cid) == {
+    'connectionId': cid, 'identityVerified': False,
+    'scopes': ['openid'], 'state': 'verification_unavailable',
+}
+assert service.get(wid_a, 'one') == before_unavailable
+denied(lambda: oauth.token_for_worker(wid_a, cid), 503)
+with connection() as db:
+    assert db.execute('SELECT scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid_a, cid)).fetchone()[0] == ['openid']
+assert oauth.channels(wid_a, 'one')['channels'][0]['capabilities']['publish']['level'] == 'Unsupported'
+# An explicitly observed empty grant still removes authority and requires reconnect.
+provider.inspect_scopes = lambda access, account: []
 assert oauth.verify(wid_a, 'one', cid)['state'] == 'scope_missing'
 assert oauth.channels(wid_a, 'one')['channels'][0]['connectionState'] == 'scope_missing'
+with connection() as db:
+    assert db.execute('SELECT scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid_a, cid)).fetchone()[0] == []
 # Simulate another connection being authorized while identity lookup is in flight.
 base_identity = provider.identity
 rotated, rotated_key = oauth.vault.encrypt('ACCESS-reauthorized')
@@ -286,7 +308,7 @@ denied(lambda: oauth.verify(wid_a, 'one', cid), 409)
 with connection() as db:
     assert db.execute('SELECT access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid_a,cid)).fetchone()[0] == rotated
 provider.identity = base_identity
-checks.append('scope re-verification persists downgraded authority, fails closed on unknown grants, and fences a reauthorization race')
+checks.append('scope re-verification preserves stored grants without extending trust when unavailable, downgrades explicit scope loss, and fences a reauthorization race')
 
 # The picture download runs after the connection is saved: an unexpected fault in it (a TypeError on the
 # 2026-09-25 production build) must not report the saved connection as failed.

@@ -40,9 +40,13 @@ from . import account_protection, agent_observability, device_trust, security_ga
 from .agent_runtime import FixtureAgentRuntime
 
 
-def postgres_factory(dsn):
+def postgres_factory(dsn, *, pooled=False, max_size=20, max_waiting=64, timeout=8, options=None, observer=None):
     if not isinstance(dsn, str) or not dsn.strip():
         raise ValueError("POSTRIFF_DATABASE_URL is required.")
+    if pooled:
+        from .postgres_pool import PooledPostgresFactory
+        return PooledPostgresFactory(dsn, max_size=max_size, max_waiting=max_waiting, timeout=timeout,
+                                     options=options, observer=observer)
     try:
         import psycopg
     except ImportError as error:
@@ -287,7 +291,12 @@ def chat_media_from_environment(values):
 def runtime_from_environment(environ=None):
     from .deployment import isolated_environment
     values = isolated_environment(os.environ if environ is None else environ)
-    database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"))
+    worker_binding = ({'environment': 'preview', 'origin': values['POSTRIFF_PUBLIC_BASE_URL'].rstrip('/')}
+                      if values.get('VERCEL_ENV') == 'preview' else None)
+    database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"),
+        pooled=values.get('POSTRIFF_DB_POOL_ENABLED') == 'true',
+        max_size=int(values.get('POSTRIFF_DB_POOL_MAX_CONNECTIONS', '20')),
+        max_waiting=int(values.get('POSTRIFF_DB_POOL_MAX_WAITING', '64')))
     project_url = values.get("POSTRIFF_SUPABASE_URL")
     publishable = values.get("POSTRIFF_SUPABASE_PUBLISHABLE_KEY")
     secret = values.get("POSTRIFF_SUPABASE_SECRET_KEY")
@@ -299,11 +308,25 @@ def runtime_from_environment(environ=None):
     from .productivity_connectors import flags_from_environment as productivity_flags, providers_from_environment as productivity_providers
     from .hosted_social import HostedSocial
     # Adapters mount only with client credentials; live execution only when a provider is
-    # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
+    # explicitly marked reviewed, or exact member Share product evidence is verified.
+    # Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
+    # P4's coordination spans tenants and process replicas of one bot. Never
+    # activate the P3 Discord sender without a durable, shared admission store.
+    discord = providers.get('discord')
+    if discord is not None:
+        if getattr(discord, 'rate_v1_enabled', False):
+            from .discord.rate_limits import SharedPostgresBudget, RateCoordinatorUnavailable
+            try:
+                discord.rate_limiter = SharedPostgresBudget(database, discord.client_id)
+            except RateCoordinatorUnavailable:
+                discord.authorization_v2_enabled = False
+        elif getattr(discord, 'authorization_v2_enabled', False):
+            # Also fence manually triggered Discord worker actions; not just cron.
+            discord.authorization_v2_enabled = False  # other providers unaffected
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values), worker_binding=worker_binding)
     verify.on_first_sighting = lambda principal, session_id, label, eligible: service._alert_new_device(principal, session_id, label, eligible=eligible)
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
@@ -313,7 +336,8 @@ def runtime_from_environment(environ=None):
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
     social = HostedSocial(service.oauth, providers, storage) if any(
-        p.production_reviewed or getattr(p, "account_scoped_direct", False) or getattr(p, 'creator_enabled', False) for p in providers.values()
+        p.production_reviewed or getattr(p, "account_scoped_direct", False) or getattr(p, 'creator_enabled', False)
+        or (getattr(p, 'id', None) == 'linkedin' and getattr(p, 'member_publishing_approved', lambda: False)()) for p in providers.values()
     ) else None
     if social is not None:
         social.youtube = service.youtube
@@ -336,7 +360,7 @@ def runtime_from_environment(environ=None):
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)
     on_verified=then_capture(on_verified,service.growth.enabled('check'))
-    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), youtube_maintenance=service.youtube)
+    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), youtube_maintenance=service.youtube, worker_binding=worker_binding)
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
@@ -599,7 +623,7 @@ class HostedApplication:
                 'event':'request.completed', 'requestId':request_id,
                 'method':method if method in ('GET','POST','PUT','PATCH','DELETE','OPTIONS','HEAD') else 'OTHER',
                 'status':status_code, 'durationMs':round((time.monotonic()-started)*1000,2),
-                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' or environ.get('PATH_INFO','').startswith('/api/cron/youtube/') else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
+                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' or environ.get('PATH_INFO','').startswith(('/api/cron/youtube/', '/api/cron/linkedin/')) else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
             **environ.get('postriff.failure', {})
             }))
             # Founder reliability metrics (CONTRACTS §8.D): one in-memory count per minute x route pattern x status class,
@@ -650,9 +674,15 @@ class HostedApplication:
                 self._runtime().repository.api_tokens.authorize(self._token(environ), method, path.strip("/").split("/"), client_label(environ))
             if path == "/api/health" and method == "GET":
                 configured = self.service is not None or all(os.environ.get(key) for key in ("POSTRIFF_DATABASE_URL", "POSTRIFF_SUPABASE_URL", "POSTRIFF_SUPABASE_PUBLISHABLE_KEY", "POSTRIFF_SUPABASE_SECRET_KEY"))
-                revision = os.environ.get('VERCEL_GIT_COMMIT_SHA', '')
-                revision = revision if re.fullmatch(r'[0-9a-f]{40}', revision) else None
-                return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False, "sourceRevision": revision})
+                from .release_provenance import release_source_proof
+                source_proof = release_source_proof(os.environ)
+                revision = source_proof['sourceRevision']
+                from .deployment import production_binding_proof
+                try:
+                    bindings = production_binding_proof(os.environ)
+                except (ValueError, TypeError):
+                    bindings = {'databaseBindingVerified': False}
+                return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False, "sourceRevision": revision, "sourceProvenance": source_proof, "productionBindings": bindings})
             if path == "/api/catalog" and method == "GET":
                 provider = (self.public_auth or {}).get("provider", "supabase")
                 return self._json(start_response, 200, {"templates": catalog(), "routes": routes(), "profileMetadata": metadata(), "phase2": True, "authMode": "dev" if provider == "dev" else "supabase", "execution": (self.public_auth or {}).get("execution", "hosted")})
@@ -773,6 +803,13 @@ class HostedApplication:
                     raise AlphaError("Cron authorization failed.", 401)
                 from .agent_runtime_v2.task_engine import cron as task_cron
                 return self._json(start_response, 200, task_cron.tick(self._runtime()))
+            if path == '/api/cron/linkedin/worker' and method == 'GET':
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get('CRON_SECRET', '')
+                if len(expected) < 16 or not hmac.compare_digest(environ.get('HTTP_AUTHORIZATION', ''), 'Bearer ' + expected):
+                    raise AlphaError('Cron authorization failed.', 401)
+                self._runtime()
+                from .linkedin_fleet import tick as linkedin_tick
+                return self._json(start_response, 200, linkedin_tick(self.worker))
             if path == "/api/cron/worker" and method == "GET":
                 service = self._runtime()
                 expected = self.cron_secret or ""
@@ -960,6 +997,8 @@ class HostedApplication:
                 return self._json(start_response, 200, service.security_events(token))
             if path == "/api/me/invitations" and method == "GET":
                 return self._json(start_response, 200, service.my_invitations(token))
+            if len(oauth_parts) == 4 and oauth_parts[:2] == ['api', 'oauth'] and oauth_parts[3] == 'context' and method == 'POST':
+                return self._json(start_response, 200, service.oauth.completion_context(token, oauth_parts[2], self._body(environ).get('state')))
             if path == "/api/workspaces" and method == "GET":
                 return self._json(start_response, 200, service.workspaces(token))
             if path == "/api/invitations/accept" and method == "POST":
@@ -1017,6 +1056,14 @@ class HostedApplication:
                 return phone_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] in coworker_http.RESOURCES:
                 return coworker_http.handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) == 6 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'jobs' and parts[5] == 'execute' and method == 'POST':
+                body = self._body(environ)
+                if set(body) != {'approvalDigest'}:
+                    raise AlphaError('Send only the exact stored approval for this post.')
+                if self.worker is None:
+                    raise AlphaError('The publishing worker is unavailable. Reload the post status before continuing.', 503)
+                return self._json(start_response, 202, self.worker.execute_job(service.repository, parts[2], token,
+                                                                             parts[4], body.get('approvalDigest')))
             if len(parts) >= 4 and parts[:2] == ['api','workspaces'] and parts[3]=='growth':
                 return growth_http.handle(self,environ,start_response,service,token,method,parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":
@@ -1080,6 +1127,21 @@ class HostedApplication:
                 from . import connection_health
                 if connection_health.deployment_enabled(connection_health.environment(service)):
                     return self._json(start_response, 200, connection_health.ConnectionHealth(service).read(parts[2], token))
+            if len(parts) == 7 and parts[:2] == ['api', 'workspaces'] and parts[3:5] == ['discord', 'identities']:
+                discord = service.oauth.discord_connections
+                if parts[6] == 'guilds' and method == 'GET':
+                    return self._json(start_response, 200, discord.guilds(parts[2], token, parts[5]))
+                if parts[6] == 'disconnect' and method == 'POST':
+                    return self._json(start_response, 200, discord.disconnect_identity(parts[2], token, parts[5]))
+            if (len(parts) in (6, 7) and parts[:2] == ['api', 'workspaces']
+                    and parts[3] == 'channels' and parts[5] == 'discord-engagement'):
+                engagement = service.discord_engagement
+                if len(parts) == 6 and method == 'GET':
+                    return self._json(start_response, 200, engagement.status(parts[2], token, parts[4]))
+                operations = {'consent': engagement.consent, 'read': engagement.read,
+                              'preview': engagement.preview, 'approve': engagement.approve, 'cancel': engagement.cancel}
+                if len(parts) == 7 and method == 'POST' and parts[6] in operations:
+                    return self._json(start_response, 200, operations[parts[6]](parts[2], token, parts[4], self._body(environ)))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
                 if len(parts) == 4 and method == "GET":
@@ -1093,8 +1155,20 @@ class HostedApplication:
                     body = self._body(environ)
                     extra = {"iss": body["iss"]} if body.get("iss") is not None else {}
                     return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
+                if len(parts) == 6 and parts[5] == 'native-read' and method == 'POST':
+                    body = self._body(environ)
+                    return self._json(start_response, 200, oauth.native_social.read(parts[2], token, parts[4], body.get('feature'), body.get('target'), body.get('options')))
+                if len(parts) == 6 and parts[5] == 'native-action' and method == 'POST':
+                    body = self._body(environ)
+                    return self._json(start_response, 201, oauth.native_social.preview(parts[2], token, parts[4], body.get('action'), body.get('target'), body.get('payload')))
+                if len(parts) == 8 and parts[5] == 'native-action' and parts[7] == 'approve' and method == 'POST':
+                    body = self._body(environ)
+                    return self._json(start_response, 200, oauth.native_social.approve(parts[2], token, parts[6], body.get('digest'), body.get('confirmed'), connection_id=parts[4]))
                 if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
-                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4]))
+                    board_id = self._query_str(environ, 'boardId')
+                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4], board_id=board_id))
+                if len(parts) == 7 and parts[5] == 'destinations' and method == 'DELETE':
+                    return self._json(start_response, 200, oauth.remove_discord_destination(parts[2], token, parts[4], parts[6]))
                 if len(parts) == 6 and parts[5] == "creator-info" and method == "GET":
                     return self._json(start_response, 200, oauth.creator_info(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "destination" and method == "POST":
@@ -1112,6 +1186,9 @@ class HostedApplication:
                     if method == "GET":
                         return self._json(start_response, 200, history.status(parts[2], token, parts[4]))
                     return self._json(start_response, 202, history.request(parts[2], token, parts[4], self._body(environ)))
+                if len(parts) == 6 and parts[5] == "refresh-authorization" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, oauth.refresh_pinterest_authorization(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))
@@ -1291,7 +1368,7 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith('/api/cron/youtube/'):
+            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith(('/api/cron/youtube/', '/api/cron/linkedin/')):
                 # Source locations only: never format exception text, source lines, locals or payloads.
                 frame = error.__traceback__
                 while frame is not None:

@@ -93,6 +93,15 @@ def token(user, session, aal="aal1", **claims):
     return f"{b64({'alg': 'none', 'typ': 'JWT'})}.{b64(payload)}.sig-{uuid.uuid4().hex}"
 
 
+def fresh_signin_token(user, session, aal="aal1"):
+    """Explicit successful sign-in proof for protected-operation fixtures only.
+
+    Keep token() AMR-free by default: unknown-method, refreshed-token and stale
+    proof cases must continue to exercise their real restrictive boundaries.
+    """
+    return token(user, session, aal=aal, amr=[{"method": "password", "timestamp": int(time.time())}])
+
+
 def claims_of(access_token):
     encoded = access_token.split(".")[1]
     return json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
@@ -392,7 +401,7 @@ def revoke_own_other():
     observe_mode()
     user, workspace = person()
     current, other = signed_in(user), signed_in(user)
-    status, body = call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})
+    status, body = call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(user, current), {})
     assert status == 200 and body["revoked"] is True and body["current"] is False, body
     assert call("GET", f"/api/workspaces/{workspace}", token(user, other))[0] == 401
     assert call("GET", f"/api/workspaces/{workspace}", token(user, current))[0] == 200
@@ -404,8 +413,8 @@ def revoke_foreign():
     alice, _ = person()
     bob, bob_workspace = person()
     mine, bobs = signed_in(alice), signed_in(bob)
-    foreign = call("DELETE", f"/api/auth/sessions/{bobs}", token(alice, mine), {})
-    unknown = call("DELETE", f"/api/auth/sessions/{new_session()}", token(alice, mine), {})
+    foreign = call("DELETE", f"/api/auth/sessions/{bobs}", fresh_signin_token(alice, mine), {})
+    unknown = call("DELETE", f"/api/auth/sessions/{new_session()}", fresh_signin_token(alice, mine), {})
     strip = lambda result: (result[0], {k: v for k, v in result[1].items() if k != "requestId"})
     assert strip(foreign) == strip(unknown) and foreign[0] == 404, (foreign, unknown)
     assert sql("SELECT count(*) FROM public.pr_session_revocations WHERE session_id=%s", bobs)[0][0] == 0
@@ -417,8 +426,8 @@ def revoke_twice():
     observe_mode()
     user, _ = person()
     current, other = signed_in(user), signed_in(user)
-    first = call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})
-    second = call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})
+    first = call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(user, current), {})
+    second = call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(user, current), {})
     assert first[0] == second[0] == 200, (first, second)
     audit_rows = sql("SELECT count(*) FROM public.pr_audit_events WHERE actor=%s AND kind='session.revoked' AND subject=%s", user, other)[0][0]
     assert audit_rows == 1, f"{audit_rows} session.revoked rows for one session"
@@ -431,7 +440,7 @@ def revoked_hosted():
     current, other = signed_in(user), signed_in(user)
     stolen = token(user, other)
     assert call("GET", f"/api/workspaces/{workspace}", stolen)[0] == 200
-    call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})
+    call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(user, current), {})
     for path in (f"/api/workspaces/{workspace}", "/api/me", "/api/auth/sessions", "/api/me/security-events"):
         status, body = call("GET", path, stolen)
         assert status == 401 and set(body) <= {"error", "code", "requestId"}, (path, status, body)
@@ -444,7 +453,7 @@ def revoke_current():
     observe_mode()
     user, workspace = person()
     current = signed_in(user)
-    status, body = call("DELETE", f"/api/auth/sessions/{current}", token(user, current), {})
+    status, body = call("DELETE", f"/api/auth/sessions/{current}", fresh_signin_token(user, current), {})
     assert status == 200 and body["current"] is True, body
     assert call("GET", f"/api/workspaces/{workspace}", token(user, current))[0] == 401
 
@@ -454,7 +463,7 @@ def revoked_direct():
     observe_mode()
     user, workspace = person()
     current, other = signed_in(user), signed_in(user)
-    call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})
+    call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(user, current), {})
 
     def reads(session):
         with connection() as db:
@@ -473,7 +482,7 @@ def revoked_storage():
     user, workspace = person()
     current, other = signed_in(user), signed_in(user)
     sql("INSERT INTO storage.objects(bucket_id,name) VALUES('postriff-private',%s)", f"{workspace}/synthetic/{uuid.uuid4().hex}.bin")
-    call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})
+    call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(user, current), {})
 
     def objects(session):
         with connection() as db:
@@ -492,7 +501,7 @@ def revoke_others():
     user, workspace = person()
     current = signed_in(user)
     others = [signed_in(user) for _ in range(3)]
-    status, body = call("POST", "/api/auth/sessions/revoke-others", token(user, current), {})
+    status, body = call("POST", "/api/auth/sessions/revoke-others", fresh_signin_token(user, current), {})
     assert status == 200 and body["current"] == current, body
     # The bootstrap session person() used is another session of this person and is revoked too.
     expected = sql("SELECT count(*) FROM public.pr_sessions WHERE user_id=%s AND session_id<>%s", user, current)[0][0]
@@ -514,7 +523,7 @@ def revoke_race_orders():
     assert written > revision, (revision, written)
     status, body = call("PATCH", "/api/me", token(user, other), {"displayName": "Before revoke"})
     assert status == 200, ("profile before revoke", status, body)
-    assert call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})[0] == 200
+    assert call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(user, current), {})[0] == 200
     # Order 2: revoked first, then the same still-valid JWT tries both writes.
     status, body = call("POST", f"/api/workspaces/{workspace}/actions", token(user, other), {"expectedRevision": written, "action": "mode", "payload": {"mode": "studio"}})
     assert status == 401, ("write after revoke", status, body)
@@ -531,7 +540,7 @@ def revoke_across_workspaces():
     sql("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status) VALUES(%s,%s,'editor','active')", shared, user)
     current, other = signed_in(user), signed_in(user)
     assert [call("GET", f"/api/workspaces/{w}", token(user, other))[0] for w in (home, shared)] == [200, 200]
-    call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})
+    call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(user, current), {})
     assert [call("GET", f"/api/workspaces/{w}", token(user, other))[0] for w in (home, shared)] == [401, 401]
 
 
@@ -541,7 +550,7 @@ for row, what in (("RAP-062", "account protection flag off"), ("RAP-142", "the e
         observe_mode()
         user, workspace = person()
         current, other = signed_in(user), signed_in(user)
-        call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})
+        call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(user, current), {})
         observe_mode(on=False)
         assert call("GET", f"/api/workspaces/{workspace}", token(user, other))[0] == 401
         assert call("GET", "/api/me", token(user, other))[0] == 401
@@ -833,7 +842,7 @@ def deletion_purge():
     deleting = HostedWorkspaceService(connection, verify, identity=Identity(), public_base_url="https://app.rafii.example", mailer=FakeMailer())
     user, workspace = person()
     session = signed_in(user)
-    deleting.delete_account(workspace, token(user, session, iat=int(time.time())), "DELETE")
+    deleting.delete_account(workspace, fresh_signin_token(user, session), "DELETE")
     # Policy (owner decision A+B, 2026-10-15): the inventory goes; the history stays with no identifying field left.
     assert sql("SELECT count(*) FROM public.pr_sessions WHERE user_id=%s", user)[0][0] == 0
     history = sql("SELECT subject, meta FROM public.pr_audit_events WHERE actor=%s AND kind LIKE 'session.%%'", user)
@@ -868,7 +877,7 @@ def server_side_user():
     alice, _ = person()
     bob, _ = person()
     current, other = signed_in(alice), signed_in(alice)
-    call("DELETE", f"/api/auth/sessions/{other}", token(alice, current), {"userId": bob})
+    call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(alice, current), {"userId": bob})
     assert sql("SELECT user_id::text FROM public.pr_session_revocations WHERE session_id=%s", other) == [(alice,)]
     assert sql("SELECT count(*) FROM public.pr_sessions WHERE user_id=%s AND session_id IN (%s,%s)", bob, current, other)[0][0] == 0
 
@@ -936,7 +945,7 @@ def rollback():
     observe_mode()
     user, workspace = person()
     current, other = signed_in(user), signed_in(user)
-    call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})
+    call("DELETE", f"/api/auth/sessions/{other}", fresh_signin_token(user, current), {})
     before = observed(user)
     observe_mode(on=False)
     assert call("GET", f"/api/workspaces/{workspace}", token(user, other))[0] == 401
@@ -1459,7 +1468,7 @@ def inactive_browser():
 
 def api_token(user, workspace):
     p1(mode="observe", device=False)
-    status, body = call("POST", f"/api/workspaces/{workspace}/tokens", token(user, signed_in(user), iat=int(time.time())), {"name": "acceptance", "scopes": ["read"], "expiresDays": 30})
+    status, body = call("POST", f"/api/workspaces/{workspace}/tokens", fresh_signin_token(user, signed_in(user)), {"name": "acceptance", "scopes": ["read"], "expiresDays": 30})
     assert status in (200, 201), (status, body)
     return body.get("secret")
 
@@ -1859,7 +1868,7 @@ def device_list_cross_user():
         status, body = call("GET", "/api/auth/devices", token(a, session), headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}", **extra}, query=query)
         assert status == 200 and {d["deviceId"] for d in body["devices"]} == mine, (query, body)
     other = sorted(theirs)[0]
-    assert call("POST", f"/api/auth/devices/{other}/revoke", token(a, session), {})[0] == 404
+    assert call("POST", f"/api/auth/devices/{other}/revoke", fresh_signin_token(a, session), {})[0] == 404
     assert {row[1] for row in devices(b)} == {"observed"}
     p1(device=False)
     assert call("GET", "/api/auth/devices", token(a, session))[0] == 404  # off: the route does not exist
@@ -1878,10 +1887,10 @@ def device_session_counts():
     assert device["current"] and device["sessions"] == 2 and device["activeSessions"] == 2, device
     _, _, phone_cookie, phone = browse(user)
     phone_id = next(d["deviceId"] for d in device_list(user, first, cookie)[1]["devices"] if not d["current"])
-    assert call("POST", f"/api/auth/devices/{device['deviceId']}/revoke", token(user, first), {}, headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})[1]["code"] == "current_device_revocation_requires_logout"
-    status, body = call("POST", f"/api/auth/devices/{phone_id}/revoke", token(user, first), {}, headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})
+    assert call("POST", f"/api/auth/devices/{device['deviceId']}/revoke", fresh_signin_token(user, first), {}, headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})[1]["code"] == "current_device_revocation_requires_logout"
+    status, body = call("POST", f"/api/auth/devices/{phone_id}/revoke", fresh_signin_token(user, first), {}, headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})
     assert status == 200 and body["sessionsRevoked"] == 1, body
-    assert call("POST", f"/api/auth/devices/{phone_id}/revoke", token(user, first), {}, headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})[1].get("replayed") is True
+    assert call("POST", f"/api/auth/devices/{phone_id}/revoke", fresh_signin_token(user, first), {}, headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})[1].get("replayed") is True
     assert call("GET", "/api/me", token(user, phone), headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={phone_cookie}"})[0] == 401
     assert device_list(user, first, cookie)[1]["summary"] == {"recognizedBrowsers": 1, "activeSessions": 2}
     assert len(ledger(user, "device.revoked")) == 1

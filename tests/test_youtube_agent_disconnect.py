@@ -232,10 +232,11 @@ class ConnectionAuthorityTests(unittest.TestCase):
         value = state()
         _, policy = draft_and_policy(value)
         oauth, database = oauth_fixture(value)
-        database.credentials['linkedin'] = {'provider': 'linkedin', 'access': 'synthetic-linkedin', 'revoked': False}
+        # LinkedIn and Discord now disconnect atomically in their own transaction; Threads still takes the generic path.
+        database.credentials['threads'] = {'provider': 'threads', 'access': 'synthetic-threads', 'revoked': False}
         with disconnect_dependencies():
-            oauth.disconnect('workspace', 'session', 'linkedin')
-        database.mutate.assert_called_once_with('workspace', 'session', 1, 'p2_channel_disconnect', {'channelId': 'linkedin'})
+            oauth.disconnect('workspace', 'session', 'threads')
+        database.mutate.assert_called_once_with('workspace', 'session', 1, 'p2_channel_disconnect', {'channelId': 'threads'})
         self.assertEqual(root(database.state)['policies'][0]['status'], 'active')
         self.assertFalse(database.credentials[CONNECTION]['revoked'])
 

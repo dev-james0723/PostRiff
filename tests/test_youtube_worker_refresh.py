@@ -109,6 +109,7 @@ def worker_for(channels=2):
 
     engine.current = current
     worker = PostgresWorker.__new__(PostgresWorker)
+    worker.worker_binding = None  # Same default as the real constructor; no cross-deployment adoption.
     worker.connection_factory, worker.clock, worker.worker_id = db.connection_factory, engine.clock, 'synthetic-worker'
     worker.commands, worker.complete = SimpleNamespace(engine=engine), Mock()
 

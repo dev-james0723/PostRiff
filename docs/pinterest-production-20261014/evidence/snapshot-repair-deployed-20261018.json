@@ -1,0 +1,131 @@
+{
+  "recordedAt": "2026-10-18T14:52:35.562651+00:00",
+  "status": "PASS_REPAIR_DEPLOYMENT_ONLY",
+  "canonicalSupabase": "buoyhkbodnhzngaotoel",
+  "productSource": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
+  "deploymentReceiptCommit": "0281699f7663275118fef4ff5ca6a2b391ee8647",
+  "deploymentId": "dpl_5Z6zzXpASpk5iB5roLGkSy2oTXZg",
+  "previousProductionDeployment": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ",
+  "build": {
+    "startedAt": "2026-10-18T14:25:05.993807+00:00",
+    "finishedAt": "2026-10-18T14:27:39.112288+00:00",
+    "cliExitCode": 0,
+    "buildSubmissions": 1,
+    "qualifiedCloudRun": "08m85w3gj9"
+  },
+  "promotion": {
+    "startedAt": "2026-10-18T14:33:09.035796+00:00",
+    "finishedAt": "2026-10-18T14:33:15.434534+00:00",
+    "cliExitCode": 0,
+    "promotions": 1,
+    "rebuilds": 0
+  },
+  "sourceQualification": {
+    "checkedAt": "2026-10-18T14:29:25.743162+00:00",
+    "deploymentId": "dpl_5Z6zzXpASpk5iB5roLGkSy2oTXZg",
+    "url": "https://postriff-phase2-private-qqit43u0j-jamesau0723-6572s-projects.vercel.app",
+    "productSource": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
+    "receiptSource": "0281699f7663275118fef4ff5ca6a2b391ee8647",
+    "method": "Complete Vercel v6 file tree; exact src wrapper; raw content SHA1",
+    "fileCount": 2217,
+    "matched": 2217,
+    "mismatches": [],
+    "forbiddenFiles": [],
+    "servicesMatchPreviousProduction": true,
+    "cronsMatchPreviousProduction": true,
+    "nodeVersion": "24.x",
+    "status": "PASS"
+  },
+  "completeSourceArtifact": "snapshot-repair-deployed-source-sha1-20261018.json",
+  "completeSourceArtifactSha256": "67483e3c09b18adc89d9cb78c1429dcdee8317f9031ad75338e8c708e2863196",
+  "candidateHealth": {
+    "checkedAt": "2026-10-18T14:32:45.817674+00:00",
+    "method": "Actual native Chrome candidate health JSON visually inspected and then independently verified with exact observed text; existing Vercel auth session; no bypass link/protection setting created",
+    "deploymentId": "dpl_5Z6zzXpASpk5iB5roLGkSy2oTXZg",
+    "url": "https://postriff-phase2-private-qqit43u0j-jamesau0723-6572s-projects.vercel.app/api/health",
+    "body": {
+      "status": "ok",
+      "execution": "phase2-hosted-candidate",
+      "configured": true,
+      "phase0": "incomplete",
+      "customerValidated": false,
+      "sourceRevision": null
+    },
+    "networkStatusCode": "NOT_CAPTURED_FROM_NATIVE_UI",
+    "nativeVerification": {
+      "completed": true,
+      "verified": true,
+      "backend": "native",
+      "tabId": "54C2353E9B0EC5796F3DEB71530152A3"
+    },
+    "initialVerificationFailure": "Exact JSON strings omitted actual spaces; no backend failure inferred. Correct observed-whitespace verification passed."
+  },
+  "postpromotion": {
+    "checkedAt": "2026-10-18T14:34:06.995517+00:00",
+    "status": "PASS",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "canonicalSupabase": "buoyhkbodnhzngaotoel",
+    "aliasDeploymentId": "dpl_5Z6zzXpASpk5iB5roLGkSy2oTXZg",
+    "productionTargetId": "dpl_5Z6zzXpASpk5iB5roLGkSy2oTXZg",
+    "aliasReadyState": "READY",
+    "targetReadyState": "READY",
+    "envMetadataRecords": 173,
+    "envDiff": [],
+    "comparedFields": [
+      "id",
+      "key",
+      "target",
+      "type",
+      "updatedAt"
+    ],
+    "publicHealth": {
+      "statusCode": 200,
+      "url": "https://rafii.io/api/health",
+      "contentType": "application/json; charset=utf-8",
+      "body": {
+        "status": "ok",
+        "execution": "phase2-hosted-candidate",
+        "configured": true,
+        "phase0": "incomplete",
+        "customerValidated": false,
+        "sourceRevision": null
+      }
+    },
+    "productSource": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
+    "receiptSource": "0281699f7663275118fef4ff5ca6a2b391ee8647",
+    "customerAcceptance": "NOT_RUN; health and alias do not prove customer features"
+  },
+  "secretHandling": {
+    "humanProtectedCopyConfirmed": true,
+    "existingAppId": "1615884",
+    "childEnvironmentOnly": true,
+    "secretInArgv": false,
+    "secretValueLoggedOrPersisted": false,
+    "modelSawSecretValue": false,
+    "ownedClipboardEmptyVerified": true
+  },
+  "workspaceReadback": {
+    "at": "2026-10-18T14:36:06.681Z",
+    "method": "Actual native Library load correlated with Vercel runtime log",
+    "path": "/api/workspaces/568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+    "httpStatus": 200,
+    "requestId": "rswj2-1792334166381-9bfcf56cd87a",
+    "canonicalRowBeforeUpload": {
+      "revision": 104,
+      "trial": null,
+      "channels": 3,
+      "assets": 0
+    }
+  },
+  "remainingBudgets": {
+    "cloudRuns": 0,
+    "builds": 0,
+    "promotions": 0,
+    "approvedImageFiles": 0,
+    "pinCreatesApproved": 0
+  },
+  "publicCustomerAcceptance": "NOT_RUN; NOT PRODUCTION-READY",
+  "policyExpiry": "2026-10-18T18:00:00Z unchanged",
+  "noNewSqlResourcesPublicFlagsOrStandardSubmission": true,
+  "rollback": "Existing previous deployment Eobk after shared compatibility checks; no rebuild. It retains the known legacy snapshot500. Preserve journal/quota and pause/cancel only this policy jobs if necessary."
+}

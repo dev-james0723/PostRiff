@@ -1,0 +1,82 @@
+{
+  "recordedAt": "2026-10-18T05:27Z",
+  "status": "BLOCKED_HUMAN_PROTECTED_COPY_REQUIRED",
+  "productSource": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
+  "cloudRun": "08m85w3gj9",
+  "cloudStatus": "PASS",
+  "canonicalSupabase": "buoyhkbodnhzngaotoel",
+  "productionDeployment": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ",
+  "preflight": {
+    "at": "2026-10-18T05:58:41.023343+00:00",
+    "status": "PASS",
+    "productionAliasAndTargetAgree": true,
+    "envMetadataRecords": 173,
+    "envDiff": [],
+    "fields": [
+      "id",
+      "key",
+      "target",
+      "type",
+      "updatedAt"
+    ],
+    "secretDecryption": false,
+    "recheckBeforeBuildRequired": true
+  },
+  "bucket": {
+    "id": "postriff-video",
+    "private": true,
+    "limit": 50000000,
+    "mime": [
+      "video/mp4",
+      "video/quicktime"
+    ],
+    "newBucket": false
+  },
+  "buildSubmissions": 0,
+  "promotions": 0,
+  "deploymentStateFileExists": false,
+  "buildBudgetRemaining": 1,
+  "promotionBudgetRemaining": 1,
+  "secretTransfer": {
+    "status": "BLOCKED",
+    "browserToolError": "SECURE_INPUT_BLOCKED: Secure browser fields cannot be controlled remotely.",
+    "attempts": "Exactlabels missing/ambiguous; one coordinateclick yieldedemptyclipboard, nodeployment; fresh visuallymatched Copybutton rejected by browser security.",
+    "secretNeverRevealed": true,
+    "secretValuesReadOrRetained": false,
+    "clipboardObservedEmpty": true,
+    "clipboardMetadataCheckOnly": true,
+    "next": "Human clicks existing masked App secret key Copyicon at developers.pinterest.com/apps/1615884; never paste into chat. Same approved source/config/policy; no fresh release approval required.",
+    "bypass": false
+  },
+  "recording": {
+    "status": "BLOCKED_NATIVE_CONTROL_TIMEOUT",
+    "rootGetAppWallSeconds": 4527.4145,
+    "agentGetAppWallSeconds": 6120.2,
+    "startRecordingActions": 0,
+    "newFootage": false,
+    "OBSState": "UNKNOWN; existing Untitled/MissingFiles untouched",
+    "next": "No further unbounded CUA retry or fabricated video. Dedicated agent stopped its attempt."
+  },
+  "policyExpiry": "2026-10-18T18:00:00Z unchanged",
+  "pinCreates": 0,
+  "publicEnablement": 0,
+  "standardSubmissions": 0,
+  "continuedAt": "2026-10-18T06:02:58.740676+00:00",
+  "latestStandardCheck": {
+    "at": "2026-10-18T05:59Z",
+    "method": "Native existing My apps tab; exact visible text verification",
+    "visible": [
+      "Rafii",
+      "Trial access active",
+      "Upgrade"
+    ],
+    "approved": false
+  },
+  "newDeploymentOrPromotionAttempt": false,
+  "releaseControls": {
+    "status": "CANDIDATE_AST_PASS_ONLY",
+    "receipt": "snapshot-repair-continuation-20261018.json",
+    "manualCopyProvenanceRequiredBeforeClipboardRead": true,
+    "qualifiedOrPromoted": false
+  }
+}

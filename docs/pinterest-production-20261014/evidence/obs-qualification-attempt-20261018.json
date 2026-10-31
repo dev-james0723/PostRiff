@@ -1,0 +1,40 @@
+{
+  "recorded_at": "2026-10-18T05:26:40.583070+00:00",
+  "status": "BLOCKED_NATIVE_CONTROL_TIMEOUT_NO_RECORDING_START_ISSUED",
+  "last_actual_action": {
+    "tool": "cua_repl.js",
+    "code": "var obs = await cua.getApp('OBS');",
+    "requested_timeout_ms": 15000,
+    "actual_tool_result": "aborted_by_user after6120.2seconds",
+    "interpretation": "Parent interrupted the hung control attempt; no human mission cancellation is established. No app state was returned."
+  },
+  "agent_actions": {
+    "start_recording": 0,
+    "scene_or_profile_edits": 0,
+    "source_creation": 0,
+    "owned_chrome_window_creation": 0,
+    "captures": 0,
+    "output_file_returned": null,
+    "recording_pid_returned": null
+  },
+  "root_observation_only": {
+    "at": "2026-10-18T05:20:00Z",
+    "source": "Parent Kynlo list_windows observation, not independently repeated",
+    "OBS_pid": 59976,
+    "main_window_id": "5313",
+    "main_window_title": "OBS32.0.3 - Profile: Untitled - Scenes: Untitled",
+    "dialog_window_id": "5316",
+    "dialog_title": "Missing Files",
+    "owned_chrome_window_visible": false,
+    "note": "Parent independently reported its own CUA OBS getApp timeout after4527seconds."
+  },
+  "safe_state": {
+    "OBS_launch": "PARTIALLY OBSERVED by parent window inventory",
+    "OBS_recording_active": "UNKNOWN; no recording-start action was ever issued by this agent",
+    "clean_stop_confirmed": false,
+    "permission_prompt": "NOT OBSERVED; no permission diagnosis inferred",
+    "missing_files_dialog": "Left untouched; existing sources/files were not repaired, dismissed or deleted"
+  },
+  "next": "No further UI, app, screen, compile or capture calls. Parent may reconcile the existing OBS state through its scoped read-only route; never stop an unowned recording or modify the Untitled scene/MissingFiles dialog blindly.",
+  "new_footage": "NONE. Earlier4fps preparation clip is unchanged and remains unsuitable for StandardAccess submission."
+}

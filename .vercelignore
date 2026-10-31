@@ -72,3 +72,19 @@ requirements-dev.txt
 /api/control.py
 /requirements-control.txt
 /vercel.control.json
+
+# Exclude private-tooling symlink entries as well as directories.
+/.claude
+/.agents
+/.codex
+/.token-pilot
+
+# Local source-validation logs are not deployable inputs.
+/.source-provenance-local/
+
+# Manual CI recipe and its hash inventory are not production runtime inputs.
+/.depot/workflows/linkedin-qualification-once.yml
+/.depot/linkedin-qualification-inputs.json
+
+# Include the generated, credential-free clean-commit source receipt.
+!src/postriff_phase2/release-source.json

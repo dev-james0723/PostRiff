@@ -1,0 +1,32 @@
+{
+  "recordedAt": "2026-10-18T15:59:06.975577+00:00",
+  "sourceRevision": "e40f3869df6143c30c7b53f774598e25b9809c12",
+  "state": "LOCAL_CANDIDATE_NOT_DEPLOYED",
+  "defect": "JWT iat from a routine token refresh could satisfy the existing 600-second sensitive-action freshness gate without a new sign-in.",
+  "fix": "Use signed AMR sign-in/MFA method time; reject missing, malformed, nonfinite and future times. Preserve existing identity validation, MFA and 600-second gate.",
+  "scope": [
+    "src/postriff_phase2/hosted_identity.py",
+    "tests/test_postriff_phase2_hosted.py",
+    "tests/test_verified_session_freshness.py",
+    "scripts/cloud-pinterest-release-delta-validation.sh",
+    "web/src/config/channels.ts"
+  ],
+  "validation": {
+    "baselineSyntheticBypassControl": "FAIL (AlphaError not raised), 1 test 0.003s; intentionally reproduced defect",
+    "candidateSameControl": "PASS, 1 test 0.004s",
+    "recentSixAuthenticationMethodsControl": "PASS, 1 test 0.004s with six subcases",
+    "malformedOrFutureMethodTimeControl": "PASS, 1 test 0.004s with malformed/bool/nonfinite/oversized/future subcases",
+    "sourceAstAndDiff": "PASS",
+    "cloudScriptBashSyntax": "PASS",
+    "remainingFourNewCases": "PASS in actual cloud87-test first group",
+    "updatedExistingHostedExpectation": "PASS in actual cloud87-test first group",
+    "newCandidateCloudSuite": "PASS_COMBINED_SOURCE_SPECIFIC: retained299Python+6PG plus kg26m0ks8s repairedRAPv2/frontend; first failure preserved.",
+    "newCandidateDeployment": "NOT RUN: conditional release stopped"
+  },
+  "evidenceProvenance": "Independent worker observed red/green controls; source and exact changed files reviewed by root. No live authentication bypass attempt.",
+  "limitation": "Independent security defect; does not diagnose or explain the live Rafii403. Prior CI32/212 applies to its original source, not this candidate.",
+  "publicCopy": "Public connections closed during private Trial; eligible businesses recommended; personal data may require Pinterest approval; Trial Pins creator-only.",
+  "externalEffects": "None. Local source commit only; no push, cloud run, deployment, SQL, flags or publication.",
+  "cloudReceipt": "amr-hardening-cloud-failed-20261018.json",
+  "recoveryReceipt": "amr-hardening-cloud-recovery-20261018.json"
+}

@@ -1,0 +1,25 @@
+{
+  "recordedAt": "2026-10-18T16:47:11.862301+00:00",
+  "superseded": {
+    "timing": {
+      "mode": "rafii_server_schedule",
+      "localTime": "2026-10-18T12:45:00-04:00",
+      "timezone": "America/Indiana/Indianapolis",
+      "publishAt": "2026-10-18T16:45:00Z",
+      "condition": "NEW UNAPPROVED proposal after12:00EDT elapsed.12:45EDT permits the separately approved CI/deployment and human fresh sign-in, with proposed13:45EDT one-hour Analytics read before14:00EDT expiry. No job exists. If missed, stop and obtain a new exact time approval; never catch up or roll forward."
+    },
+    "hash": "6501be228954df315025272c26edd31bc83d42b27112a93ac6cf620e0fff98ce",
+    "state": "NOT_APPROVED_NOT_SCHEDULED_ELAPSED"
+  },
+  "newTiming": {
+    "mode": "rafii_server_schedule",
+    "localTime": "2026-10-18T13:15:00-04:00",
+    "timezone": "America/Indiana/Indianapolis",
+    "publishAt": "2026-10-18T17:15:00Z",
+    "condition": "NEW UNAPPROVED13:15EDT proposal after12:45elapsed. Only after exact human approval and normal sign-in/refresh/deployment gates; actual readback and first Analytics API read before14:00EDT expiry. NewPin metrics may be no_data. Later automated metric offsets after policy expiry remain unauthorized and must stop. No job exists; no catch-up if missed."
+  },
+  "newHash": "b48d0e124bdc2f9a3c8938692015c4f3e59a7fd3cc5c4b3a2bd646188504b43e",
+  "pinCreates": 0,
+  "scheduledJobs": 0,
+  "approval": "NOT_RECEIVED"
+}

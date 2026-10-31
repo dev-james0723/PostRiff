@@ -1,0 +1,69 @@
+{
+  "observedAt": "2026-10-07T04:54:39.112501+00:00",
+  "classification": "operator/configuration observation; not customer acceptance",
+  "deployment": {
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "project": "postriff-phase2-private",
+    "deploymentId": "dpl_9Jiq5wtAzg7iwJHC7DqW5kbJw8en",
+    "sourceSha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+    "canonicalOrigin": "https://postriff-phase2-private.vercel.app",
+    "backend": "Vercel postriff_api api.index:app; same project /api rewrite",
+    "health": "200 configured=true phase0=incomplete customerValidated=false"
+  },
+  "sources": [
+    "Vercel get_project/get_deployment APIs",
+    "Vercel production environment metadata (names only)",
+    "Chrome normal Channels UI and provider consoles, current session"
+  ],
+  "youtube": {
+    "project": "rafii-509720",
+    "clientName": "Rafii YouTube",
+    "clientId": "81579135390-fbaui3k787sv1v2clgn6ead480mopjkd.apps.googleusercontent.com",
+    "audience": "External",
+    "publishingStatus": "Testing",
+    "testUsers": 1,
+    "otherUsers": 0,
+    "callback": "https://postriff-phase2-private.vercel.app/api/oauth/youtube/callback",
+    "runtimeClientAndCallbackMatch": true,
+    "runtimeScopes": [
+      "https://www.googleapis.com/auth/youtube.readonly"
+    ],
+    "consentPerformed": false
+  },
+  "tiktok": {
+    "consoleApp": "7689508412459370497",
+    "consoleStatus": "Production Draft",
+    "runtimeClientKey": "sbaw5erc39q65ndb6r",
+    "runtimeScope": "user.info.basic",
+    "runtimeCallback": "https://postriff-phase2-private.vercel.app/api/oauth/tiktok/callback",
+    "consoleClientMapping": "UNVERIFIED",
+    "consentPerformed": false
+  },
+  "x": {
+    "consoleApp": "33504271",
+    "oauth2": "Set up (not configured in visible app)",
+    "runtimeClientMapping": "UNVERIFIED",
+    "meteredCalls": 0,
+    "spendingApproval": false
+  },
+  "meta": {
+    "page": "https://developers.facebook.com/apps/",
+    "visible": "blank app area after reload",
+    "supportedConsoleDiagnostic": "HTTP 500 HTTP_SERVER_ERROR; TypeError Failed to fetch",
+    "policyBypass": false,
+    "historicalBrowserPolicyFailure": "not reproduced in current Chrome session"
+  },
+  "iphone": {
+    "device": "iPhone 17 Pro Max",
+    "mirroring": "Timed Out starting iPhone Mirroring after one reconnect attempt",
+    "realSafariAcceptance": "validation_unavailable: device mirroring did not connect"
+  },
+  "legalRoutes": {
+    "/privacy": 200,
+    "/terms": 200,
+    "/data-deletion": 200,
+    "meaning": "reachability only; operator must verify legal identity and review requirements"
+  },
+  "noProviderReviewSubmissions": true,
+  "noReleasePerformed": true
+}

@@ -197,7 +197,7 @@ class AnalyticsCoverageTest(unittest.TestCase):
     """The Python port is checked against the same fixtures as web/src/features/analytics/coverage.ts (web test)."""
 
     def test_coverage_port_matches_the_shared_fixtures(self):
-        cases = json.loads((ROOT / "tests/fixtures/agent_ui/coverage/cases.json").read_text())
+        cases = json.loads((ROOT / "tests/fixtures/agent_ui/bridge-cases.json").read_text())
         self.assertGreaterEqual(len(cases), 5)
         for case in cases:
             with self.subTest(case=case["name"]):

@@ -364,7 +364,10 @@ def normalize_destinations(state: dict, value: Any) -> list[dict]:
             if channel is None or channel.get("revoked") or channel.get("platform") != item["platform"]:
                 raise AlphaError("One selected account is no longer connected to this workspace. Choose your destinations again.", 409)
             destination["channelId"] = channel_id
-        key = (destination["platform"], channel_id, tag)
+            if item['platform'] == 'Discord' and item.get('destinationId'):
+                from .discord.authorization import destination as discord_destination
+                destination['destinationId'] = discord_destination(state, channel, item['destinationId'])['id']
+        key = (destination["platform"], channel_id, tag, destination.get('destinationId'))
         if key not in seen:
             seen.add(key)
             out.append(destination)
@@ -380,7 +383,7 @@ def connected_destinations(state: dict, destinations: list[dict]) -> tuple[list[
         if destination.get("channelId") and (channel is None or channel.get("revoked") or channel.get("platform") != destination["platform"]):
             skipped.append(destination)
         else:
-            kept.append({key: destination[key] for key in ("platform", "language", "channelId") if key in destination})
+            kept.append({key: destination[key] for key in ("platform", "language", "channelId", 'destinationId') if key in destination})
     return kept, skipped
 
 
@@ -687,7 +690,7 @@ def retime_open_runs(state: dict, task: dict, now: float, actor: str) -> None:
     if not is_staged(task):
         return
     workflow, schedule = task["workflow"], task["schedule"]
-    wanted = {(d["platform"], d.get("channelId") or "", d["language"]) for d in task["destinations"]}
+    wanted = {(d["platform"], d.get("channelId") or "", d["language"], d.get('destinationId')) for d in task["destinations"]}
     for occurrence in _root(state)["occurrences"]:
         if occurrence["taskId"] != task["id"] or occurrence.get("lifecycle") != "drafted" or not open_items(occurrence):
             continue
@@ -703,13 +706,18 @@ def retime_open_runs(state: dict, task: dict, now: float, actor: str) -> None:
         occurrence.update(anchorAt=anchor, schedule=schedule, stages={key: times[key] for key in ("generateAt", "reviewAt", "publishAt", "local")})
         task["lastAnchorAt"] = max(float(task.get("lastAnchorAt") or 0), anchor)
         for item in open_items(occurrence):
-            if (item["platform"], item.get("channelId") or "", item["language"]) not in wanted:
+            slot = (item['platform'], item.get('channelId') or '', item['language'])
+            if (*slot, item.get('destinationId')) not in wanted and (*slot, None) not in wanted:
                 if item.get("state") != "publishing" and (not item.get("jobId") or _cancel_job(state, item["jobId"], now, "Removed from the automation")):
                     lifecycle.move(item, "skipped", reason=f"{item['platform']} was removed from this automation.", at=now)
                 continue
             if item.get("jobId") or item.get("publishAt") is None:
                 continue  # already queued at its approved time, or a draft only (never turned into a publication)
+            previous_publish_at = item['publishAt']
             item["publishAt"] = times["publishAt"] if workflow.get("policy") != "drafts" else None
+            if item.get('platform') == 'Discord' and item.get('state') == 'approved' and item['publishAt'] != previous_publish_at:
+                item['decision'], item['approvedVia'] = None, None
+                lifecycle.move(item, 'ready_for_review', reason='Discord publication time changed. Review the frozen destination and time again.', at=now)
             if item["publishAt"] is None and item.get("state") == "approved":
                 # Switching to drafts only: an approval to publish no longer applies.
                 item["decision"], item["approvedVia"] = None, None
@@ -762,6 +770,18 @@ def _decide(state: dict, root: dict, payload: dict, actor: str, now: float) -> d
                 uses.append({"sourceId": source_id, "factsDigest": current})
         item["decision"] = {"decision": "approve", "by": actor, "at": now, "note": note, "variantRevision": variant["revision"], "textDigest": digest(variant.get("text", "")),
                             "excludedUnknowns": list(variant.get("unknowns", [])), "acknowledgedWarnings": list(variant.get("warnings") or []), "sourceUse": uses}
+        if item['platform'] == 'Discord' and item.get('publishAt') is not None:
+            from .discord.authorization import campaign_binding, destination as discord_destination
+            channel = next((c for c in state['phase2']['channels'] if c['id'] == item.get('channelId') and c['platform'] == 'Discord'), None)
+            if channel is None or payload.get('publishAt') != item['publishAt']:
+                raise AlphaError('Review the exact Discord destination and publication time.', 409)
+            selected_id = item.get('destinationId') or payload.get('destinationId')
+            resource = discord_destination(state, channel, selected_id)
+            if payload.get('destinationId') != selected_id or payload.get('destinationGeneration') != resource['resourceGeneration']:
+                raise AlphaError('The Discord destination changed. Review it again.', 409)
+            binding = campaign_binding(state, channel, variant, selected_id, item['publishAt'], task['schedule']['timeZone'], now)
+            item['destinationId'] = selected_id
+            item['decision'].update(discord=binding['discord'], timing=binding['timing'])
         item["approvedVia"] = "human"
         lifecycle.move(item if item["state"] != "needs_revision" else lifecycle.move(item, "ready_for_review", at=now), "approved", at=now)
         _history(occurrence, now, "approved", f"{item['platform']} post approved; it publishes at its scheduled time." if item.get("publishAt") else f"{item['platform']} draft approved.", actor)

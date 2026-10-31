@@ -1,3 +1,4 @@
+import localFont from 'next/font/local';
 import {
   Architects_Daughter,
   DM_Sans,
@@ -8,7 +9,6 @@ import {
   Instrument_Sans,
   Inter,
   JetBrains_Mono,
-  Merriweather,
   Mulish,
   Playfair_Display,
   Noto_Sans_Mono,
@@ -109,10 +109,13 @@ const fontJetBrainsMono = JetBrains_Mono({
   variable: '--font-jetbrains-mono'
 });
 
-const fontMerriweather = Merriweather({
-  subsets: ['latin'],
+// Same OFL family, bundled locally: Google's extensionless font URL breaks Next.js builds.
+const fontMerriweather = localFont({
+  src: './fonts/Merriweather.ttf',
   preload: false,
-  weight: ['300', '400', '700'],
+  weight: '300 700',
+  display: 'swap',
+  adjustFontFallback: 'Times New Roman',
   variable: '--font-merriweather'
 });
 

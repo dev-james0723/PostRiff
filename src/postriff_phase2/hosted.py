@@ -4,6 +4,7 @@ The caller supplies a connection factory and a server-side verified Auth princip
 No browser may supply the principal. No service key or profile metadata is accepted.
 """
 from contextlib import contextmanager
+from urllib.parse import urlsplit
 import copy
 import hashlib
 import io
@@ -13,6 +14,7 @@ import secrets
 import time
 import zipfile
 import zoneinfo
+from urllib.parse import urlsplit
 from postriff_alpha.domain import AlphaError
 from postriff_alpha.domain import Store
 from postriff_alpha import profiles
@@ -22,7 +24,7 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state, with_youtube_credential_status, youtube_credential_status
-from . import account_protection, brand_brain, campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
+from . import account_protection, brand_brain, campaigns, locales, manual_drafts, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
 
@@ -216,6 +218,9 @@ class PostgresWorkspaceRepository:
             audit_event = lambda state: ("connector.egress_decided", "cloud", {"cloud": productivity_connectors.egress_decision(state).get("cloud") is True})
         if action == writer_defaults.ACTION:
             audit_event = lambda state: ("writer.default_decided", "writer", {"model": writer_defaults.settings(state)["model"]})
+        if action == manual_drafts.ACTION:
+            audit_event = lambda state: ("draft.manual_saved", payload["requestId"], {
+                "draftCount": sum(v.get("manualRequestId") == payload["requestId"] for v in state.get("variants", []))})
         if action.startswith(('voice_sample', 'brand_brain_')) or action == 'voice_profile_analyze':
             audit_event = lambda state: ('voice.' + action, payload.get('sourceId', ''), {'requestId': payload.get('requestId'), 'activeRevision': state.get('speaker', {}).get('activeRevision')})
         after = None
@@ -228,7 +233,9 @@ class PostgresWorkspaceRepository:
                 if media_consent.decision(state).get("cloud") is not True:
                     from .media_notes import purge_workspace
                     purge_workspace(cur, workspace_id)
-        if action in ("p2_review", "p2_approve", "p2_approve_many", "raffi_run_commit"):
+        # Preparing a frozen needs_review record is passive. Approval/commit and
+        # worker dispatch still require a live publishing entitlement.
+        if action in ("p2_approve", "p2_approve_many", "raffi_run_commit"):
             from .billing import require_publishing
             after = lambda cur, state, principal: require_publishing(cur, workspace_id, self.clock())
         return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event, after=after)
@@ -249,12 +256,20 @@ class HostedPhase2Commands:
     # against it). A worker or test that builds these commands alone has none, so it can only clear the default.
     writers = None
 
-    def __init__(self, clock=time.time):
+    def __init__(self, clock=time.time, worker_binding=None):
         self.clock = clock
+        if worker_binding is not None:
+            if not isinstance(worker_binding, dict) or set(worker_binding) != {'environment', 'origin'}:
+                raise ValueError('Preview worker binding requires one fixed HTTPS origin.')
+            parsed = urlsplit(worker_binding.get('origin', ''))
+            if (worker_binding['environment'] != 'preview' or parsed.scheme != 'https' or not parsed.hostname
+                    or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password):
+                raise ValueError('Preview worker binding requires one fixed HTTPS origin.')
         # The processors a photo or frame would go to now ({id, label}); the hosted service sets it (never the client).
         self.media_processors = lambda: ()
         self.engine = Phase2Store.__new__(Phase2Store)
         self.engine.clock = clock
+        self.engine.worker_binding = copy.deepcopy(worker_binding)
         # Hosted entitlement checks use live SQL, including paid plans after the original trial ends.
         self.engine.hosted_entitlements = True
         self.engine.social = FixtureSocial()
@@ -262,7 +277,9 @@ class HostedPhase2Commands:
 
     def present(self, state, revision):
         shown = self.engine._present(state, revision)
+        shown['workerBinding'] = copy.deepcopy(self.engine.worker_binding)
         shown['state']['brandBrain'] = brand_brain.projection(state)
+        shown['workerBinding'] = copy.deepcopy(self.engine.worker_binding)
         return shown
 
     def __call__(self, state, principal, action, payload):
@@ -270,6 +287,10 @@ class HostedPhase2Commands:
             raise AlphaError("Expected a structured command.")
         if state.get("workspace", {}).get("sample"):
             raise AlphaError("Hosted sample workspaces are read-only.", 403)
+        if action == "manual_draft_create":
+            # Saving author text must not run a writer, change the shared brief,
+            # or invalidate existing research drafts, approvals or scheduled jobs.
+            return manual_drafts.create(state, principal, payload, self.clock())
         ensure_content_state(state)
         previous_jobs = {job["id"] for job in state.get("phase2", {}).get("jobs", [])}
         if source_policy.apply_policy_action(state, action, payload, principal, self.clock()):
@@ -399,16 +420,23 @@ class HostedPhase2Commands:
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
         required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
         # `language` is optional: records from before per-channel languages still carry it (languages plan §6).
-        if set(channel) - {"language", "refreshBindingRequired", "authorizationLane", "youtubeIdentityIngestedAt"} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
+        if set(channel) - {"language", "refreshBindingRequired", "authorizationLane", "youtubeIdentityIngestedAt", 'enabledPermissionGroups', 'destinationId', 'discordAuthorizationGeneration'} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
             raise AlphaError("A complete server-verified channel record is required.")
         if channel.get("authorizationLane", "standard") not in ("standard", "agentic"):
             raise AlphaError("A server-bound YouTube authorization lane is required.")
+        groups = channel.get('enabledPermissionGroups',[])
+        if not isinstance(groups,list) or len(groups) > 30 or any(not isinstance(g,str) or not re.fullmatch(r'[a-z_]{1,40}',g) for g in groups): raise AlphaError('Invalid enabled permission groups.',400)
         saved = copy.deepcopy(channel)
         # identityVerified comes from the provider identity endpoint; capabilityVerified only when
         # publish scopes were granted to a production-reviewed app (see OAuthService._capabilities).
         saved.update({"configured": True, "identityVerified": True, "capabilityVerified": bool(capability_verified), "revoked": False, "qualification": "server_verified", "evidenceSource": "live_provider", "scenario": None})
         existing = next((item for item in state["phase2"]["channels"] if item["id"] == saved["id"]), None)
         if existing:
+            if saved['platform'] == 'Discord':
+                # Keep destination history, but new consent never inherits approval.
+                saved['discordDestinations'] = copy.deepcopy(existing.get('discordDestinations', []))
+                for destination in saved['discordDestinations']:
+                    destination['status'] = 'reauthorization_required'
             existing.clear()
             existing.update(saved)
         else:
@@ -419,12 +447,12 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False, youtube_public_base_url=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False, youtube_public_base_url=None, worker_binding=None):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
         self.assets = assets
-        self.commands = HostedPhase2Commands(clock)
+        self.commands = HostedPhase2Commands(clock, worker_binding=worker_binding)
         self.repository = PostgresWorkspaceRepository(connection_factory, verify_session, self.commands, clock)
         self.clock = clock
         self.identity = identity
@@ -444,6 +472,7 @@ class HostedWorkspaceService:
         from .audience import AudienceService
         credential_vault = vault or CredentialVault(None)
         self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock, youtube_public_base_url=youtube_public_base_url)
+        self.oauth.native_social.assets = self.assets
         self.productivity_connectors = productivity_connectors.ProductivityConnectorService(
             self.repository, credential_vault, productivity_providers or {}, public_base_url,
             flags=productivity_flags or {}, clock=clock,
@@ -465,6 +494,8 @@ class HostedWorkspaceService:
         self.data_requests = DataRequests(self.repository, clock)
         self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport, reply_sender_enabled=reply_sender_enabled)
         self.audience._service = self   # reply suggestions are written by the drafting service's managed writer
+        from .discord.engagement import DiscordEngagementService
+        self.discord_engagement = DiscordEngagementService(self.repository, self.oauth, self.commands, clock)
         from .youtube.service import YouTubeCreatorService
         self.youtube = YouTubeCreatorService(self)
         self.commands.youtube_capacity = self.youtube.capacity

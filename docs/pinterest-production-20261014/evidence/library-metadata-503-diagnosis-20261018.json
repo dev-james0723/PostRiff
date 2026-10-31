@@ -1,0 +1,21 @@
+{
+  "recordedAt": "2026-10-18T15:00:42.735265+00:00",
+  "status": "DIAGNOSED_NOT_APPLIED",
+  "observedEndpoint": "GET /api/workspaces/568699ad-d66e-42b8-a7f1-e86d0c35ab02/library/metadata/changes",
+  "observedStatusCode": 503,
+  "observedAt": "2026-10-18T14:36:08.351Z",
+  "requestId": "th9g7-1792334166400-208a944cbf59",
+  "canonicalProject": "buoyhkbodnhzngaotoel",
+  "readOnlyCatalogResult": {
+    "public.pr_library_metadata_changes": null,
+    "public.pr_library_metadata_versions": null
+  },
+  "sourceGuard": "src/postriff_phase2/library_metadata.py:LibraryMetadataChanges._ready checks these two regclass entries and returns503 library_metadata_unavailable",
+  "candidateMigration": "migrations/postriff/112_library_metadata_changes.sql",
+  "migrationSha256": "f980a58a6e811c26341d05b3acd83c2fb0b1b9b9aad2def094266eece01bd0a1",
+  "scope": "Two service-only FORCE RLS tables, indexes, metadata version bump function and three existing Library table triggers. Applies across existing Library users, so separate production SQL approval required.",
+  "rollback": "Keep new private receipts and monotonic versions; roll code independently; do not drop customer data or recreate receipts. Exact recovery reviewed before any approved change.",
+  "requiredBeforeApply": "Review dependency tables/columns/grants and matching remote database regression evidence; no new cloud budget or SQL approval presently granted.",
+  "currentPinImageImpact": "Not a blocker to already verified normal p2_media_upload/media GET; no fallback or exception added.",
+  "ddlDmlExecuted": 0
+}
