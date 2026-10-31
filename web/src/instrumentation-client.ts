@@ -9,19 +9,54 @@ import { scrubTelemetry } from '@/lib/telemetry';
 let headingToPlay = false;
 const onPlay = () => headingToPlay || isPlayPath(window.location.pathname);
 
+// Sentry tallies the events its beforeSend drops and reports the tally later in a client_report, possibly from another
+// page. Drops caused by /play are counted here and taken back out, so not even a count of the child's visit leaves.
+const playDrops: Record<string, number> = {};
+function dropForPlay(category: string): null {
+  playDrops[category] = (playDrops[category] ?? 0) + 1;
+  return null;
+}
+
+type Discard = { reason: string; category: string; quantity: number };
+type EnvelopeItem = [{ type?: string }, unknown];
+
+/** Removes /play's own before_send drops from client_report items; returns null when nothing is left to send. */
+function withoutPlayDrops<E>(envelope: E): E | null {
+  if (!Object.values(playDrops).some(Boolean)) return envelope;
+  const [headers, items] = envelope as unknown as [unknown, EnvelopeItem[]];
+  const kept = items.flatMap((item): EnvelopeItem[] => {
+    if (item[0].type !== 'client_report') return [item];
+    const report = item[1] as { discarded_events?: Discard[] };
+    const discarded = (report.discarded_events ?? []).flatMap((entry) => {
+      if (entry.reason !== 'before_send' || !playDrops[entry.category]) return [entry];
+      const taken = Math.min(playDrops[entry.category], entry.quantity);
+      playDrops[entry.category] -= taken;
+      return entry.quantity > taken ? [{ ...entry, quantity: entry.quantity - taken }] : [];
+    });
+    return discarded.length ? [[item[0], { ...report, discarded_events: discarded }]] : [];
+  });
+  return kept.length ? ([headers, kept] as unknown as E) : null;
+}
+
 // Disabled/unconfigured deployments must not download or initialize the SDK.
 const sdk = !process.env.NEXT_PUBLIC_SENTRY_DISABLED && process.env.NEXT_PUBLIC_SENTRY_DSN && !onPlay()
   ? import('@sentry/nextjs').then((Sentry) => {
       const playSafeTransport: typeof Sentry.makeFetchTransport = (options) => {
         const transport = Sentry.makeFetchTransport(options);
-        return { ...transport, send: (envelope) => (onPlay() ? Promise.resolve({}) : transport.send(envelope)) };
+        return {
+          ...transport,
+          send: (envelope) => {
+            const outgoing = onPlay() ? null : withoutPlayDrops(envelope);
+            return outgoing ? transport.send(outgoing) : Promise.resolve({});
+          }
+        };
       };
       Sentry.init({
         dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
         sendDefaultPii: false,
         tracesSampleRate: 0,
-        beforeSend: (event) => (onPlay() || isPlayEvent(event) ? null : scrubTelemetry(event)),
-        beforeSendTransaction: (event) => (onPlay() || isPlayEvent(event) ? null : event),
+        beforeSend: (event) => (onPlay() || isPlayEvent(event) ? dropForPlay('error') : scrubTelemetry(event)),
+        beforeSendTransaction: (event) => (onPlay() || isPlayEvent(event) ? dropForPlay('transaction') : event),
         transport: playSafeTransport,
         debug: false
       });
