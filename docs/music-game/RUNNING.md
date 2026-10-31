@@ -29,11 +29,16 @@ cd web
 npm ci                                   # repo lockfile, no new packages
 RAFII_PLAY_ENABLED=1 node_modules/.bin/next dev -p 3107 -H 127.0.0.1      # dev, then open http://127.0.0.1:3107/play/note-garden
 # or production mode:
-node_modules/.bin/next build
-node_modules/.bin/next start -p 3117 -H 127.0.0.1    # http://127.0.0.1:3117/play/note-garden
+RAFII_PLAY_ENABLED=1 node_modules/.bin/next build
+RAFII_PLAY_ENABLED=1 node_modules/.bin/next start -p 3117 -H 127.0.0.1    # http://127.0.0.1:3117/play/note-garden
 ```
 
-No `.env` is needed: the route does not touch Supabase or any provider. Stop the server when done. Don't run
+Launch-switch check over HTTP (`tests/play-launch-http.cjs`, against a production server on port 3127): build and start
+without the flag and run `PLAY_EXPECT=off node tests/play-launch-http.cjs` (every /play route a 404 that names nothing of
+the game; a query, header or cookie cannot turn it on); build and start with `RAFII_PLAY_ENABLED=1` and run
+`PLAY_EXPECT=on node tests/play-launch-http.cjs`.
+
+No other `.env` value is needed: the route does not touch Supabase or any provider. Stop the server when done. Don't run
 `next build` in the same `web/` folder while a dev server is running there.
 
 ## Test it
