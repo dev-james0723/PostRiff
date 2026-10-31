@@ -91,7 +91,7 @@ export function NoteGarden() {
   };
 
   const sound = useCallback(
-    async (events: SoundEvent[], options?: { delay?: number }) => {
+    async (events: SoundEvent[], options?: { delay?: number; cue?: 'correct' | 'try-again' }) => {
       const synth = getSynth();
       if (!(await synth.unlock())) return;
       await synth.play(events, options);
@@ -99,13 +99,19 @@ export function NoteGarden() {
     [getSynth]
   );
 
-  const cue = useCallback((kind: 'correct' | 'try-again') => getSynth().feedback(kind), [getSynth]);
+  const stopSound = useCallback(() => synthRef.current?.stop(), []);
+
+  /** Every screen change silences whatever the last screen was playing. */
+  const go = (next: Screen) => {
+    stopSound();
+    setScreen(next);
+  };
 
   async function letsGo() {
     const synth = getSynth();
     const ok = (await synth.unlock()) || progress.muted;
     setAudioOk(synth.supported() && ok);
-    setScreen('map');
+    go('map');
   }
 
   function toggleMute() {
@@ -123,24 +129,24 @@ export function NoteGarden() {
 
   function openGrownUps() {
     setGrownupsFrom(screen);
-    setScreen('grownups');
+    go('grownups');
   }
 
   function play(n: LevelNumber) {
     setLevel(n);
-    setScreen('learn');
+    go('learn');
   }
 
   function startRun() {
     setSeed(freshSeed());
-    setScreen('play');
+    go('play');
   }
 
   function finish(round: Round) {
     getSynth().stop();
     update((p) => recordRun(p, round.level, round.stars));
     setLastRun(round);
-    setScreen('done');
+    go('done');
   }
 
   const allDone = LEVELS.every((l) => progress.done[l.number]);
@@ -165,7 +171,7 @@ export function NoteGarden() {
               ))}
             </div>
             <div className={styles.row}>
-              <button type='button' className={styles.button} onClick={() => setScreen('hello')}>
+              <button type='button' className={styles.button} onClick={() => go('hello')}>
                 Play
               </button>
               <button type='button' className={styles.linkButton} onClick={openGrownUps}>
@@ -230,7 +236,7 @@ export function NoteGarden() {
           </main>
         )}
 
-        {screen === 'learn' && <LearnCard level={level} sound={sound} onPlay={startRun} onBack={() => setScreen('map')} />}
+        {screen === 'learn' && <LearnCard level={level} sound={sound} onPlay={startRun} onBack={() => go('map')} />}
 
         {screen === 'play' && (
           <PlayScreen
@@ -240,12 +246,12 @@ export function NoteGarden() {
             muted={progress.muted}
             audioOk={audioOk}
             sound={sound}
-            cue={cue}
+            stopSound={stopSound}
             onToggleMute={toggleMute}
             onFinish={finish}
             onLeave={() => {
               getSynth().stop();
-              setScreen('map');
+              go('map');
             }}
           />
         )}
@@ -269,7 +275,7 @@ export function NoteGarden() {
                   Next level
                 </button>
               )}
-              <button type='button' className={styles.ghost} onClick={() => setScreen('map')}>
+              <button type='button' className={styles.ghost} onClick={() => go('map')}>
                 Garden map
               </button>
             </div>
@@ -285,7 +291,7 @@ export function NoteGarden() {
             onVolume={setVolume}
             onOpenAll={() => update((p) => withAllOpen(p, true))}
             onReset={() => setProgress(resetProgress(browserStorage(), progress))}
-            onBack={() => setScreen(grownupsFrom === 'grownups' ? 'title' : grownupsFrom)}
+            onBack={() => go(grownupsFrom === 'grownups' ? 'title' : grownupsFrom)}
           />
         )}
       </div>

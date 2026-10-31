@@ -25,7 +25,26 @@ async function newPage(browser, options = {}) {
   await context.addInitScript(() => {
     window.__audioContexts = 0;
     const Real = window.AudioContext;
-    if (Real) window.AudioContext = class extends Real { constructor(...args) { super(...args); window.__audioContexts++; } };
+    if (Real) window.AudioContext = class extends Real { constructor(...args) { super(...args); window.__audioContexts++; window.__ctx = this; } };
+    // Log every oscillator on the audio clock: when it was started, the stop first asked for, and the latest stop.
+    window.__oscLog = [];
+    const proto = window.AudioScheduledSourceNode?.prototype;
+    if (proto) {
+      const start = proto.start;
+      const stop = proto.stop;
+      proto.start = function (when = 0, ...rest) {
+        this.__rec = { calledAt: this.context.currentTime, startAt: when, firstStop: Infinity, stopAt: Infinity };
+        window.__oscLog.push(this.__rec);
+        return start.call(this, when, ...rest);
+      };
+      proto.stop = function (when = 0) {
+        if (this.__rec) {
+          if (this.__rec.firstStop === Infinity) this.__rec.firstStop = when;
+          this.__rec.stopAt = Math.min(this.__rec.stopAt, when || this.context.currentTime);
+        }
+        return stop.call(this, when);
+      };
+    }
   });
   const page = await context.newPage();
   page.on('request', (request) => {
@@ -78,6 +97,26 @@ async function tabTo(page, pattern, max = 40) {
   throw new Error(`Could not Tab to ${pattern}`);
 }
 
+/** Mark the audio clock, run `action`, then check every oscillator started before the mark was cut short. */
+async function supersedes(page, action, label) {
+  const mark = await page.evaluate(() => window.__ctx.currentTime);
+  const before = await page.evaluate(() => window.__oscLog.length);
+  await action();
+  await page.waitForTimeout(100);
+  const result = await page.evaluate(({ mark, before }) => {
+    const old = window.__oscLog.slice(0, before);
+    return {
+      old: old.length,
+      wouldHaveRungOn: old.filter((r) => r.firstStop > mark + 0.2).length,
+      stillRinging: old.filter((r) => r.stopAt > mark + 0.25).map((r) => [r.calledAt, r.stopAt]),
+      started: window.__oscLog.length - before
+    };
+  }, { mark, before });
+  assert.ok(result.wouldHaveRungOn > 0, `${label}: earlier sound was still due to play (test is meaningful)`);
+  assert.deepEqual(result.stillRinging, [], `${label}: earlier oscillators stopped within the fade`);
+  return result;
+}
+
 const answers = (page) => page.getByRole('group', { name: 'Answers' }).getByRole('button');
 const nextButton = (page) => page.getByRole('button', { name: 'Next', exact: true });
 const heading = (page) => page.locator('h1');
@@ -99,9 +138,22 @@ async function answerByKeyboard(page) {
   await page.keyboard.press('Tab');
   for (let tries = 0; tries < 4; tries++) {
     await page.keyboard.press('Enter');
-    if (await nextButton(page).isVisible()) break;
-    // Try again: focus has moved to the first option still open.
-    assert.equal(await page.evaluate(() => document.activeElement?.closest('[aria-label="Answers"]') !== null), true);
+    // Either the question is settled (Next has focus) or it was "try again" (focus is back on an open option).
+    const outcome = await page
+      .waitForFunction(() => {
+        const el = document.activeElement;
+        if (el?.textContent?.trim() === 'Next') return 'next';
+        if (el?.closest('[aria-label="Answers"]') && !el.disabled) return 'try-again';
+        return false;
+      }, null, { timeout: 8000 })
+      .catch(async (error) => {
+        const state = await page.evaluate(() => ({
+          active: `${document.activeElement?.tagName}:${document.activeElement?.textContent?.trim().slice(0, 40)}`,
+          answers: [...document.querySelectorAll('[aria-label="Answers"] button')].map((x) => x.textContent.trim() + (x.disabled ? ' (disabled)' : ''))
+        }));
+        throw new Error(`no answer outcome after Enter: ${JSON.stringify(state)} (${error.message})`);
+      });
+    if ((await outcome.jsonValue()) === 'next') break;
   }
   await nextButton(page).waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'Next', 'focus moves to Next');
@@ -264,6 +316,21 @@ async function stored(page) {
     await desktop.page.getByRole('button', { name: 'Back', exact: true }).click();
     await desktop.page.getByRole('button', { name: 'Play' }).click();
     await desktop.page.getByRole('button', { name: "Let's go" }).click();
+    // Overlap guard: replaying mid-sound and leaving mid-sound never leave earlier notes ringing.
+    await desktop.page.getByRole('button', { name: /High or Low\?/ }).click();
+    await desktop.page.getByRole('button', { name: "Let's play" }).click();
+    await desktop.page.waitForFunction(() => window.__oscLog.length > 0);
+    const replay = await supersedes(desktop.page, () => desktop.page.getByRole('button', { name: 'Hear it again' }).click(), 'replay');
+    assert.ok(replay.started > 0, 'the replay itself plays');
+    await supersedes(
+      desktop.page,
+      async () => {
+        await desktop.page.getByRole('button', { name: 'Back' }).click();
+        await desktop.page.getByRole('button', { name: 'Leave' }).click();
+      },
+      'leave level'
+    );
+    pass('AC3 a replay or leaving cancels earlier sound (one schedule at a time)');
     assert.equal(await playLevel(desktop.page, 'Note Names', 'mouse'), 8);
     await desktop.page.getByRole('button', { name: 'Garden map' }).click();
     assert.equal(

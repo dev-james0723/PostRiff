@@ -21,7 +21,8 @@ import { ConfirmDialog, SoundToggle } from './parts';
 import styles from './note-garden.module.css';
 
 type Feedback = { tone: 'right' | 'try' | 'reveal'; lead: string; text: string };
-export type PlaySound = (events: SoundEvent[], options?: { delay?: number }) => Promise<void>;
+/** Plays `events`, replacing anything still sounding (the synth keeps one schedule at a time). */
+export type PlaySound = (events: SoundEvent[], options?: { delay?: number; cue?: 'correct' | 'try-again' }) => Promise<void>;
 
 const ICONS: Record<NonNullable<Option['icon']>, string> = { same: '=', different: '≠', up: '↑ 🐦', down: '↓ 🐸', step: '👣', skip: '🐸' };
 /** DESIGN §9: lock answers only while a short prompt sound plays the first time. */
@@ -83,7 +84,7 @@ export function PlayScreen({
   muted,
   audioOk,
   sound,
-  cue,
+  stopSound,
   onToggleMute,
   onFinish,
   onLeave
@@ -93,13 +94,16 @@ export function PlayScreen({
   muted: boolean;
   audioOk: boolean;
   sound: PlaySound;
-  cue: (kind: 'correct' | 'try-again') => void;
+  stopSound: () => void;
   onToggleMute: () => void;
   onFinish: (round: Round) => void;
   onLeave: () => void;
 }) {
+  const silent = muted || !audioOk;
+  /** Answers wait while a short question sound plays the first time; decided with the question, never after paint. */
+  const lockFor = (question: Question) => (!silent && question.sound.length > 0 && soundLength(question.sound) <= LOCK_LIMIT_SECONDS ? question.id : null);
   const [round, setRound] = useState<Round>(() => startRound(level, seed));
-  const [locked, setLocked] = useState(false);
+  const [lockedId, setLockedId] = useState<string | null>(() => lockFor(round.questions[0]));
   const [hint, setHint] = useState(false);
   const [picture, setPicture] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -114,7 +118,7 @@ export function PlayScreen({
 
   const q = round.questions[round.index];
   const settled = round.status !== 'asking';
-  const silent = muted || !audioOk;
+  const locked = lockedId === q.id;
   const showPicture = silent || picture;
   const soundOff = !audioOk ? "Sound can't play on this device. You can still play with pictures." : muted ? 'Sound is off. Here is a picture of the sound.' : null;
   const title = getLevel(level).title;
@@ -129,9 +133,8 @@ export function PlayScreen({
     setShake(null);
     promptRef.current?.focus();
     if (silent || q.sound.length === 0) return;
-    const lock = soundLength(q.sound) <= LOCK_LIMIT_SECONDS;
-    if (lock) setLocked(true);
-    void sound(q.sound).finally(() => setLocked(false));
+    // Released when this sound ends, or as soon as a replay, an answer, mute or leaving replaces it.
+    void sound(q.sound).finally(() => setLockedId((id) => (id === q.id ? null : id)));
   }, [q, silent, sound]);
 
   // After an answer: focus Next when settled, else the first option still open.
@@ -144,12 +147,12 @@ export function PlayScreen({
     const step = answerRound(round, id);
     if (step.outcome === 'ignored') return;
     setRound(step.round);
+    // Each answer sound replaces the question sound, so a long rhythm prompt never plays under the feedback.
     if (step.outcome === 'correct') {
-      cue('correct');
-      void sound(q.answerSound, { delay: 0.35 });
+      void sound(q.answerSound, { delay: 0.35, cue: 'correct' });
       setFeedback({ tone: 'right', lead: PRAISE[praise.current++ % PRAISE.length], text: q.reveal });
     } else if (step.outcome === 'try-again') {
-      cue('try-again');
+      void sound([], { cue: 'try-again' });
       setShake(id);
       setFeedback({ tone: 'try', lead: TRY_AGAIN[nudge.current++ % TRY_AGAIN.length], text: '' });
     } else {
@@ -159,9 +162,14 @@ export function PlayScreen({
   }
 
   function next() {
+    stopSound();
     const after = nextQuestion(round);
-    if (after.finished) onFinish(after);
-    else setRound(after);
+    if (after.finished) {
+      onFinish(after);
+      return;
+    }
+    setRound(after);
+    setLockedId(lockFor(after.questions[after.index]));
   }
 
   function hearAgain() {
