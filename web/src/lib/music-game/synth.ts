@@ -159,6 +159,9 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
 
   async function unlock(): Promise<boolean> {
     if (muted || failed || !options.createContext) return false;
+    // The context this call is resuming. Success and failure are both judged against it, so a stale call never
+    // touches a context that a newer call already brought up.
+    let resuming: AudioContext | null = null;
     try {
       if (!ctx) {
         ctx = options.createContext();
@@ -173,7 +176,7 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
         master.connect(limiter);
         limiter.connect(ctx.destination);
       }
-      const resuming = ctx;
+      resuming = ctx;
       if (resuming.state !== 'running') await resuming.resume();
       // Closed or muted while resume() was pending: nothing to set up.
       if (ctx !== resuming || !master || muted) return false;
@@ -181,9 +184,15 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
       master.gain.setValueAtTime(masterLevel(volume), ctx.currentTime);
       return ctx.state === 'running';
     } catch {
+      // Stale failure: the context was closed/replaced meanwhile, or another resume() already got it running.
+      if (resuming && (resuming !== ctx || resuming.state === 'running')) return false;
+      // This call owned the current context and it cannot run (or could not be built): release it, never orphan it.
       failed = true;
+      stopAll();
+      const dead = ctx;
       ctx = null;
       master = null;
+      if (dead) void dead.close().catch(() => {});
       return false;
     }
   }

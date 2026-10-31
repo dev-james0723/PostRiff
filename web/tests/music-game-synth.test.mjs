@@ -28,7 +28,12 @@ function fakeAudio({ deferResume = false } = {}) {
         ctx.resumed++;
         if (!deferResume) { ctx.state = 'running'; return Promise.resolve(); }
         // Deferred: the test decides when the browser finishes resuming.
-        return new Promise((resolve) => pendingResumes.push(() => { ctx.state = 'running'; resolve(); }));
+        return new Promise((resolve, reject) =>
+          pendingResumes.push({
+            ok: () => { ctx.state = 'running'; resolve(); },
+            fail: () => reject(new Error('resume failed'))
+          })
+        );
       },
       async suspend() { ctx.state = 'suspended'; },
       async close() { ctx.closed = true; ctx.state = 'closed'; },
@@ -55,11 +60,19 @@ function fakeAudio({ deferResume = false } = {}) {
     made.push(ctx);
     return ctx;
   };
-  const finishResume = async () => {
-    for (const done of pendingResumes.splice(0)) done();
-    for (let i = 0; i < 5; i++) await Promise.resolve();
+  const flush = async () => {
+    for (let i = 0; i < 8; i++) await Promise.resolve();
   };
-  return { factory, made, finishResume };
+  const finishResume = async () => {
+    for (const pending of pendingResumes.splice(0)) pending.ok();
+    await flush();
+  };
+  /** Settle one pending resume() (oldest first = index 0) by resolving or rejecting it. */
+  const settleResume = async (index, how) => {
+    pendingResumes[index][how === 'reject' ? 'fail' : 'ok']();
+    await flush();
+  };
+  return { factory, made, finishResume, settleResume, pendingResumes };
 }
 
 test('volume levels follow DESIGN: medium 0.20, soft 0.10, hard ceiling 0.25', () => {
@@ -258,17 +271,19 @@ test('pending unlock: a direct play() also invalidates an older pending request'
   assert.deepEqual(scheduledHz(fake), []);
 });
 
-test('pending unlock: muting before resume finishes means nothing schedules, even after unmuting later', async () => {
+test('pending unlock: mute then unmute before resume finishes still drops the muted-era request', async () => {
   const fake = fakeAudio({ deferResume: true });
   const synth = createSynth({ createContext: fake.factory });
   const a = synth.request([tone('C4')]);
   synth.setMuted(true);
+  synth.setMuted(false); // the child flips sound back on before the browser finished resuming
   await fake.finishResume();
   await a;
-  synth.setMuted(false);
   assert.deepEqual(scheduledHz(fake), [], 'the muted-era request stays dead');
 });
 
+// Guard test: the 19decc01 code also passed this, but only because its unlock() hit a TypeError on the cleared master
+// and fell into the catch. It pins the intended behaviour so a refactor of that path cannot start sound after unmount.
 test('pending unlock: close() (unmount) before resume finishes means nothing schedules', async () => {
   const fake = fakeAudio({ deferResume: true });
   const synth = createSynth({ createContext: fake.factory });
@@ -278,4 +293,36 @@ test('pending unlock: close() (unmount) before resume finishes means nothing sch
   await a;
   assert.deepEqual(scheduledHz(fake), []);
   assert.equal(synth.ready(), false);
+});
+
+test('failed resume: an older resume() rejecting after a newer request scheduled leaves that sound and close() intact', async () => {
+  const fake = fakeAudio({ deferResume: true });
+  const synth = createSynth({ createContext: fake.factory });
+  const a = synth.request([tone('C4')]); // resume #0
+  const b = synth.request([tone('G5', 0, 2)]); // resume #1
+  assert.equal(fake.pendingResumes.length, 2);
+  await fake.settleResume(1, 'resolve'); // the newer resume wins and B schedules
+  const ctx = fake.made[0];
+  const playing = ctx.sources.slice();
+  assert.ok(scheduledHz(fake).includes(G5) && !scheduledHz(fake).includes(C4));
+  await fake.settleResume(0, 'reject'); // the stale, older resume() fails afterwards
+  await a;
+  assert.equal(synth.ready(), true, 'the live context is not torn down by a stale failure');
+  assert.equal(ctx.closed, false);
+  assert.ok(playing.every((s) => s.stopAt > 0.5), 'B keeps playing');
+  synth.close();
+  assert.ok(playing.every((s) => s.stopAt <= FADE_END), 'close() stops every live source');
+  assert.equal(ctx.closed, true, 'close() closes the live context');
+  await b;
+});
+
+test('failed resume: when the current context really cannot resume, that context is closed and later sounds stay silent', async () => {
+  const fake = fakeAudio({ deferResume: true });
+  const synth = createSynth({ createContext: fake.factory });
+  const a = synth.request([tone('C4')]);
+  await fake.settleResume(0, 'reject');
+  await a;
+  assert.deepEqual(scheduledHz(fake), []);
+  assert.equal(fake.made[0].closed, true, 'the context it owned is released, not orphaned');
+  assert.equal(await synth.unlock(), false, 'no retry loop on a device that cannot play');
 });
