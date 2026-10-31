@@ -3,6 +3,7 @@ import { updateSession } from '@/lib/supabase/middleware';
 import { hasSupabaseEnv } from '@/lib/supabase/env';
 import { CONTROL_COOKIE, FOUNDER_SIGN_IN_PATH } from '@/lib/founder/errors';
 import { legacyHostRedirect } from '@/lib/legacy-host';
+import { isPlayPath } from '@/lib/play-path';
 
 /** Set by the sign-in page when the API runs in dev-harness mode (no Supabase). */
 const DEV_COOKIE = 'postriff_dev';
@@ -53,6 +54,14 @@ export async function proxy(request: NextRequest) {
     { mode: process.env.RAFII_LEGACY_HOST_REDIRECT, hosts: process.env.RAFII_LEGACY_HOSTS, canonical: process.env.NEXT_PUBLIC_APP_URL }
   );
   if (moved) return NextResponse.redirect(moved.location, moved.status);
+
+  // The children's /play area never touches sign-in: no Supabase session refresh, no auth cookies set or refreshed.
+  // The route hint is still overwritten so a browser cannot spoof it (as updateSession does for every other path).
+  if (isPlayPath(pathname)) {
+    const headers = new Headers(request.headers);
+    headers.set('x-postriff-home-render', '0');
+    return NextResponse.next({ request: { headers } });
+  }
 
   const { response, user } = await updateSession(request);
 

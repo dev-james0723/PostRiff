@@ -1,11 +1,12 @@
 import Providers from '@/components/layout/providers';
+import { SiteAnalytics } from '@/components/layout/site-analytics';
+import { SentryRouteStart } from '@/components/layout/sentry-route-start';
 import { Toaster } from '@/components/ui/sonner';
 import { fontVariables, uiFontFamily } from '@/components/themes/font.config';
 import { DEFAULT_THEME, THEME_COOKIE, THEMES } from '@/components/themes/theme.config';
 import ThemeProvider from '@/components/themes/theme-provider';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
-import { Analytics } from '@vercel/analytics/next';
 import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
 import NextTopLoader from 'nextjs-toploader';
@@ -89,8 +90,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </Providers>
           </ThemeProvider>
         </NuqsAdapter>
-        {/* Vercel Web Analytics only when the project has it enabled; otherwise its script request 404s on every page. */}
-        {process.env.NEXT_PUBLIC_VERCEL_ANALYTICS === '1' && <Analytics />}
+        {/* Vercel Web Analytics only when the project has it enabled; otherwise its script request 404s on every page.
+            Never on the children's /play area (D1): see SiteAnalytics. */}
+        {process.env.NEXT_PUBLIC_VERCEL_ANALYTICS === '1' && <SiteAnalytics />}
+        {/* Starts browser Sentry on committed non-play routes (a visit that began on /play has none until then). */}
+        <SentryRouteStart />
       </body>
     </html>
   );

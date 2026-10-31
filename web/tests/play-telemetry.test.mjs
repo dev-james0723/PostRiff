@@ -1,0 +1,58 @@
+/** Decision D1 = exclude: nothing analytics or telemetry may leave the /play/* routes (children's games). */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { dropPlayPageview, isPlayAssetRequest, isPlayEvent, isPlayPath, isPlayUrl } from '../src/lib/play-path.ts';
+
+test('isPlayPath: exactly /play or under /play/, nothing that merely starts with "play"', () => {
+  for (const path of ['/play', '/play/', '/play/note-garden', '/play/note-garden/', '/play//x']) assert.equal(isPlayPath(path), true, path);
+  for (const path of ['/player', '/playground', '/app/play', '/plays', '/', '', '/pricing', 'play', undefined, null]) assert.equal(isPlayPath(path), false, String(path));
+});
+
+test('isPlayPath is case-sensitive and does not decode: Next serves the game only at the literal lowercase path', () => {
+  // Observed on `next start` (2026-10-31): /PLAY/note-garden, /Play/note-garden and /%70lay/note-garden are 404 pages
+  // without the game, so they are ordinary site pages and keep the site's analytics.
+  for (const path of ['/PLAY/note-garden', '/Play/note-garden', '/%70lay/note-garden']) assert.equal(isPlayPath(path), false, path);
+  // An encoded segment below /play/ is still inside the play area (a 404 there sends nothing either).
+  assert.equal(isPlayPath('/play/%6Eote-garden'), true);
+});
+
+test('isPlayUrl: absolute or relative URLs, with query and hash', () => {
+  for (const url of ['https://rafii.io/play/note-garden', 'http://127.0.0.1:3117/play?x=1', '/play/note-garden#top', '/play']) assert.equal(isPlayUrl(url), true, url);
+  for (const url of ['https://rafii.io/pricing', '/player', 'https://rafii.io/app/play', 'not a url', '', undefined]) assert.equal(isPlayUrl(url), false, String(url));
+});
+
+test('Vercel Analytics beforeSend drops /play page views and events, keeps everything else unchanged', () => {
+  assert.equal(dropPlayPageview({ type: 'pageview', url: 'https://rafii.io/play/note-garden' }), null);
+  assert.equal(dropPlayPageview({ type: 'event', url: 'https://rafii.io/play' }), null);
+  const other = { type: 'pageview', url: 'https://rafii.io/pricing' };
+  assert.equal(dropPlayPageview(other), other, 'other routes pass through untouched');
+});
+
+test('Sentry events are recognised as /play by request URL or transaction name', () => {
+  assert.equal(isPlayEvent({ request: { url: 'https://rafii.io/play/note-garden?x' } }), true);
+  assert.equal(isPlayEvent({ transaction: 'GET /play/note-garden' }), true);
+  assert.equal(isPlayEvent({ transaction: '/play/[game]' }), true);
+  assert.equal(isPlayEvent({ request: { url: 'https://rafii.io/pricing' }, transaction: 'GET /pricing' }), false);
+  assert.equal(isPlayEvent({ transaction: 'GET /playground' }), false);
+  // A transaction from a span outside any request scope still carries its path in the trace data.
+  assert.equal(isPlayEvent({ transaction: 'GET', contexts: { trace: { data: { 'http.target': '/play/note-garden' } } } }), true);
+  assert.equal(isPlayEvent({ transaction: 'GET', contexts: { trace: { data: { 'http.target': '/pricing' } } } }), false);
+  assert.equal(isPlayEvent({}), false);
+});
+
+test('isPlayAssetRequest: files a /play page loads (assets, metadata) are play traffic; pages and RSC requests are not', () => {
+  const play = 'http://127.0.0.1:3117/play/note-garden';
+  for (const url of ['/_next/static/chunks/app.js', '/_next/static/media/geist.woff2', '/_next/image?url=x', '/manifest.webmanifest', '/favicon.ico', '/icon?abc', '/apple-icon?abc']) {
+    assert.equal(isPlayAssetRequest(`http://127.0.0.1:3117${url}`, play), true, url);
+  }
+  // Leaving /play ("Back to Rafii") is a visit to the next page and keeps being counted, even with a /play Referer.
+  for (const url of ['/', '/pricing', '/pricing?_rsc=abc', '/app/drafts']) assert.equal(isPlayAssetRequest(`http://127.0.0.1:3117${url}`, play), false, url);
+  // The same assets loaded by any other page stay counted; no Referer means no attribution (documented limit).
+  // Only a same-host /play Referer counts: another site's /play page is not this game (codex D13-3).
+  for (const referer of ['https://elsewhere.example/play/note-garden', 'http://127.0.0.1:9999/play/note-garden']) {
+    assert.equal(isPlayAssetRequest('http://127.0.0.1:3117/_next/static/chunks/app.js', referer), false, referer);
+  }
+  for (const referer of ['http://127.0.0.1:3117/', 'http://127.0.0.1:3117/player', undefined, '']) {
+    assert.equal(isPlayAssetRequest('http://127.0.0.1:3117/_next/static/chunks/app.js', referer), false, String(referer));
+  }
+});
