@@ -4,6 +4,10 @@ if [ "$(uname -s)" != Linux ] || [ "${CI:-}" != true ]; then exit 64; fi
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export PYTHONPATH="$PWD/src:$PWD/tests"
 mkdir -p docs/consumer-ready/evidence/library
+# Library previews must never start a request once the page has begun to navigate: WebKit refuses it and
+# reports "…/preview due to access control checks." as a browser runtime error (seconds, both engines).
+node --test web/tests/library-preview-cancel.test.cjs
+(cd web && npx playwright install --with-deps chromium webkit && node tests/library-preview-teardown-browser.cjs)
 npm --prefix web audit --json > docs/consumer-ready/evidence/library/npm-audit.json || true
 python - <<'PY'
 import json
