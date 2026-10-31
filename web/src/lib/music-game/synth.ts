@@ -41,6 +41,8 @@ export type Synth = {
    * Resolves when the last note has ended, when a newer sound replaces it, or at once if silent.
    */
   play(events: SynthEvent[], options?: { delay?: number; cue?: 'correct' | 'try-again' }): Promise<void>;
+  /** Number of callers still waiting on a sound (diagnostics and tests). */
+  waiting(): number;
   /** unlock() then play(), unless a newer sound, stop, mute or close happened while the context was resuming. */
   request(events: SynthEvent[], options?: { delay?: number; cue?: 'correct' | 'try-again' }): Promise<void>;
   /** Fades out and stops every queued or sounding note. */
@@ -58,6 +60,8 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
   let master: GainNode | null = null;
   let muted = options.muted === true;
   let volume = options.volume ?? 'medium';
+  /** Settles the request still waiting for the context, if any; a newer request supersedes it at once. */
+  let waitingRequest: (() => void) | null = null;
   /** The one resume() in flight for the current context, shared by every caller (single flight). */
   let resuming: Promise<void> | null = null;
   /** The one schedule allowed to sound: its own bus into the master, and every oscillator it started. */
@@ -160,8 +164,9 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
 
   /** Builds a context with its master gain and limiter. A device without working Web Audio just stays silent. */
   function build(): boolean {
+    let c: AudioContext | null = null;
     try {
-      const c = options.createContext!();
+      c = options.createContext!();
       const m = c.createGain();
       m.gain.setValueAtTime(masterLevel(volume), c.currentTime);
       const limiter = c.createDynamicsCompressor();
@@ -176,6 +181,12 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
       master = m;
       return true;
     } catch {
+      // Partial construction: the context exists but its nodes could not be built. Close it so none is orphaned.
+      try {
+        if (c) void c.close().catch(() => {});
+      } catch {
+        // Already unusable.
+      }
       ctx = null;
       master = null;
       return false;
@@ -257,15 +268,31 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
   /** Waits for the shared resume, then schedules only if nothing newer (sound, stop, mute, close) happened meanwhile. */
   function request(events: SynthEvent[], opts: { delay?: number; cue?: 'correct' | 'try-again' } = {}): Promise<void> {
     const token = ++generation;
+    waitingRequest?.(); // superseded: settle the older waiter now, not when the shared resume finally settles
     return new Promise<void>((resolve) => {
-      // Released at once by stop, mute, close or a newer sound, so a resume that never settles cannot hang a caller.
-      waiting.push(resolve);
+      let settled = false;
+      const leave = () => {
+        if (waitingRequest === settle) waitingRequest = null;
+        waiting = waiting.filter((r) => r !== settle);
+      };
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        leave();
+        resolve();
+      };
+      // Also released by stop, mute or close, so a resume that never settles cannot hang a caller.
+      waitingRequest = settle;
+      waiting.push(settle);
       void unlock().then((ok) => {
+        if (settled) return;
         if (!ok || token !== generation) {
-          resolve();
+          settle();
           return;
         }
-        waiting = waiting.filter((r) => r !== resolve);
+        // Hand over to play(): from here the request settles when its sound ends or is replaced.
+        settled = true;
+        leave();
         void play(events, opts).then(resolve);
       });
     });
@@ -292,6 +319,7 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
       if (ctx && master && !muted) master.gain.setValueAtTime(masterLevel(volume), ctx.currentTime);
     },
     close: release,
+    waiting: () => waiting.length,
     ready() {
       return running();
     },

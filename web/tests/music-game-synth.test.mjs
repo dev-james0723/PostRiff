@@ -331,3 +331,36 @@ test('failed resume: the owned context is closed, waiting requests settle, and a
   for (const s of fake.made[1].sources) s.end();
   await b;
 });
+
+test('partial build failure: a context whose nodes cannot be built is closed, every attempt, and after close()', async () => {
+  const made = [];
+  const factory = () => {
+    const ctx = {
+      state: 'suspended', currentTime: 0, closed: false, destination: {},
+      close() { ctx.closed = true; ctx.state = 'closed'; return Promise.resolve(); },
+      createGain() { throw new Error('createGain failed'); }
+    };
+    made.push(ctx);
+    return ctx;
+  };
+  const synth = createSynth({ createContext: factory });
+  for (let i = 0; i < 3; i++) assert.equal(await synth.unlock(), false);
+  await synth.request([tone('C4')]);
+  synth.close();
+  assert.equal(made.length, 4);
+  assert.ok(made.every((c) => c.closed), `closed ${made.filter((c) => c.closed).length} of ${made.length} contexts`);
+});
+
+test('superseded waiters settle at once even if resume() never settles, and the waiter list does not grow', async () => {
+  const fake = fakeAudio({ deferResume: true }); // resume() is never settled in this test
+  const synth = createSynth({ createContext: fake.factory });
+  const settled = [];
+  const requests = Array.from({ length: 20 }, (_, i) => synth.request([tone('C4')]).then(() => settled.push(i)));
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.deepEqual(settled, Array.from({ length: 19 }, (_, i) => i), 'every superseded request settled at once');
+  assert.equal(synth.waiting(), 1, 'only the latest request is still waiting');
+  synth.stop();
+  await Promise.all(requests);
+  assert.equal(synth.waiting(), 0, 'nothing left waiting after stop()');
+  assert.deepEqual(scheduledHz(fake), []);
+});
