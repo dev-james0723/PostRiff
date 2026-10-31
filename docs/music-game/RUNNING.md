@@ -141,6 +141,7 @@ Observed with `next start` on 2026-10-31: only the literal `/play/note-garden` r
 | Vercel Web Analytics (when `NEXT_PUBLIC_VERCEL_ANALYTICS=1`) | `<Analytics>` is not rendered, so a direct visit never loads the script. `beforeSend` (the documented API in `@vercel/analytics` 1.6.1) drops `/play` page views and events after a client-side visit | `web/src/components/layout/site-analytics.tsx`, `web/src/app/layout.tsx` |
 | Sentry browser SDK (when a DSN is set) | Booting on `/play` never loads or initialises the SDK. After a client-side visit, a transport gate drops every envelope (event, transaction, session, client_report and any other type) while on `/play` or heading there. `beforeSend`/`beforeSendTransaction` drop `/play` events. Router transitions into `/play` are not recorded. The tally of events dropped on `/play` is also subtracted from the next client_report sent elsewhere | `web/src/lib/sentry-client.ts`, `web/src/instrumentation-client.ts`, `web/src/components/layout/sentry-route-start.tsx` |
 | Sentry server SDK | `beforeSend`/`beforeSendTransaction` drop events whose request URL or transaction is `/play`, and `onRequestError` skips `/play` request paths. While a `/play` request is handled, no outcome is recorded, so there's no tally in a later client_report (no dropped error, no sampled-out transaction). The request is also not counted in the request-session aggregates | `web/src/instrumentation.ts`, test `web/tests/play-sentry-server.test.cjs` |
+| Files the /play page loads (D12) | `/play` references no site manifest and no server-hosted icons: a `/play` segment layout sets `manifest: null` and an inline SVG tab icon. On the server, asset and metadata requests (`/_next/static`, `/_next/image`, manifest, favicon, icons) whose Referer is `/play` count as `/play` traffic, so they are not counted as request sessions or outcomes. Pages and RSC requests are never matched, so leaving `/play` still counts as a visit to the next page | `web/src/app/play/layout.tsx`, `web/src/lib/play-path.ts` (`isPlayAssetRequest`), `web/src/instrumentation.ts` |
 | Sign-in session (Supabase) | The proxy returns before the session refresh: no `getUser()` call, and no auth cookie set or refreshed, even for a signed-in parent on the same device. The legacy-host redirect still runs first | `web/src/proxy.ts`, test `web/tests/play-proxy.test.cjs` |
 | Speed Insights | Not installed; not added | — |
 
@@ -187,6 +188,31 @@ The browser test checks:
 5. **A visit that begins on `/play`, then navigates client-side to `/pricing` (and, separately, to `/`):** Sentry
    initialises and the analytics script loads there, with page views only for that page. An error is sent, and no
    telemetry request leaves while the page shows `/play`.
+
+**Server telemetry from a whole `/play` visit (D12)** needs a local Sentry sink, because the server only flushes its
+counts every 60 s:
+
+```sh
+SINK=http://public@127.0.0.1:3127/1
+NEXT_PUBLIC_VERCEL_ANALYTICS=1 NEXT_PUBLIC_SENTRY_DSN=$SINK SENTRY_RELEASE=local node_modules/.bin/next build
+NEXT_PUBLIC_VERCEL_ANALYTICS=1 NEXT_PUBLIC_SENTRY_DSN=$SINK SENTRY_RELEASE=local node_modules/.bin/next start -p 3117 -H 127.0.0.1
+# fresh server, touch only /play first (the readiness check may curl /play/note-garden)
+RAFII_TELEMETRY_URL=http://127.0.0.1:3117 SINK_PORT=3127 node tests/play-server-telemetry-sink.cjs   # ~2.5 min
+```
+
+Requests a headless `/play/note-garden` visit makes to the server (2026-10-31): the page itself plus 24 files under
+`/_next/static` (JS, CSS, the preloaded font). Nothing else. Before D12, those 24 files were counted as 24 request
+sessions plus sampled-out transactions. The page also referenced `/manifest.webmanifest`, `/icon` and `/apple-icon`.
+After D12, the server sends nothing for that visit within the 70 s window, while a home visit still produces its 42
+sessions and client_report.
+
+Limits:
+- Next always adds the root `app/favicon.ico` link on every page, including `/play`. A real browser's `/favicon.ico`
+  request is excluded when it carries a `/play` Referer, and counted (counts only, no URL) when it carries none.
+  Headless Chromium never requests favicons, so this is **NOT_TESTED**.
+- Any request without a Referer cannot be attributed to `/play`.
+- `og:image`/`twitter:image` point at absolute `rafii.io` URLs that browsers do not fetch. Only link-preview crawlers
+  do.
 
 Rebuild without those two variables before the normal game journey, or run the journey against this build. Both
 passed with 0 off-origin requests on 2026-10-31.
