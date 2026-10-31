@@ -1,0 +1,410 @@
+{
+  "task": "POC-1",
+  "state": "CANDIDATE_ONLY",
+  "base_sha": "5f93f37519e13c1ef4ffe2629576156b588875ed",
+  "candidate_diff_sha256": "85415a3cf029b5d11104c7747edae98f7f0a80f2301c34a0bd9ea60dc80c27ac",
+  "worktree": "/Users/ouxianxing/Documents/.agent-worktrees/rafii-poc1-candidate-20261015",
+  "branch": "claude/rafii-poc1-candidate-20261015",
+  "environment": "Depot runner depot-ubuntu-24.04-8; disposable PostgreSQL 16; synthetic fixtures",
+  "input_kind": "synthetic",
+  "contract_versions": {
+    "observation": "insights 2026-09 + read_offset (035)",
+    "snapshot": "coworker.review 1.0 / review-export-v2 / review-qualification-v2-window-tolerance",
+    "eligibility": "operation-eligibility-v1 (analytics.read)"
+  },
+  "validation": [
+    {
+      "acceptance_id": "A-D01",
+      "test": "missing與zero",
+      "result": "PASS",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::test_A_D01_observed_zero_and_missing_stay_distinct",
+        "tests/test_rafii_poc1_review.py::test_A_D13 (CSV null vs 0.0)",
+        "tests/phase2/postgres_rafii_poc1.py A-D01 block"
+      ],
+      "note": "Zero stays a measured 0.0; unavailable stays null/missing in projection, report JSON, MD, CSV and HTML. No model input exists in this path; takeaways read only measured values.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-D02",
+      "test": "post-age窗口",
+      "result": "PASS",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::test_A_D02_*",
+        "tests/test_rafii_poc1_review.py::WindowTruth",
+        "tests/phase2/postgres_rafii_poc1.py A-D02 blocks (stored rows + scheduler)"
+      ],
+      "note": "Late (> +24h+3h), legacy NULL offset and early readings are excluded with reason, windowQualification and actualAgeSeconds kept; the scheduler closes a late read as window_missed with no provider call; post-cutoff readings are invisible to a fixed scope.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-D03",
+      "test": "原生metric definition",
+      "result": "PASS",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::test_A_D03_native_definition_unit_and_metric_identity_are_exact",
+        "tests/phase2/postgres_rafii_poc1.py definition edge post"
+      ],
+      "note": "nativeName/definitionVersion/unit must equal the scope; other definitions or units are excluded and never aggregated; mixed-reading ratios are refused. No ratio is part of the POC-1 metric.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-D05",
+      "test": "insufficient sample",
+      "result": "PASS",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::test_A_D05_insufficient_sample_degrades_without_an_aggregate"
+      ],
+      "note": "Below 3 comparable publications the group has no aggregate, the projection is insufficient_sample, no takeaway is produced, exclusions are listed and the floor is labelled descriptive, not statistical confidence.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-D11",
+      "test": "AI不補數字",
+      "result": "PASS (scope)",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::test_A_D11_takeaways_use_only_measured_snapshot_numbers"
+      ],
+      "note": "Takeaways are deterministic (generatedBy=deterministic) and bound to the snapshot's context/basis digests; missing native values stay missing. No model is called anywhere in this candidate, so model behaviour itself is NOT RUN.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-D13",
+      "test": "report parity",
+      "result": "PARTIAL",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::test_A_D13_every_rendering_comes_from_one_frozen_payload",
+        "tests/phase2/postgres_rafii_poc1.py A-D13 block"
+      ],
+      "note": "Report JSON (the screen payload), Markdown, CSV and printable HTML carry the same snapshotId, payloadDigest and inputDigest and identical per-row values. Not run: an on-screen React view (no web change) and a real browser PDF print.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-C02",
+      "test": "wrong account/workspace",
+      "result": "PASS (existing)",
+      "evidence": [
+        "tests/phase2/postgres_channels.py (state from another workspace/member refused)",
+        "tests/test_rafii_poc1_review.py::Eligibility (credential provider mismatch)",
+        "tests/phase2/postgres_rafii_poc1.py A-S01 block"
+      ],
+      "note": "No OAuth code changed. The existing state/member/workspace binding was re-run on the candidate tree; the eligibility projection refuses a credential of another provider and accounts outside the workspace.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-C05",
+      "test": "revoked scope",
+      "result": "PASS",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::test_A_S02_A_C05_*",
+        "tests/test_rafii_poc1_review.py::Eligibility",
+        "tests/phase2/postgres_rafii_poc1.py A-C05/A-S02 block",
+        "tests/phase2/postgres_channels.py (scope drift downgrade)"
+      ],
+      "note": "A missing *_manage_insights scope makes analytics.read unusable at once (userGrant=downgraded, repair=reconnect); stored values, sources, aggregates and exports are withheld, the bound experiment cannot start and a pending read is cancelled before any grant or provider call.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-C06",
+      "test": "callback replay/idempotency",
+      "result": "PASS (existing)",
+      "evidence": [
+        "tests/phase2/postgres_channels.py (single-use state; reconnect returns the same connectionId)"
+      ],
+      "note": "No OAuth code changed; the existing single-use state and stable-identity reconnect checks were re-run on the candidate tree.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-C09",
+      "test": "disconnect pending jobs",
+      "result": "PARTIAL",
+      "evidence": [
+        "tests/phase2/postgres_rafii_poc1.py A-C09/A-S02 block",
+        "tests/phase2/postgres_growth_metric_reads.py (lost Direct analytics cancels before token)"
+      ],
+      "note": "After disconnect, pending reads are cancelled before any grant/provider call and the report is withheld (410). The disconnect was simulated with the rows the existing disconnect writes; the stored-observation purge/retention path (history_import purge) was not exercised.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-U01",
+      "test": "source→takeaway",
+      "result": "PASS",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::test_A_U01_comparison_takeaway_keeps_support_counter_evidence_and_exclusions",
+        "tests/phase2/postgres_rafii_poc1.py A-U01/A-U02 block"
+      ],
+      "note": "Every takeaway lists support bindings (observation id, publication binding, sanitized native source), counter-evidence for comparisons, baseline bindings and excludedByReason.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-U02",
+      "test": "takeaway→draft",
+      "result": "PASS",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::DraftLink",
+        "tests/phase2/postgres_rafii_poc1.py A-U01/A-U02 block"
+      ],
+      "note": "Proposal from the report takeaway creates the existing Growth Loop experiment (bound to snapshot id/version/payload digest); only after owner accept + prepare can an existing versioned draft be linked; no review, approval or publishing job is created. No draft is generated (no model).",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-U03",
+      "test": "既有approval",
+      "result": "PASS",
+      "evidence": [
+        "tests/test_postriff_phase2.py::test_manifest_approval_idempotency_and_tampering (existing)",
+        "tests/test_rafii_poc1_review.py::DraftLink",
+        "tests/phase2/postgres_rafii_poc1.py A-U03 block"
+      ],
+      "note": "The existing approval manifest still holds a job when the variant revision changes (re-run on candidate tree); a linked draft that is edited shows revision_changed and a stale revision cannot be linked.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-S01",
+      "test": "workspace isolation",
+      "result": "PASS",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::test_A_S01_scope_cannot_reach_another_workspace_or_account",
+        "tests/phase2/postgres_rafii_poc1.py A-S01 block"
+      ],
+      "note": "Another member or workspace cannot read, export, scope or create the report; foreign workspace/account/observation ids are refused or excluded; generic workspace state and RLS reads do not expose report storage.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-S02",
+      "test": "current rights expiry",
+      "result": "PASS",
+      "evidence": [
+        "tests/test_rafii_poc1_review.py::test_A_S02_A_C05_*",
+        "tests/phase2/postgres_rafii_poc1.py A-C05/A-S02 and A-C09/A-S02 blocks"
+      ],
+      "note": "read, render and every export re-check current operation eligibility, channel state, observation integrity and payload digest; expired/downgraded/revoked rights withhold values; identical restored rights restore the frozen report.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-S07",
+      "test": "GET/mount/filter no paid work",
+      "result": "PASS",
+      "evidence": [
+        "tests/phase2/postgres_rafii_poc1.py A-D01/02/03/05 and A-D13 blocks"
+      ],
+      "note": "Reads, three filter variations, report JSON and all exports left metric reads/observations, model usage, usage ledger, product events, AI call events and workspace revision unchanged, with zero provider and zero grant calls.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    },
+    {
+      "acceptance_id": "A-S08",
+      "test": "model usage ledger",
+      "result": "PASS (scope) / existing",
+      "evidence": [
+        "tests/phase2/postgres_rafii_poc1.py A-S08 block",
+        "tests/test_growth_router.py (existing, re-run)"
+      ],
+      "note": "The POC-1 path makes zero model attempts and writes zero usage/ledger/AI-call rows. Per-attempt ledger, failure accounting and no-double-charge semantics belong to the existing router/ledger, re-run unchanged; no new model path was added.",
+      "runs": [
+        {
+          "runId": "vp5kcw6596",
+          "exitCode": 0,
+          "stages": "targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"
+        },
+        {
+          "runId": "n0cd7hj8n5",
+          "exitCode": 0,
+          "stages": "every tests/phase2/postgres_*.py group: 133 results, 0 failed"
+        }
+      ]
+    }
+  ],
+  "external_effects": [],
+  "cost": {
+    "estimateUsd": 0.33,
+    "basis": "(281.6 s + 546.2 s) x USD 0.024/min published depot-ubuntu-24.04-8 rate; elapsed includes queueing, so this is an upper-bound estimate; provider invoice not read",
+    "capUsd": 10
+  },
+  "remaining_native_gates": [
+    "POC-2 native read-only check on a real authorized Instagram/Threads account (AP-4)",
+    "ordinary-user (non-developer) behaviour",
+    "platform app review / approval status (recorded as unknown)",
+    "on-screen report UI and real PDF print (AP-5)",
+    "stored-observation purge/retention after disconnect (existing history_import purge not exercised)",
+    "commit/PR/merge/deploy and flag enablement (AP-1)",
+    "PR #126/#142 integration ownership (AP-2)",
+    "independent Codex review (AP-6, not run: paid LLM excluded)"
+  ],
+  "rollback": "Keep RAFII_REVIEW_SNAPSHOTS_ENABLED off (default); revert the metric_schedule window-bound and attach_draft hunks if unwanted; no migration; raw observations never rewritten; discard the uncommitted worktree changes to remove the candidate."
+}
