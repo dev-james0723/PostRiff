@@ -38,34 +38,66 @@ function withoutPlayDrops<E>(envelope: E): E | null {
   return kept.length ? ([headers, kept] as unknown as E) : null;
 }
 
+type SentryModule = typeof import('@sentry/nextjs');
+
 // Disabled/unconfigured deployments must not download or initialize the SDK.
-const sdk = !process.env.NEXT_PUBLIC_SENTRY_DISABLED && process.env.NEXT_PUBLIC_SENTRY_DSN && !onPlay()
-  ? import('@sentry/nextjs').then((Sentry) => {
-      const playSafeTransport: typeof Sentry.makeFetchTransport = (options) => {
-        const transport = Sentry.makeFetchTransport(options);
-        return {
-          ...transport,
-          send: (envelope) => {
-            const outgoing = onPlay() ? null : withoutPlayDrops(envelope);
-            return outgoing ? transport.send(outgoing) : Promise.resolve({});
-          }
-        };
+const enabled = !process.env.NEXT_PUBLIC_SENTRY_DISABLED && Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN);
+let sdk: Promise<SentryModule | null> | null = null;
+
+/** Loads and initialises Sentry once, with the same options whether the visit began on /play or not. */
+function startSentry(): Promise<SentryModule | null> | null {
+  if (!enabled) return null;
+  sdk ??= import('@sentry/nextjs').then((Sentry) => {
+    const playSafeTransport: typeof Sentry.makeFetchTransport = (options) => {
+      const transport = Sentry.makeFetchTransport(options);
+      return {
+        ...transport,
+        send: (envelope) => {
+          const outgoing = onPlay() ? null : withoutPlayDrops(envelope);
+          return outgoing ? transport.send(outgoing) : Promise.resolve({});
+        }
       };
-      Sentry.init({
-        dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-        sendDefaultPii: false,
-        tracesSampleRate: 0,
-        beforeSend: (event) => (onPlay() || isPlayEvent(event) ? dropForPlay('error') : scrubTelemetry(event)),
-        beforeSendTransaction: (event) => (onPlay() || isPlayEvent(event) ? dropForPlay('transaction') : event),
-        transport: playSafeTransport,
-        debug: false
-      });
-      return Sentry;
-    }).catch(() => null)
-  : null;
+    };
+    Sentry.init({
+      dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+      sendDefaultPii: false,
+      tracesSampleRate: 0,
+      beforeSend: (event) => (onPlay() || isPlayEvent(event) ? dropForPlay('error') : scrubTelemetry(event)),
+      beforeSendTransaction: (event) => (onPlay() || isPlayEvent(event) ? dropForPlay('transaction') : event),
+      transport: playSafeTransport,
+      debug: false
+    });
+    return Sentry;
+  }).catch(() => null);
+  return sdk;
+}
+
+/** Resolves true once the address bar has left /play (checked per frame, up to ~5 s); false if heading back in. */
+function afterLeavingPlay(): Promise<boolean> {
+  return new Promise((resolve) => {
+    let frames = 0;
+    const check = () => {
+      if (!isPlayPath(window.location.pathname)) resolve(true);
+      else if (headingToPlay || frames++ > 300) resolve(false);
+      else requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+
+// A visit that begins on /play never loads Sentry while there (see onRouterTransitionStart for leaving).
+if (!onPlay()) startSentry();
 
 export function onRouterTransitionStart(href: string, navigationType: string) {
   headingToPlay = isPlayUrl(href);
   if (headingToPlay) return;
-  void sdk?.then((Sentry) => Sentry?.captureRouterTransitionStart(href, navigationType));
+  if (sdk) {
+    void sdk.then((Sentry) => Sentry?.captureRouterTransitionStart(href, navigationType));
+    return;
+  }
+  // The visit began on /play, so Sentry was never started. Leaving for a normal page starts it there, as a direct
+  // visit to that page would, once the address bar shows it: nothing is initialised or sent while still on /play.
+  void afterLeavingPlay().then((left) => {
+    if (left) startSentry();
+  });
 }
