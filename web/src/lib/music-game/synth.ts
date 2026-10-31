@@ -64,7 +64,6 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
   function stopAll() {
     for (const osc of live) {
       try {
-        osc.onended = null;
         osc.stop();
       } catch {
         // Already stopped.
@@ -83,7 +82,7 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
     osc.start(at);
     osc.stop(until);
     live.add(osc);
-    osc.addEventListener?.('ended', () => live.delete(osc));
+    osc.addEventListener('ended', () => live.delete(osc), { once: true });
     return osc;
   }
 
@@ -174,10 +173,14 @@ export function createSynth(options: { createContext?: () => AudioContext; muted
       if (!last) return Promise.resolve();
       return new Promise<void>((resolve) => {
         waiting.push(resolve);
-        last.onended = () => {
-          waiting = waiting.filter((r) => r !== resolve);
-          resolve();
-        };
+        last.addEventListener(
+          'ended',
+          () => {
+            waiting = waiting.filter((r) => r !== resolve);
+            resolve();
+          },
+          { once: true }
+        );
       });
     },
     feedback(kind) {

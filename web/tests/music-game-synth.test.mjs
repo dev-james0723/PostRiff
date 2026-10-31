@@ -34,7 +34,12 @@ function fakeAudio() {
         return c;
       },
       createOscillator() {
-        const o = node({ type: '', frequency: param(), started: false, stopped: false, onended: null, start() { o.started = true; }, stop() { o.stopped = true; } });
+        const o = node({
+          type: '', frequency: param(), started: false, stopped: false, listeners: [],
+          addEventListener(type, fn) { if (type === 'ended') o.listeners.push(fn); },
+          end() { for (const fn of o.listeners.splice(0)) fn(); },
+          start() { o.started = true; }, stop() { o.stopped = true; }
+        });
         ctx.sources.push(o);
         return o;
       }
@@ -99,8 +104,7 @@ test('tones and clicks are scheduled on the audio clock and play() settles when 
   assert.ok(sources.length >= 3 && sources.every((s) => s.started));
   await Promise.resolve();
   assert.equal(settled, false);
-  const last = sources.find((s) => typeof s.onended === 'function');
-  last.onended();
+  for (const s of sources) s.end();
   await done;
   assert.equal(settled, true);
 });
