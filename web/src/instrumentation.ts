@@ -13,7 +13,12 @@ const sentryOptions: Sentry.NodeOptions | Sentry.EdgeOptions = {
   sendDefaultPii: false,
 
   // Adjust this value in production, or use tracesSampler for greater control
-  tracesSampleRate: 0,
+  // Same as tracesSampleRate: 0 (inherit a parent's decision, else 0), but notes when the decision is for /play.
+  tracesSampler: (context) => {
+    const target = context.attributes?.['http.target'];
+    samplingPlay = inPlayRequest() || isPlayUrl(typeof target === 'string' ? target : undefined);
+    return context.inheritOrSampleWith(0);
+  },
   // D1: nothing from the children's /play area is sent; other routes keep the existing scrubbing.
   beforeSend: (event) => (isPlayEvent(event) || inPlayRequest() ? null : scrubTelemetry(event)),
   beforeSendTransaction: (event) => (isPlayEvent(event) || inPlayRequest() ? null : event),
@@ -21,6 +26,13 @@ const sentryOptions: Sentry.NodeOptions | Sentry.EdgeOptions = {
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false
 };
+
+/**
+ * True when the sampling decision the SDK is about to record is for /play. The SDK calls tracesSampler and then,
+ * synchronously, records the sample_rate drop. Even the first request after a cold start, which runs before Sentry has
+ * a request scope for it, carries its path in the span's `http.target` attribute.
+ */
+let samplingPlay = false;
 
 type RequestInfo = { url?: string; headers?: Record<string, string | string[] | undefined> };
 
@@ -40,7 +52,8 @@ function inPlayRequest(): boolean {
  * - Request sessions: core counts a request when its response closes, only if `requestSession` is still set on the
  *   request's isolation scope, so it is cleared for /play as the request starts (`httpServerRequest`).
  * - Client reports: outcomes (dropped by beforeSend, sampled out, …) are not recorded while handling /play, so no
- *   tally of the request reaches a later client_report. Every other route reports exactly as before.
+ *   tally of the request reaches a later client_report. Sampled-out /play spans are recognised by their path too
+ *   (tracesSampler), which also covers a cold start's first request. Every other route reports exactly as before.
  */
 function excludePlayRequests() {
   const client = Sentry.getClient();
@@ -50,7 +63,9 @@ function excludePlayRequests() {
   });
   const record = client.recordDroppedEvent.bind(client);
   client.recordDroppedEvent = (...args: Parameters<typeof record>) => {
-    if (!inPlayRequest()) record(...args);
+    const sampledOutPlay = args[0] === 'sample_rate' && samplingPlay;
+    if (args[0] === 'sample_rate') samplingPlay = false;
+    if (!sampledOutPlay && !inPlayRequest()) record(...args);
   };
 }
 

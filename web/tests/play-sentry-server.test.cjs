@@ -67,6 +67,9 @@ test('server: a /play request and the assets it loads send nothing; other pages 
     server.emit('request', req, res);
     res.emit('close');
   }
+  // A cold start's first request runs before Sentry has a request scope for it; its spans still carry the path.
+  Sentry.startInactiveSpan({ name: 'GET', attributes: { 'http.target': '/play/note-garden', 'http.method': 'GET' } }).end();
+  Sentry.startInactiveSpan({ name: 'GET', attributes: { 'http.target': '/pricing', 'http.method': 'GET' } }).end();
   await Sentry.flush(2000);
   // Outcomes recorded after the first flush go out with the next one; close() flushes them too.
   await Sentry.close(2000);
@@ -78,7 +81,7 @@ test('server: a /play request and the assets it loads send nothing; other pages 
   const tallies = all.filter((i) => i.type === 'client_report').flatMap((i) => i.payload.discarded_events ?? []);
   assert.deepEqual(tallies.filter((d) => d.reason === 'before_send'), [], `no tally of the /play drop: ${JSON.stringify(tallies)}`);
   const sampledOut = tallies.filter((d) => d.reason === 'sample_rate' && d.category === 'transaction').reduce((n, d) => n + d.quantity, 0);
-  assert.equal(sampledOut, 2, `only /pricing and / have sampled-out transactions tallied (static assets create none): ${JSON.stringify(tallies)}`);
+  assert.equal(sampledOut, 3, `only /pricing, / and the out-of-scope /pricing span are tallied as sampled out (not /play, not static assets): ${JSON.stringify(tallies)}`);
   const aggregates = all.filter((i) => i.type === 'sessions').flatMap((i) => i.payload.aggregates ?? []);
   const counted = aggregates.reduce((sum, a) => sum + (a.exited ?? 0) + (a.errored ?? 0) + (a.crashed ?? 0), 0);
   assert.equal(counted, 3, `only the three non-play requests are request sessions: ${JSON.stringify(aggregates)}`);
