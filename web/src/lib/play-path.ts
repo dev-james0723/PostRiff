@@ -27,11 +27,15 @@ export function dropPlayPageview<T extends { url: string }>(event: T): T | null 
   return isPlayUrl(event.url) ? null : event;
 }
 
-/** True when a Sentry event or transaction came from /play (request URL, or a transaction name like "GET /play/x"). */
-export function isPlayEvent(event: { request?: { url?: string }; transaction?: string }): boolean {
+/**
+ * True when a Sentry event or transaction came from /play: its request URL, a transaction name like "GET /play/x", or
+ * the span's own http.target (a span outside any request scope, e.g. a cold start's first request).
+ */
+export function isPlayEvent(event: { request?: { url?: string }; transaction?: string; contexts?: { trace?: { data?: Record<string, unknown> } } }): boolean {
   if (isPlayUrl(event.request?.url)) return true;
   const name = event.transaction?.replace(/^[A-Z]+\s+/, '');
-  return isPlayPath(name);
+  const target = event.contexts?.trace?.data?.['http.target'];
+  return isPlayPath(name) || isPlayUrl(typeof target === 'string' ? target : undefined);
 }
 
 /** Files a page loads rather than pages: build assets, optimised images and the site metadata files. */
@@ -40,12 +44,15 @@ const ASSET = /^\/(_next\/(static|image)\b|manifest\.webmanifest$|favicon\.ico$|
 /**
  * D12: an asset or metadata request made by a /play page (its Referer is /play). Such requests are /play traffic for
  * server telemetry. Page and RSC requests are never matched, so leaving /play still counts as a visit to the next
- * page. A request without a Referer cannot be attributed and is not matched.
+ * page. Only a same-host Referer counts; a request without a Referer cannot be attributed and is not matched.
  */
 export function isPlayAssetRequest(url: string | null | undefined, referer: string | null | undefined): boolean {
-  if (!url || !isPlayUrl(referer)) return false;
+  if (!url || !referer || !isPlayUrl(referer)) return false;
   try {
-    return ASSET.test(new URL(url, 'http://local.invalid').pathname);
+    const request = new URL(url, 'http://local.invalid');
+    // Same host only (codex D13-3): another site's /play page is not this game. Host, not full origin, so a TLS proxy
+    // that reports the request as http while the browser's Referer is https still matches.
+    return request.host === new URL(referer).host && ASSET.test(request.pathname);
   } catch {
     return false;
   }

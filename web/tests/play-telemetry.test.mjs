@@ -34,6 +34,9 @@ test('Sentry events are recognised as /play by request URL or transaction name',
   assert.equal(isPlayEvent({ transaction: '/play/[game]' }), true);
   assert.equal(isPlayEvent({ request: { url: 'https://rafii.io/pricing' }, transaction: 'GET /pricing' }), false);
   assert.equal(isPlayEvent({ transaction: 'GET /playground' }), false);
+  // A transaction from a span outside any request scope still carries its path in the trace data.
+  assert.equal(isPlayEvent({ transaction: 'GET', contexts: { trace: { data: { 'http.target': '/play/note-garden' } } } }), true);
+  assert.equal(isPlayEvent({ transaction: 'GET', contexts: { trace: { data: { 'http.target': '/pricing' } } } }), false);
   assert.equal(isPlayEvent({}), false);
 });
 
@@ -45,6 +48,10 @@ test('isPlayAssetRequest: files a /play page loads (assets, metadata) are play t
   // Leaving /play ("Back to Rafii") is a visit to the next page and keeps being counted, even with a /play Referer.
   for (const url of ['/', '/pricing', '/pricing?_rsc=abc', '/app/drafts']) assert.equal(isPlayAssetRequest(`http://127.0.0.1:3117${url}`, play), false, url);
   // The same assets loaded by any other page stay counted; no Referer means no attribution (documented limit).
+  // Only a same-host /play Referer counts: another site's /play page is not this game (codex D13-3).
+  for (const referer of ['https://elsewhere.example/play/note-garden', 'http://127.0.0.1:9999/play/note-garden']) {
+    assert.equal(isPlayAssetRequest('http://127.0.0.1:3117/_next/static/chunks/app.js', referer), false, referer);
+  }
   for (const referer of ['http://127.0.0.1:3117/', 'http://127.0.0.1:3117/player', undefined, '']) {
     assert.equal(isPlayAssetRequest('http://127.0.0.1:3117/_next/static/chunks/app.js', referer), false, String(referer));
   }
