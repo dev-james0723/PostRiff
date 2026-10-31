@@ -101,14 +101,25 @@ const TOKEN_NAMES: Record<Token, string> = { Q: 'quarter note', H: 'half note', 
 const TOKEN_WORDS: Record<Token, string> = { Q: 'quarter', H: 'half', W: 'whole', E2: 'two eighths', R: 'rest' };
 const SYLLABLES: Record<Token, string> = { Q: 'ta', H: 'ta-a', W: 'ta-a-a-a', E2: 'ti-ti', R: 'shh' };
 
-export const PRAISE = [
-  'Yes! Great listening!',
-  'You got it!',
-  "That's right! Nice looking!",
-  'Well done. You counted carefully!',
-  'Brilliant ear!',
-  'Correct! Your garden is growing!'
-];
+export type PraiseKind = 'listen' | 'look' | 'count';
+/** SPEC praise lines, grouped so the praise names the skill the child just used. */
+export const PRAISE: Record<PraiseKind, string[]> = {
+  listen: ['Yes! Great listening!', 'Brilliant ear!', 'You got it!', 'Correct! Your garden is growing!'],
+  look: ["That's right! Nice looking!", 'You got it!', 'Sharp eyes!', 'Correct! Your garden is growing!'],
+  count: ['Well done. You counted carefully!', 'You got it!', 'Correct! Your garden is growing!']
+};
+
+export function praiseKind(question: Question): PraiseKind {
+  if (question.type === 'count-beats' || question.type === 'fill-bar') return 'count';
+  if (question.type === 'name-note' || question.type === 'find-note' || (question.type === 'step-skip' && question.seen)) return 'look';
+  return 'listen';
+}
+
+/** The n-th praise line of the right kind; rotating means no line repeats back to back. */
+export function praiseFor(question: Question, n: number): string {
+  const lines = PRAISE[praiseKind(question)];
+  return lines[n % lines.length];
+}
 export const TRY_AGAIN = ['Not quite. Try again!', 'So close! Have another go.', 'Hmm, listen once more.'];
 export const REVEAL_LEAD = "Let's see together.";
 export const LEVEL_DONE: Record<number, string> = {

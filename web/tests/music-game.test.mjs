@@ -14,7 +14,10 @@ import {
   midiToFrequency,
   nextQuestion,
   noteToMidi,
+  PRAISE,
   positionPhrase,
+  praiseFor,
+  praiseKind,
   rhythmEvents,
   staffStep,
   starsFor,
@@ -284,4 +287,19 @@ test('toneEvents spaces notes by duration plus gap', () => {
     { kind: 'tone', note: 'C4', at: 0, seconds: 0.6 },
     { kind: 'tone', note: 'D4', at: 1, seconds: 0.6 }
   ]);
+});
+
+test('praise fits the skill: listening, looking or counting, and never repeats back to back', () => {
+  const kind = { 'same-different': 'listen', 'up-down': 'listen', 'hear-rhythm': 'listen', 'name-note': 'look', 'find-note': 'look', 'count-beats': 'count', 'fill-bar': 'count' };
+  for (const level of LEVELS) {
+    for (const q of generateQuestions(level.number, 3)) {
+      const expected = q.type === 'step-skip' ? (q.seen ? 'look' : 'listen') : kind[q.type];
+      assert.equal(praiseKind(q), expected, q.id);
+      const lines = [0, 1, 2].map((i) => praiseFor(q, i));
+      for (const line of lines) assert.ok(PRAISE[expected].includes(line));
+      assert.notEqual(lines[0], lines[1]);
+    }
+  }
+  assert.ok(PRAISE.count.every((line) => !/listen|ear/i.test(line)), 'no listening praise on counting questions');
+  assert.ok(PRAISE.look.every((line) => !/listen|ear/i.test(line)));
 });
