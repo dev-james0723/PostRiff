@@ -1,0 +1,37 @@
+{
+  "checkedAt": "2026-10-17T16:18:14.197076+00:00",
+  "classification": "real_read_only_production_metadata_only",
+  "projectRef": "buoyhkbodnhzngaotoel",
+  "projectName": "postriff-phase2-private",
+  "serverVersion": "17.6",
+  "quotaTableExists": false,
+  "credentialAndOAuthTables": {
+    "rls": true,
+    "forceRls": true,
+    "anonSelect": false,
+    "authenticatedSelect": false
+  },
+  "vercelProject": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "deployment": "dpl_BLyFgcDyW85wPrEsJV5qrkXsmrLj",
+  "deploymentState": "READY",
+  "gitMetadataSha": null,
+  "runtimeQualification": "current-runtime-source-receipt-reference.json",
+  "pinterestEnvironmentMetadata": [
+    {
+      "key": "POSTRIFF_OAUTH_PINTEREST_CALLBACK_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ]
+    }
+  ],
+  "clientIdPresent": false,
+  "clientSecretPresent": false,
+  "secretValuesRead": false,
+  "credentialRowsRead": false,
+  "productionWrites": 0,
+  "callbackRegistration": "Verified after reload 2026-10-15; not changed this phase",
+  "callbackOriginValue": "Last checked 2026-10-15; old postriff-phase2-private.vercel.app alias; not re-read 2026-10-17",
+  "billing": "Last checked 2026-10-15 Pro/overdue; not rechecked; later READY deployments prevent inferring deployment rejection",
+  "quotaMigrationSha256": "9a9b20f0e41ce5ba65c1bf013ed9e427e4b60237dc1e9130ac9043253f56fce4"
+}

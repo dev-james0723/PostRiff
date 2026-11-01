@@ -1,0 +1,15 @@
+{
+  "status": "FAIL",
+  "runId": "r6gmbkjt4p",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/r6gmbkjt4p",
+  "source": "fce85ddc03fdb05761d21d8f3bc37c88f52c7a16",
+  "remoteExitCode": 1,
+  "controllerExitCode": 1,
+  "elapsedSeconds": 95.294,
+  "pythonTests": 376,
+  "failures": 1,
+  "failedTest": "test_disconnect_stays_available_while_browser_needs_step_up",
+  "cause": "New test omitted required JSON body on DELETE; actual server returned413 before route dispatch. Fixture changed to body={} without changing product behavior or expected authorization.",
+  "postgresAndFrontend": "NOT RUN because unit stage failed",
+  "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261017T153940287179Z-ci.json"
+}

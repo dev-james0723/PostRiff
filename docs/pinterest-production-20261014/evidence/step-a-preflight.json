@@ -1,0 +1,87 @@
+{
+  "checkedAt": "2026-10-14T23:07:54.815387+00:00",
+  "sourceCommit": "a54fadf519a69e125ebd1d0d4c3139f2946ee183",
+  "sourceFingerprints": {
+    "files": 42,
+    "mismatches": 0,
+    "productTreeMatchesSourceCommit": true
+  },
+  "approval": {
+    "status": "APPROVED",
+    "scope": "Step A only",
+    "reply": "Approve",
+    "proposalSha256": "1a30e8ae26db74d62760b9afa2cf087d3f3613facc47c660669d0f4fe6ad7e45"
+  },
+  "staging": {
+    "ref": "oxacvkhpfgytkepxcaqh",
+    "name": "rafii-consumer-staging",
+    "status": "ACTIVE_HEALTHY",
+    "region": "us-east-1",
+    "readOnlyTransaction": true,
+    "aggregate": {
+      "workspaces": 6,
+      "authUsers": 5,
+      "authSessions": 23,
+      "appSessions": 28,
+      "jobs": 0,
+      "recurringTasks": 1,
+      "encryptedCredentials": 3,
+      "channels": 0
+    },
+    "userRowsRead": false,
+    "credentialValuesRead": false,
+    "dedicatedDatabaseQualification": "FAIL",
+    "reason": "Existing consumer staging shares auth/session/application/credential tables. Candidate worker selects public.pr_workspaces across the database; a fresh vault key does not create DB/auth/job isolation."
+  },
+  "vercel": {
+    "teamId": "team_PgXY5VdAYKcsv0RLoDPHscNq",
+    "projectId": "prj_7AB6iulp2Vk0wPqeT1CRAi9XwBUl",
+    "projectName": "rafii-pinterest-trial-staging",
+    "projectObservedExisting": true,
+    "projectCreationAttribution": "NOT VERIFIED",
+    "latestDeployment": null,
+    "live": false,
+    "environmentCount": 0,
+    "plan": "pro",
+    "billingStatus": "overdue",
+    "concurrentBuilds": 1,
+    "elasticConcurrencyEnabled": false,
+    "proposedAlias": "rafii-pinterest-trial-staging.vercel.app",
+    "aliasLookupHttpStatus": 404,
+    "aliasAssigned": false,
+    "globalAliasAvailability": "NOT VERIFIED",
+    "ssoProtection": {
+      "enabled": true,
+      "deploymentType": "all_except_custom_domains"
+    },
+    "callbackPublicReachability": "NOT RUN",
+    "spendManagement": null,
+    "boundedDeploymentCostQualification": "BLOCKED",
+    "envMetadataMcp": "403 forbidden",
+    "envMetadataCli": "PASS exit0; no environment variables"
+  },
+  "cleanDatabaseProposal": {
+    "name": "rafii-pinterest-isolated-staging",
+    "organizationId": "gztpsyvraqdcoklwpvdo",
+    "organizationName": "dfestival.office@gmail.com's Org",
+    "organizationPlan": "pro",
+    "region": "us-east-1",
+    "compute": "Micro",
+    "publicHourlyRateUSD": 0.01344,
+    "publicApproxMonthlyRateUSD": 10,
+    "organizationSpecificQuote": "validation_unavailable: MCP get_cost was not returned by tools/list",
+    "priceSources": [
+      "https://supabase.com/docs/guides/platform/compute-and-disk",
+      "https://supabase.com/pricing"
+    ],
+    "authorized": false
+  },
+  "currentPhaseExternalMutations": 0,
+  "productionConnection": false,
+  "productionSecretRead": false,
+  "productionMutation": false,
+  "oauthConsent": "NOT RUN",
+  "providerRequests": 0,
+  "pinCreation": "NOT RUN",
+  "deployment": "BLOCKED"
+}

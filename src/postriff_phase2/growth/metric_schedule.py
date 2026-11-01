@@ -7,7 +7,7 @@ Two halves, so no HTTP ever runs inside the publishing worker's transaction:
   any transaction, then records the observations and closes the row in one transaction fenced on the lease, so a
   crash-recovered re-claim cannot double-write.
 
-Only Threads and Instagram posts on connections whose analytics capability is Direct are scheduled or read; both
+Only admitted Threads, Instagram and separately enabled Pinterest posts on connections whose analytics capability is Direct are scheduled or read; both
 are re-checked before every read (a disconnect or account deletion stops readings). A failed read never writes an
 'unavailable' observation that would hide an earlier real value: transient failures retry with backoff; terminal
 ones close the schedule row only. Everything is off unless POSTRIFF_METRIC_READS is "1" and the workspace is in
@@ -28,6 +28,7 @@ from .. import insights
 FLAG = "POSTRIFF_METRIC_READS"
 WORKSPACE_ALLOWLIST = "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST"
 NATIVE_ANALYTICS_SCOPES = {
+    "pinterest": frozenset({"user_accounts:read", "boards:read", "pins:read"}),
     "threads": frozenset({"threads_basic", "threads_manage_insights"}),
     "instagram": frozenset({"instagram_business_basic", "instagram_business_manage_insights"}),
 }
@@ -161,14 +162,35 @@ class MetricScheduler:
     def workspace_allowed(self, workspace_id):
         return str(workspace_id) in self.workspace_allowlist
 
-    def provider_allowed(self, provider):
+    def provider_allowed(self, provider, workspace_id=None):
         adapter = (getattr(self.oauth, "providers", None) or {}).get(provider)
+        private_pinterest = False
+        if provider == 'pinterest':
+            from ..pinterest_analytics import enabled, private_trial_enabled
+            if not enabled(adapter) or not self._pinterest_schema_ready():
+                return False
+            private_pinterest = private_trial_enabled(adapter, workspace_id)
+            if getattr(adapter, 'private_trial', False) is True and not private_pinterest:
+                return False
         reviewed_or_scoped = bool(adapter and (
             getattr(adapter, "production_reviewed", False) is True or
-            getattr(adapter, "account_scoped_direct", False) is True
+            getattr(adapter, "account_scoped_direct", False) is True or private_pinterest
         ))
         return bool(provider in NATIVE_ANALYTICS_SCOPES and reviewed_or_scoped
                     and getattr(adapter, "execution_enabled", True) is True)
+
+    def _pinterest_schema_ready(self):
+        # Legacy035 accepts only Meta providers. Never enable collection before
+        # the separately approved CHECK expansion has actually been applied.
+        import re
+        try:
+            with self.connection_factory() as db, db.cursor() as cur:
+                cur.execute("SELECT convalidated,pg_get_constraintdef(oid),(SELECT count(*) FROM public.pr_metric_definitions WHERE provider='pinterest' AND definition_version='pinterest-pin-utc-window-v1' AND metric IN ('impressions','saves','pin_clicks','outbound_clicks')) FROM pg_constraint WHERE conrelid=to_regclass('public.pr_metric_reads') AND conname='pr_metric_reads_provider_check' AND contype='c'")
+                row = cur.fetchone()
+            return bool(row and row[0] is True and row[2] == 4 and 'provider = ANY' in row[1]
+                        and set(re.findall(r"'([^']+)'", row[1])) == {'threads', 'instagram', 'pinterest'})
+        except Exception:
+            return False
 
     def probe(self, workspace_id, token, connection_id, payload):
         """Explicit interactive canary before scheduled reads are enabled.
@@ -302,7 +324,7 @@ class MetricScheduler:
     def _eligibility(self, cur, row, *, lock=False):
         # Completion serializes with workspace disconnect/deletion commands;
         # provider I/O still runs outside this short transaction.
-        if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"]):
+        if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"], row["workspaceId"]):
             return "cancel"
         cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s" +
                     (" FOR UPDATE" if lock else ""), (row["workspaceId"],))
@@ -325,7 +347,7 @@ class MetricScheduler:
         """Outcome dict: {"state": "done"|"transient"|"unavailable"|"cancelled", ...}. Never raises."""
         requested = False
         try:
-            if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"]):
+            if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"], row["workspaceId"]):
                 return {"state": "cancelled", "failure": "not_admitted"}
             eligibility = self._eligible(row)
             if eligibility == "cancel":
@@ -346,7 +368,11 @@ class MetricScheduler:
             if eligibility != "read":
                 return {"state": "cancelled", "failure": "not_eligible"}
             requested = True
-            fetched = insights.fetch_post_insights(self.transport, grant["accessToken"], row["provider"], row["postId"])
+            extra = {}
+            if row['provider'] == 'pinterest':
+                extra = {'provider_adapter': self.oauth._provider_for_access('pinterest', grant['accessToken']),
+                         'period_start': row['anchorAt'], 'now': self.clock()}
+            fetched = insights.fetch_post_insights(self.transport, grant["accessToken"], row["provider"], row["postId"], **extra)
         except AlphaError as error:
             status = getattr(error, "status", None)
             if status in (404, 409):            # revoked grant, or an attempted native request rejected by the transport
@@ -357,11 +383,18 @@ class MetricScheduler:
             _note("metric_reads.read_failed", error)
             return {"state": "transient", "failure": "error", "http": None, "providerRead": requested}
         status = fetched["status"]
+        analytics = {}
+        if row['provider'] == 'pinterest':
+            analytics = {"analyticsOutcome": fetched.get("outcome", "read_failed")}
+            if status == 200 and analytics["analyticsOutcome"] not in ("success", "no_data"):
+                return {"state": "transient", "failure": "summary_unavailable" if fetched.get("failure") == "summary_unavailable" else "invalid_response",
+                        "http": 200, "providerRead": True, "analyticsOutcome": "read_failed"}
         if status == 200:
-            return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True}
+            return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True,
+                    **analytics, **({"periodStart": fetched["periodStart"]} if "periodStart" in fetched else {})}
         if status in TERMINAL_HTTP:
-            return {"state": "unavailable", "failure": f"http_{status}", "http": status, "providerRead": True}
-        return {"state": "transient", "failure": f"http_{status}", "http": status, "providerRead": True}
+            return {"state": "unavailable", "failure": f"http_{status}", "http": status, "providerRead": True, **analytics}
+        return {"state": "transient", "failure": f"http_{status}", "http": status, "providerRead": True, **analytics}
 
     def complete(self, row, outcome):
         """Fence on this claim generation, unexpired lease and current rights."""
@@ -374,14 +407,17 @@ class MetricScheduler:
                     outcome.update(state=state, failure="not_eligible" if eligibility == "cancel" else "purge_pending")
             fence = (row["id"], self.worker_id, row["attempts"])
             if state == "done":
-                cur.execute("""UPDATE public.pr_metric_reads SET status='done', observed_at=now(), last_http_status=200, failure_class=NULL,
+                # Keep a successful empty report distinguishable in durable read receipts.
+                # Native zero metrics remain a successful reading; missing metrics never become zero.
+                marker = "no_data" if outcome.get("analyticsOutcome") == "no_data" else None
+                cur.execute("""UPDATE public.pr_metric_reads SET status='done', observed_at=now(), last_http_status=200, failure_class=%s,
                                       lease_owner=NULL, lease_until=NULL, updated_at=now() WHERE id=%s::uuid AND lease_owner=%s
-                                      AND attempts=%s AND lease_until>clock_timestamp() AND status='claimed'""", fence)
+                                      AND attempts=%s AND lease_until>clock_timestamp() AND status='claimed'""", (marker, *fence))
                 recorded = cur.rowcount == 1
                 if recorded:
                     insights.record_observations(cur, row["workspaceId"], row["connectionId"], row["provider"], row["postId"], row["jobId"],
                                                  outcome["found"], outcome["endpoint"], self.clock(), read_offset=row["offset"],
-                                                 period_start=row["anchorAt"])
+                                                 period_start=outcome.get("periodStart", row["anchorAt"]))
             elif state == "transient" and row["attempts"] < row["maxAttempts"]:
                 cur.execute("""UPDATE public.pr_metric_reads SET status='pending', due_at=now() + make_interval(secs => %s), last_http_status=%s,
                                       failure_class=%s, lease_owner=NULL, lease_until=NULL, updated_at=now()
@@ -414,6 +450,7 @@ class MetricScheduler:
         """Bounded cron step. Returns a status dict of counts; never raises."""
         counts = {"status": "ok", "claimed": 0, "done": 0, "retry": 0, "unavailable": 0, "cancelled": 0, "dead": 0, "deferred": 0}
         counts.update(providerReads=0, providerErrors=0, costUnknownReads=0)
+        counts["pinterestAnalytics"] = {"success": 0, "no_data": 0, "read_failed": 0}
         try:
             deadline = self.monotonic() + max_seconds
             rows = self.claim(max_reads)
@@ -429,6 +466,11 @@ class MetricScheduler:
                     counts["providerReads"] += 1
                     counts["costUnknownReads"] += 1  # native response reports no invoice; never assert zero
                     counts["providerErrors"] += int(outcome["state"] != "done")
+                    if row.get("provider") == "pinterest":
+                        analytics_outcome = outcome.get("analyticsOutcome", "read_failed")
+                        if analytics_outcome not in counts["pinterestAnalytics"]:
+                            analytics_outcome = "read_failed"
+                        counts["pinterestAnalytics"][analytics_outcome] += 1
                 try:
                     recorded = self.complete(row, outcome)
                 except Exception as error:  # noqa: BLE001 - the row stays claimed and is re-read after its lease lapses

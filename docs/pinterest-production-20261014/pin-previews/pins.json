@@ -1,0 +1,161 @@
+{
+  "preparedAt": "2026-10-17T20:55:22.286319+00:00",
+  "state": "REVIEWABLE_DRAFT_NOT_EXECUTABLE",
+  "providerAppId": "1615884",
+  "productionSupabase": "buoyhkbodnhzngaotoel",
+  "pins": [
+    {
+      "account": "@jamesaucreates",
+      "providerAccountId": "1126814906675966091",
+      "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+      "connectionState": "DISCONNECTED; new exact consent required",
+      "board": {
+        "state": "PROPOSED_NOT_CREATED",
+        "name": "Rafii — Product & Content Workflows",
+        "id": null,
+        "privacy": "PUBLIC",
+        "description": "Rafii product ideas and practical workflows for planning, reviewing and publishing original content.",
+        "method": "After explicit approval, create exactly one empty public board through the official Pinterest UI on @jamesaucreates. No boards:write scope requested. Read back the provider ID and eligibility before any Pin approval is executable.",
+        "selectionReason": "Own account native Saved UI20:57Z showed no boards/cards and no saved Pins, consistent with earlier official API200 emptyitems. Propose the single named PUBLIC board; provider ID stays pending."
+      },
+      "sectionId": null,
+      "image": {
+        "sourceUrl": "https://rafii.io/opengraph-image",
+        "localFile": "rafii-existing-og.png",
+        "sha256": "8b0a4150bcf7adcbe8de83baa063b05f8f2246c3a3e918c3f40263b5e37dc030",
+        "mime": "image/png",
+        "width": 1200,
+        "height": 630,
+        "bytes": 76554,
+        "rightsBasis": "Existing Rafii-owned source web/src/app/opengraph-image.tsx, reused unchanged; no generation or editing.",
+        "altText": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
+        "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop."
+      },
+      "destinationUrl": "https://rafii.io/",
+      "accessTier": "Trial; Standard not approved",
+      "apiHost": "https://api.pinterest.com",
+      "visibility": "Trial API-created Pins are creator-only Sandbox entities under current provider documentation; PUBLIC board selection does not prove public Pin visibility. Record actual response/readback/visibility. No switch to API Sandbox host or Rafii staging is implied.",
+      "approval": "NOT_APPROVED",
+      "execution": "NOT_RUN",
+      "proposalId": "rafii-pinterest-immediate-20261017",
+      "title": "Your ideas. Your voice. A clearer content workflow.",
+      "description": "Bring an idea into Rafii, shape a draft for each channel, and review it before approving publication. Explore a practical approach to content planning and publishing at rafii.io. Controlled Pinterest integration test.",
+      "timing": {
+        "mode": "immediate",
+        "publishAt": null,
+        "timezone": "America/Indiana/Indianapolis",
+        "condition": "Only after exact board ID, current account, payload and bounded live-test window are verified and specifically approved."
+      },
+      "proposedCreateRequest": {
+        "method": "POST",
+        "url": "https://api.pinterest.com/v5/pins",
+        "body": {
+          "board_id": null,
+          "title": "Your ideas. Your voice. A clearer content workflow.",
+          "description": "Bring an idea into Rafii, shape a draft for each channel, and review it before approving publication. Explore a practical approach to content planning and publishing at rafii.io. Controlled Pinterest integration test.",
+          "link": "https://rafii.io/",
+          "alt_text": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
+          "media_source": {
+            "source_type": "image_url",
+            "url": "https://rafii.io/opengraph-image"
+          }
+        },
+        "state": "DRAFT_REQUIRES_VERIFIED_BOARD_ID_AND_APPROVAL"
+      }
+    },
+    {
+      "account": "@jamesaucreates",
+      "providerAccountId": "1126814906675966091",
+      "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+      "connectionState": "DISCONNECTED; new exact consent required",
+      "board": {
+        "state": "PROPOSED_NOT_CREATED",
+        "name": "Rafii — Product & Content Workflows",
+        "id": null,
+        "privacy": "PUBLIC",
+        "description": "Rafii product ideas and practical workflows for planning, reviewing and publishing original content.",
+        "method": "After explicit approval, create exactly one empty public board through the official Pinterest UI on @jamesaucreates. No boards:write scope requested. Read back the provider ID and eligibility before any Pin approval is executable.",
+        "selectionReason": "Own account native Saved UI20:57Z showed no boards/cards and no saved Pins, consistent with earlier official API200 emptyitems. Propose the single named PUBLIC board; provider ID stays pending."
+      },
+      "sectionId": null,
+      "image": {
+        "sourceUrl": "https://rafii.io/opengraph-image",
+        "localFile": "rafii-existing-og.png",
+        "sha256": "8b0a4150bcf7adcbe8de83baa063b05f8f2246c3a3e918c3f40263b5e37dc030",
+        "mime": "image/png",
+        "width": 1200,
+        "height": 630,
+        "bytes": 76554,
+        "rightsBasis": "Existing Rafii-owned source web/src/app/opengraph-image.tsx, reused unchanged; no generation or editing.",
+        "altText": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
+        "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop."
+      },
+      "destinationUrl": "https://rafii.io/",
+      "accessTier": "Trial; Standard not approved",
+      "apiHost": "https://api.pinterest.com",
+      "visibility": "Trial API-created Pins are creator-only Sandbox entities under current provider documentation; PUBLIC board selection does not prove public Pin visibility. Record actual response/readback/visibility. No switch to API Sandbox host or Rafii staging is implied.",
+      "approval": "NOT_APPROVED",
+      "execution": "NOT_RUN",
+      "proposalId": "rafii-pinterest-scheduled-20261017",
+      "title": "Plan your next week of content with Rafii",
+      "description": "Draft your ideas, review the image and wording, then choose when each approved post should go out. Keep a clear view of what is planned and what has actually published. Controlled scheduling test for Rafii’s Pinterest integration.",
+      "timing": {
+        "mode": "rafii_server_schedule",
+        "localTime": "2026-10-19T10:00:00-04:00",
+        "timezone": "America/Indiana/Indianapolis",
+        "publishAt": "2026-10-19T14:00:00Z",
+        "condition": "Proposed exact time only. If the time passes before authorization, do not silently roll forward; obtain a new time approval."
+      },
+      "proposedCreateRequest": {
+        "method": "POST",
+        "url": "https://api.pinterest.com/v5/pins",
+        "body": {
+          "board_id": null,
+          "title": "Plan your next week of content with Rafii",
+          "description": "Draft your ideas, review the image and wording, then choose when each approved post should go out. Keep a clear view of what is planned and what has actually published. Controlled scheduling test for Rafii’s Pinterest integration.",
+          "link": "https://rafii.io/",
+          "alt_text": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
+          "media_source": {
+            "source_type": "image_url",
+            "url": "https://rafii.io/opengraph-image"
+          }
+        },
+        "state": "DRAFT_REQUIRES_VERIFIED_BOARD_ID_AND_APPROVAL"
+      }
+    }
+  ],
+  "writeBudget": {
+    "pins": 2,
+    "boards": 1,
+    "automaticRePOSTAfterAmbiguousResponse": 0
+  },
+  "hardBlocks": [
+    "No verified board ID",
+    "No current OAuth grant or active live-test window",
+    "No approved write-capable private configuration",
+    "No real Pin approval",
+    "New delta source cloud validation pending"
+  ],
+  "readbackPlan": [
+    "Persist provider Pin ID before reporting accepted; GET exact Pin through bound account.",
+    "Match returned Pin board_id, source metadata and destination URL; preserve redacted response/time.",
+    "A queued or accepted-only result is not success. Lost POST response is uncertain; reconcile, never blindly retry POST.",
+    "Exactly one unique provider Pin per approved intent, with all lease/attempt IDs retained.",
+    "For scheduled Pin capture manifest local+UTC times, actual due dispatch, attempt and read-back times.",
+    "Emergency pause/cancel future jobs; deletion of a created Pin requires separately approved exact provider ID."
+  ],
+  "nativeBoardRead": {
+    "at": "2026-10-17T20:57:00Z",
+    "account": "@jamesaucreates",
+    "identitySignals": [
+      "Your profile links to /jamesaucreates/",
+      "visible@jamesaucreates",
+      "Edit profile control"
+    ],
+    "savedTab": "https://www.pinterest.com/jamesaucreates/_saved/",
+    "text": "You haven’t saved any Pins yet",
+    "boardCardsObserved": 0,
+    "eligibleBoardId": null,
+    "classification": "No suitable existing board observed; not a fresh OAuth API eligibility proof."
+  }
+}

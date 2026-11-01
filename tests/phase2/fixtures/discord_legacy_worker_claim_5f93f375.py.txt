@@ -1,0 +1,161 @@
+def claim(self, *, youtube_only=False, exclude_youtube=False):
+        if youtube_only and exclude_youtube:
+            raise AlphaError('Worker platform filters conflict.', 503, code='worker_platform_filter')
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('postriff-worker-v1',0))")
+                if not cur.fetchone()[0]:
+                    return None
+                cur.execute("SELECT to_regclass('public.pr_worker_tenants')")
+                capacity_ready = cur.fetchone()[0] is not None
+                self.capacity_intervention = None if capacity_ready else {
+                    'code': 'youtube_capacity_schema', 'youtubeDispatch': 'paused',
+                    'message': 'YouTube dispatch requires reviewed migration 097. No YouTube provider request is sent; other platforms continue.',
+                    'nextAction': 'Review and apply migration 097, then verify admission and worker execution.'}
+                # A founder account block freezes the workspace like a pending deletion; lifting it resumes the same jobs.
+                # Select only tenants with due work, oldest dispatch first. The
+                # durable cursor survives cron/worker restarts; a busy tenant
+                # cannot monopolize every chunk lease by sorting before others.
+                from .youtube.operations import schema_ready
+                indexed = youtube_only and capacity_ready and schema_ready(cur)
+                cur.execute(due_workspaces_sql(capacity_ready, youtube_only=youtube_only, exclude_youtube=exclude_youtube,
+                                              operations_ready=indexed), (self.clock(), self.clock()))
+                for candidate in cur.fetchall():
+                    if indexed:
+                        workspace_id, revision = candidate
+                        # The selector owns the row lock. Fetch only the state
+                        # considered for this claim, rather than 100 histories.
+                        cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (workspace_id,))
+                        row = cur.fetchone()
+                        if not row:
+                            continue
+                        raw_state = row[0]
+                    else:
+                        workspace_id, revision, raw_state = candidate
+                    state = json.loads(raw_state) if isinstance(raw_state, str) else raw_state
+                    # Projections are selection hints, never account authority.
+                    if not state.get('phase2') or 'accountDeletion' in state or 'accountBlock' in state:
+                        continue
+                    original = json.dumps(state, sort_keys=True)
+                    if youtube_only or exclude_youtube:
+                        # Invalidation can hold jobs too; the isolated lane must
+                        # not change another platform's review or queued job.
+                        data = state['phase2']
+                        jobs, reviews = data['jobs'], data['reviews']
+                        def selected_platform(item):
+                            match = item.get('manifest', {}).get('platform') == 'YouTube'
+                            return match if youtube_only else not match
+                        data['jobs'] = [job for job in jobs if selected_platform(job)]
+                        data['reviews'] = [review for review in reviews if selected_platform(review)]
+                        try:
+                            self.commands.engine.invalidate(state)
+                        finally:
+                            data['jobs'], data['reviews'] = jobs, reviews
+                    else:
+                        self.commands.engine.invalidate(state)
+                    selected = None
+                    for job in sorted(state["phase2"]["jobs"], key=lambda item: item.get('lastDispatchedAt', 0)):
+                        is_youtube = job.get('manifest', {}).get('platform') == 'YouTube'
+                        if (youtube_only and not is_youtube) or (exclude_youtube and is_youtube):
+                            continue
+                        now = self.clock()
+                        if job.get("leaseUntil", 0) > now or job.get("nextAt", 0) > now or job.get("state") in (*TERMINAL, "held"):
+                            continue
+                        stage = job.get('progress', {}).get('stage')
+                        instagram = job['manifest']['platform'] == 'Instagram' and hasattr(self.social, 'advance_instagram')
+                        if instagram and job.get('container') and not stage:
+                            self._event(job, 'uncertain', 'Legacy container has no durable stage; reconcile without creating or publishing again')
+                        forward = instagram and stage in ('container_created', 'container_ready') and job['state'] == 'processing'
+                        youtube_forward = (job['manifest']['platform'] == 'YouTube' and bool(getattr(self.social, 'youtube', None))
+                                           and (stage not in ('native_scheduled', 'native_schedule_reconciling') or job.get('cancelRequested')))
+                        if job.get("cancelRequested") and (job.get("state") not in IN_FLIGHT or forward):
+                            self._event(job, "canceled", "Canceled before provider submission")
+                            continue
+                        if job['manifest']['platform'] == 'YouTube' and not capacity_ready:
+                            # Preserve the operation, approval and journal. Once
+                            # the schema exists this same due job can resume;
+                            # no lease, provider attempt or replacement is made.
+                            if not job.get('capacityIntervention'):
+                                self._event(job, job['state'], self.capacity_intervention['message'])
+                            job['capacityIntervention'] = dict(self.capacity_intervention)
+                            job['nextAction'] = self.capacity_intervention['nextAction']
+                            job['nextAt'] = now + 60
+                            continue
+                        job.pop('capacityIntervention', None)
+                        if job.get("state") == "submitting":
+                            self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
+                        reconciliation = job.get("state") in IN_FLIGHT and not forward
+                        # YouTube forward authority is checked after the fenced claim,
+                        # following exact-connection revalidation outside database locks.
+                        # Accepted native schedules only read back.
+                        if forward and not self._approved(cur, workspace_id, state, job):
+                            self._event(job, 'held', 'Approval, account, media, timing or permission changed; a new review is required')
+                            continue
+                        if not reconciliation:
+                            from .billing import require_publishing
+                            try:
+                                require_publishing(cur, workspace_id, now)
+                                assert_job_authority(state, job, now)
+                            except AlphaError as error:
+                                self._event(job, "held", str(error))
+                                continue
+                            cur.execute("SELECT m.role,m.can_publish FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, job['approvedBy']))
+                            member = cur.fetchone()
+                            # Re-authorize at claim time: the approver must still hold approve authority.
+                            if (not member or not Membership.from_row(member[0], can_publish=member[1]).allows("approve")
+                                    or (job.get('youtubeAgent') and member[0] != 'owner')
+                                    or job['approvalDigest'] != digest(job['manifest'])
+                                    or job['approvedBy'] != job['manifest']['actor']):
+                                self._event(job, 'held', 'Approval authority changed; a new review is required')
+                                continue
+                        if not reconciliation and not forward and len(job.get("attempts", [])) >= 3:
+                            self._event(job, "failed", "Bounded retry limit reached")
+                            from . import product_events
+                            product_events.publish_outcome(cur, workspace_id, job, "failed")
+                            continue
+                        youtube_generation = None
+                        if is_youtube:
+                            from .youtube import workspace_provider_data as youtube_data
+                            cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL FOR NO KEY UPDATE",
+                                        (workspace_id, job['manifest'].get('channelId')))
+                            credential = cur.fetchone()
+                            youtube_generation = credential[0] if credential else None
+                            prior_source = job.get(youtube_data.KEY) if isinstance(job.get(youtube_data.KEY), dict) else {}
+                            if (not youtube_generation or job.get(youtube_data.REMOVED)
+                                    or (prior_source and prior_source.get('authorizationGeneration') != youtube_generation)):
+                                youtube_data.scrub_job(job, 'youtube_authorization_data_removed', now)
+                                continue
+                        previous_state = job['state']
+                        job["leaseOwner"] = self.worker_id
+                        job["leaseUntil"] = now + 45
+                        job["leaseId"] = uuid.uuid4().hex
+                        job['lastDispatchedAt'] = now
+                        if reconciliation:
+                            job["checks"] = job.get("checks", 0) + 1
+                        elif not forward:
+                            self._event(job, "claimed", "Hosted worker acquired the fenced lease")
+                            if not youtube_forward:
+                                job.setdefault("attempts", []).append({"number": len(job.get("attempts", [])) + 1, "startedAt": now, "idempotencyKey": job["manifest"]["idempotencyKey"]})
+                                self._event(job, "submitting", "Hosted worker began the approved provider operation")
+                        selected = {"workspaceId": workspace_id, "job": copy.deepcopy(job), "reconciliation": reconciliation}
+                        if is_youtube:
+                            selected['youtubeAuthorizationGeneration'] = youtube_generation
+                        if youtube_forward:
+                            selected.update(youtubeForward=True, previousState=previous_state)
+                        if instagram and not reconciliation:
+                            action = 'status' if stage == 'container_created' else 'publish' if stage == 'container_ready' else 'create'
+                            if action != 'status':
+                                job['progress'] = {'version': 1, 'stage': action + '_attempted'}
+                                self._event(job, 'submitting', 'Durable Instagram ' + action + ' intent recorded')
+                            selected.update(job=copy.deepcopy(job), instagramAction=action)
+                        break
+                    if selected or json.dumps(state, sort_keys=True) != original:
+                        cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s", (json.dumps(state), workspace_id, revision))
+                        if cur.rowcount != 1:
+                            raise AlphaError("Worker claim lost its workspace revision.", 409)
+                    if selected:
+                        if capacity_ready:
+                            cur.execute('''INSERT INTO public.pr_worker_tenants(workspace_id,last_claimed_at) VALUES(%s,to_timestamp(%s))
+                                ON CONFLICT(workspace_id) DO UPDATE SET last_claimed_at=excluded.last_claimed_at''', (workspace_id, now))
+                        return selected
+        return None

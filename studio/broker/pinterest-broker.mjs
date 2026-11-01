@@ -2,7 +2,7 @@ import http from 'node:http';
 import {createHash,randomBytes,timingSafeEqual} from 'node:crypto';
 import {privateStore} from './private-store.mjs';
 
-export const PINTEREST_SCOPE='user_accounts:read,boards:read,boards:write,boards:read_secret,boards:write_secret,pins:read,pins:write,pins:read_secret,pins:write_secret,ads:read,ads:write,billing:read,billing:write';
+export const PINTEREST_SCOPE='user_accounts:read';
 const REDIRECT_URI='http://127.0.0.1:4317/callback';
 const TTL=10*60*1000;
 const digest=value=>createHash('sha256').update(value).digest('hex');
@@ -36,6 +36,9 @@ export async function createPinterestBroker({port,studioPort,root,capability,cli
     if(pending?.phase==='connection_unresolved')return {...base,state:'connection_unresolved'};
     if(pending?.phase&&pending.phase!=='complete')return {...base,state:pending.phase};
     if(!record)return base;
+    // A stored pre-migration grant must not masquerade as current authorization.
+    // Retain it for reconciliation, but allow the user to re-consent to the smaller scope.
+    if(record.scope!==PINTEREST_SCOPE)return {...base,state:'reauthorization_required',username:record.username,accountId:record.accountId,accountType:record.accountType};
     if(!verifiedThisRun||Date.parse(record.expiresAt)<=now())return {...base,...record,state:'verification_required'};
     return {...base,...record,state:'connected_identity'};
   };
@@ -105,7 +108,7 @@ export async function createPinterestBroker({port,studioPort,root,capability,cli
       let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>2048){json(res,413,{error:'request_too_large'});return;}}let body;try{body=JSON.parse(raw);}catch{json(res,422,{error:'invalid_request'});return;}
       if(!body||Object.keys(body).sort().join(',')!=='scope,username'||body.scope!==PINTEREST_SCOPE){json(res,422,{error:'invalid_request'});return;}
       const expected=username(body.username);if(!expected){json(res,422,{error:'invalid_identity'});return;}
-      if(record){json(res,409,{error:'account_already_connected'});return;}
+      if(record&&record.scope===PINTEREST_SCOPE){json(res,409,{error:'account_already_connected'});return;}
       if(pending&&pending.expires>now()&&!['connection_failed','interrupted','complete'].includes(pending.phase)){json(res,409,{error:'signin_already_pending'});return;}
       const flow=randomBytes(32).toString('hex'),ticket=randomBytes(32).toString('hex');await persist({username:expected,flow,expires:now()+TTL,phase:'awaiting_private_signin',ticketHash:digest(ticket)});json(res,200,{beginPath:`/begin/${ticket}`});return;
     }

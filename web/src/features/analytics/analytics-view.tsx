@@ -33,6 +33,7 @@ import { AnalyticsEmptyState, chooseEmptyKind } from './empty-states';
 import { PostSheet } from './post-sheet';
 import { PostsTable, type PostRowData } from './posts-table';
 import { RulesCollapsible } from './rules-collapsible';
+import { DiscordEngagementPanel } from '@/features/channels/discord-engagement-panel';
 
 const infoContent = {
   title: 'Analytics',
@@ -44,7 +45,7 @@ const infoContent = {
     },
     { title: 'Unavailable isn’t zero', description: 'A metric the platform hasn’t reported shows “Unavailable”. A real zero shows 0.' },
     { title: 'Rates', description: 'Every rate shows both of its numbers. Fewer than three posts is too few to compare.' },
-    { title: 'When numbers update', description: 'Numbers aren’t collected automatically yet. A row shows numbers only after a reading, with the time it was read.' },
+    { title: 'When numbers update', description: 'Enabled analytics services read eligible posts after verified publication. Every value keeps its reporting window and reading time. A failed read and a successful read with no metrics are shown separately.' },
     {
       title: 'Accounts without numbers',
       description: 'Analytics is a separate permission, granted per account. Some platforms, like LinkedIn, don’t share analytics with Rafii.',
@@ -100,9 +101,10 @@ export function AnalyticsView() {
         channels: channels.data?.channels ?? [],
         providers: channels.data?.providers ?? [],
         jobs,
-        posts: data?.posts ?? []
+        posts: data?.posts ?? [],
+        readOutcomes: data?.readOutcomes ?? []
       }),
-    [channels.data, jobs, data?.posts]
+    [channels.data, jobs, data?.posts, data?.readOutcomes]
   );
   // Posts can show once the summary is here and the account and job lists have answered or failed.
   const postsReady = Boolean(data) && settled(channels) && settled(snapshot);
@@ -130,6 +132,10 @@ export function AnalyticsView() {
   const unreadInView = unreadVerifiedCount(connectionsInView);
   const directCount = coverage.connections.filter((c) => c.direct).length;
   const latestOverall = latestObservedAt(allPosts);
+  const outcomesInView = connectionsInView.flatMap((connection) => connection.readOutcomes);
+  const failedReads = outcomesInView.filter((reading) => reading.outcome === 'read_failed').length;
+  const emptyReads = outcomesInView.filter((reading) => reading.outcome === 'no_data').length;
+  const retainedValues = visiblePosts.some((post) => Object.values(post.metrics).some((metric) => metric.availability === 'available'));
 
   const rows = useMemo<PostRowData[]>(() => {
     const index = indexJobs(jobs);
@@ -172,6 +178,7 @@ export function AnalyticsView() {
         <GrowthEntry />
         <GrowthAnalytics />
         <TimeBackSection />
+        {channels.data?.channels.filter((channel) => channel.platform === 'Discord').map((channel) => <DiscordEngagementPanel key={channel.id} channel={channel} mode='analytics' />)}
         <SectionHeading id='post-performance-heading' title='Post performance' description='Each platform’s own numbers for your published posts.' className='pt-2' />
         {channels.error ? (
           <RetryState title='accounts' error={channels.error} onRetry={() => channels.refetch()} />
@@ -192,7 +199,7 @@ export function AnalyticsView() {
               <>
                 <Dot />
                 <span>
-                  <span className='text-foreground font-medium tabular-nums'>{unreadInView}</span> waiting for a first read
+                  <span className='text-foreground font-medium tabular-nums'>{unreadInView}</span> without a successful read yet
                 </span>
               </>
             )}
@@ -209,6 +216,13 @@ export function AnalyticsView() {
           <Skeleton className='h-5 w-64 rounded-md' aria-hidden />
         )}
 
+        {!analytics.error && postsReady && !emptyKind && failedReads > 0 && (
+          <StateMessage kind='error' title={`${failedReads} ${failedReads === 1 ? 'analytics read failed' : 'analytics reads failed'}`} description={retainedValues ? 'Earlier reported metrics remain visible with their original reading times. The latest failed reads did not replace them with zero.' : 'The platform did not return usable metrics. No missing values are shown as zero. Check the account connection if retries do not recover.'} />
+        )}
+        {!analytics.error && postsReady && !emptyKind && emptyReads > 0 && (
+          <StateMessage kind='empty' title={`${emptyReads} ${emptyReads === 1 ? 'read returned no metrics' : 'reads returned no metrics'}`} description={retainedValues ? 'Earlier reported metrics remain visible with their original reading times. The latest empty reports are not new zeros.' : 'The platform accepted these reads but returned no metrics for their reporting windows. A reported zero appears as 0.'} />
+        )}
+
         {analytics.error ? null : !postsReady ? (
           <StateMessage kind='loading' title='Loading readings…' />
         ) : emptyKind ? (
@@ -223,7 +237,7 @@ export function AnalyticsView() {
                 : !current.direct
                   ? capabilitySummary(current)
                   : current.verifiedJobs.length > 0
-                    ? `${current.verifiedJobs.length} ${current.verifiedJobs.length === 1 ? 'post' : 'posts'} waiting for a first read.`
+                    ? `${current.verifiedJobs.length} ${current.verifiedJobs.length === 1 ? 'post' : 'posts'} without a successful read yet.`
                     : 'No published posts on this account yet.'
             }
           />

@@ -13,6 +13,7 @@ import re
 import secrets
 import socket
 import string
+import time
 from urllib.parse import quote, urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 from .net_guard import assert_public, public_host
@@ -214,8 +215,8 @@ class DiscordProvider(OAuthProvider):
     id, platform, capability_version = "discord", "Discord", 1
     AUTH = "https://discord.com/oauth2/authorize"
     API = "https://discord.com/api/v10"
-    # View Channel, Send Messages, Embed Links, Attach Files.
-    PERMISSIONS = (1 << 10) | (1 << 11) | (1 << 14) | (1 << 15)
+    # View Channel, Send Messages, Attach Files and Read Message History (receipt lookup).
+    PERMISSIONS = (1 << 10) | (1 << 11) | (1 << 15) | (1 << 16)
     SCOPES = {"identity": ["identify", "bot"], "publish": ["identify", "bot"], "schedule": ["identify", "bot"]}
     EXPLAIN = {"identity": "Add Rafii's bot to a server you manage. It can post only in the channel you choose.",
                "publish": "Add Rafii's bot to a server you manage. Rafii posts in your chosen channel only when you approve each exact post."}
@@ -227,11 +228,28 @@ class DiscordProvider(OAuthProvider):
     # Revoking removes Rafii's one bot from the server, which every workspace connected to that server shares.
     shared_remote = True
     ADMINISTRATOR, VIEW_CHANNEL, SEND_MESSAGES = 1 << 3, 1 << 10, 1 << 11
+    MANAGE_GUILD, ATTACH_FILES, READ_HISTORY = 1 << 5, 1 << 15, 1 << 16
     ALL_PERMISSIONS = (1 << 64) - 1
 
     def __init__(self, client_id, client_secret, bot_token, website, transport=None, production_reviewed=False):
         super().__init__(client_id, client_secret, transport=transport, production_reviewed=production_reviewed)
         self.bot_token, self.website = bot_token, website.rstrip("/")
+        # Local candidate stays off until a separately approved rollout.
+        self.authorization_v2_enabled = False
+        self.connections_v2_enabled = False
+        self.rate_v1_enabled = False
+        self.engagement_v1_enabled = False
+        self.message_content_evidence_raw = None
+        self.rate_policy_raw = None
+        self.rate_limiter = None
+        self.rate_coordinator_degraded = False
+        self._bot_identity_cache = None
+
+    @property
+    def server_schedule(self):
+        # Rafii's existing queue dispatches approved manifests; Discord does
+        # not schedule them. Legacy connection flows retain assisted status.
+        return self.authorization_v2_enabled and self.connections_v2_enabled
 
     @classmethod
     def mount(cls, values, transport=None):
@@ -242,42 +260,174 @@ class DiscordProvider(OAuthProvider):
         valid = pair_valid and _credential_shape(bot) and _https_origin(base)
         state = "not_configured" if not anything else "partial_configuration" if missing else "configured" if valid else "invalid_configuration"
         diagnostic = {**diagnostic, "configurationState": state, "missingVariables": missing}
-        return (cls(client_id, secret, bot, base, transport=transport) if state == "configured" else None), diagnostic
+        adapter = cls(client_id, secret, bot, base, transport=transport) if state == 'configured' else None
+        if adapter is not None:
+            adapter.authorization_v2_enabled = values.get('POSTRIFF_DISCORD_AUTHORIZATION_V2_ENABLED') == 'true'
+            adapter.connections_v2_enabled = values.get('POSTRIFF_DISCORD_CONNECTIONS_V2_ENABLED') == 'true'
+            adapter.rate_v1_enabled = values.get('POSTRIFF_DISCORD_RATE_LIMITS_V1_ENABLED') == 'true'
+            adapter.rate_policy_raw = values.get('POSTRIFF_DISCORD_RATE_POLICY')
+            adapter.engagement_v1_enabled = values.get('POSTRIFF_DISCORD_ENGAGEMENT_V1_ENABLED') == 'true'
+            adapter.message_content_evidence_raw = values.get('POSTRIFF_DISCORD_MESSAGE_CONTENT_EVIDENCE')
+        return adapter, diagnostic
 
     def _basic(self):
         return "Basic " + base64.b64encode(f"{quote(self.client_id, safe='')}:{quote(self.client_secret, safe='')}".encode()).decode()
 
+    def _rate_identity(self, kind, bearer=None, user_id=None):
+        from .discord.rate_limits import RequestIdentity
+        credential = self.bot_token if kind == 'bot' else bearer if kind == 'user' else self.client_secret
+        return RequestIdentity.make(self.client_id, kind, credential, user_id)
+
+    def admit_bot_request(self, method, path, *, binding=None, valid_until=None):
+        """Reserve one atomic global/route slot before an irreversible publication intent."""
+        from .discord.rate_limits import RateCoordinatorUnavailable
+        if not self.rate_v1_enabled:
+            return None  # historical local fixtures; production worker requires P4
+        if self.rate_coordinator_degraded or self.rate_limiter is None:
+            raise RateCoordinatorUnavailable()
+        return self.rate_limiter.reserve(method, path, identity=self._rate_identity('bot'),
+                                         binding=binding, valid_until=valid_until)
+
     def _bot(self, method, path, **kwargs):
-        headers = {"Authorization": "Bot " + self.bot_token, "User-Agent": f"DiscordBot ({self.website}, 1)", **kwargs.pop("headers", {})}
-        return self.transport(method, self.API + path, headers=headers, **kwargs)
+        extra = kwargs.pop('headers',{})
+        if any(k.lower() in ('authorization','user-agent') for k in extra):
+            raise AlphaError('Discord request credentials cannot be overridden.',409)
+        headers = {"Authorization": "Bot " + self.bot_token, "User-Agent": f"DiscordBot ({self.website}, 1)", **extra}
+        return self._discord_http(method, path, headers=headers, credential_kind='bot', **kwargs)
+
+    def _discord_http(self, method, path, *, credential_kind, bearer=None, user_id=None, **kwargs):
+        from .discord.rate_limits import Permit, RateDelayed, RateCoordinatorUnavailable, UnconsumedPublishPermit, ReadAdmissionDelayed
+        read_authorize = kwargs.pop('read_authorize', None)
+        if read_authorize is not None and (method != 'GET' or not callable(read_authorize) or read_authorize() is not True):
+            raise AlphaError('Discord read consent changed.', 409, code='discord_engagement_consent_required')
+        rate_permit = kwargs.pop('rate_permit', None)
+        binding = kwargs.pop('rate_binding', None)
+        intent_id = kwargs.pop('rate_intent_id', None)
+        authorize = kwargs.pop('rate_authorize', None)
+        if (self.rate_v1_enabled and method == 'POST'
+                and path.startswith('/channels/') and path.endswith('/messages')
+                and (rate_permit is None or binding is None or not callable(authorize))):
+            # A message create requires pre-seal admission, never an implicit
+            # allocation after the P0 intent has already committed.
+            raise RateCoordinatorUnavailable()
+        if self.rate_v1_enabled:
+            if self.rate_coordinator_degraded or self.rate_limiter is None:
+                raise RateCoordinatorUnavailable()
+            policy = self.rate_limiter.policy
+            if policy is None:
+                raise RateCoordinatorUnavailable()
+            # These denials precede transport. In particular, an OAuth code is
+            # not exchanged again and a message permit is never reallocated.
+            resumable = (rate_permit is None and binding is None and
+                         (method == 'GET' or method == 'POST' and path in ('/oauth2/token','/oauth2/token/revoke')))
+            attempts = policy.read_attempts if resumable else 1
+            wait_deadline = time.monotonic() + 1
+            for attempt in range(attempts):
+                try:
+                    direct_read = method == 'GET' and rate_permit is None and binding is None
+                    if direct_read:
+                        permit = self.rate_limiter.reserve_read(method, path, identity=self._rate_identity(credential_kind,bearer,user_id))
+                    else:
+                        permit = rate_permit if isinstance(rate_permit, Permit) else (
+                            self.rate_limiter.reserve(method, path, identity=self._rate_identity(credential_kind,bearer,user_id))
+                            if rate_permit is None else None)
+                    if permit is None or permit.identity != self._rate_identity(credential_kind,bearer,user_id):
+                        raise RateCoordinatorUnavailable()
+                    if not direct_read:
+                        self.rate_limiter.consume(permit, method, path, binding=binding, intent_id=intent_id, authorize=authorize)
+                    break
+                except RateDelayed as error:
+                    if (isinstance(rate_permit, Permit) and binding is not None
+                            and error.rate_cause == 'permit_expired'):
+                        # Mint only around admission/consume, before transport.
+                        # A transport exception can never acquire this proof.
+                        raise UnconsumedPublishPermit(rate_permit.id, error.retry_after_seconds) from error
+                    wait = max(error.retry_after_seconds, .005 * 2 ** attempt) + secrets.randbelow(26) / 1000
+                    if not resumable or attempt + 1 >= attempts or time.monotonic() + wait > wait_deadline:
+                        if method == 'GET':
+                            raise ReadAdmissionDelayed(error) from error
+                        raise
+                    time.sleep(wait)
+        elif rate_permit is not None:
+            raise RateCoordinatorUnavailable()
+        if read_authorize is not None:
+            try:
+                if read_authorize() is not True:
+                    raise AlphaError('Discord read consent changed.', 409, code='discord_engagement_consent_required')
+            except Exception:
+                if self.rate_v1_enabled:
+                    try:
+                        self.rate_limiter.abandon_unsent_read(permit)
+                    except Exception:
+                        self.rate_coordinator_degraded = True
+                raise
+        try:
+            response = self.transport(method, self.API + path, **kwargs)
+        except Exception:
+            if self.rate_v1_enabled:
+                try:
+                    self.rate_limiter.note_transport_failure(permit)
+                except Exception:
+                    self.rate_coordinator_degraded = True
+            raise
+        if self.rate_v1_enabled:
+            try:
+                observation = self.rate_limiter.observe(permit, response)
+            except Exception:
+                self.rate_coordinator_degraded = True
+                # A POST may already have been accepted. Preserve the provider
+                # message ID/receipt instead of hiding it behind a ledger error.
+                if method not in ('POST', 'PUT', 'PATCH', 'DELETE'):
+                    raise RateCoordinatorUnavailable()
+            if response.get('status') == 429 and method not in ('POST', 'PUT', 'PATCH', 'DELETE'):
+                # Read/preflight requests are proven rejected and may defer
+                # without spending a Discord publication attempt.
+                if observation['retryHintMalformed']:
+                    raise RateCoordinatorUnavailable()
+                raise RateDelayed(observation['retryAfterSeconds'], cause='provider_429')
+            if response.get('status') in (401,403,404) and method == 'GET':
+                error = AlphaError('Discord access was removed. Reconnect or authorize this exact destination again.',409,
+                                   code='discord_connection_required')
+                error.discord_permanent = True
+                raise error
+        return response
 
     def authorize_url(self, redirect, state, challenge, scopes):
-        # Discord's code grant has no PKCE parameter; the verifier still binds the transaction server-side.
+        # Current Web API code-grant docs do not document PKCE parameters. Do not
+        # infer support from the separate Social SDK; retain server-side state binding.
         return self.AUTH + "?" + urlencode({"client_id": self.client_id, "response_type": "code", "redirect_uri": redirect, "scope": " ".join(scopes),
                                             "state": state, "permissions": str(self.PERMISSIONS), "integration_type": "0"})
 
     def exchange(self, code, verifier, redirect):
-        body = self._ok(self.transport("POST", self.API + "/oauth2/token", headers={"Authorization": self._basic()},
+        body = self._ok(self._discord_http("POST", "/oauth2/token", credential_kind='oauth', headers={"Authorization": self._basic()},
                                        form={"grant_type": "authorization_code", "code": code, "redirect_uri": redirect}), "access_token")
         guild = body.get("guild") if isinstance(body.get("guild"), dict) else {}
         if not re.fullmatch(r"\d{5,25}", str(guild.get("id", ""))):
             raise AlphaError("Choose a server to add Rafii's bot to.", 409)
         # Who connected: channel choices are limited to channels this person can see (destinations()).
-        me = self.transport("GET", self.API + "/users/@me", headers={"Authorization": "Bearer " + body["access_token"], "User-Agent": f"DiscordBot ({self.website}, 1)"})
+        me = self._discord_http("GET", "/users/@me", credential_kind='user', bearer=body['access_token'], headers={"Authorization": "Bearer " + body["access_token"], "User-Agent": f"DiscordBot ({self.website}, 1)"})
         user_id = str(me.get("body", {}).get("id", "")) if isinstance(me.get("body"), dict) else ""
         if me.get("status") != 200 or not re.fullmatch(r"\d{5,25}", user_id):
             raise AlphaError("Discord did not confirm who is connecting. Try again.", 502)
         try:
             # Rafii posts with its bot; the person's own Discord token is not kept.
-            self.transport("POST", self.API + "/oauth2/token/revoke", headers={"Authorization": self._basic()}, form={"token": body["access_token"], "token_type_hint": "access_token"})
+            self._discord_http("POST", "/oauth2/token/revoke", credential_kind='oauth', headers={"Authorization": self._basic()}, form={"token": body["access_token"], "token_type_hint": "access_token"})
         except AlphaError:
             pass
         scopes = body["scope"].split() if isinstance(body.get("scope"), str) else []
-        return {"accessToken": json.dumps({"v": 1, "guild": str(guild["id"]), "channel": None, "user": user_id}), "refreshToken": None, "expiresIn": None, "scopes": scopes}
+        bot_id = self._bot_identity()
+        return {"accessToken": json.dumps({"v": 2, "applicationId": self.client_id, 'botUserId': bot_id,
+                "guild": str(guild["id"]), "channel": None, "user": user_id}),
+                "refreshToken": None, "expiresIn": None, "scopes": scopes}
 
     @staticmethod
     def session(access_token):
-        session = _load(access_token)
+        try:
+            session = json.loads(access_token)
+        except (TypeError, ValueError):
+            raise AlphaError('This Discord connection needs to be reconnected.', 409) from None
+        if not isinstance(session, dict) or type(session.get('v')) is not int or session['v'] not in (1, 2):
+            raise AlphaError('This Discord connection needs to be reconnected.', 409)
         if not re.fullmatch(r"\d{5,25}", str(session.get("guild", ""))):
             raise AlphaError("This account needs to be reconnected.", 409)
         return session
@@ -307,9 +457,34 @@ class DiscordProvider(OAuthProvider):
 
     def _permissions(self, guild, member_roles, member_id, channel=None):
         """Discord's documented permission algorithm: @everyone and member roles, then channel overwrites."""
+        from .discord.authorization import snowflake
+        roles_raw = guild.get('roles')
+        if (not snowflake(str(guild.get('id', ''))) or not snowflake(str(guild.get('owner_id', '')))
+                or not isinstance(roles_raw, list) or not isinstance(member_roles, list)
+                or not snowflake(str(member_id))):
+            raise AlphaError('Discord permission evidence is incomplete. Reconnect or restore access.', 409)
+        roles = {}
+        for role in roles_raw:
+            if (not isinstance(role, dict) or not snowflake(str(role.get('id', '')))
+                    or not re.fullmatch(r'[0-9]+', str(role.get('permissions', '')))
+                    or str(role['id']) in roles):
+                raise AlphaError('Discord role evidence is incomplete.', 409)
+            roles[str(role['id'])] = int(role['permissions'])
+        if str(guild['id']) not in roles or any(str(role) not in roles for role in member_roles):
+            raise AlphaError('Discord role evidence is incomplete.', 409)
+        overwrites = {}
+        if channel is not None:
+            if channel.get('guild_id') != str(guild['id']) or not isinstance(channel.get('permission_overwrites'), list):
+                raise AlphaError('Discord channel permission evidence is incomplete.', 409)
+            for overwrite in channel['permission_overwrites']:
+                if (not isinstance(overwrite, dict) or not snowflake(str(overwrite.get('id', '')))
+                        or type(overwrite.get('type')) is not int or overwrite['type'] not in (0, 1)
+                        or any(not re.fullmatch(r'[0-9]+', str(overwrite.get(k, ''))) for k in ('allow', 'deny'))
+                        or (str(overwrite['id']), overwrite['type']) in overwrites):
+                    raise AlphaError('Discord channel overwrite evidence is incomplete.', 409)
+                overwrites[(str(overwrite['id']), overwrite['type'])] = overwrite
         if str(guild.get("owner_id")) == str(member_id):
             return self.ALL_PERMISSIONS
-        roles = {str(r.get("id")): int(r.get("permissions") or 0) for r in guild.get("roles") or [] if isinstance(r, dict)}
         base = roles.get(str(guild["id"]), 0)
         for role in member_roles:
             base |= roles.get(str(role), 0)
@@ -317,60 +492,126 @@ class DiscordProvider(OAuthProvider):
             return self.ALL_PERMISSIONS
         if channel is None:
             return base
-        overwrites = {str(o.get("id")): o for o in channel.get("permission_overwrites") or [] if isinstance(o, dict)}
-        everyone = overwrites.get(str(guild["id"]))
+        everyone = overwrites.get((str(guild["id"]), 0))
         if everyone:
             base = (base & ~int(everyone.get("deny") or 0)) | int(everyone.get("allow") or 0)
         allow = deny = 0
         for role in member_roles:
-            overwrite = overwrites.get(str(role))
+            overwrite = overwrites.get((str(role), 0))
             if overwrite and overwrite.get("type") in (0, "0", "role"):
                 allow |= int(overwrite.get("allow") or 0)
                 deny |= int(overwrite.get("deny") or 0)
         base = (base & ~deny) | allow
-        member = overwrites.get(str(member_id))
+        member = overwrites.get((str(member_id), 1))
         if member and member.get("type") in (1, "1", "member"):
             base = (base & ~int(member.get("deny") or 0)) | int(member.get("allow") or 0)
         return base
 
-    def _member_roles(self, guild_id, user_id):
-        response = self._bot("GET", f"/guilds/{guild_id}/members/{user_id}")
+    def _member_roles(self, guild_id, user_id, *, read_authorize=None):
+        response = self._bot("GET", f"/guilds/{guild_id}/members/{user_id}", read_authorize=read_authorize)
         if response.get("status") == 404:
             return None
         member = self._json(response, dict)
-        return [str(role) for role in member.get("roles") or []]
+        if (not isinstance(member.get('roles'), list)
+                or (member.get('user') or {}).get('id') != str(user_id)
+                or any(not re.fullmatch(r'[0-9]{5,25}', str(role)) for role in member['roles'])):
+            raise AlphaError('Discord did not confirm this server membership.', 409)
+        if 'pending' in member and type(member['pending']) is not bool:
+            raise AlphaError('Discord membership screening evidence is invalid.', 409)
+        if member.get('pending') is True:
+            return None
+        timeout = member.get('communication_disabled_until')
+        if timeout is not None:
+            from datetime import datetime, timezone
+            try:
+                until = datetime.fromisoformat(timeout.replace('Z', '+00:00'))
+                if until.tzinfo is None:
+                    raise ValueError()
+            except (AttributeError, TypeError, ValueError):
+                raise AlphaError('Discord membership restriction evidence is invalid.', 409) from None
+            if until > datetime.now(timezone.utc):
+                return None
+        return [str(role) for role in member['roles']]
 
-    def destinations(self, access_token):
-        """Text and announcement channels where Rafii's bot can view and send and the person who connected can view."""
+    def _bot_identity(self, *, read_authorize=None):
+        from .discord.rate_limits import _digest, RateCoordinatorUnavailable
+        cache_enabled = self.authorization_v2_enabled and self.connections_v2_enabled and self.rate_v1_enabled
+        if cache_enabled and (self.rate_coordinator_degraded or self.rate_limiter is None
+                              or self.rate_limiter.policy is None):
+            raise RateCoordinatorUnavailable()
+        key = (self.client_id, _digest(self.bot_token))
+        cached = self._bot_identity_cache
+        now = time.monotonic()
+        if cache_enabled and cached and cached[:2] == key and 0 <= now-cached[3] < 60:
+            return cached[2]
+        application = self._json(self._bot('GET', '/oauth2/applications/@me', read_authorize=read_authorize), dict)
+        me = self._json(self._bot('GET', '/users/@me', read_authorize=read_authorize), dict)
+        if (str(application.get('id')) != self.client_id or me.get('bot') is not True
+                or not re.fullmatch(r'[0-9]{5,25}', str(me.get('id', '')))):
+            raise AlphaError('The Discord bot and application do not match. Ask the workspace owner to reconnect.', 409)
+        if cache_enabled:
+            # Only immutable bot/application IDs are retained, never permission
+            # evidence. Every destination operation still rechecks live guild,
+            # membership and channel permissions through the shared coordinator.
+            self._bot_identity_cache = (*key, str(me['id']), time.monotonic())
+        return str(me['id'])
+
+    def destinations(self, access_token, *, read_authorize=None):
+        """Explicit installation, server-manager and effective channel permission evidence."""
         session = self.session(access_token)
-        guild = self._json(self._bot("GET", f"/guilds/{session['guild']}"), dict)
-        bot_id = str(self._json(self._bot("GET", "/users/@me"), dict).get("id", ""))
-        bot_roles = self._member_roles(session["guild"], bot_id) or []
+        if (session.get('v') != 2 or session.get('applicationId') != self.client_id
+                or any(not re.fullmatch(r'[0-9]{5,25}', str(session.get(k, ''))) for k in ('botUserId', 'user', 'guild'))):
+            raise AlphaError('Reconnect Discord to bind the application, bot and authorizing user before choosing channels.', 409)
+        guild = self._json(self._bot("GET", f"/guilds/{session['guild']}", read_authorize=read_authorize), dict)
+        bot_id = self._bot_identity(read_authorize=read_authorize)
+        if (guild.get('id') != session['guild'] or session.get('applicationId') != self.client_id
+                or session.get('botUserId') != bot_id):
+            raise AlphaError('Reconnect this Discord installation before authorizing channels.', 409)
+        bot_roles = self._member_roles(session["guild"], bot_id, read_authorize=read_authorize)
         user_id = session.get("user")
-        user_roles = self._member_roles(session["guild"], user_id) if user_id else []
-        if user_id and user_roles is None:
-            return []  # the person who connected has left the server
-        channels = self._json(self._bot("GET", f"/guilds/{session['guild']}/channels"), list)
+        if not re.fullmatch(r'[0-9]{5,25}', str(user_id or '')):
+            raise AlphaError('Reconnect to confirm the Discord user who authorizes this server.', 409)
+        user_roles = self._member_roles(session['guild'], user_id, read_authorize=read_authorize)
+        if bot_roles is None or user_roles is None:
+            return []
+        if not self._permissions(guild, user_roles, user_id) & self.MANAGE_GUILD:
+            return []
+        channels = self._json(self._bot("GET", f"/guilds/{session['guild']}/channels", read_authorize=read_authorize), list)
         usable = []
         for channel in channels:
             if not isinstance(channel, dict) or channel.get("type") not in (0, 5) or not re.fullmatch(r"\d{5,25}", str(channel.get("id", ""))):
                 continue
             bot = self._permissions(guild, bot_roles, bot_id, channel)
-            viewer = self._permissions(guild, user_roles, user_id, channel) if user_id else self._permissions(guild, [], None, channel)
-            if bot & self.VIEW_CHANNEL and bot & self.SEND_MESSAGES and viewer & self.VIEW_CHANNEL:
-                usable.append(channel)
+            viewer = self._permissions(guild, user_roles, user_id, channel)
+            required = self.VIEW_CHANNEL | self.SEND_MESSAGES | self.READ_HISTORY
+            if bot & required == required and viewer & (self.VIEW_CHANNEL | self.SEND_MESSAGES) == (self.VIEW_CHANNEL | self.SEND_MESSAGES):
+                usable.append({**channel, 'botPermissions': bot, 'userPermissions': viewer})
         usable.sort(key=lambda c: (c.get("position") or 0, str(c.get("name"))))
         return [{"id": str(c["id"]), "name": "#" + str(c.get("name") or c["id"]), "kind": "announcement" if c.get("type") == 5 else "text",
-                 "selected": str(c["id"]) == str(session.get("channel"))} for c in usable]
+                 "selected": str(c["id"]) == str(session.get("channel")), 'applicationId': self.client_id,
+                 'botUserId': bot_id, 'linkedUserId': user_id, 'guildId': session['guild'],
+                 'guildName': str(guild.get('name') or session['guild']), 'channelId': str(c['id']),
+                 'channelName': '#' + str(c.get('name') or c['id']), 'botPermissions': c['botPermissions'], 'userPermissions': c['userPermissions']} for c in usable]
 
     def with_destination(self, access_token, destination_id):
         session = self.session(access_token)
-        if not any(d["id"] == str(destination_id) for d in self.destinations(access_token)):
+        evidence = next((d for d in self.destinations(access_token) if d['id'] == str(destination_id)), None)
+        if evidence is None:
             raise AlphaError("Choose a text channel in this server.", 409)
-        return json.dumps({**session, "channel": str(destination_id)})
+        return json.dumps({**session, "channel": str(destination_id), 'destinationEvidence': evidence})
+
+    def authorize_destination(self, access_token, target, *, media=False, read_authorize=None):
+        evidence = next((d for d in self.destinations(access_token, read_authorize=read_authorize) if d['id'] == target['channelId']), None)
+        if (not evidence or any(evidence.get(k) != target.get(k) for k in
+                               ('applicationId', 'botUserId', 'linkedUserId', 'guildId', 'channelId'))
+                or media and not evidence['botPermissions'] & self.ATTACH_FILES):
+            raise AlphaError('The approved Discord destination is unavailable or lacks permission. Nothing was posted.', 409)
+        return evidence
 
     def revoke(self, token):
-        # Disconnecting removes Rafii's bot from the server.
+        if self.connections_v2_enabled:
+            raise AlphaError('Use workspace-local disconnect; removing the shared bot requires separate server administration.', 409)
+        # Legacy operator-only removal; v2 user disconnect never reaches this path.
         return self._bot("DELETE", f"/users/@me/guilds/{self.session(token)['guild']}").get("status") in (200, 204)
 
 

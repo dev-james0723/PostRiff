@@ -1,0 +1,601 @@
+diff --git a/migrations/postriff/20261017_pinterest_metric_reads.rollback.sql b/migrations/postriff/20261017_pinterest_metric_reads.rollback.sql
+new file mode 100644
+index 00000000..1101b61f
+--- /dev/null
++++ b/migrations/postriff/20261017_pinterest_metric_reads.rollback.sql
+@@ -0,0 +1,24 @@
++-- Separately reviewed rollback only. Refuse data loss and schema drift; pause analytics first.
++BEGIN;
++SET LOCAL lock_timeout = '5s';
++DO $$
++DECLARE existing text; allowed text[]; validated boolean;
++BEGIN
++  SELECT pg_get_expr(conbin,conrelid),convalidated INTO existing,validated FROM pg_constraint
++   WHERE conrelid=to_regclass('public.pr_metric_reads') AND conname='pr_metric_reads_provider_check' AND contype='c';
++  IF existing IS NULL OR validated IS NOT TRUE OR position('provider = ANY' in existing)=0 THEN
++    RAISE EXCEPTION 'Expected validated metric provider CHECK is missing; review source drift';
++  END IF;
++  SELECT array_agg(m[1] ORDER BY m[1]) INTO allowed FROM regexp_matches(existing, $rx$'([^']+)'$rx$, 'g') m;
++  IF allowed IS DISTINCT FROM ARRAY['instagram','pinterest','threads'] AND allowed IS DISTINCT FROM ARRAY['instagram','threads'] THEN
++    RAISE EXCEPTION 'Unexpected metric provider CHECK; review source drift';
++  END IF;
++  IF EXISTS(SELECT 1 FROM public.pr_metric_reads WHERE provider='pinterest') THEN
++    RAISE EXCEPTION 'Pinterest metric rows exist; preserve them and keep the expanded CHECK';
++  END IF;
++  IF allowed=ARRAY['instagram','threads'] THEN RETURN; END IF;
++  ALTER TABLE public.pr_metric_reads DROP CONSTRAINT pr_metric_reads_provider_check;
++  ALTER TABLE public.pr_metric_reads ADD CONSTRAINT pr_metric_reads_provider_check CHECK(provider IN ('threads','instagram')) NOT VALID;
++  ALTER TABLE public.pr_metric_reads VALIDATE CONSTRAINT pr_metric_reads_provider_check;
++END $$;
++COMMIT;
+diff --git a/migrations/postriff/20261017_pinterest_metric_reads.sql b/migrations/postriff/20261017_pinterest_metric_reads.sql
+new file mode 100644
+index 00000000..6a1e336f
+--- /dev/null
++++ b/migrations/postriff/20261017_pinterest_metric_reads.sql
+@@ -0,0 +1,23 @@
++-- Candidate only: separately approved production SQL required. No grants, customer content or existing rows change; four native metric definitions are additive.
++BEGIN;
++SET LOCAL lock_timeout = '5s';
++DO $$
++DECLARE existing text; allowed text[]; validated boolean;
++BEGIN
++  SELECT pg_get_expr(conbin,conrelid),convalidated INTO existing,validated FROM pg_constraint
++   WHERE conrelid=to_regclass('public.pr_metric_reads') AND conname='pr_metric_reads_provider_check' AND contype='c';
++  IF existing IS NULL OR validated IS NOT TRUE OR position('provider = ANY' in existing)=0 THEN RAISE EXCEPTION 'Expected migration035 metric provider CHECK is missing'; END IF;
++  SELECT array_agg(m[1] ORDER BY m[1]) INTO allowed FROM regexp_matches(existing, $rx$'([^']+)'$rx$, 'g') m;
++  IF allowed=ARRAY['instagram','pinterest','threads'] THEN RETURN; END IF;
++  IF allowed IS DISTINCT FROM ARRAY['instagram','threads'] THEN RAISE EXCEPTION 'Unexpected metric provider CHECK; review source drift'; END IF;
++  ALTER TABLE public.pr_metric_reads DROP CONSTRAINT pr_metric_reads_provider_check;
++  ALTER TABLE public.pr_metric_reads ADD CONSTRAINT pr_metric_reads_provider_check CHECK(provider IN ('threads','instagram','pinterest')) NOT VALID;
++  ALTER TABLE public.pr_metric_reads VALIDATE CONSTRAINT pr_metric_reads_provider_check;
++END $$;
++INSERT INTO public.pr_metric_definitions(provider,metric,native_name,definition_version,unit,scope,definition_url) VALUES
++ ('pinterest','impressions','IMPRESSION','pinterest-pin-utc-window-v1','count','post','https://github.com/pinterest/api-description/blob/main/v5/openapi.json'),
++ ('pinterest','saves','SAVE','pinterest-pin-utc-window-v1','count','post','https://github.com/pinterest/api-description/blob/main/v5/openapi.json'),
++ ('pinterest','pin_clicks','PIN_CLICK','pinterest-pin-utc-window-v1','count','post','https://github.com/pinterest/api-description/blob/main/v5/openapi.json'),
++ ('pinterest','outbound_clicks','OUTBOUND_CLICK','pinterest-pin-utc-window-v1','count','post','https://github.com/pinterest/api-description/blob/main/v5/openapi.json')
++ON CONFLICT(provider,metric,definition_version) DO NOTHING;
++COMMIT;
+diff --git a/scripts/cloud-pinterest-postgres.sh b/scripts/cloud-pinterest-postgres.sh
+index 4376c578..0560d7bb 100644
+--- a/scripts/cloud-pinterest-postgres.sh
++++ b/scripts/cloud-pinterest-postgres.sh
+@@ -19,4 +19,5 @@ env -i PATH="$PATH" HOME="$pg_test_home" CI=true LC_ALL=C PYTHONDONTWRITEBYTECOD
+   PYTHONPATH="$PWD/src:$PWD/tests" POSTRIFF_PG_BIN="$pg_bin" POSTRIFF_RESEARCH=0 \
+   "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py tests/phase2/postgres_pinterest.py tests/phase2/postgres_browser_session_guard.py \
+     tests/phase2/postgres_device_registry.py tests/phase2/postgres_account_holds.py \
+-    tests/phase2/postgres_security_incidents.py tests/phase2/postgres_rapv2_acceptance.py
++    tests/phase2/postgres_security_incidents.py tests/phase2/postgres_rapv2_acceptance.py \
++    tests/phase2/postgres_growth_metric_reads.py
+diff --git a/scripts/cloud-pinterest-production-validation.sh b/scripts/cloud-pinterest-production-validation.sh
+index 3e85efe7..4ff8f545 100644
+--- a/scripts/cloud-pinterest-production-validation.sh
++++ b/scripts/cloud-pinterest-production-validation.sh
+@@ -6,7 +6,7 @@ if [ "$(uname -s)" != Linux ] || [ "${CI:-}" != true ]; then
+ fi
+ cd "$(dirname "$0")/.."
+ export PYTHONPATH=src:tests PYTHONDONTWRITEBYTECODE=1
+-python -m unittest -v test_hosted_wave3_connectors test_pinterest_trial_readiness test_pinterest_trial_evidence test_pinterest_pilot test_pinterest_production_prep test_postriff_phase2_hosted test_agent_capability_registry test_rafii_browser_session_guard test_rafii_account_protection_p0 test_postriff_account_security test_rafii_account_protection_a1 test_rafii_creation_capabilities test_rafii_device_registry test_rafii_account_holds test_rafii_risk_engine test_rafii_security_incidents test_rafii_account_protection_acceptance test_rafii_rapv2_decisions
++python -m unittest -v test_pinterest_analytics test_growth_metric_schedule test_connection_health test_hosted_wave3_connectors test_pinterest_trial_readiness test_pinterest_trial_evidence test_pinterest_pilot test_pinterest_production_prep test_postriff_phase2_hosted test_agent_capability_registry test_rafii_browser_session_guard test_rafii_account_protection_p0 test_postriff_account_security test_rafii_account_protection_a1 test_rafii_creation_capabilities test_rafii_device_registry test_rafii_account_holds test_rafii_risk_engine test_rafii_security_incidents test_rafii_account_protection_acceptance test_rafii_rapv2_decisions
+ python tests/pinterest_agent_registration.py
+ python scripts/pinterest-synthetic-load.py
+ bash scripts/cloud-pinterest-postgres.sh
+diff --git a/src/postriff_phase2/connection_health.py b/src/postriff_phase2/connection_health.py
+index 0b320a5f..acc4679e 100644
+--- a/src/postriff_phase2/connection_health.py
++++ b/src/postriff_phase2/connection_health.py
+@@ -62,7 +62,7 @@ EXPIRING_SOON_SECONDS = 7 * 86400                           # web/src/lib/channe
+ RECENT_SECONDS = 2 * 86400                                  # data newer than this reads as "recent"
+ 
+ # Rafii reads post analytics in the background only for these (insights.INSIGHT_METRICS, growth/metric_schedule.py).
+-COLLECTED_ANALYTICS = {"Threads": "threads", "Instagram": "instagram"}
++COLLECTED_ANALYTICS = {"Threads": "threads", "Instagram": "instagram", "Pinterest": "pinterest"}
+ 
+ # Lane B1's GET payload (CF-2 §16): only these values pass through, anything else is dropped.
+ AUTONOMY_MODES = ("shadow", "enforce")
+diff --git a/src/postriff_phase2/growth/metric_schedule.py b/src/postriff_phase2/growth/metric_schedule.py
+index a24e292a..5e3c2cfb 100644
+--- a/src/postriff_phase2/growth/metric_schedule.py
++++ b/src/postriff_phase2/growth/metric_schedule.py
+@@ -7,7 +7,7 @@ Two halves, so no HTTP ever runs inside the publishing worker's transaction:
+   any transaction, then records the observations and closes the row in one transaction fenced on the lease, so a
+   crash-recovered re-claim cannot double-write.
+ 
+-Only Threads and Instagram posts on connections whose analytics capability is Direct are scheduled or read; both
++Only admitted Threads, Instagram and separately enabled Pinterest posts on connections whose analytics capability is Direct are scheduled or read; both
+ are re-checked before every read (a disconnect or account deletion stops readings). A failed read never writes an
+ 'unavailable' observation that would hide an earlier real value: transient failures retry with backoff; terminal
+ ones close the schedule row only. Everything is off unless POSTRIFF_METRIC_READS is "1" and the workspace is in
+@@ -28,6 +28,7 @@ from .. import insights
+ FLAG = "POSTRIFF_METRIC_READS"
+ WORKSPACE_ALLOWLIST = "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST"
+ NATIVE_ANALYTICS_SCOPES = {
++    "pinterest": frozenset({"user_accounts:read", "boards:read", "pins:read"}),
+     "threads": frozenset({"threads_basic", "threads_manage_insights"}),
+     "instagram": frozenset({"instagram_business_basic", "instagram_business_manage_insights"}),
+ }
+@@ -163,6 +164,10 @@ class MetricScheduler:
+ 
+     def provider_allowed(self, provider):
+         adapter = (getattr(self.oauth, "providers", None) or {}).get(provider)
++        if provider == 'pinterest':
++            from ..pinterest_analytics import enabled
++            if not enabled(adapter) or not self._pinterest_schema_ready():
++                return False
+         reviewed_or_scoped = bool(adapter and (
+             getattr(adapter, "production_reviewed", False) is True or
+             getattr(adapter, "account_scoped_direct", False) is True
+@@ -170,6 +175,19 @@ class MetricScheduler:
+         return bool(provider in NATIVE_ANALYTICS_SCOPES and reviewed_or_scoped
+                     and getattr(adapter, "execution_enabled", True) is True)
+ 
++    def _pinterest_schema_ready(self):
++        # Legacy035 accepts only Meta providers. Never enable collection before
++        # the separately approved CHECK expansion has actually been applied.
++        import re
++        try:
++            with self.connection_factory() as db, db.cursor() as cur:
++                cur.execute("SELECT convalidated,pg_get_constraintdef(oid),(SELECT count(*) FROM public.pr_metric_definitions WHERE provider='pinterest' AND definition_version='pinterest-pin-utc-window-v1' AND metric IN ('impressions','saves','pin_clicks','outbound_clicks')) FROM pg_constraint WHERE conrelid=to_regclass('public.pr_metric_reads') AND conname='pr_metric_reads_provider_check' AND contype='c'")
++                row = cur.fetchone()
++            return bool(row and row[0] is True and row[2] == 4 and 'provider = ANY' in row[1]
++                        and set(re.findall(r"'([^']+)'", row[1])) == {'threads', 'instagram', 'pinterest'})
++        except Exception:
++            return False
++
+     def probe(self, workspace_id, token, connection_id, payload):
+         """Explicit interactive canary before scheduled reads are enabled.
+ 
+@@ -346,7 +364,11 @@ class MetricScheduler:
+             if eligibility != "read":
+                 return {"state": "cancelled", "failure": "not_eligible"}
+             requested = True
+-            fetched = insights.fetch_post_insights(self.transport, grant["accessToken"], row["provider"], row["postId"])
++            extra = {}
++            if row['provider'] == 'pinterest':
++                extra = {'provider_adapter': self.oauth._provider_for_access('pinterest', grant['accessToken']),
++                         'period_start': row['anchorAt'], 'now': self.clock()}
++            fetched = insights.fetch_post_insights(self.transport, grant["accessToken"], row["provider"], row["postId"], **extra)
+         except AlphaError as error:
+             status = getattr(error, "status", None)
+             if status in (404, 409):            # revoked grant, or an attempted native request rejected by the transport
+@@ -358,7 +380,8 @@ class MetricScheduler:
+             return {"state": "transient", "failure": "error", "http": None, "providerRead": requested}
+         status = fetched["status"]
+         if status == 200:
+-            return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True}
++            return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True,
++                    **({"periodStart": fetched["periodStart"]} if "periodStart" in fetched else {})}
+         if status in TERMINAL_HTTP:
+             return {"state": "unavailable", "failure": f"http_{status}", "http": status, "providerRead": True}
+         return {"state": "transient", "failure": f"http_{status}", "http": status, "providerRead": True}
+@@ -381,7 +404,7 @@ class MetricScheduler:
+                 if recorded:
+                     insights.record_observations(cur, row["workspaceId"], row["connectionId"], row["provider"], row["postId"], row["jobId"],
+                                                  outcome["found"], outcome["endpoint"], self.clock(), read_offset=row["offset"],
+-                                                 period_start=row["anchorAt"])
++                                                 period_start=outcome.get("periodStart", row["anchorAt"]))
+             elif state == "transient" and row["attempts"] < row["maxAttempts"]:
+                 cur.execute("""UPDATE public.pr_metric_reads SET status='pending', due_at=now() + make_interval(secs => %s), last_http_status=%s,
+                                       failure_class=%s, lease_owner=NULL, lease_until=NULL, updated_at=now()
+diff --git a/src/postriff_phase2/insights.py b/src/postriff_phase2/insights.py
+index a5f0b369..de98face 100644
+--- a/src/postriff_phase2/insights.py
++++ b/src/postriff_phase2/insights.py
+@@ -15,6 +15,7 @@ FAMILIES = {
+     "resonance": ("likes", "comments", "replies", "reposts", "quotes", "shares", "saved"),
+ }
+ INSIGHT_METRICS = {"threads": ("views", "likes", "replies", "reposts", "quotes", "shares"), "instagram": ("reach", "views", "likes", "comments", "saved", "shares")}
++INSIGHT_METRICS['pinterest'] = ('impressions', 'saves', 'pin_clicks', 'outbound_clicks')
+ MIN_COMPARABLE = 3
+ # Cross-post comparisons (coworker performance, campaign triggers) read every post at the same age: the +24h scheduled
+ # reading, or a legacy row with no offset. Values read at t0, +1h, +7d or by a backfill are not like-for-like.
+@@ -44,8 +45,12 @@ def insights_endpoint(provider, provider_post_id):
+     return f"{base}/{GRAPH_VERSION}/{quote(provider_post_id)}/insights"
+ 
+ 
+-def fetch_post_insights(transport, access_token, provider, provider_post_id):
++def fetch_post_insights(transport, access_token, provider, provider_post_id, *, provider_adapter=None, period_start=None, now=None):
+     """One insights GET, no database. {"status", "found": {metric: value}, "endpoint"}; transport errors propagate."""
++    if provider == 'pinterest':
++        if provider_adapter is None:
++            raise AlphaError('Pinterest analytics requires bound provider custody.', 503)
++        return provider_adapter.pin_analytics(access_token, provider_post_id, start_at=period_start, end_at=now)
+     metrics = INSIGHT_METRICS[provider]
+     endpoint = insights_endpoint(provider, provider_post_id)
+     response = transport("GET", endpoint + "?" + urlencode({"metric": ",".join(metrics), "access_token": access_token}))
+@@ -71,7 +76,8 @@ def record_observations(cur, workspace_id, connection_id, provider, provider_pos
+     extra_vals = ",%s,to_timestamp(%s)" if read_offset is not None else ""
+     for metric in INSIGHT_METRICS[provider]:
+         available = type(found.get(metric)) in (int, float) and math.isfinite(found[metric]) and found[metric] >= 0
+-        params = [workspace_id, connection_id, provider, provider_post_id, job_id, metric, DEFINITION_VERSION, found.get(metric) if available else None, "available" if available else "unavailable", now, endpoint]
++        definition = 'pinterest-pin-utc-window-v1' if provider == 'pinterest' else DEFINITION_VERSION
++        params = [workspace_id, connection_id, provider, provider_post_id, job_id, metric, definition, found.get(metric) if available else None, "available" if available else "unavailable", now, endpoint]
+         if read_offset is not None:
+             params += [read_offset, period_start]
+         cur.execute(f"INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint{extra_cols}) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'count',%s,to_timestamp(%s),%s{extra_vals})", params)
+@@ -85,8 +91,15 @@ def ingest_post_insights(cur, transport, oauth, workspace_id, connection_id, pro
+     if not metrics:
+         cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint) VALUES(%s,%s,%s,%s,%s,'all',%s,NULL,'count','not_supported',to_timestamp(%s),'')", (workspace_id, connection_id, provider, provider_post_id, job_id, DEFINITION_VERSION, now))
+         return {"provider": provider, "availability": "not_supported"}
++    extra = {}
++    if provider == 'pinterest':
++        from .pinterest_analytics import enabled
++        if not enabled(oauth.providers.get(provider)):
++            raise AlphaError('Pinterest analytics is not enabled for this integration.', 403)
+     grant = oauth.token_for_worker(workspace_id, connection_id)
+-    fetched = fetch_post_insights(transport, grant["accessToken"], provider, provider_post_id)
++    if provider == 'pinterest':
++        extra = {'provider_adapter': oauth._provider_for_access(provider, grant['accessToken']), 'period_start': now, 'now': now}
++    fetched = fetch_post_insights(transport, grant["accessToken"], provider, provider_post_id, **extra)
+     recorded = record_observations(cur, workspace_id, connection_id, provider, provider_post_id, job_id, fetched["found"], fetched["endpoint"], now)
+     return {"provider": provider, "status": fetched["status"], "recorded": recorded}
+ 
+diff --git a/src/postriff_phase2/oauth.py b/src/postriff_phase2/oauth.py
+index 41cc51ee..374b5a5f 100644
+--- a/src/postriff_phase2/oauth.py
++++ b/src/postriff_phase2/oauth.py
+@@ -1088,6 +1088,9 @@ class OAuthService:
+                 set_level(matrix, name, "Direct", evidence, now, adapter.capability_version)
+             elif name == requested:
+                 set_level(matrix, name, "Unsupported", f"Waiting for {adapter.platform} to approve Rafii.", now, adapter.capability_version)
++        if getattr(adapter, 'id', None) == 'pinterest':
++            from .pinterest_analytics import describe
++            matrix = describe(matrix, granted, analytics_enabled=getattr(adapter, 'analytics_enabled', False))
+         return matrix
+ 
+     # --- read / refresh / disconnect -------------------------------------------------
+@@ -1107,6 +1110,11 @@ class OAuthService:
+         views = [{**customer_view(with_youtube_credential_status(c, credentials.get((workspace_id, c['id']))), matrices.get(c['id'], assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
+         for view in views:
+             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
++        for view in views:
++            if view.get('platform') == 'Pinterest':
++                from .pinterest_analytics import describe
++                view['capabilities'] = describe(view.get('capabilities', {}), view.get('scopes', []),
++                    analytics_enabled=getattr(self.providers.get('pinterest'), 'analytics_enabled', False))
+         return {'channels': views, 'providers': catalog}
+ 
+     def token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False, pinterest_force_refresh=False):
+diff --git a/src/postriff_phase2/pinterest_analytics.py b/src/postriff_phase2/pinterest_analytics.py
+new file mode 100644
+index 00000000..c97640d0
+--- /dev/null
++++ b/src/postriff_phase2/pinterest_analytics.py
+@@ -0,0 +1,80 @@
++"""Native Pin metrics through existing bound custody/quota transport; disabled until separately enabled."""
++from datetime import datetime, timezone, timedelta
++import math
++import re
++from urllib.parse import urlencode
++from postriff_alpha.domain import AlphaError
++
++SCOPES = frozenset({'user_accounts:read', 'boards:read', 'pins:read'})
++METRICS = {'IMPRESSION': 'impressions', 'SAVE': 'saves', 'PIN_CLICK': 'pin_clicks', 'OUTBOUND_CLICK': 'outbound_clicks'}
++DEFINITION = 'pinterest-pin-utc-window-v1'
++
++
++def enabled(adapter):
++    return bool(adapter and getattr(adapter, 'analytics_enabled', False) is True
++                and getattr(adapter, 'production_reviewed', False) is True
++                and getattr(adapter, 'execution_enabled', True) is True
++                and not getattr(adapter, 'trial_readonly', False))
++
++
++def fetch(adapter, token, pin_id, *, start_at, end_at):
++    if not enabled(adapter):
++        raise AlphaError('Pinterest analytics is not enabled for this integration.', 403)
++    if not isinstance(pin_id, str) or not re.fullmatch(r'\d{1,30}', pin_id):
++        raise AlphaError('Choose a verified Pinterest Pin.', 400)
++    if any(type(x) not in (int, float) or not math.isfinite(x) or x <= 0 for x in (start_at, end_at)) or start_at > end_at:
++        raise AlphaError('Choose a valid Pinterest reporting window.', 400)
++    try:
++        first = datetime.fromtimestamp(start_at, timezone.utc).date()
++        last = datetime.fromtimestamp(end_at, timezone.utc).date()
++    except (ValueError, OverflowError, OSError):
++        raise AlphaError('Choose a valid Pinterest reporting window.', 400) from None
++    if first < last - timedelta(days=89):
++        raise AlphaError('Pinterest Pin analytics needs a reporting window within the last 90 days.', 409)
++    envelope = adapter._bound(token, 'at')
++    account = envelope.get('accountId')
++    if not isinstance(account, str) or not re.fullmatch(r'\d{1,30}', account):
++        raise AlphaError('Reconnect Pinterest to bind analytics to the expected account.', 409)
++    if not SCOPES <= set(envelope.get('scope') or []):
++        raise AlphaError('Reconnect Pinterest with Pin analytics read permission.', 403)
++    identity = adapter.identity(token)
++    if identity.get('providerAccountId') != account:
++        raise AlphaError('Pinterest account changed. Reconnect before reading analytics.', 409)
++    path = f'/v5/pins/{pin_id}/analytics'
++    query = urlencode({'start_date': first.isoformat(), 'end_date': last.isoformat(), 'metric_types': ','.join(METRICS)})
++    response = adapter.api(token, 'GET', path + '?' + query)
++    body = response.get('body')
++    report = (body.get('all') if 'all' in body else body.get('ALL')) if isinstance(body, dict) else None
++    summary = report.get('summary_metrics') if isinstance(report, dict) else None
++    found = {}
++    if response.get('status') == 200 and isinstance(summary, dict):
++        for native, name in METRICS.items():
++            value = summary.get(native)
++            if type(value) in (int, float) and math.isfinite(value) and value >= 0:
++                found[name] = value
++    return {'status': response.get('status'), 'found': found, 'endpoint': adapter.content_api + path + '?' + query,
++            'periodStart': datetime.combine(first, datetime.min.time(), timezone.utc).timestamp()}
++
++
++def describe(matrix, scopes, *, analytics_enabled=False):
++    """Explain stored levels truthfully without promoting an unverified permission to Direct."""
++    result = {key: dict(value) if isinstance(value, dict) else value for key, value in matrix.items()}
++    granted = set(scopes or [])
++    publishing = {'user_accounts:read', 'boards:read', 'pins:read', 'pins:write'} <= granted
++    if not publishing:
++        for name, detail in {'publish': 'Publishing needs Pinterest publishing permission and Rafii release approval. This connection is read-only.',
++                             'schedule': 'Rafii supports scheduling approved Pins through its queue after publishing access is enabled. This read-only connection cannot schedule.'}.items():
++            value = result.setdefault(name, {})
++            if value.get('level') != 'Direct':
++                value['evidence'] = detail
++    value = result.setdefault('analytics', {})
++    if analytics_enabled is not True:
++        value.update(level='Unsupported', verifiedAt=None)
++    if value.get('level') != 'Direct':
++        value['evidence'] = ('Pinterest offers Pin analytics. Rafii analytics is not enabled for this connection; separate read permission and release approval are required.'
++                             if not analytics_enabled else 'Pinterest offers Pin analytics; this connection has not granted Pin-read analytics permission.'
++                             if not SCOPES <= granted else 'Analytics read permission is granted; provider and release approval gates remain closed.')
++    for name in ('comments_read', 'reply'):
++        value = result.setdefault(name, {})
++        value.update(level='Unsupported', evidence='Pinterest public API v5 does not expose Pin comment-reading or reply endpoints. Use Pinterest directly.', verifiedAt=None)
++    return result
+diff --git a/src/postriff_phase2/wave3_connectors.py b/src/postriff_phase2/wave3_connectors.py
+index 04af55de..6337bae7 100644
+--- a/src/postriff_phase2/wave3_connectors.py
++++ b/src/postriff_phase2/wave3_connectors.py
+@@ -307,19 +307,24 @@ class PinterestProvider(OAuthProvider):
+     AUTH = "https://www.pinterest.com/oauth/"
+     API, SANDBOX = "https://api.pinterest.com", "https://api-sandbox.pinterest.com"
+     SCOPES = {"identity": ["user_accounts:read"], "boards_read": ["user_accounts:read", "boards:read"], "publish": ["user_accounts:read", "boards:read", "pins:read", "pins:write"],
+-              "schedule": ["user_accounts:read", "boards:read", "pins:read", "pins:write"]}
++              "schedule": ["user_accounts:read", "boards:read", "pins:read", "pins:write"],
++              "analytics": ["user_accounts:read", "boards:read", "pins:read"]}
+     EXPLAIN = {"identity": "Connect your Pinterest account. Rafii reads only your profile.",
+                "boards_read": "Rafii reads your Pinterest profile and boards. This connection cannot publish or schedule Pins.",
+-               "publish": "Rafii will create Pins on the board you choose only when you approve each exact Pin."}
++               "publish": "Rafii will create Pins on the board you choose only when you approve each exact Pin.",
++               "analytics": "Read available impressions, saves, Pin clicks and outbound clicks for your own Pins. No ads access or comment/reply permission."}
+     account_requirement = "An eligible Pinterest account with a board. Personal account data may require Pinterest approval; business accounts are recommended."
+     publish_scope = "pins:write"
+     publish_required = frozenset({"user_accounts:read", "pins:read", "pins:write", "boards:read"})
+     refresh_margin = 300
++    native_schedule = False
++    server_schedule = True  # Existing Rafii durable worker dispatches the approved Pin when due.
+     has_destinations = True
+     destination_scope, destination_label = "post", "Board"
+ 
+-    def __init__(self, client_id, client_secret, sandbox=False, transport=None, production_reviewed=False):
++    def __init__(self, client_id, client_secret, sandbox=False, transport=None, production_reviewed=False, analytics_enabled=False):
+         super().__init__(client_id, client_secret, transport=transport, production_reviewed=production_reviewed)
++        self.analytics_enabled = analytics_enabled is True
+         # Trial access writes to Pinterest's sandbox; boards there are separate from the live account's boards.
+         self.sandbox = bool(sandbox)
+ 
+@@ -346,13 +351,23 @@ class PinterestProvider(OAuthProvider):
+             def record(receipt):
+                 print(json.dumps({"pinterestTrialRequest": receipt}, sort_keys=True), flush=True)
+             transport = PinterestReadOnlyEvidenceTransport(record, environment=trial_environment, mock_transport=transport)
+-        adapter = cls(client_id, secret, sandbox=sandbox, transport=transport) if valid else None
++        adapter = cls(client_id, secret, sandbox=sandbox, transport=transport,
++                      analytics_enabled=values.get("POSTRIFF_PINTEREST_ANALYTICS_ENABLED") == "1" and not readonly) if valid else None
+         if adapter:
+             adapter.trial_readonly = readonly
+             adapter.trial_api_environment = trial_environment if readonly else None
+             adapter.trial_policy = policy
+         return adapter, diagnostic
+ 
++    def capability_scopes(self, capability):
++        if capability == 'analytics' and not self.analytics_enabled:
++            return []
++        return super().capability_scopes(capability)
++
++    def pin_analytics(self, access_token, pin_id, *, start_at, end_at):
++        from .pinterest_analytics import fetch
++        return fetch(self, access_token, pin_id, start_at=start_at, end_at=end_at)
++
+     def assert_trial_context(self, workspace_id, actor_id=None, *, scopes=None, now=None):
+         if not getattr(self, 'trial_readonly', False):
+             return
+diff --git a/tests/phase2/postgres_growth_metric_reads.py b/tests/phase2/postgres_growth_metric_reads.py
+index c77b3fbd..ef07278a 100644
+--- a/tests/phase2/postgres_growth_metric_reads.py
++++ b/tests/phase2/postgres_growth_metric_reads.py
+@@ -420,4 +420,75 @@ with connection() as db:
+     assert db.execute("SELECT status FROM pr_metric_reads WHERE id=%s", (race_row['id'],)).fetchone()[0] == 'cancelled'
+ checks.append('scope revoked during HTTP prevents append and is counted as cancelled, not done')
+ 
++# Pinterest reuses this same worker and lease/observation path, with separate enablement and schema gates.
++from postriff_phase2.wave3_connectors import PinterestProvider
++from postriff_phase2.pinterest_analytics import SCOPES as PIN_SCOPES
++from test_hosted_wave1_connectors import Wire, ok
++pin_wire = Wire([])
++pin_provider = PinterestProvider('1615884', 'SYNTHETIC', transport=pin_wire, production_reviewed=True, analytics_enabled=True)
++pin_token = json.dumps({'v':1,'at':'SYNTHETIC','environment':'production','clientId':'1615884','accountId':'1234567','scope':sorted(PIN_SCOPES)})
++class PinOAuth:
++    providers = {'pinterest':pin_provider}
++    calls = 0
++    def token_for_worker(self, workspace_id, connection_id):
++        self.calls += 1
++        return {'provider':'pinterest','accessToken':pin_token,'scopes':sorted(PIN_SCOPES)}
++    def _provider_for_access(self, provider, token):
++        assert provider == 'pinterest'
++        pin_provider._bound(token, 'at')
++        return pin_provider
++pin_oauth = PinOAuth()
++pin_scheduler = M.MetricScheduler(connection, pin_oauth, transport=lambda *a,**k: (_ for _ in ()).throw(AssertionError('raw transport bypass')),
++    workspace_allowlist={wid}, worker_id='mr-pin')
++assert not pin_scheduler.provider_allowed('pinterest')
++with connection() as db:
++    db.execute("UPDATE pr_metric_reads SET status='cancelled',lease_owner=NULL,lease_until=NULL WHERE provider='threads' AND status IN ('pending','claimed')")
++    db.execute("INSERT INTO pr_channel_capabilities(workspace_id,connection_id,capability,level) VALUES(%s,'conn-pinterest-1','analytics','Direct')", (wid,))
++    db.execute("INSERT INTO pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,key_id,scopes) VALUES(%s,'conn-pinterest-1','pinterest','1234567','sealed','k1',%s)", (wid,sorted(PIN_SCOPES)))
++    assert db.execute("SELECT count(*) FROM pr_metric_reads WHERE provider='pinterest'").fetchone()[0] == 0
++migration_pin = (ROOT/'migrations/postriff/20261017_pinterest_metric_reads.sql').read_text()
++rollback_pin = (ROOT/'migrations/postriff/20261017_pinterest_metric_reads.rollback.sql').read_text()
++with psycopg.connect(DSN,autocommit=True) as db:
++    db.execute(migration_pin); db.execute(migration_pin)
++    assert pin_scheduler.provider_allowed('pinterest')
++    db.execute(rollback_pin)
++    assert not pin_scheduler.provider_allowed('pinterest')
++    db.execute(migration_pin)
++assert pin_scheduler.provider_allowed('pinterest')
++with connection() as db,db.cursor() as cur:
++    pin_scheduler.on_post_verified(cur,wid,job('1234567',platform='Pinterest',channel='conn-pinterest-1'))
++    pin_scheduler.on_post_verified(cur,wid,job('1234567',platform='Pinterest',channel='conn-pinterest-1'))
++with connection() as db:
++    assert db.execute("SELECT count(*) FROM pr_metric_reads WHERE provider='pinterest'").fetchone()[0] == 4
++pin_provider.transport = Wire([ok({'id':'1234567','username':'synthetic'}),ok({'all':{'summary_metrics':{'IMPRESSION':10,'SAVE':0,'PIN_CLICK':3,'OUTBOUND_CLICK':2}}})])
++# Transport remains the provider's bound transport, never the generic Meta transport.
++result_pin = pin_scheduler.tick(max_reads=1)
++assert result_pin['done'] == 1,result_pin
++with connection() as db:
++    native = db.execute("SELECT metric,availability,value,definition_version,period_start IS NOT NULL FROM pr_metric_observations WHERE provider='pinterest' ORDER BY metric").fetchall()
++assert len(native)==4 and all(r[3]=='pinterest-pin-utc-window-v1' and r[4] for r in native),native
++assert next(r for r in native if r[0]=='saves')[1:3] == ('available',0)
++with connection() as db:
++    db.execute("UPDATE pr_metric_reads SET due_at=now()-interval '1second' WHERE provider='pinterest' AND read_offset='1h'")
++pin_claim = pin_scheduler.claim(1)[0]
++pin_provider.transport = Wire([ok({'id':'1234567','username':'synthetic'}),ok({'all':{'summary_metrics':{'IMPRESSION':15}}})])
++pin_outcome = pin_scheduler.read(pin_claim,{})
++with connection() as db:
++    db.execute("UPDATE pr_encrypted_credentials SET revoked_at=now() WHERE workspace_id=%s AND connection_id='conn-pinterest-1'",(wid,))
++assert pin_scheduler.complete(pin_claim,pin_outcome) is True
++assert pin_outcome['state']=='cancelled'
++with connection() as db:
++    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE provider='pinterest'").fetchone()[0] == 4
++before_pin_calls = pin_oauth.calls
++other_result = pin_scheduler.read({**pin_claim,'workspaceId':other},{})
++assert other_result['state']=='cancelled' and pin_oauth.calls==before_pin_calls
++with psycopg.connect(DSN,autocommit=True) as db:
++    try:
++        db.execute(rollback_pin)
++        raise AssertionError('Rollback must preserve existing Pinterest metric rows')
++    except psycopg.errors.RaiseException:
++        db.execute('ROLLBACK')
++assert pin_scheduler.provider_allowed('pinterest')
++checks.append('Pinterest flags/review/schema gate, migration idempotency and empty rollback, four idempotent worker offsets, native zero/definitions, existing lease revocation fence, tenant denial, and data-preserving rollback refusal PASS; synthetic provider only')
++
+ print(json.dumps({"status": "pass", "execution": "disposable-local-postgres; synthetic transport only", "checks": checks}, indent=2))
+diff --git a/tests/test_connection_health.py b/tests/test_connection_health.py
+index dfbccb1a..167c798a 100644
+--- a/tests/test_connection_health.py
++++ b/tests/test_connection_health.py
+@@ -39,7 +39,10 @@ class World:
+ 
+     def __init__(self, **extra):
+         self.registry = providers.registry_from_environment(environment(**extra))
+-        self.oauth = OAuthService(None, None, CredentialVault(KEY), self.registry, "https://app.example", clock=lambda: NOW)
++        def no_database():
++            raise AssertionError("Connection-health fixtures must not access provider quota storage")
++        repository = SimpleNamespace(connection_factory=no_database)
++        self.oauth = OAuthService(repository, None, CredentialVault(KEY), self.registry, "https://app.example", clock=lambda: NOW)
+         self.catalog = self.oauth.provider_catalog()
+         self.by_platform = {p["platform"]: p for p in self.catalog}
+ 
+diff --git a/tests/test_pinterest_analytics.py b/tests/test_pinterest_analytics.py
+new file mode 100644
+index 00000000..5dddcb6c
+--- /dev/null
++++ b/tests/test_pinterest_analytics.py
+@@ -0,0 +1,97 @@
++"""Synthetic official-API analytics/capability boundaries; no provider traffic or activation."""
++import json
++import unittest
++from types import SimpleNamespace
++from unittest.mock import Mock
++from postriff_alpha.domain import AlphaError
++from postriff_phase2 import insights
++from postriff_phase2.growth.metric_schedule import MetricScheduler
++from postriff_phase2.oauth import OAuthService
++from postriff_phase2.pinterest_analytics import SCOPES, fetch, describe
++from postriff_phase2.wave3_connectors import PinterestProvider
++from test_hosted_wave1_connectors import Wire, ok
++
++NOW = 1792238400
++IDENTITY = ok({'id':'1234567','username':'synthetic','account_type':'BUSINESS'})
++REPORT = ok({'all':{'summary_metrics':{'IMPRESSION':25,'SAVE':0,'PIN_CLICK':4,'OUTBOUND_CLICK':2}}})
++
++
++def fixture(replies=(), scopes=SCOPES):
++    p= PinterestProvider('1615884','SYNTHETIC',transport=Wire(replies),production_reviewed=True,analytics_enabled=True)
++    token=json.dumps({'v':1,'at':'SYNTHETIC_TOKEN','environment':'production','clientId':'1615884','accountId':'1234567','scope':sorted(scopes)})
++    return p,token
++
++
++class PinterestAnalytics(unittest.TestCase):
++    def test_official_summary_uses_bound_adapter_quota_and_native_metrics(self):
++        p,t=fixture([IDENTITY,REPORT]);quota=[];p.quota_required=True;p.rate_gate=lambda *a:quota.append(a)
++        r=fetch(p,t,'7654321',start_at=NOW-3600,end_at=NOW)
++        self.assertEqual(r['found'],{'impressions':25,'saves':0,'pin_clicks':4,'outbound_clicks':2})
++        self.assertEqual(len(quota),2)
++        self.assertIn('/v5/pins/7654321/analytics?',r['endpoint'])
++        self.assertNotIn('access_token',r['endpoint']);self.assertNotIn('SYNTHETIC_TOKEN',json.dumps(r))
++        self.assertEqual(p.transport.calls[-1]['headers']['Authorization'],'Bearer SYNTHETIC_TOKEN')
++        self.assertEqual(r['periodStart']%86400,0)
++
++    def test_flags_review_pause_and_readonly_deny_before_network(self):
++        for field,value in [('analytics_enabled',False),('analytics_enabled','false'),('production_reviewed',False),('production_reviewed','false'),('execution_enabled',False),('trial_readonly',True)]:
++            with self.subTest(field=field,value=value):
++                p,t=fixture();setattr(p,field,value)
++                with self.assertRaises(AlphaError):fetch(p,t,'1',start_at=NOW,end_at=NOW)
++                self.assertEqual(p.transport.calls,[])
++
++    def test_missing_scopes_and_unknown_account_deny_before_network(self):
++        for change in ('scope','accountId'):
++            p,t=fixture();d=json.loads(t);d[change]=[] if change=='scope' else None
++            with self.assertRaises(AlphaError):fetch(p,json.dumps(d),'1',start_at=NOW,end_at=NOW)
++            self.assertEqual(p.transport.calls,[])
++
++    def test_account_drift_stops_before_analytics(self):
++        p,t=fixture([ok({'id':'999','username':'other'})])
++        with self.assertRaises(AlphaError):fetch(p,t,'1',start_at=NOW,end_at=NOW)
++        self.assertEqual(len(p.transport.calls),1)
++
++    def test_invalid_pin_and_reporting_windows_never_call_provider(self):
++        for pin,start,end in [('../1',NOW,NOW),('1',True,NOW),('1',float('nan'),NOW),('1',1e300,1e300),('1',NOW,NOW-1),('1',NOW-91*86400,NOW)]:
++            p,t=fixture()
++            with self.assertRaises(AlphaError):fetch(p,t,pin,start_at=start,end_at=end)
++            self.assertEqual(p.transport.calls,[])
++
++    def test_missing_or_bad_values_stay_unavailable_and_error_payload_is_not_retained(self):
++        for body,status in [({'all':{'summary_metrics':{'IMPRESSION':True,'SAVE':-1,'PIN_CLICK':float('inf')}}},200),({'split':{'summary_metrics':{'IMPRESSION':999}}},200),({'message':'SYNTHETIC_SECRET'},403)]:
++            p,t=fixture([IDENTITY,ok(body,status)]);r=fetch(p,t,'1',start_at=NOW,end_at=NOW)
++            self.assertEqual(r['found'],{});self.assertNotIn('SYNTHETIC_SECRET',json.dumps(r))
++
++    def test_existing_observation_storage_keeps_zero_and_unavailable_separate(self):
++        rows=[];cur=SimpleNamespace(execute=lambda sql,args:rows.append(args))
++        insights.record_observations(cur,'w','c','pinterest','1','job',{'saves':0},'safe',NOW)
++        self.assertEqual(len(rows),4)
++        by_name={r[5]:r for r in rows}
++        self.assertEqual(by_name['saves'][7:9],[0,'available'])
++        self.assertEqual(by_name['impressions'][7:9],[None,'unavailable'])
++        self.assertTrue(all(r[6]=='pinterest-pin-utc-window-v1' for r in rows))
++
++    def test_scheduling_is_rafii_queue_and_analytics_uses_minimal_separate_scopes(self):
++        p,t=fixture();full=sorted(SCOPES|{'pins:write'})
++        m=OAuthService._capabilities(p,'publish',full,[],NOW,t)
++        self.assertEqual(m['publish']['level'],'Direct');self.assertEqual(m['schedule']['level'],'Direct')
++        self.assertIn('scheduled time',m['schedule']['evidence']);self.assertFalse(p.native_schedule)
++        self.assertNotIn('pins:write',p.capability_scopes('analytics'))
++        for name in ('comments_read','reply'):self.assertEqual(m[name]['level'],'Unsupported')
++        p.analytics_enabled=False;self.assertEqual(p.capability_scopes('analytics'),[])
++        self.assertEqual(describe(m,full,analytics_enabled=False)['analytics']['level'],'Unsupported')
++        readonly=OAuthService._capabilities(p,'boards_read',['user_accounts:read','boards:read'],[],NOW,t)
++        self.assertNotEqual(readonly['analytics']['level'],'Direct');self.assertIn('read-only',readonly['schedule']['evidence'])
++
++    def test_scheduler_uses_existing_custody_not_generic_raw_transport(self):
++        p,t=fixture([IDENTITY,REPORT]);oauth=SimpleNamespace(providers={'pinterest':p},token_for_worker=Mock(return_value={'provider':'pinterest','accessToken':t,'scopes':sorted(SCOPES)}),_provider_for_access=Mock(return_value=p))
++        scheduler=MetricScheduler(None,oauth,transport=Mock(side_effect=AssertionError('raw transport bypass')),workspace_allowlist={'w'},clock=lambda:NOW)
++        scheduler._eligible=lambda row:'read';scheduler._pinterest_schema_ready=lambda:True
++        r=scheduler.read({'workspaceId':'w','connectionId':'c','provider':'pinterest','postId':'1','anchorAt':NOW-3600},{})
++        self.assertEqual(r['state'],'done');self.assertEqual(r['found']['impressions'],25)
++        self.assertEqual(oauth.token_for_worker.call_args.args,('w','c'));scheduler.transport.assert_not_called()
++        scheduler._pinterest_schema_ready=lambda:False
++        before=len(p.transport.calls);self.assertFalse(scheduler.provider_allowed('pinterest'));self.assertEqual(len(p.transport.calls),before)
++
++
++if __name__=='__main__':unittest.main()

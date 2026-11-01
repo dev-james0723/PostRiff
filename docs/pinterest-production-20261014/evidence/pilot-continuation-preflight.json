@@ -1,0 +1,71 @@
+{
+  "checkedAt": "2026-10-15T14:27:47.817597+00:00",
+  "execution": "readonly_real_infrastructure_plus_local_candidate_and_remote_synthetic_validation",
+  "productionProject": "postriff-phase2-private",
+  "productionRef": "buoyhkbodnhzngaotoel",
+  "postgresVersion": "17.6",
+  "vercelProjectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "liveDeployment": "dpl_G3qxiTBApWSDTziH8fWZxuL2fdpb",
+  "liveSha": "5e4f4e13773e3739d0aa9cd1f3c57f3a23c9140e",
+  "liveState": "READY",
+  "rafiiIoAliasVerified": true,
+  "candidateHead": "2d61b536d2a8c0c29f1957869cd08393ccea7e63",
+  "productionBaselineInCandidate": "cab2b28801a02cc2e4c36f6be7b1a233a64c74fe",
+  "latestLiveMergeStatus": "BLOCKED approval; auto-review rejected local merge, no merge executed",
+  "sourceOverlap": [
+    "src/postriff_phase2/hosted_app.py",
+    "src/postriff_phase2/hosted_worker.py",
+    "web/src/lib/api/client.ts",
+    "web/src/lib/api/types.ts"
+  ],
+  "billingPlan": "pro",
+  "billingStatus": "overdue",
+  "deploymentEligibility": "UNVERIFIED; no deployment attempt, existing later deployment READY. Overdue field alone does not prove deployment rejection.",
+  "pinterestEnvNames": [
+    "POSTRIFF_OAUTH_PINTEREST_CALLBACK_ORIGIN"
+  ],
+  "pinterestClientIdPresent": false,
+  "pinterestClientSecretPresent": false,
+  "pinterestRateBudgetsPresent": false,
+  "vaultRlsEnabledAndForced": true,
+  "oauthRlsEnabledAndForced": true,
+  "browserVaultAndOauthSelectDenied": true,
+  "observedDefaultTableGrants": {
+    "owners": [
+      "postgres",
+      "supabase_admin"
+    ],
+    "grantee": "service_role",
+    "schema": "public",
+    "privileges": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE",
+      "TRUNCATE",
+      "REFERENCES",
+      "TRIGGER",
+      "MAINTAIN"
+    ]
+  },
+  "quotaRemediation": "Local candidate forces RLS and revokes inherited service_role ALL before granting SELECT/INSERT/UPDATE/DELETE. No production apply.",
+  "quotaMigrationSha256": "9a9b20f0e41ce5ba65c1bf013ed9e427e4b60237dc1e9130ac9043253f56fce4",
+  "validationInputs": {
+    "migrations/postriff/20261014_pinterest_rate_budgets.sql": "9a9b20f0e41ce5ba65c1bf013ed9e427e4b60237dc1e9130ac9043253f56fce4",
+    "tests/phase2/postgres_pinterest.py": "081139c7de9eb06778a0aae0704f01631cf27b6345c131712c888064be8821d8",
+    "web/package.json": "266fbeda4396e978c7d45f13e7a737f5259b62253348e001f3983be99e4a1f45"
+  },
+  "jcbDoctor": "PASS",
+  "targetedCloudRun": "7lkkltn4d9",
+  "targetedCloudRunUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/7lkkltn4d9",
+  "targetedCloudStatus": "PASS",
+  "newExternalWrites": [],
+  "productionDatabaseWrites": 0,
+  "deploymentsStarted": 0,
+  "realPinterestApiCalls": 0,
+  "newResources": 0,
+  "readOnlyMetadataCaveat": "Production SQL queried schema/default grants only. No credential ciphertext, tokens, sessions, content or other users records read.",
+  "targetedCloudRemoteExitCode": 0,
+  "targetedCloudControllerExitCode": 0,
+  "quotaHardeningCommit": "6d36716cfcc945fcc93a819ba243ffa870a1a799"
+}

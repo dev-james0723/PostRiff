@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "checkedAt": "2026-10-17T15:46:59.986881+00:00",
+  "sourceCommit": "42f7910cb73a17cbfaf47b2265a59c4d2f0b2b59",
+  "approvedIncoming": "5e4f4e13773e3739d0aa9cd1f3c57f3a23c9140e",
+  "mergeCommit": "e8d0c30da501267246ecd5f3d34ec0e6ed0915ea",
+  "mergeConflicts": 0,
+  "runId": "9z7g5qg736",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/9z7g5qg736",
+  "remoteExitCode": 0,
+  "controllerExitCode": 0,
+  "elapsedSeconds": 170.839,
+  "pythonTests": 376,
+  "nodeTestGroups": [
+    15,
+    24,
+    3,
+    4,
+    5
+  ],
+  "nodeTests": 51,
+  "postgres": {
+    "execution": "disposable_postgres_synthetic_provider",
+    "oauthReplayDenied": true,
+    "encryptedCustody": true,
+    "tenantNegativeRead": true,
+    "refreshConcurrentCallers": 12,
+    "providerRefreshes": 1,
+    "disconnectCancelsClaimedCallback": true,
+    "canceledCallbackNoNetwork": true,
+    "freshExplicitReconnectPassed": true,
+    "failedExchangeStateConsumed": true,
+    "failedExchangeReplayNoNetwork": true,
+    "pilotTenantAndActorFences": true,
+    "pilotBroadGrantDenied": true,
+    "pilotCallbackAuthorityRechecked": true,
+    "pilotTwoReadScopesConnected": true,
+    "pilotExpiryStopsCustody": true,
+    "pilotDisconnectAfterExpiry": true,
+    "trialDailyConcurrentReservations": 120,
+    "trialDailyAccepted": 100,
+    "trialDailyDenied": 20,
+    "trialMinuteCannotResetDaily": true,
+    "trialDailyRecovery": true,
+    "disconnectStopsTokenAccess": true,
+    "otherTenantUnaffected": true,
+    "quotaConcurrentReservations": 120,
+    "quotaAccepted": 100,
+    "quotaDenied": 20,
+    "quotaNextWindowRecovered": true,
+    "clientBudgetAccessDenied": true,
+    "supabaseDefaultGrantsSimulated": true,
+    "quotaForcedRls": true,
+    "quotaServiceRolePrivilegesBounded": true,
+    "quotaServiceRoleDmlPassed": true,
+    "quotaServiceRoleTruncateDenied": true
+  },
+  "postgresCluster": {
+    "status": "pass",
+    "execution": "disposable-cloud-postgres",
+    "postgresVersion": "postgres (PostgreSQL) 17.11 (Ubuntu 17.11-1.pgdg24.04+2)",
+    "failed": [],
+    "scripts": [
+      "tests/phase2/postgres_pinterest.py",
+      "tests/phase2/postgres_browser_session_guard.py",
+      "tests/phase2/postgres_device_registry.py",
+      "tests/phase2/postgres_account_holds.py",
+      "tests/phase2/postgres_security_incidents.py",
+      "tests/phase2/postgres_rapv2_acceptance.py"
+    ]
+  },
+  "rapv2Acceptance": {
+    "scriptExitCode": 0,
+    "regressions": [],
+    "closedGaps": [],
+    "rowCounts": "not captured: disposable runner limits each script stdout to last4000 characters"
+  },
+  "fieldsBrowser": {
+    "execution": "synthetic_actual_component",
+    "boardSelection": true,
+    "secretBoardDisabled": true,
+    "sectionSelection": true,
+    "httpLinkRejected": true,
+    "httpsLinkAccepted": true,
+    "accountSwitchClearsApprovalOptions": true,
+    "realProviderRequests": 0
+  },
+  "previewBrowser": {
+    "classification": "Mock PASS",
+    "fixtureOverlay": true,
+    "realPinterestApiRequests": 0,
+    "realIdentityVerified": false,
+    "exactTitle": true,
+    "boardVisible": true,
+    "exactDestination": true,
+    "noTitleInference": true,
+    "unsafeLinkNoCTA": true,
+    "externalRequestsBlocked": 0
+  },
+  "syntheticLoad": {
+    "at": "2026-10-17T15:41:41.533908+00:00",
+    "createCalls": 1000,
+    "elapsedSeconds": 0.25495859800000176,
+    "execution": "synthetic_in_process",
+    "failureTypes": [],
+    "injectedLostCreateResponses": 20,
+    "latencyMs": {
+      "p50": 110.26115700000005,
+      "p95": 208.94758000000024,
+      "p99": 214.79345299999864
+    },
+    "limitations": [
+      "No HTTP hosting, database scheduler, production OAuth or provider rate-limit measurement.",
+      "Lost responses need manual provider reconciliation; no automatic resubmission."
+    ],
+    "lostResponsesPreservedUncertain": true,
+    "observedPeakWorkers": 64,
+    "outcomes": {
+      "failed": 0,
+      "uncertain": 20,
+      "verified": 980
+    },
+    "providerCalls": 0,
+    "simulatedProviderLatencyMs": 2,
+    "simultaneousArrivals": 1000,
+    "unexpectedFailureRate": 0.0,
+    "users": 1000,
+    "usersPerSecond": 3922.2054398023993,
+    "workerLimit": 64
+  },
+  "typecheck": "PASS",
+  "lint": {
+    "warnings": 36,
+    "errors": 0
+  },
+  "build": "PASS",
+  "agentRegistration": "PASS",
+  "specificNewRouteTests": [
+    "unproved browser refused before OAuth start/complete",
+    "fresh independent proof reaches profile-and-boards connection",
+    "disconnect available while step-up required"
+  ],
+  "sourceHashCount": 3283,
+  "localSourceHashesMatch": true,
+  "trackedSourceEqualsCommit": true,
+  "temporaryJcbMappingRestored": true,
+  "unchangedInheritedSecurityFileChecks": 9,
+  "quotaMigrationUnchangedFrom6d36716c": true,
+  "firstAttempt": "approved-merge-attempt1.json",
+  "firstAttemptOutcome": "FAIL: missing required JSON body in new DELETE fixture; fixture repaired, rerun PASS",
+  "fullProjectCI": "NOT RUN",
+  "realPinterestApiCalls": 0,
+  "productionDatabaseWrites": 0,
+  "deploymentsStarted": 0,
+  "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261017T154323749309Z-ci.json",
+  "limitations": [
+    "Cloud PostgreSQL17.11 passed; last observed production17.6 not exercised.",
+    "Legacy inner RAP scripts print disposable-local; outer runner and JCB prove cloud execution.",
+    "Inherited submodule cleanup warning128; overall exits0.",
+    "Current live source cannot be verified: READY CLI deployment has no Git SHA and health sourceRevision null. Approved5e4 snapshot preserved; no current-production equivalence claimed."
+  ]
+}

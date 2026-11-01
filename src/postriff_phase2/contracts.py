@@ -1,6 +1,7 @@
 """Provider and persistence boundaries shared by local and hosted candidates."""
 import hashlib
 import json
+from functools import lru_cache
 from typing import Protocol
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -58,8 +59,11 @@ class SocialAdapter(Protocol):
     def submit(self, manifest: dict, scenario: str) -> dict: ...
     def reconcile(self, manifest: dict, scenario: str, checks: int) -> dict: ...
 
+@lru_cache(maxsize=1)
 def tzdb_version():
     """Which time-zone database resolved the instant; recorded so a later rule change is detectable."""
+    # Deployment dependencies and system zoneinfo are immutable for this
+    # process. Repeated package discovery must not delay approval admission.
     try:
         import importlib.metadata
         return "tzdata " + importlib.metadata.version("tzdata")

@@ -1,0 +1,112 @@
+{
+  "checkedAt": "2026-10-17T20:57:56.593391+00:00",
+  "method": "Kynlo native Browser Harness plus narrowly filtered macOS accessibility; official docs; Vercel CLI read-only; authenticated Gmail read-only relevant-account search",
+  "production": {
+    "reportedSource": "e2e5169ff19ac268c0a0ad06994f67b41f69f949",
+    "deployment": "dpl_2tFM29HomWyWcrzTqTtikWN6Pvti",
+    "state": "READY",
+    "url": "https://rafii.io",
+    "health": {
+      "http": 200,
+      "status": "ok",
+      "configured": true,
+      "customerValidated": false,
+      "sourceRevision": null
+    },
+    "sourceProof": "Existing capabilities-deployed-source-qualification-20261017.json2217 hashes reused; no new deploy this phase",
+    "supabase": "buoyhkbodnhzngaotoel",
+    "recheckedAt": "2026-10-17T21:00:00Z"
+  },
+  "pinterestApp": {
+    "id": "1615884",
+    "nativeMyAppsObservedAt": "2026-10-17T20:45:00Z",
+    "accessText": "Trial access active",
+    "upgradeLink": "https://developers.pinterest.com/apps/1615884/upgrade/",
+    "standardApproved": false,
+    "submissionState": "No active Standard submission or pending status shown; available upgrade form has blank video input. No submission made in this task.",
+    "formExistingWebsite": "https://postriff-phase2-private.vercel.app",
+    "formExistingPrivacy": "https://postriff-phase2-private.vercel.app/privacy",
+    "formFieldsChanged": false,
+    "video": {
+      "required": true,
+      "recommendedFormat": "MP4",
+      "maxBytesDisplay": "2GB",
+      "fpsRange": [
+        20,
+        60
+      ],
+      "mustShow": [
+        "official OAuth authentication",
+        "main Pinterest features"
+      ]
+    },
+    "emailCheck": {
+      "accountRole": "app owner account",
+      "query": "from:(pinterest.com) (1615884 OR Rafii OR standard access OR upgrade request) newer_than:90d",
+      "count": 1,
+      "result": "2026-10-14T15:33:37Z Trial approval only",
+      "limitation": "This bounded mail query is supporting evidence, not proof that no historical submission can exist."
+    }
+  },
+  "oauth": {
+    "registeredRedirect": "https://rafii.io/api/oauth/pinterest/callback",
+    "previousGrantScopes": [
+      "user_accounts:read",
+      "boards:read"
+    ],
+    "previousGrant": "revoked and both ciphertexts erased",
+    "pilotExpiredAt": "2026-10-17T20:40:56Z",
+    "newOauth": false,
+    "runtimeObserved": "Connect disabled after original private window expiry; live e2e catalog misleadingly describes invalid pilot configuration as blank credentials. Local fix prepared; do not reset a credential on this message alone.",
+    "requestedFuturePublishScopes": [
+      "user_accounts:read",
+      "boards:read",
+      "pins:read",
+      "pins:write"
+    ],
+    "requestedFutureAnalyticsScopes": [
+      "user_accounts:read",
+      "boards:read",
+      "pins:read"
+    ]
+  },
+  "eligibility": {
+    "thirdParty": "Not verified. Owner read-only proof does not certify another customer or public availability. Public release remains blocked by Standard and real customer acceptance.",
+    "personalAccounts": "Official access-tier page warns apps registered on/after2026-09-14 may receive403 PINNER_DATA_ACCESS_DENIED for non-business board/Pin data unless Pinterest authorizes that access. App1615884 registration date/exception not verified.",
+    "businessAccounts": "Use separately consenting non-owner business account for first acceptance; no blanket success promise.",
+    "trialVisibility": "API-created Trial Pins/boards creator-only Sandbox entities; public visibility not proved.",
+    "sources": [
+      "https://developers.pinterest.com/docs/key-concepts/access-tiers/",
+      "https://developers.pinterest.com/docs/getting-started/set-up-authentication-and-authorization/"
+    ]
+  },
+  "actions": {
+    "providerApiCalls": 0,
+    "pinsCreated": 0,
+    "boardsCreated": 0,
+    "formSubmissions": 0,
+    "deployments": 0,
+    "flagsChanged": 0,
+    "sqlApplied": 0,
+    "paidValidationRuns": 0
+  },
+  "nativeBoardRead": {
+    "observedAt": "2026-10-17T20:57:00Z",
+    "account": "@jamesaucreates",
+    "identitySignals": [
+      "profileURL/jamesaucreates/",
+      "visiblehandle",
+      "Editprofile"
+    ],
+    "savedUrl": "https://www.pinterest.com/jamesaucreates/_saved/",
+    "observedBoardCards": 0,
+    "existingEligibleBoardId": null,
+    "limitation": "Native ownprofile inspection, not fresh API eligibility. Proposed new board requires separate public-write approval."
+  },
+  "localRepairSource": "776930ed3851047ee5d9022cc49a1a69fe128830",
+  "nativeRecordingFallback": {
+    "kynloListApps": "Returned emptyapps after blockedQuickTimelaunch; does not verify appabsence or a specificOSpermissionfailure.",
+    "nativeProcessRead": "Denied by current sandbox, not bypassed.",
+    "noRetry": "No blind recording/launch retry after unknown native result."
+  }
+}

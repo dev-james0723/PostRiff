@@ -1,0 +1,63 @@
+{
+  "checkedAt": "2026-10-14T23:38:47.871103+00:00",
+  "sourceCommit": "f54028edc1eb5bd8e78d089899c694505cd15c0e",
+  "deployedBaseline": "7da3375cc0409d8e3a434955a75f57478889372b",
+  "runId": "ff5rd1086p",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/ff5rd1086p",
+  "runner": "depot-ubuntu-24.04-16",
+  "remoteExitCode": 0,
+  "controllerExitCode": 0,
+  "elapsedSeconds": 144.722,
+  "pythonTests": 204,
+  "pythonResult": "PASS",
+  "nodeTests": 42,
+  "postgres": [
+    "Pinterest custody/refresh/quota/tenant tests PASS",
+    "Browser session revocation/AAL/deleted-account tests PASS"
+  ],
+  "hostedTypecheck": "PASS",
+  "lint": {
+    "warnings": 36,
+    "errors": 0
+  },
+  "hostedBuild": "PASS",
+  "uiChecks": "PASS",
+  "syntheticLoad": {
+    "at": "2026-10-14T23:31:49.828142+00:00",
+    "createCalls": 1000,
+    "elapsedSeconds": 0.19320830399999522,
+    "execution": "synthetic_in_process",
+    "failureTypes": [],
+    "injectedLostCreateResponses": 20,
+    "latencyMs": {
+      "p50": 89.38561399999756,
+      "p95": 162.33180199999708,
+      "p99": 168.2626250000041
+    },
+    "limitations": [
+      "No HTTP hosting, database scheduler, production OAuth or provider rate-limit measurement.",
+      "Lost responses need manual provider reconciliation; no automatic resubmission."
+    ],
+    "lostResponsesPreservedUncertain": true,
+    "observedPeakWorkers": 64,
+    "outcomes": {
+      "failed": 0,
+      "uncertain": 20,
+      "verified": 980
+    },
+    "providerCalls": 0,
+    "simulatedProviderLatencyMs": 2,
+    "simultaneousArrivals": 1000,
+    "unexpectedFailureRate": 0.0,
+    "users": 1000,
+    "usersPerSecond": 5175.760975573931,
+    "workerLimit": 64
+  },
+  "liveProviderTraffic": 0,
+  "fullProjectCI": "NOT RUN",
+  "notes": [
+    "Vercel/GitHub production unchanged.",
+    "Cloud cleanup emitted existing vendor submodule metadata warning; validation and runner/controller exit0."
+  ],
+  "receiptPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261014T233318022471Z-ci.json"
+}

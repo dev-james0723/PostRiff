@@ -6,6 +6,7 @@ import type { Asset, Manifest, RunMedia } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { PreviewMedia, PreviewPost } from './types';
 import { useAccountPicture } from './use-account-picture';
+import { pinterestPreviewFields } from './preview-metadata';
 
 function mediaKind(mime: string): PreviewMedia['kind'] {
   if (mime.startsWith('image/')) return 'image';
@@ -43,6 +44,7 @@ export function usePreviewPost(manifest: Manifest, timeZone: string): PreviewPos
     text: manifest.platform === 'YouTube' && typeof manifest.publishOptions?.description === 'string' ? manifest.publishOptions.description : manifest.payload.text,
     ...(manifest.platform === 'YouTube' ? { videoTitle: typeof manifest.publishOptions?.title === 'string' ? manifest.publishOptions.title : undefined,
       youtubeMode: manifest.publishOptions?.mode === 'short' ? 'short' as const : 'video' as const } : {}),
+    ...(manifest.platform === 'Pinterest' ? pinterestPreviewFields(manifest.publishOptions) : {}),
     media: assets.map((asset, index) => {
       const result = loaded[index];
       return {

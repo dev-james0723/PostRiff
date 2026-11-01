@@ -1,0 +1,31 @@
+{
+  "recordedAt": "2026-10-17T03:58:48.676702+00:00",
+  "status": "PUBLISHING_RUNTIME_SOURCE_MATCHES_COMMITTED_7432",
+  "sourceDeployment": "dpl_BLyFgcDyW85wPrEsJV5qrkXsmrLj",
+  "expectedBaseline": "7432c56d96bc9d042b6f00bdbb6acc1b5bb271f1",
+  "manifestSha256": "e6e7d173da26c1c8c01599003693a1a6fe225ea3b6c2c922a88aebcd382012d4",
+  "rawProofSha256": "b5ddb747d7c404338ec59f9203b60a1930488d49adbc50391a894f58a0876b7d",
+  "matchingFileCount": 2432,
+  "changed": [
+    "vercel.json"
+  ],
+  "missing": [
+    ".vercelignore",
+    "api/control.py"
+  ],
+  "extra": [],
+  "scope": "Allowlisted source/config extensions in src/api/runtime/migrations/scripts/web plus root build configs; excludes secrets, dependencies, generated caches and non-source binaries. Does not assert complete byte identity for omitted assets.",
+  "qualification": {
+    "matchedRuntimeFiles": 2432,
+    "addedRuntimeFiles": 0,
+    "missingFilesExplained": [
+      ".vercelignore excludes itself",
+      "api/control.py belongs only to separate Rafii Control project and is explicitly excluded by .vercelignore"
+    ],
+    "vercelJson": "Cloud redeploy hash sees a35-byte name-only materialized config; this is not evidence that production lost services/headers/cron. Deployed Vercel metadata independently retains all3 expected services, API300s/phone660s, exact API buildCommand/exclusions and every-minute worker cron. See P9-BLY-DEPLOYED-RUNTIME-CONFIG-20261017.json.",
+    "byteIdentityLimit": "Does not claim original whole-archive or omitted binary asset byte equality. Current BLY immutable deployment/config retained for rollback. Source-only code proof and actual runtime metadata support legacy guard128 applicability; unknown compatible workers still require operational fencing."
+  },
+  "evidenceSource": "/Users/ouxianxing/Documents/James-Au-Studio/docs/discord-integration-20261012/implementation/P9-BLY-DEPLOYED-SOURCE-QUALIFICATION-20261017.json",
+  "evidenceSourceSha256": "a29344973fcc8334eaa2ae4ce6553e186a88a5de0589534206a3c547dc69b45c",
+  "reuseBasis": "Fresh get_deployment(rafii.io) resolves to the same immutable deployment ID. This existing source-only receipt does not prove omitted binary asset identity."
+}

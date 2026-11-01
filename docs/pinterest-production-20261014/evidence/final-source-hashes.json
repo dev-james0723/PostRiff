@@ -1,0 +1,170 @@
+[
+  {
+    "path": "migrations/postriff/20261014_pinterest_rate_budgets.sql",
+    "sha256": "e8bbf902dc5e46010aae34d4bd8653b37601b8df0b3b585ba5ffa89b3abe07ee"
+  },
+  {
+    "path": "scripts/cloud-pinterest-postgres.sh",
+    "sha256": "ebf7ee8ca3c8636aa4e5fde36ee0715da84107b71d65c439f9414add915ac627"
+  },
+  {
+    "path": "scripts/cloud-pinterest-preview-browser.sh",
+    "sha256": "12d6ea2d51fcca37d2c2b1ea9bc4d648fb4df1bf858e0b5552959e38eb1cc98a"
+  },
+  {
+    "path": "scripts/cloud-pinterest-production-validation.sh",
+    "sha256": "3744e783f38d96d6ac0876cd8a27eb4b66a9b90e9df76063296e263480c999cc"
+  },
+  {
+    "path": "scripts/cloud-pinterest-trial-validation.sh",
+    "sha256": "479dba06b02c25ac685a1b243f4a02f50f0c96b35c47526d7c066cf332706b93"
+  },
+  {
+    "path": "scripts/pinterest-synthetic-load.py",
+    "sha256": "5b96e6afda09f2bfabb88f0d92bd344b7c2cc34c78097746f331d6c4f6ea4831"
+  },
+  {
+    "path": "src/james_au_social/studio_connections.py",
+    "sha256": "39014de5232f4d88be0ab241fab2e0467979228c81bb0877d5f86c1a7f996a05"
+  },
+  {
+    "path": "src/postriff_phase2/agent_runtime_v2/authz.py",
+    "sha256": "bc64e1a8aed960298ab58e71d1767df8636496fd903cf6ca0edef7423ece4c6d"
+  },
+  {
+    "path": "src/postriff_phase2/agent_runtime_v2/capability_copy.json",
+    "sha256": "2a673773f14b6a3629916e5ccede3251e6749359f315e6b4e217183759f86c62"
+  },
+  {
+    "path": "src/postriff_phase2/agent_runtime_v2/capability_registry.py",
+    "sha256": "f34c902a132f241ee696d086d195d40885789b849af678b79a39a47522ceb1ed"
+  },
+  {
+    "path": "src/postriff_phase2/agent_runtime_v2/domain_tools.py",
+    "sha256": "7b32fa8020bfa12acb616ad69040c7a20a24df357363ed1182b2606bdf4c8814"
+  },
+  {
+    "path": "src/postriff_phase2/hosted_app.py",
+    "sha256": "ee81da6cc3dff6f6b4e2ca581943bb82a9a08dd1a6844ad0b17cb8d876d3fd8f"
+  },
+  {
+    "path": "src/postriff_phase2/hosted_social.py",
+    "sha256": "09690bd67e0d9366235057b1c897fe56039248e3d0a3c851e58bd4bb7e3e7a5c"
+  },
+  {
+    "path": "src/postriff_phase2/hosted_worker.py",
+    "sha256": "268ffe77303942fdcb6e58f995867f586f8711e960bcfcebbb35a982f4e58faa"
+  },
+  {
+    "path": "src/postriff_phase2/oauth.py",
+    "sha256": "82bd1c0f034797bedbd260ad755d4a9cd1967853c5247f75c77f4c12416489ff"
+  },
+  {
+    "path": "src/postriff_phase2/pinterest_agent.py",
+    "sha256": "9b2981aa6718d7eeaa173e0542ae03dd04775c83402f50f550d59e3e24ee5f80"
+  },
+  {
+    "path": "src/postriff_phase2/pinterest_quota.py",
+    "sha256": "47c90190298805a8b7dffc77567ab77dd2345da332533a4de1b771e932304398"
+  },
+  {
+    "path": "src/postriff_phase2/pinterest_safety.py",
+    "sha256": "2a719673a4672e4cb69715a5706f00abb36f894de50f7139dc0b128186ae5af4"
+  },
+  {
+    "path": "src/postriff_phase2/pinterest_trial_evidence.py",
+    "sha256": "194a391619166c29fce9f383181cc628c3219b5c71f4e43310cd22e43d4a4196"
+  },
+  {
+    "path": "src/postriff_phase2/providers.py",
+    "sha256": "796aa38285802f2e935d46db532920e401a69b1fc9d8fde24d13dc0c1ed85fac"
+  },
+  {
+    "path": "src/postriff_phase2/publish_options.py",
+    "sha256": "fe972cc0baaafbf76509373910e4f2451be7c9c650379bb06c04685ad9432f90"
+  },
+  {
+    "path": "src/postriff_phase2/wave3_connectors.py",
+    "sha256": "2e22dd61c041d31c6ea1dee9e705827c41e18753ce63292f10d8cf0de4796dd7"
+  },
+  {
+    "path": "studio/broker/pinterest-broker.mjs",
+    "sha256": "6a05cda6b99537b7379996a1968e8056559775c940923af115bdb63275b827c8"
+  },
+  {
+    "path": "studio/broker/tests/pinterest-broker.test.mjs",
+    "sha256": "b5ecda4b0f7ec9bb5082e604664347a2861b0f954235635cf7997a747842de2c"
+  },
+  {
+    "path": "studio/web/src/PinterestConnection.tsx",
+    "sha256": "b7de1e7d6b2a2c2c1a2105d8a4d0812c81e925b9896a37018b1a517077a0f80e"
+  },
+  {
+    "path": "studio/web/src/connectionsApi.ts",
+    "sha256": "523570dab097a672a38b8725a9c944b4138c50e42d2b1a604da05423426484a1"
+  },
+  {
+    "path": "studio/web/tests/connections-api.test.ts",
+    "sha256": "102bf8c971448b90add3e758f8e8914a98ed5d152a35c9b4b5b7e9946de53220"
+  },
+  {
+    "path": "tests/phase2/postgres_pinterest.py",
+    "sha256": "d1f0a1d9faee5a9fcda7ec0f1508cc92f650af4fcc4833b37b9afd9e851b7a5f"
+  },
+  {
+    "path": "tests/pinterest_agent_registration.py",
+    "sha256": "2b4e6bb45c68661ff9dd470d588269843db49aa627555d214de757793fea7929"
+  },
+  {
+    "path": "tests/test_hosted_wave3_connectors.py",
+    "sha256": "c2175ad134feff25e04aff9294f48577a17176897958946c3da61e262c5d813f"
+  },
+  {
+    "path": "tests/test_pinterest_production_prep.py",
+    "sha256": "f602237c056f022552767a5c3a44079478f86ba6c4eba59e9f7d285095f54469"
+  },
+  {
+    "path": "tests/test_pinterest_trial_evidence.py",
+    "sha256": "4845f98b4ae73a25ea8ee1d476fb2557c64b0f7b3367f3a4a9893bff03979837"
+  },
+  {
+    "path": "tests/test_pinterest_trial_readiness.py",
+    "sha256": "4e3f10b7b64ab9eb949bbe00976a25632ece881788cd88b1158e0c5f7433afdb"
+  },
+  {
+    "path": "web/src/components/application/post-preview/preview-metadata.test.ts",
+    "sha256": "929d87e6d156283451a7037418288b20b5be8b0046a990b15ca7bf02006682db"
+  },
+  {
+    "path": "web/src/components/application/post-preview/preview-metadata.ts",
+    "sha256": "3712413418ae01b791e2edb7a8e6d23669fd6dd10ad89b5e090d5efd1dd8cfc8"
+  },
+  {
+    "path": "web/src/components/application/post-preview/templates/pinterest.tsx",
+    "sha256": "df84636b14d359bb9c47a9dda2f6e8e8fa5ae06674752428a02d6e237511bcc4"
+  },
+  {
+    "path": "web/src/components/application/post-preview/types.ts",
+    "sha256": "0d33369c654a70fa505bc8478cfe2ad15102f23d79a6c336d1b69116b59932d0"
+  },
+  {
+    "path": "web/src/components/application/post-preview/use-preview-post.ts",
+    "sha256": "c7072d314e8f4821791c35b75230e777dd689d28272423a063777dbe146ff7f2"
+  },
+  {
+    "path": "web/src/features/queue/publish-options.tsx",
+    "sha256": "23330a498f8f3e505018fd8f2659621fdc79b777b56238b3d9878256bfcd87ba"
+  },
+  {
+    "path": "web/src/lib/api/client.ts",
+    "sha256": "be36f1544827bec8d5a0d7ab4d5a808860b2990ed8839f34d53b87380452a23c"
+  },
+  {
+    "path": "web/src/lib/api/types.ts",
+    "sha256": "d13d9859dc197808cf55d42391dbb33ac01ff7af9f3d9332365f4560f65bacfc"
+  },
+  {
+    "path": "web/tests/pinterest-preview-browser.cjs",
+    "sha256": "44a72258b04b2d3d9e0ec8400afa105c437ca6024d9676ce485a714fc52fe4be"
+  }
+]

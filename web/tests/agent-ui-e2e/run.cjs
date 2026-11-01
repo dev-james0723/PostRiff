@@ -80,8 +80,18 @@ async function main() {
     const agentCalls = [];
     const steps = [];
     const sceneStarted = Date.now();
+    const lifecycle = [];
+    const contextIds = new Map();
+    const pageIds = new Map();
+    const lifecycleEvent = (event, contextId = null, pageId = null) => {
+      if (lifecycle.length < 200) lifecycle.push({ t: Date.now() - sceneStarted, event, contextId, pageId });
+    };
+    const disconnected = () => lifecycleEvent('browser-disconnected');
+    browser.on('disconnected', disconnected);
     const t = {
       base, providerBase, viewports: VIEWPORTS, workspaceId: boot.workspaceId, principal, shared, browser: browserName,
+      /** Fixed labels and IDs only; never capture cookies, request bodies or headers. */
+      tracePage(page, event) { lifecycleEvent(event, contextIds.get(page.context()) || null, pageIds.get(page) || null); },
       /** Diagnostics only: name the step (e.g. the viewport id) and sample the runner's memory, so a crash says where it was. */
       step(label) {
         const sample = { t: Date.now() - sceneStarted, label, ...memorySample() };
@@ -95,6 +105,10 @@ async function main() {
         const ctx = await browser.newContext({ viewport: vp, locale, reducedMotion, colorScheme: 'dark', deviceScaleFactor: 1,
                                                ...(browserName === 'chromium' ? { isMobile, hasTouch: isMobile } : { hasTouch: isMobile }) });
         contexts.push(ctx);
+        const contextId = `context-${contexts.length}`;
+        contextIds.set(ctx, contextId);
+        lifecycleEvent('context-open', contextId);
+        ctx.on('close', () => lifecycleEvent('context-close', contextId));
         await ctx.addCookies([{ name: 'postriff_dev', value: '1', url: base }, { name: 'postriff_dev_principal', value: principal, url: base }]);
         await ctx.addInitScript(({ id, tours }) => {
           localStorage.setItem('postriff-dev-principal', id);
@@ -102,6 +116,11 @@ async function main() {
         }, { id: principal, tours: TOURS });
         const page = await ctx.newPage();
         pages.push(page);
+        const pageId = `page-${pages.length}`;
+        pageIds.set(page, pageId);
+        lifecycleEvent('page-open', contextId, pageId);
+        page.on('close', () => lifecycleEvent('page-close', contextId, pageId));
+        page.on('crash', () => lifecycleEvent('page-crash', contextId, pageId));
         const opened = Date.now();
         // Diagnostics (kept only for scenes that don't pass): console errors/warnings and every agent API call's status and timing.
         page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && consoleLines.length < 40) consoleLines.push(`${m.type()}: ${m.text().slice(0, 240)}`); });
@@ -136,12 +155,19 @@ async function main() {
     let status = 'pass';
     let detail = '';
     let diagnostics;
+    let errorDetails;
     try {
       detail = String((await run(t)) || 'ok');
       if (failures.length) { status = 'fail'; detail = failures.map((f) => `${f.what}${f.detail ? ` — ${f.detail}` : ''}`).join(' | '); }
     } catch (error) {
       if (error instanceof Blocked) { status = 'blocked'; detail = `BLOCKED ${error.message}`; }
-      else { status = 'fail'; detail = `${error.name}: ${String(error.message).split('\n')[0].slice(0, 300)}`; }
+      else {
+        status = 'fail';
+        detail = `${error.name}: ${String(error.message).split('\n')[0].slice(0, 300)}`;
+        errorDetails = { name: String(error.name).slice(0, 120), message: String(error.message).slice(0, 4000),
+                         stack: typeof error.stack === 'string' ? error.stack.slice(0, 6000) : null };
+        lifecycleEvent('scene-error');
+      }
     } finally {
       if (status !== 'pass') {
         const hosts = [];
@@ -154,10 +180,14 @@ async function main() {
           const shot = path.join(out, `e2e-${browserName}-${id}-${n}.png`);
           await page.screenshot({ path: shot, fullPage: false }).then(() => shots.push(path.basename(shot))).catch(() => {});
         }
-        diagnostics = { console: consoleLines.slice(0, 40), agentCalls: agentCalls.slice(0, 80), generatedHosts: hosts, screenshots: shots, url: pages[0] && !pages[0].isClosed() ? shortPath(pages[0].url()) : null };
+        diagnostics = { error: errorDetails, lifecycle, console: consoleLines.slice(0, 40), agentCalls: agentCalls.slice(0, 80), generatedHosts: hosts, screenshots: shots, url: pages[0] && !pages[0].isClosed() ? shortPath(pages[0].url()) : null };
       }
       if (providerBase) await fetch(`${providerBase}/__fault`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"fault":null}' }).catch(() => {});
-      for (const ctx of contexts) await ctx.close().catch(() => {});
+      for (const ctx of contexts) {
+        lifecycleEvent('harness-context-close-requested:scene-finally', contextIds.get(ctx) || null);
+        await ctx.close().catch(() => {});
+      }
+      browser.off('disconnected', disconnected);
     }
     items.push({ check: `e2e:${id}`, status, detail: detail.slice(0, 600), metrics, ms: Date.now() - started, ...(diagnostics ? { diagnostics } : {}),
                  ...(steps.length ? { steps, lastStep: steps[steps.length - 1].label } : {}) });

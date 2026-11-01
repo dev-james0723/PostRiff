@@ -64,24 +64,24 @@ def _youtube(options, media, text):
     return validate_video(options, media, text)
 
 
-def _pinterest(options, media):
-    if len(media) != 1 or not str(media[0].get("mime") or "").startswith("image/"):
-        raise AlphaError("A Pin needs exactly one image.", 409)
+def _pinterest(options, media, text):
+    from .pinterest_safety import image, https_url
+    image(media)
+    if not isinstance(text, str) or len(text) > 800:
+        raise AlphaError('A Pin description allows 800 characters.', 400)
     board = options.get("boardId")
     if not isinstance(board, str) or not re.fullmatch(r"\d{1,30}", board):
         raise AlphaError("Choose the board for this Pin.", 400)
-    title = options.get("title") or ""
+    section = options.get('boardSectionId')
+    if section is not None and (not isinstance(section, str) or not re.fullmatch(r'\d{1,30}', section)):
+        raise AlphaError('Choose a section belonging to this board.', 400)
+    title = options.get("title", "")
     if not isinstance(title, str) or len(title) > 100:
         raise AlphaError("A Pin title allows 100 characters.", 400)
-    link = options.get("link") or ""
-    if link:
-        try:
-            parts = urlsplit(link) if isinstance(link, str) else None
-        except ValueError:
-            parts = None
-        if not parts or parts.scheme not in ("http", "https") or not parts.hostname or len(link) > 2048 or parts.username or parts.password:
-            raise AlphaError("The Pin link must be a web address starting with https://.", 400)
-    return {"boardId": board, "title": title.strip(), "link": link}
+    link = options.get('link', '')
+    if not isinstance(link, str) or (link and not https_url(link)):
+        raise AlphaError('The Pin link must be a public web address starting with https://.', 400)
+    return {"boardId": board, "title": title.strip(), "link": link, **({'boardSectionId': section} if section else {})}
 
 
 def _gbp(options, media):
@@ -146,4 +146,4 @@ def normalize(platform, options, media, text):
         return _youtube(options, media, text)
     if platform == "Google Business Profile":
         return _gbp(options, media)
-    return _pinterest(options, media)
+    return _pinterest(options, media, text)

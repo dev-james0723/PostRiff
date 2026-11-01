@@ -9,7 +9,7 @@ import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { cn } from '@/lib/utils';
 import { capabilitySummary, enableAnalyticsHref, unreadVerifiedCount, type Coverage } from './coverage';
 
-export type EmptyKind = 'no-connections' | 'no-analytics-capability' | 'nothing-verified' | 'awaiting-first-reading';
+export type EmptyKind = 'no-connections' | 'no-analytics-capability' | 'nothing-verified' | 'awaiting-first-reading' | 'read-failed' | 'no-data';
 
 /**
  * Which of the four empty states applies, from the real channel, job and post lists.
@@ -19,6 +19,9 @@ export function chooseEmptyKind(coverage: Coverage): EmptyKind | null {
   const posts = coverage.connections.reduce((n, c) => n + c.posts.length, 0) + coverage.unmatchedPosts.length;
   if (posts > 0) return null;
   if (coverage.connections.length === 0) return 'no-connections';
+  const outcomes = coverage.connections.flatMap((c) => c.readOutcomes ?? []);
+  if (outcomes.some((r) => r.outcome === 'read_failed')) return 'read-failed';
+  if (outcomes.some((r) => r.outcome === 'no_data')) return 'no-data';
   const direct = coverage.connections.filter((c) => c.direct);
   if (direct.length === 0) return 'no-analytics-capability';
   const verified = direct.reduce((n, c) => n + c.verifiedJobs.length, 0);
@@ -39,6 +42,12 @@ function AskAdmin({ children }: { children: React.ReactNode }) {
 }
 
 export function AnalyticsEmptyState({ kind, coverage, canManage }: { kind: EmptyKind; coverage: Coverage; canManage: boolean }) {
+  if (kind === 'read-failed') {
+    return <StateMessage kind='error' title='Analytics read failed' description='The platform did not return usable metrics. Missing values are not zero. Rafii retries eligible temporary failures; check the account connection if the failure continues.' action={<NextStep href='/app/channels'>Check connection</NextStep>} />;
+  }
+  if (kind === 'no-data') {
+    return <StateMessage kind='empty' title='No metrics reported yet' description='The platform accepted the read and returned no metrics for this reporting window. This is different from a reported zero.' />;
+  }
   if (kind === 'no-connections') {
     return (
       <StateMessage
@@ -100,7 +109,7 @@ export function AnalyticsEmptyState({ kind, coverage, canManage }: { kind: Empty
     <StateMessage
       kind='stale'
       title={`${waiting} ${waiting === 1 ? 'post' : 'posts'} waiting for a first read`}
-      description='Readings aren’t collected automatically yet.'
+      description='No successful read is recorded yet. Collection depends on analytics permission and the services enabled for this workspace.'
       action={<NextStep href='/app/queue'>See posts</NextStep>}
     />
   );

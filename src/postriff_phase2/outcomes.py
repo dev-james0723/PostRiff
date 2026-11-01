@@ -72,6 +72,38 @@ def normalize_result(result, job, reconciliation=False):
     if url is not None and not valid_receipt_url(url, job.get('manifest', {}).get('platform')):
         return unknown('Invalid canonical receipt URL; manual review required')
     normalized = {key: result[key] for key in ('state', 'confirmed', 'verification') if key in result}
+    if job.get('manifest', {}).get('platform') == 'Discord':
+        delivery = result.get('discordDeliveryEvidence', 'uncertain')
+        if (delivery not in ('not_sent', 'rejected', 'accepted', 'uncertain')
+                or delivery == 'accepted' and not reference
+                or delivery in ('not_sent', 'rejected') and (reference or result['state'] not in ('held', 'failed', 'scheduled'))):
+            return unknown('Invalid Discord delivery evidence; reconcile without resubmission')
+        normalized['discordDeliveryEvidence'] = delivery
+        if result.get('discordRateLimited') is True and result['state'] == 'held' and delivery == 'rejected':
+            normalized['discordRateLimited'] = True
+    if 'retryAfterSeconds' in result:
+        delay = result['retryAfterSeconds']
+        discord_read = (job.get('manifest', {}).get('platform') == 'Discord' and reconciliation
+                        and result['state'] == 'provider_accepted' and result.get('discordReadDeferred') is True
+                        and reference and reference == job.get('providerReference')
+                        and normalized.get('discordDeliveryEvidence') == 'accepted')
+        linkedin_wait = job.get('manifest', {}).get('platform') == 'LinkedIn' and result['state'] == 'scheduled'
+        ceiling = 253402300799 if discord_read else 86400
+        if (not (discord_read or linkedin_wait) or type(delay) is not int or not 1 <= delay <= ceiling):
+            return unknown('Invalid provider retry delay; reconcile before retry')
+        normalized['retryAfterSeconds'] = delay
+        if discord_read:
+            normalized['discordReadDeferred'] = True
+            normalized['discordReadAdmissionDenied'] = result.get('discordReadAdmissionDenied') is True
+    if job.get('manifest', {}).get('platform') == 'Pinterest':
+        visibility = result.get('visibility', job.get('providerVisibility'))
+        previous_visibility = job.get('providerVisibility')
+        if previous_visibility in ('creator_only_trial', 'creator_only_sandbox') and visibility == 'unverified':
+            visibility = previous_visibility  # A later runtime tier cannot make an existing Trial Pin public.
+        if visibility is not None:
+            if not isinstance(visibility, str) or visibility not in ('creator_only_trial', 'creator_only_sandbox', 'unverified'):
+                return unknown('Invalid Pinterest visibility receipt; reconcile before retry')
+            normalized['visibility'] = visibility
     progress = result.get('progress')
     if progress is not None:
         if youtube_progress:

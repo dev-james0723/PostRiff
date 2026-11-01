@@ -1,0 +1,42 @@
+{
+  "runs": [
+    {
+      "sourceHead": "9efd8b2ebde99cd3e909e2417898796066dc191d",
+      "runId": "58tnsvdg0g",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/58tnsvdg0g",
+      "remoteExitCode": 1,
+      "exitCode": 1,
+      "elapsedSeconds": 80.576,
+      "rawReceipt": "20261015T003302817289Z-ci.json"
+    },
+    {
+      "sourceHead": "9eb38b6f622d3fdaacc64381f9a1e4bb879deb09",
+      "runId": "6dn6zqdjff",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/6dn6zqdjff",
+      "remoteExitCode": 0,
+      "exitCode": 0,
+      "elapsedSeconds": 125.042,
+      "rawReceipt": "20261015T003603882072Z-ci.json"
+    },
+    {
+      "sourceHead": "0f07c90c5d69c938cc3bf15e36360615bb6651a8",
+      "runId": "tbcf74f9lc",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/tbcf74f9lc",
+      "remoteExitCode": 0,
+      "exitCode": 0,
+      "elapsedSeconds": 133.114,
+      "rawReceipt": "20261015T003927926925Z-ci.json"
+    },
+    {
+      "sourceHead": "b2a5e78bc5ab6d917a85d3b0b4d0be15c5b74b3e",
+      "runId": "v7np1m090d",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/v7np1m090d",
+      "remoteExitCode": 1,
+      "exitCode": 1,
+      "elapsedSeconds": 87.728,
+      "failure": "New disconnected outcome violated existing check; use existing denied outcome instead; no additional migration."
+    }
+  ],
+  "firstFailure": "Dispatch fixture had no provider; fixed without relaxing the new guard. Later runs cover superseded candidates, not the final disconnect race fix.",
+  "finalPassingRun": "md6ps00zt7"
+}

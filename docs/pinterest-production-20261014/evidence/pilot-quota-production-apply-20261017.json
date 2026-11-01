@@ -1,0 +1,28 @@
+{
+  "executedAt": "2026-10-17T16:39:44.091029+00:00",
+  "status": "APPLIED",
+  "projectRef": "buoyhkbodnhzngaotoel",
+  "migrationName": "pinterest_rate_budgets_readonly_trial_20261017",
+  "file": "migrations/postriff/20261014_pinterest_rate_budgets.sql",
+  "sha256": "9a9b20f0e41ce5ba65c1bf013ed9e427e4b60237dc1e9130ac9043253f56fce4",
+  "providerResult": {
+    "success": true
+  },
+  "backupReadOnlyCheck": {
+    "cli": "403",
+    "dashboard": "Canonical scheduled backup page shows8PHYSICAL rows with enabled Restore controls; dates/content and restore integrity not checked",
+    "restoresExecuted": 0
+  },
+  "existingTablesChanged": false,
+  "userDataCopied": false,
+  "postflight": {
+    "rls": true,
+    "forceRls": true,
+    "anonSelect": false,
+    "authenticatedSelect": false,
+    "serverDml": true,
+    "serverTruncate": false,
+    "serverReferences": false,
+    "serverTrigger": false
+  }
+}

@@ -18,5 +18,9 @@ test('channel capability deep links derive the Connect request directly from the
 
 test('direct capability deep links render a focused Connect sheet instead of the full Channels page', () => {
   assert.match(source, /if \(deepLinkRequest\)/);
-  assert.match(source, /<ConnectSheet open onOpenChange=\{closeDirectConnect\} providers=\{providers\} request=\{deepLinkRequest\} \/>/);
+  const directSheet = source.match(/<ConnectSheet\b[^>]*onOpenChange=\{closeDirectConnect\}[^>]*\/>/)?.[0];
+  assert.ok(directSheet, 'The direct Connect sheet must use its URL-clearing close handler');
+  assert.match(directSheet, /\bopen\s/);
+  assert.match(directSheet, /\bproviders=\{providers\}/);
+  assert.match(directSheet, /\brequest=\{deepLinkRequest\}/);
 });

@@ -1,0 +1,35 @@
+{
+  "checkedAt": "2026-10-15 00:42:57 UTC",
+  "projectRef": "buoyhkbodnhzngaotoel",
+  "execution": "production_readonly_schema_metadata",
+  "userRowsRead": false,
+  "secretValuesRead": false,
+  "externalMutations": false,
+  "oauthConstraints": [
+    {
+      "conname": "pr_oauth_transactions_capability_check",
+      "definition": "CHECK ((capability = ANY (ARRAY['identity'::text, 'publish'::text, 'schedule'::text, 'analytics'::text, 'comments_read'::text, 'reply'::text, 'moderate'::text])))"
+    },
+    {
+      "conname": "pr_oauth_transactions_check",
+      "definition": "CHECK ((expires_at > created_at))"
+    },
+    {
+      "conname": "pr_oauth_transactions_outcome_check",
+      "definition": "CHECK ((outcome = ANY (ARRAY['exchange_started'::text, 'exchanged'::text, 'denied'::text, 'expired'::text, 'mismatch'::text])))"
+    },
+    {
+      "conname": "pr_oauth_transactions_provider_check",
+      "definition": "CHECK (((provider = 'x'::text) OR ((length(provider) >= 2) AND (length(provider) <= 40))))"
+    },
+    {
+      "conname": "pr_oauth_transactions_redirect_uri_check",
+      "definition": "CHECK ((redirect_uri ~~ 'https://%'::text))"
+    },
+    {
+      "conname": "pr_oauth_transactions_state_hash_check",
+      "definition": "CHECK ((length(state_hash) = 64))"
+    }
+  ],
+  "existingOutcomeSupportsExchangeStartedAndDenied": true
+}

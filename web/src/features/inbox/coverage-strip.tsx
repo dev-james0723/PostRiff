@@ -174,7 +174,9 @@ export function CoverageStrip({
             ))}
           </span>
           {badge && <ConnectionNote badge={badge} />}
-          {channel.capabilities.comments_read?.level === 'Direct' && !commentsReadFor(channel.platform, providers) && (
+          {channel.platform === 'Discord' && channel.discordEngagement?.enabled ? (
+            <span className='text-muted-foreground text-xs'>Open Discord conversations above for manual reads with your channel consent.</span>
+          ) : channel.capabilities.comments_read?.level === 'Direct' && !commentsReadFor(channel.platform, providers) && (
             <span className='text-muted-foreground text-xs'>{channel.platform} comments aren&apos;t available yet</span>
           )}
         </Surface>

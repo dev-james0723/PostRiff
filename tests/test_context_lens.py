@@ -471,10 +471,11 @@ class PermissionTests(unittest.TestCase):
 
         authz.context_gate = gate
         parent = sys.modules[package]
-        sys.modules[authz.__name__] = authz
-        setattr(parent, "authz", authz)
+        previous_module = sys.modules.get(authz.__name__)
+        previous_attribute = getattr(parent, "authz", None)
         kwargs = dict(workspace_id="w", principal="p", member=member, config=cfg, cur=cursor, state=state, now=NOW)
-        try:
+        # Preserve the real authorization module and its ContextVar identity for later tests.
+        with patch.dict(sys.modules, {authz.__name__: authz}), patch.object(parent, "authz", authz, create=True):
             self.assertEqual(context_lens.agent_gate("context.page_summary", **kwargs), "allow")
             self.assertEqual(seen[0], ("context.page_summary", kwargs))
             self.assertEqual(context_lens.agent_gate("context.screen_outline", **kwargs), "deny")
@@ -483,10 +484,8 @@ class PermissionTests(unittest.TestCase):
                 self.assertEqual(context_lens.agent_gate("context.page_summary", **kwargs), "deny")
             authz.context_gate = lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom"))
             self.assertEqual(context_lens.agent_gate("context.page_summary", **kwargs), "deny", "fail closed")
-        finally:
-            sys.modules.pop(authz.__name__, None)
-            if hasattr(parent, "authz"):
-                delattr(parent, "authz")
+        self.assertIs(sys.modules.get(authz.__name__), previous_module)
+        self.assertIs(getattr(parent, "authz", None), previous_attribute)
 
     def test_unrecognized_context_gate_results_never_include_screen_data(self):
         page = queue_page(visibleState={"tab": "scheduled"})

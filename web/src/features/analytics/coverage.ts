@@ -5,13 +5,13 @@
  * estimated; every count is a length of a real list.
  */
 import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
-import type { Analytics, AnalyticsPost, ChannelView, Job, ProviderView } from '@/lib/api/types';
+import type { Analytics, AnalyticsPost, AnalyticsReadOutcome, ChannelView, Job, ProviderView } from '@/lib/api/types';
 
 export type AnalyticsPostRow = AnalyticsPost;
 
 export type JobRow = Job;
 
-export type CoverageState = 'unavailable' | 'pending' | 'partial' | 'ready';
+export type CoverageState = 'unavailable' | 'pending' | 'partial' | 'ready' | 'no_data' | 'read_failed';
 
 export interface ConnectionCoverage {
   id: string;
@@ -30,6 +30,8 @@ export interface ConnectionCoverage {
   readJobIds: Set<string>;
   posts: AnalyticsPostRow[];
   lastObservedAt: number | null;
+  /** Latest attempted reads, bound by the API to account, post and publishing job. */
+  readOutcomes: AnalyticsReadOutcome[];
 }
 
 export interface Coverage {
@@ -44,14 +46,18 @@ export const STATE_LABEL: Record<CoverageState, string> = {
   unavailable: 'No analytics',
   pending: 'Waiting for first read',
   partial: 'Some posts unread',
-  ready: 'All posts read'
+  ready: 'All posts read',
+  no_data: 'No metrics reported',
+  read_failed: 'Analytics read failed'
 };
 
 export const STATE_STATUS: Record<CoverageState, AnimatedBadgeStatus> = {
   unavailable: 'neutral',
   pending: 'warning',
   partial: 'warning',
-  ready: 'success'
+  ready: 'success',
+  no_data: 'neutral',
+  read_failed: 'warning'
 };
 
 export const ALL_CONNECTIONS = 'all';
@@ -98,10 +104,11 @@ export function jobForPost(
   post: AnalyticsPost,
   jobs: { byReference: Map<string, JobRow>; byId: Map<string, JobRow> }
 ) {
-  return (
-    jobs.byReference.get(post.providerPostId) ??
-    (post.jobId ? (jobs.byId.get(post.jobId) ?? null) : null)
-  );
+  const candidates = [post.jobId ? jobs.byId.get(post.jobId) : undefined, jobs.byReference.get(post.providerPostId)];
+  return candidates.find((job) => job &&
+    (!job.providerReference || job.providerReference === post.providerPostId) &&
+    (!post.connectionId || job.manifest.channelId === post.connectionId) &&
+    job.manifest.platform.toLowerCase() === post.provider.toLowerCase()) ?? null;
 }
 
 export function indexJobs(jobs: JobRow[]) {
@@ -119,6 +126,7 @@ export function buildCoverage(input: {
   providers: ProviderView[];
   jobs: Job[];
   posts: AnalyticsPost[];
+  readOutcomes?: AnalyticsReadOutcome[];
 }): Coverage {
   const { channels, providers } = input;
   const byId = new Map<string, ConnectionCoverage>();
@@ -138,7 +146,8 @@ export function buildCoverage(input: {
       verifiedJobs: [],
       readJobIds: new Set(),
       posts: [],
-      lastObservedAt: null
+      lastObservedAt: null,
+      readOutcomes: []
     });
   }
   for (const job of input.jobs) {
@@ -163,6 +172,16 @@ export function buildCoverage(input: {
     const at = post.freshness.observedAt;
     if (target.lastObservedAt === null || at > target.lastObservedAt) target.lastObservedAt = at;
   }
+  for (const reading of input.readOutcomes ?? []) {
+    const target = byId.get(reading.connectionId);
+    if (!target || target.platform.toLowerCase() !== reading.provider.toLowerCase()) continue;
+    target.readOutcomes.push(reading);
+    if (reading.outcome === 'read_failed' || !reading.jobId) continue;
+    const job = jobIndex.byId.get(reading.jobId);
+    if (job?.state === 'verified' && job.manifest.channelId === reading.connectionId &&
+        job.manifest.platform.toLowerCase() === reading.provider.toLowerCase() &&
+        job.providerReference === reading.providerPostId) target.readJobIds.add(job.id);
+  }
   return { connections: Array.from(byId.values()), unmatchedPosts, usesPlatformFallback };
 }
 
@@ -181,6 +200,10 @@ export function unreadVerifiedCount(connections: ConnectionCoverage[]) {
 export function coverageState(coverage: Coverage): CoverageState {
   const direct = coverage.connections.filter((c) => c.direct);
   if (direct.length === 0) return 'unavailable';
+  const outcomes = direct.flatMap((c) => c.readOutcomes ?? []);
+  if (outcomes.some((r) => r.outcome === 'read_failed')) return 'read_failed';
+  const reported = direct.some((c) => c.posts.some((post) => Object.values(post.metrics ?? {}).some((metric) => metric.availability === 'available')));
+  if (!reported && outcomes.some((r) => r.outcome === 'no_data')) return 'no_data';
   const readings = direct.reduce((n, c) => n + c.posts.length, 0);
   if (readings === 0) return 'pending';
   return unreadVerifiedCount(direct) > 0 ? 'partial' : 'ready';
@@ -207,7 +230,9 @@ export function enableAnalyticsHref(providerId: string | null) {
 
 /** The honest sentence for a provider whose adapter does not offer analytics. Never "coming soon". */
 export function notOfferedSentence(platform: string) {
-  return `${platform} doesn’t share analytics.`;
+  return platform.toLowerCase() === 'pinterest'
+    ? 'Pinterest analytics is not enabled in Rafii.'
+    : `${platform} doesn’t share analytics.`;
 }
 
 /** What Rafii can say about one connection's analytics capability, from the matrix alone. */

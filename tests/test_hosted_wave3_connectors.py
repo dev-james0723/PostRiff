@@ -10,6 +10,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from contextlib import nullcontext
 from urllib.parse import parse_qs, urlparse
 
 sys.path[:0] = [str(Path(__file__).resolve().parents[1] / "src"), str(Path(__file__).resolve().parent)]
@@ -23,7 +24,7 @@ from test_hosted_wave1_connectors import BASE, Grants, ServiceFlows, Wire, ok
 VIDEO = [{"id": "a" * 32, "mime": "video/mp4", "duration": 30.0, "alt": "", "bytes": 1024,
           "bucket": "postriff-video", "objectName": "a" * 32 + ".mp4", "etag": '"e1"',
           "durationSource": "container", "verified": {"container": True, "locationChecked": True}}]
-IMAGE = [{"id": "i1", "mime": "image/jpeg", "alt": "A score page"}]
+IMAGE = [{"id": "i1", "mime": "image/jpeg", "alt": "A score page", "bytes": 1024}]
 
 
 def storage(raw=b"\x00" * 1024):
@@ -187,13 +188,32 @@ class TikTokAdapter(unittest.TestCase):
 class PinterestAdapter(unittest.TestCase):
     def test_basic_auth_token_identity_and_sandbox_boards(self):
         pinterest = PinterestProvider("pid", "psecret", sandbox=True, transport=Wire([ok({"access_token": "AT", "refresh_token": "RT", "scope": "user_accounts:read,boards:read,pins:read,pins:write"}),
-                                                                                      ok({"username": "jamesau", "account_type": "BUSINESS"}),
-                                                                                      ok({"items": [{"id": "1234567", "name": "Recitals"}, {"id": "bad"}]})]))
+                                                                                      ok({"username": "jamesau", "id": "1234567", "account_type": "BUSINESS"}),
+                                                                                      ok({"items": [{"id": "1234567", "name": "Recitals", "privacy": "PUBLIC"}]})]))
         grant = pinterest.exchange("CODE", "V", BASE + "/cb")
         self.assertTrue(pinterest.transport.calls[0]["headers"]["Authorization"].startswith("Basic "))
         self.assertEqual(pinterest.identity(grant["accessToken"])["handle"], "@jamesau")
         self.assertEqual([b["id"] for b in pinterest.destinations(grant["accessToken"])], ["1234567"])
+        self.assertEqual([call["url"] for call in pinterest.transport.calls[:2]],
+                         [PinterestProvider.SANDBOX + "/v5/oauth/token", PinterestProvider.SANDBOX + "/v5/user_account"])
         self.assertTrue(pinterest.transport.calls[2]["url"].startswith(PinterestProvider.SANDBOX))
+
+    def test_sandbox_token_refresh_never_hits_production(self):
+        wire = Wire([ok({"access_token": "NEW", "refresh_token": "NEW-RT", "scope": "user_accounts:read,boards:read,pins:read,pins:write"})])
+        pinterest = PinterestProvider("pid", "psecret", sandbox=True, transport=wire)
+        previous = pinterest._grant({"access_token": "OLD", "refresh_token": "OLD-RT", "scope": "user_accounts:read"})
+        refreshed = pinterest.refresh(previous["refreshToken"])
+        self.assertEqual(wire.calls[0]["url"], PinterestProvider.SANDBOX + "/v5/oauth/token")
+        self.assertEqual(json.loads(refreshed["refreshToken"])["rt"], "NEW-RT")
+
+    def test_production_grants_stay_on_production(self):
+        wire = Wire([ok({"access_token": "AT", "refresh_token": "RT", "scope": "user_accounts:read"}) ,
+                     ok({"username": "jamesau", "id": "1234567"})])
+        pinterest = PinterestProvider("pid", "psecret", sandbox=False, transport=wire)
+        grant = pinterest.exchange("CODE", "VERIFIER", BASE + "/cb")
+        pinterest.identity(grant["accessToken"])
+        self.assertEqual([call["url"] for call in wire.calls],
+                         [PinterestProvider.API + "/v5/oauth/token", PinterestProvider.API + "/v5/user_account"])
 
 
 # --- per-post options -----------------------------------------------------------------------------------------------
@@ -246,7 +266,7 @@ class OtherOptions(unittest.TestCase):
 
     def test_pinterest(self):
         self.assertEqual(publish_options.normalize("Pinterest", {"boardId": "1234567", "title": "Score", "link": "https://rafii.example"}, IMAGE, "desc")["boardId"], "1234567")
-        for bad in ({"boardId": "abc"}, {"boardId": "1234567", "link": "javascript:alert(1)"}, {"boardId": "1234567", "title": "x" * 101}):
+        for bad in ({"boardId": "abc"}, {"boardId": "1234567", "link": "javascript:alert(1)"}, {"boardId": "1234567", "link": "http://example.com"}, {"boardId": "1234567", "title": "x" * 101}):
             with self.subTest(bad=bad), self.assertRaises(AlphaError):
                 publish_options.normalize("Pinterest", bad, IMAGE, "desc")
         with self.assertRaises(AlphaError):
@@ -381,32 +401,35 @@ class PinterestPublishing(unittest.TestCase):
     options = {"boardId": "1234567", "title": "Score", "link": "https://rafii.example/score"}
 
     def social(self, wire, sandbox=False):
+        wire.responses.insert(0, ok({"id": "1234567", "username": "mock", "account_type": "BUSINESS"}))
         pinterest = reviewed(PinterestProvider("pid", "secret", sandbox=sandbox, transport=wire))
-        return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["pins:write", "boards:read"]}), ["pins:write", "boards:read"]), {"pinterest": pinterest}, storage())
+        grants = Grants(pinterest._grant({"access_token": "AT", "scope": "user_accounts:read pins:read pins:write boards:read"})["accessToken"], ["user_accounts:read", "pins:read", "pins:write", "boards:read"])
+        grants.pinterest_dispatch = lambda *args: nullcontext({})  # synthetic fixture only, no real provider
+        return HostedSocial(grants, {"pinterest": pinterest}, storage())
 
-    BOARDS = ok({"items": [{"id": "1234567", "name": "Recitals"}]})
+    BOARDS = ok({"items": [{"id": "1234567", "name": "Recitals", "privacy": "PUBLIC"}]})
 
     def test_pin_in_the_sandbox_rejection_and_readback(self):
         wire = Wire([self.BOARDS, ok({"id": "987654321"}, 201)])
-        result = self.social(wire, sandbox=True).submit(manifest("Pinterest", "jamesau", media=IMAGE, options=self.options))
-        self.assertEqual((result["state"], wire.calls[1]["url"]), ("provider_accepted", PinterestProvider.SANDBOX + "/v5/pins"))
-        self.assertTrue(wire.calls[0]["url"].startswith(PinterestProvider.SANDBOX + "/v5/boards"))  # the board is checked where the Pin goes
-        body = wire.calls[1]["body"]
+        result = self.social(wire, sandbox=True).submit(manifest("Pinterest", "1234567", media=IMAGE, options=self.options))
+        self.assertEqual((result["state"], wire.calls[2]["url"]), ("provider_accepted", PinterestProvider.SANDBOX + "/v5/pins"))
+        self.assertTrue(wire.calls[1]["url"].startswith(PinterestProvider.SANDBOX + "/v5/boards"))  # the board is checked where the Pin goes
+        body = wire.calls[2]["body"]
         self.assertEqual((body["board_id"], body["media_source"]["source_type"], body["link"], body["alt_text"]), ("1234567", "image_url", "https://rafii.example/score", "A score page"))
-        refused = self.social(Wire([self.BOARDS, ok({"code": 1, "message": "Board not found."}, 400)])).submit(manifest("Pinterest", "jamesau", media=IMAGE, options=self.options))
-        self.assertEqual((refused["state"], "Board not found." in refused["confirmed"]), ("failed", True))
+        refused = self.social(Wire([self.BOARDS, ok({"code": 1, "message": "Board not found."}, 400)])).submit(manifest("Pinterest", "1234567", media=IMAGE, options=self.options))
+        self.assertEqual((refused["state"], "Board not found." not in refused["confirmed"]), ("failed", True))
 
     def test_a_board_that_is_not_this_accounts_own_is_refused(self):
         wire = Wire([ok({"items": [{"id": "7654321", "name": "Other"}], "bookmark": "next"}), ok({"items": [{"id": "5555555", "name": "More"}]})])
-        refused = self.social(wire).submit(manifest("Pinterest", "jamesau", media=IMAGE, options=self.options))
-        self.assertEqual((refused["state"], len(wire.calls)), ("failed", 2))  # both pages read, and no Pin was attempted
-        self.assertIn("bookmark=next", wire.calls[1]["url"])
+        refused = self.social(wire).submit(manifest("Pinterest", "1234567", media=IMAGE, options=self.options))
+        self.assertEqual((refused["state"], len(wire.calls)), ("failed", 3))  # both pages read, and no Pin was attempted
+        self.assertIn("bookmark=next", wire.calls[2]["url"])
         for status, words in ((404, "can't find that board"), (403, "won't let this account pin")):
             with self.subTest(status=status):
-                result = self.social(Wire([self.BOARDS, ok({"code": 3, "message": "Board is gone"}, status)])).submit(manifest("Pinterest", "jamesau", media=IMAGE, options=self.options))
+                result = self.social(Wire([self.BOARDS, ok({"code": 3, "message": "Board is gone"}, status)])).submit(manifest("Pinterest", "1234567", media=IMAGE, options=self.options))
                 self.assertEqual((result["state"], words in result["confirmed"]), ("failed", True))
-        verified = self.social(Wire([ok({"id": "987654321", "board_id": "1234567", "description": "Rehearsal notes"})])).reconcile(
-            manifest("Pinterest", "jamesau", options=self.options), {"providerReference": "987654321"})
+        verified = self.social(Wire([ok({"id": "987654321", "board_id": "1234567", "description": "Rehearsal notes", "title": "Score", "link": "https://rafii.example/score", "media": {"media_type": "image"}})])).reconcile(
+            manifest("Pinterest", "1234567", options=self.options), {"providerReference": "987654321"})
         self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Pinterest"}})["url"], "https://www.pinterest.com/pin/987654321/")
 
 
@@ -432,7 +455,7 @@ class ServiceChecks(unittest.TestCase):
             service.creator_info("workspace", "session", "conn")
         pinterest = PinterestProvider("pid", "secret", transport=Wire([ok({"items": [{"id": "1234567", "name": "Recitals"}]})]))
         service, repo = self.service({"pinterest": pinterest})
-        self.credential(service, repo, "pinterest", "jamesau", {"v": 1, "at": "AT", "scope": ["boards:read"]}, ["boards:read"])
+        self.credential(service, repo, "pinterest", "jamesau", json.loads(pinterest._grant({"access_token": "AT", "scope": "boards:read"})["accessToken"]), ["boards:read"])
         listed = service.destinations("workspace", "session", "conn")
         self.assertEqual((listed["scope"], listed["destinations"][0]["id"]), ("post", "1234567"))
         with self.assertRaises(AlphaError):

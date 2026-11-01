@@ -1,0 +1,31 @@
+{
+  "checkedAt": "2026-10-17T19:46:54.202449+00:00",
+  "source": "https://raw.githubusercontent.com/pinterest/api-description/main/v5/openapi.json",
+  "schemaVersion": "5.28.0",
+  "sha256": "b698c180678a616bf1d635b374c086ba9cb2484117035c12f2b906eebe92a3e5",
+  "pathCount": 189,
+  "pinCreate": "POST /pins",
+  "pinAnalytics": "GET /pins/{pin_id}/analytics",
+  "commentOrReplyPaths": [],
+  "interpretation": "No public comment/reply operation in this official schema; no undocumented endpoint used. Scheduling is Rafii durable scheduling, not a native PinCreate scheduling field.",
+  "liveAnalytics": "NOT RUN; feature flag OFF, read-only pilot has no pins:read",
+  "pinCreateFields": [
+    "ai_disclosures",
+    "alt_text",
+    "board_id",
+    "board_section_id",
+    "description",
+    "dominant_color",
+    "link",
+    "media_source",
+    "parent_pin_id",
+    "sponsor_id",
+    "title"
+  ],
+  "analyticsRequiredScopes": {
+    "pinterest_oauth2": [
+      "boards:read",
+      "pins:read"
+    ]
+  }
+}

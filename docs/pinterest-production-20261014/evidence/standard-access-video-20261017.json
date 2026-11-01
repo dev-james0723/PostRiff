@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "task": "Actual Standard Access recording by separate recording agent",
+  "execution_date": "2026-10-17",
+  "production_source_baseline": "e2e5169ff19ac268c0a0ad06994f67b41f69f949",
+  "pinterest_app_id": "1615884",
+  "canonical_supabase_project": "buoyhkbodnhzngaotoel",
+  "authorization": "User explicitly requested a different agent to perform screen recording; no platform upload/submission, OAuth grant, board or Pin write, flag, SQL, deployment, or paid action authorized by this recording task.",
+  "capture": {
+    "status": "PASS",
+    "method": "Kynlo / Open Remote Computer record_screen; visible Chrome window 4020",
+    "url": "https://developers.pinterest.com/apps/1615884/upgrade/",
+    "artifact": "standard-access-video/standard-upgrade-form-partial-20261017.mp4",
+    "bytes": 11561,
+    "sha256": "808c0c217a5f614b29c42750a1c7909e3495397edcf85c68d8beef2d8818a1d8",
+    "duration_seconds": 8,
+    "codec": "h264",
+    "width": 640,
+    "height": 366,
+    "frame_rate": "4/1",
+    "decoded_frames": 32,
+    "audio": false,
+    "content": "Actual live Upgrade to Standard access page, empty video-upload control, instructions. Static partial preparation evidence; no OAuth or API operation appears."
+  },
+  "privacy_review": {
+    "status": "PASS",
+    "method": "Decoded first frame visually inspected at native resolution and all 32 frames inspected in contact sheet; decode completed without error.",
+    "findings": "Only relevant Pinterest upgrade page and task-specific browser tabs visible. No secrets, codes, OAuth state, personal email, private tenant content or unrelated Twin page visible.",
+    "safe_to_include": [
+      "standard-access-video/standard-upgrade-form-partial-20261017.mp4",
+      "standard-access-video/README.md",
+      "evidence/standard-access-video-20261017.json"
+    ],
+    "unrelated_capture_retained_in_worktree": false
+  },
+  "submission_format": {
+    "status": "FAIL",
+    "observed_requirement": "Current native upgrade form: MP4 recommended under 2GB; frame rate between 20 and 60 frames per second; demonstrate Pinterest user authentication and main user-facing features.",
+    "blocker": "ORC connector schema rejects fps=20 with 'fps [maximum]: Value 20.0 > maximum 4'. Captured partial is 4fps and must not be submitted or upsampled as proof of native 20fps capture."
+  },
+  "native_quality_attempt": {
+    "status": "BLOCKED",
+    "action": "cua.getApp('QuickTime Player')",
+    "result": "Launch tool remained blocked for approximately 686 seconds then was interrupted by parent to obtain bounded handoff. Launch outcome is unknown.",
+    "quicktime_recording_start_action_issued": false,
+    "quicktime_video_created": false,
+    "note": "No evidence of an active QuickTime recording was obtained; no recording-start command was issued. No further app actions or recording-stop actions were taken. This is not a confirmed macOS permission denial or human mission cancellation.",
+    "parent_reconciliation": "Parent subsequently queried Kynlo list_apps: structured apps[] despite earlier known Chrome presence, so native inventory could not verify QuickTime launch state. Parent reported shell ps read denied; no bypass or escalation attempted. This is an automation/inventory blocker, not a confirmed OS permission diagnosis."
+  },
+  "actual_form": {
+    "observed_at": "2026-10-17T20:54:15Z",
+    "app_name": "Rafii",
+    "company_name": "Rafii",
+    "prefilled_website": "https://postriff-phase2-private.vercel.app/",
+    "prefilled_privacy": "https://postriff-phase2-private.vercel.app/privacy",
+    "selected_use_case": [
+      "Pin creation & scheduling"
+    ],
+    "reporting_selected": false,
+    "selected_audiences": [
+      "Creators",
+      "Businesses"
+    ],
+    "video_upload_empty": true,
+    "fields_modified": false,
+    "submitted": false
+  },
+  "account_board_readonly": {
+    "observed_at": "2026-10-17T20:57:00Z",
+    "account": "@jamesaucreates",
+    "identity_evidence": [
+      "Account switcher James Au",
+      "Your profile link /jamesaucreates/",
+      "Visible jamesaucreates and Edit profile"
+    ],
+    "created_tab": "Create your first Pin",
+    "saved_url": "https://www.pinterest.com/jamesaucreates/_saved/",
+    "saved_text": "You haven't saved any Pins yet",
+    "observed_board_links": 0,
+    "eligible_destination_verified": false,
+    "scope": "Read-only native browser, no OAuth/API request, no board/Pin creation."
+  },
+  "limitations": {
+    "full_oauth_and_api_demo": "NOT RUN",
+    "production_actor_workspace_binding": "UNVERIFIED in current browser. Observed labels My workspace and Classical Music Life alone do not establish actor/workspace identifiers or a different tenant.",
+    "original_readonly_api_window": "Expired 2026-10-17T20:40:56Z; not extended.",
+    "prior_grant": "Previously disconnected and cleared; not re-authorized.",
+    "standard_submission": "NOT RUN",
+    "provider_writes": 0,
+    "payment": 0
+  },
+  "next_required": "Parent must prepare and obtain exact approval for renewed bounded OAuth/required scopes and approved live test content/destination, then capture actual OAuth, board discovery, approved API operation/read-back and disconnect at native 20–60fps with a functioning recorder. Review complete video before any separately approved upload/submission."
+}

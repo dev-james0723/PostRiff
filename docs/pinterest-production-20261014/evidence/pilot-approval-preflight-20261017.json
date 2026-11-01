@@ -1,0 +1,18 @@
+{
+  "approvedAt": "2026-10-17T16:38:41.205132+00:00",
+  "approval": "Direct human APPROVE to the exact saved four-hour private read-only pilot bundle",
+  "scope": "NEXT-ACTION-READONLY-PILOT.md at6d102fa7ed514cbb4c11837378e70056c0ba9b4c",
+  "projectRef": "buoyhkbodnhzngaotoel",
+  "vercelProject": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "account": "jamesaucreates",
+  "durationSeconds": 14400,
+  "clientSecretSecurelyAvailable": true,
+  "secretValueRecorded": false,
+  "currentDeployment": "dpl_BLyFgcDyW85wPrEsJV5qrkXsmrLj",
+  "sourceHashesMatch": 3297,
+  "ownerActive": true,
+  "quotaAbsent": true,
+  "normalBackupMetadata": "CLI403; existing canonical dashboard verified8PHYSICAL backup rows with enabled Restore controls; no restore or new backup",
+  "mutationsExecuted": true,
+  "quotaMigrationApplied": true
+}

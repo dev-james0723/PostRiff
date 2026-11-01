@@ -1,0 +1,119 @@
+{
+  "checkedAt": "2026-10-15T04:55:59.435062+00:00",
+  "sourceCommit": "b99cf89aef28972a5e9acc2c159fa43d3cb5962f",
+  "productionBaseline": "cab2b28801a02cc2e4c36f6be7b1a233a64c74fe",
+  "runId": "bcz5vdqznw",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/bcz5vdqznw",
+  "remoteExitCode": 0,
+  "controllerExitCode": 0,
+  "elapsedSeconds": 133.951,
+  "pythonTests": 270,
+  "nodeTests": 51,
+  "nodeTestGroups": [
+    15,
+    24,
+    3,
+    4,
+    5
+  ],
+  "postgres": {
+    "execution": "disposable_postgres_synthetic_provider",
+    "oauthReplayDenied": true,
+    "encryptedCustody": true,
+    "tenantNegativeRead": true,
+    "refreshConcurrentCallers": 12,
+    "providerRefreshes": 1,
+    "disconnectCancelsClaimedCallback": true,
+    "canceledCallbackNoNetwork": true,
+    "freshExplicitReconnectPassed": true,
+    "failedExchangeStateConsumed": true,
+    "failedExchangeReplayNoNetwork": true,
+    "pilotTenantAndActorFences": true,
+    "pilotBroadGrantDenied": true,
+    "pilotCallbackAuthorityRechecked": true,
+    "pilotTwoReadScopesConnected": true,
+    "pilotExpiryStopsCustody": true,
+    "pilotDisconnectAfterExpiry": true,
+    "trialDailyConcurrentReservations": 120,
+    "trialDailyAccepted": 100,
+    "trialDailyDenied": 20,
+    "trialMinuteCannotResetDaily": true,
+    "trialDailyRecovery": true,
+    "disconnectStopsTokenAccess": true,
+    "otherTenantUnaffected": true,
+    "quotaConcurrentReservations": 120,
+    "quotaAccepted": 100,
+    "quotaDenied": 20,
+    "quotaNextWindowRecovered": true,
+    "clientBudgetAccessDenied": true
+  },
+  "syntheticLoad": {
+    "at": "2026-10-15T04:41:19.596692+00:00",
+    "createCalls": 1000,
+    "elapsedSeconds": 0.20409378099999742,
+    "execution": "synthetic_in_process",
+    "failureTypes": [],
+    "injectedLostCreateResponses": 20,
+    "latencyMs": {
+      "p50": 88.03715650000399,
+      "p95": 167.82353600000022,
+      "p99": 175.1055430000008
+    },
+    "limitations": [
+      "No HTTP hosting, database scheduler, production OAuth or provider rate-limit measurement.",
+      "Lost responses need manual provider reconciliation; no automatic resubmission."
+    ],
+    "lostResponsesPreservedUncertain": true,
+    "observedPeakWorkers": 64,
+    "outcomes": {
+      "failed": 0,
+      "uncertain": 20,
+      "verified": 980
+    },
+    "providerCalls": 0,
+    "simulatedProviderLatencyMs": 2,
+    "simultaneousArrivals": 1000,
+    "unexpectedFailureRate": 0.0,
+    "users": 1000,
+    "usersPerSecond": 4899.708335551943,
+    "workerLimit": 64
+  },
+  "fieldsBrowser": {
+    "execution": "synthetic_actual_component",
+    "boardSelection": true,
+    "secretBoardDisabled": true,
+    "sectionSelection": true,
+    "httpLinkRejected": true,
+    "httpsLinkAccepted": true,
+    "accountSwitchClearsApprovalOptions": true,
+    "realProviderRequests": 0
+  },
+  "previewBrowser": {
+    "classification": "Mock PASS",
+    "fixtureOverlay": true,
+    "realPinterestApiRequests": 0,
+    "realIdentityVerified": false,
+    "exactTitle": true,
+    "boardVisible": true,
+    "exactDestination": true,
+    "noTitleInference": true,
+    "unsafeLinkNoCTA": true,
+    "externalRequestsBlocked": 0
+  },
+  "typecheck": "PASS",
+  "lint": {
+    "warnings": 36,
+    "errors": 0
+  },
+  "build": "PASS",
+  "browserSessionPostgres": "PASS",
+  "agentRegistry": "PASS",
+  "addedRegressionModules": [
+    "test_rafii_account_protection_a1",
+    "test_rafii_creation_capabilities",
+    "web/tests/creation-capabilities.test.mjs"
+  ],
+  "realPinterestApiCalls": 0,
+  "fullProjectCI": "NOT RUN",
+  "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261015T044239538064Z-ci.json"
+}

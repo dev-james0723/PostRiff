@@ -39,7 +39,10 @@ class World:
 
     def __init__(self, **extra):
         self.registry = providers.registry_from_environment(environment(**extra))
-        self.oauth = OAuthService(None, None, CredentialVault(KEY), self.registry, "https://app.example", clock=lambda: NOW)
+        def no_database():
+            raise AssertionError("Connection-health fixtures must not access provider quota storage")
+        repository = SimpleNamespace(connection_factory=no_database)
+        self.oauth = OAuthService(repository, None, CredentialVault(KEY), self.registry, "https://app.example", clock=lambda: NOW)
         self.catalog = self.oauth.provider_catalog()
         self.by_platform = {p["platform"]: p for p in self.catalog}
 

@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-10-17T15:46:59.986881+00:00",
+  "deploymentLookup": "rafii.io",
+  "providerDeployment": "dpl_BLyFgcDyW85wPrEsJV5qrkXsmrLj",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "state": "READY",
+  "sourceType": "cli",
+  "gitSha": null,
+  "healthHttpStatus": 200,
+  "healthStatus": "ok",
+  "healthSourceRevision": null,
+  "currentSourceVerified": false,
+  "newDeployment": false,
+  "billingRechecked": false,
+  "currentDatabaseRechecked": false,
+  "productionReadiness": "NO-GO",
+  "qualifiedRuntimeBaselineFromExistingReceipt": "7432c56d96bc9d042b6f00bdbb6acc1b5bb271f1",
+  "currentRuntimeSourceReceipt": "current-runtime-source-receipt-reference.json",
+  "sourceVerificationLimit": "Git metadata and health still lack SHA; reused exact-deployment receipt qualifies2432 allowlisted source files to7432, not complete artifact byte identity."
+}

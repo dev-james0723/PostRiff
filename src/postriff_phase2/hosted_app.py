@@ -40,9 +40,13 @@ from . import account_protection, agent_observability, device_trust, security_ga
 from .agent_runtime import FixtureAgentRuntime
 
 
-def postgres_factory(dsn):
+def postgres_factory(dsn, *, pooled=False, max_size=20, max_waiting=64, timeout=8, options=None, observer=None):
     if not isinstance(dsn, str) or not dsn.strip():
         raise ValueError("POSTRIFF_DATABASE_URL is required.")
+    if pooled:
+        from .postgres_pool import PooledPostgresFactory
+        return PooledPostgresFactory(dsn, max_size=max_size, max_waiting=max_waiting, timeout=timeout,
+                                     options=options, observer=observer)
     try:
         import psycopg
     except ImportError as error:
@@ -287,7 +291,10 @@ def chat_media_from_environment(values):
 def runtime_from_environment(environ=None):
     from .deployment import isolated_environment
     values = isolated_environment(os.environ if environ is None else environ)
-    database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"))
+    database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"),
+        pooled=values.get('POSTRIFF_DB_POOL_ENABLED') == 'true',
+        max_size=int(values.get('POSTRIFF_DB_POOL_MAX_CONNECTIONS', '20')),
+        max_waiting=int(values.get('POSTRIFF_DB_POOL_MAX_WAITING', '64')))
     project_url = values.get("POSTRIFF_SUPABASE_URL")
     publishable = values.get("POSTRIFF_SUPABASE_PUBLISHABLE_KEY")
     secret = values.get("POSTRIFF_SUPABASE_SECRET_KEY")
@@ -301,6 +308,19 @@ def runtime_from_environment(environ=None):
     # Adapters mount only with client credentials; live execution only when a provider is
     # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
+    # P4's coordination spans tenants and process replicas of one bot. Never
+    # activate the P3 Discord sender without a durable, shared admission store.
+    discord = providers.get('discord')
+    if discord is not None:
+        if getattr(discord, 'rate_v1_enabled', False):
+            from .discord.rate_limits import SharedPostgresBudget, RateCoordinatorUnavailable
+            try:
+                discord.rate_limiter = SharedPostgresBudget(database, discord.client_id)
+            except RateCoordinatorUnavailable:
+                discord.authorization_v2_enabled = False
+        elif getattr(discord, 'authorization_v2_enabled', False):
+            # Also fence manually triggered Discord worker actions; not just cron.
+            discord.authorization_v2_enabled = False  # other providers unaffected
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
     service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
@@ -1017,6 +1037,14 @@ class HostedApplication:
                 return phone_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] in coworker_http.RESOURCES:
                 return coworker_http.handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) == 6 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'jobs' and parts[5] == 'execute' and method == 'POST':
+                body = self._body(environ)
+                if set(body) != {'approvalDigest'}:
+                    raise AlphaError('Send only the exact stored approval for this post.')
+                if self.worker is None:
+                    raise AlphaError('The publishing worker is unavailable. Reload the post status before continuing.', 503)
+                return self._json(start_response, 202, self.worker.execute_job(service.repository, parts[2], token,
+                                                                             parts[4], body.get('approvalDigest')))
             if len(parts) >= 4 and parts[:2] == ['api','workspaces'] and parts[3]=='growth':
                 return growth_http.handle(self,environ,start_response,service,token,method,parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":
@@ -1080,6 +1108,21 @@ class HostedApplication:
                 from . import connection_health
                 if connection_health.deployment_enabled(connection_health.environment(service)):
                     return self._json(start_response, 200, connection_health.ConnectionHealth(service).read(parts[2], token))
+            if len(parts) == 7 and parts[:2] == ['api', 'workspaces'] and parts[3:5] == ['discord', 'identities']:
+                discord = service.oauth.discord_connections
+                if parts[6] == 'guilds' and method == 'GET':
+                    return self._json(start_response, 200, discord.guilds(parts[2], token, parts[5]))
+                if parts[6] == 'disconnect' and method == 'POST':
+                    return self._json(start_response, 200, discord.disconnect_identity(parts[2], token, parts[5]))
+            if (len(parts) in (6, 7) and parts[:2] == ['api', 'workspaces']
+                    and parts[3] == 'channels' and parts[5] == 'discord-engagement'):
+                engagement = service.discord_engagement
+                if len(parts) == 6 and method == 'GET':
+                    return self._json(start_response, 200, engagement.status(parts[2], token, parts[4]))
+                operations = {'consent': engagement.consent, 'read': engagement.read,
+                              'preview': engagement.preview, 'approve': engagement.approve, 'cancel': engagement.cancel}
+                if len(parts) == 7 and method == 'POST' and parts[6] in operations:
+                    return self._json(start_response, 200, operations[parts[6]](parts[2], token, parts[4], self._body(environ)))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
                 if len(parts) == 4 and method == "GET":
@@ -1094,7 +1137,10 @@ class HostedApplication:
                     extra = {"iss": body["iss"]} if body.get("iss") is not None else {}
                     return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
                 if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
-                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4]))
+                    board_id = self._query_str(environ, 'boardId')
+                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4], board_id=board_id))
+                if len(parts) == 7 and parts[5] == 'destinations' and method == 'DELETE':
+                    return self._json(start_response, 200, oauth.remove_discord_destination(parts[2], token, parts[4], parts[6]))
                 if len(parts) == 6 and parts[5] == "creator-info" and method == "GET":
                     return self._json(start_response, 200, oauth.creator_info(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "destination" and method == "POST":
@@ -1112,6 +1158,9 @@ class HostedApplication:
                     if method == "GET":
                         return self._json(start_response, 200, history.status(parts[2], token, parts[4]))
                     return self._json(start_response, 202, history.request(parts[2], token, parts[4], self._body(environ)))
+                if len(parts) == 6 and parts[5] == "refresh-authorization" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, oauth.refresh_pinterest_authorization(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))

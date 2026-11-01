@@ -10,6 +10,7 @@ import { SegmentedControl, StateMessage, Surface, type SegmentOption } from '@/c
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { SHEET_ELEVATED } from '@/features/channels/rafii-materials';
+import { DiscordEngagementPanel } from '@/features/channels/discord-engagement-panel';
 import { ApiError } from '@/lib/api/client';
 import { useAudience, useChannels } from '@/lib/api/hooks';
 import type { Audience, ChannelView, ProviderView, Thread } from '@/lib/api/types';
@@ -240,6 +241,7 @@ function InboxPage() {
     <PageContainer pageTitle='Inbox' infoContent={infoContent}>
       <div className='flex min-w-0 flex-col gap-5'>
         <GrowthEntry audience />
+        {(channels ?? []).filter((channel) => channel.platform === 'Discord').map((channel) => <DiscordEngagementPanel key={channel.id} channel={channel} mode='inbox' />)}
         <CoverageStrip
           channels={channels}
           providers={providers}
@@ -308,16 +310,19 @@ function InboxSkeleton() {
  */
 function InboxEmpty({ channels, providers }: { channels: ChannelView[] | undefined; providers: ProviderView[] | undefined }) {
   const noAccounts = channels !== undefined && channels.length === 0;
+  const manualDiscord = (channels ?? []).some((channel) => channel.platform === 'Discord' && channel.discordEngagement?.enabled);
   const anyDirect = (channels ?? []).some((channel) => channel.capabilities.comments_read?.level === 'Direct' && commentsReadFor(channel.platform, providers));
   return (
     <div data-tour='inbox-empty'>
       <StateMessage
         kind='empty'
-        title='No comments yet'
+        title={manualDiscord ? 'No collected comments yet' : 'No comments yet'}
         description={
-          noAccounts
-            ? undefined
-            : anyDirect
+          manualDiscord
+            ? 'Read the approved Discord channel in Discord conversations above. Manual readings appear there.'
+            : noAccounts
+              ? undefined
+              : anyDirect
               ? 'Comments are read once, when Rafii verifies a post it published. Later comments aren’t collected yet.'
               : `Comments appear for ${commentReadNames(providers)} accounts with Direct comments.`
         }

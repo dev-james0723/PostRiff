@@ -67,7 +67,7 @@ export const connectionsApi={
   },
   verifyPinterest:()=>api<PinterestConnection>('/api/connections/pinterest/verify',{method:'POST',body:'{}'}),
   preparePinterest:async(username:string)=>{
-    const scope='user_accounts:read,boards:read,boards:write,boards:read_secret,boards:write_secret,pins:read,pins:write,pins:read_secret,pins:write_secret,ads:read,ads:write,billing:read,billing:write';
+    const scope='user_accounts:read';
     const result=await api<{authorizationPath:string}>('/api/connections/pinterest/prepare',{method:'POST',body:JSON.stringify({username,scope,identityConsent:true})});
     return result.authorizationPath;
   },

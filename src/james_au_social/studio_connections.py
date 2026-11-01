@@ -763,13 +763,13 @@ class ConnectionBroker:
         try:
             value = self._pinterest_request('GET', '/status')
             allowed = {'provider', 'available', 'state', 'username', 'accountId', 'accountType', 'scope', 'routeDriver', 'verifiedAt', 'expiresAt', 'identitySignals', 'publishReady', 'publishing'}
-            allowed_scopes = {'user_accounts:read,boards:read,boards:write,boards:read_secret,boards:write_secret,pins:read,pins:write,pins:read_secret,pins:write_secret,ads:read,ads:write,billing:read,billing:write', 'controlled_browser_session'}
+            allowed_scopes = {'user_accounts:read', 'controlled_browser_session'}
             if set(value) != allowed or value['publishReady'] is not False or value['publishing'] is not False or value['scope'] not in allowed_scopes or value['routeDriver'] not in {'official_api_oauth', 'controlled_browser'}:
                 raise ValueError('invalid_pinterest_status')
             return value
         except (StudioError, ValueError):
             return {'provider': 'pinterest', 'available': False, 'state': 'broker_unavailable', 'username': None, 'accountId': None, 'accountType': None,
-                    'scope': 'user_accounts:read,boards:read,boards:write,boards:read_secret,boards:write_secret,pins:read,pins:write,pins:read_secret,pins:write_secret,ads:read,ads:write,billing:read,billing:write', 'routeDriver': 'official_api_oauth', 'verifiedAt': None, 'expiresAt': None, 'identitySignals': [], 'publishReady': False, 'publishing': False}
+                    'scope': 'user_accounts:read', 'routeDriver': 'official_api_oauth', 'verifiedAt': None, 'expiresAt': None, 'identitySignals': [], 'publishReady': False, 'publishing': False}
 
     def _pinterest_request(self, method, path, body=None):
         if not self.pinterest_child or self.pinterest_child.poll() is not None:
@@ -1381,7 +1381,7 @@ def register_connection_routes(app, broker, body_parser):
     @app.post('/api/connections/pinterest/prepare')
     async def prepare_pinterest(request: Request):
         value = await body_parser(request)
-        scope = 'user_accounts:read,boards:read,boards:write,boards:read_secret,boards:write_secret,pins:read,pins:write,pins:read_secret,pins:write_secret,ads:read,ads:write,billing:read,billing:write'
+        scope = 'user_accounts:read'
         if set(value) != {'username', 'scope', 'identityConsent'} or value.get('scope') != scope or value.get('identityConsent') is not True:
             raise StudioError('exact_connection_consent_required', 'Review and confirm the displayed Pinterest identity and per-Pin approval-gated access.', 422)
         if value.get('username') != 'jamesaucreates':

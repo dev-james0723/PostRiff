@@ -1,0 +1,72 @@
+{
+  "startedAt": "2026-10-17T16:40:56.988985+00:00",
+  "activationUnix": 1792255256,
+  "expiresUnix": 1792269656,
+  "durationSeconds": 14400,
+  "sourceCommit": "01cdf494c49e43099ef6b61401b84db138746c23",
+  "receiptCommit": "6d102fa7ed514cbb4c11837378e70056c0ba9b4c",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "teamId": "team_PgXY5VdAYKcsv0RLoDPHscNq",
+  "previousProductionDeployment": "dpl_BLyFgcDyW85wPrEsJV5qrkXsmrLj",
+  "configurationScope": "deployment-only; project environment left unchanged",
+  "pinterestConfiguration": {
+    "POSTRIFF_OAUTH_PINTEREST_CLIENT_ID": "1615884",
+    "POSTRIFF_OAUTH_PINTEREST_CALLBACK_ORIGIN": "https://rafii.io",
+    "POSTRIFF_PINTEREST_SANDBOX": "false",
+    "POSTRIFF_PINTEREST_TRIAL_API_ENVIRONMENT": "production",
+    "POSTRIFF_PINTEREST_TRIAL_READONLY": "1",
+    "POSTRIFF_PINTEREST_TRIAL_WORKSPACE_ID": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+    "POSTRIFF_PINTEREST_TRIAL_ACTOR_ID": "b167161d-37f4-4bc3-ae22-2482c982e5a0",
+    "POSTRIFF_PINTEREST_TRIAL_USERNAME": "jamesaucreates",
+    "POSTRIFF_PINTEREST_TRIAL_EXPIRES_AT": "1792269656",
+    "POSTRIFF_OAUTH_PINTEREST_ENABLED": "false",
+    "POSTRIFF_OAUTH_PINTEREST_VERIFIED": "false",
+    "POSTRIFF_OAUTH_PINTEREST_REVIEWED": "false",
+    "POSTRIFF_OAUTH_PINTEREST_POLICY_APPROVED": "false",
+    "POSTRIFF_OAUTH_PINTEREST_DISABLED": "false",
+    "POSTRIFF_PINTEREST_AGENT_ENABLED": "0",
+    "POSTRIFF_PINTEREST_AGENT_PROVIDER_DATA_APPROVED": "0"
+  },
+  "secretInstalledFrom": "Existing app1615884 copy control; owner-only temp\u2192child process env; no CLI argv value",
+  "sourceHashesMatch": 3297,
+  "state": "CLI_FINISHED",
+  "autoAssignDomains": false,
+  "log": "/private/tmp/rafii-pinterest-approved-deploy.log",
+  "secretTransferFileRemoved": true,
+  "pid": 97018,
+  "cliExitCode": 0,
+  "finishedAt": "2026-10-17T16:43:24.012954+00:00",
+  "providerState": "READY",
+  "promotionCliExitCode": 0,
+  "promotedAt": "2026-10-17T16:50:11.256907+00:00",
+  "productionAliasVerified": "rafii.io resolves to dpl_C4AqhCMXcy7LYB4eeCBvXgxQWSVv",
+  "health": {
+    "status": "ok",
+    "configured": true,
+    "sourceRevision": null
+  },
+  "deployedFileHashesMatched": 2215,
+  "runtimeServicesVerified": [
+    "postriff_web",
+    "postriff_api",
+    "rafii_phone_media"
+  ],
+  "runtimeCronVerified": "/api/cron/worker every minute",
+  "callbackPreflight": {
+    "execution": "synthetic denied callback; no state/code/provider network",
+    "status": 302,
+    "locationOrigin": "https://rafii.io",
+    "cacheControl": "no-store",
+    "referrerPolicy": "no-referrer"
+  },
+  "runtimePilotConfiguration": "VERIFIED by authenticated two-scope read-only UI + real official API journal and expected account binding; root env names metadata does not include deployment overrides",
+  "realOAuth": "PASS existing-consent authorization-code flow and expected business identity",
+  "realPinterestCalls": 2,
+  "browserIdentityVerified": {
+    "approvedActorMatchesSignedInEmail": true,
+    "approvedWorkspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+    "workspaceName": "Rafii Ops (founder)",
+    "selection": "Existing profile switch control selected; UI confirmed Current",
+    "verifiedAt": "2026-10-17T16:55:59.252115+00:00"
+  }
+}

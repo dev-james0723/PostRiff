@@ -4,6 +4,9 @@ Levels: Direct (official API + production app/scopes verified), Assisted (export
 no execution claim), Bridge (reviewed device workflow), Unsupported. Catalog presence is
 never evidence; a level above Unsupported requires an evidence string and a verified_at.
 """
+import copy
+import math
+
 from postriff_alpha.domain import AlphaError
 
 CAPABILITIES = ("identity", "publish", "schedule", "analytics", "comments_read", "reply", "moderate", "media_types", "webhooks")
@@ -90,4 +93,11 @@ def customer_view(channel, matrix, now):
         "refreshBindingRequired": channel.get("refreshBindingRequired") is True,
         "authorizationLane": channel.get("authorizationLane", "standard") if channel.get("platform") == "YouTube" else None,
         "accessTokenExpiresAt": channel.get("accessTokenExpiresAt"),
+        **({"discordDestinations": copy.deepcopy(channel.get("discordDestinations", [])),
+            "defaultDestinationId": channel.get("defaultDestinationId"),
+            "discordAuthorizationGeneration": channel.get("discordAuthorizationGeneration"),
+            "discordIdentityConnectionId": channel.get("discordIdentityConnectionId"),
+            "discordConnectionKind": channel.get("discordConnectionKind"),
+            "providerAccountId": channel.get("providerAccountId")}
+           if channel.get("platform") == "Discord" else {}),
     }

@@ -1,0 +1,55 @@
+{
+  "checkedAt": "2026-10-17T17:03:45.456010+00:00",
+  "classification": "REAL approved private Trial on shared production infrastructure, official production API",
+  "projectRef": "buoyhkbodnhzngaotoel",
+  "deployment": "dpl_C4AqhCMXcy7LYB4eeCBvXgxQWSVv",
+  "operatorId": "b167161d-37f4-4bc3-ae22-2482c982e5a0",
+  "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+  "workspaceName": "Rafii Ops (founder)",
+  "oauthTransactionId": "c56ad398-50e0-4f19-9440-c12306cc9d67",
+  "callbackUri": "https://rafii.io/api/oauth/pinterest/callback",
+  "scopes": [
+    "boards:read",
+    "user_accounts:read"
+  ],
+  "consentObservation": "Provider reused prior authorization and returned automatically; no new human consent screen was shown. Not a new-user/public-onboarding or consent-screen-video proof.",
+  "callbackOutcome": "exchanged, consumed=true",
+  "connectionId": "909e9784cdcde21f2bb7cf521ce67f43",
+  "account": "@jamesaucreates",
+  "providerAccountId": "1126814906675966091",
+  "accountType": "business",
+  "refreshSupported": true,
+  "accessExpiresAt": "2026-11-16T16:58:26.956076+00:00",
+  "credentialRevoked": false,
+  "credentialsStoredEncrypted": "Existing vault custody path exercised; no ciphertext/token values read by operator",
+  "providerRequests": [
+    {
+      "method": "POST",
+      "path": "/v5/oauth/token",
+      "grantType": "authorization_code",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/v5/user_account",
+      "status": 200
+    }
+  ],
+  "tokenExchange": "PASS",
+  "identityReadback": "PASS",
+  "boards": "NOT RUN: existing channel card has no board-read entry point; API exists in publishing options",
+  "refreshCycle": "NOT RUN: received 30day access lifetime; natural expiry outside4hour pilot; no production expiry/ciphertext mutation performed",
+  "reconnect": "NOT RUN",
+  "disconnect": "BLOCKED_REAUTH: actual scoped DELETE returned403; credentials remain active. Existing HostedRepository.assert_fresh requires recent interactive sign-in; no gate bypass or credential mutation.",
+  "pinsCreated": 0,
+  "publicOnboarding": "NOT RUN",
+  "productionReadiness": "NO-GO",
+  "runtimeConfiguration": "Authenticated UI confirmed read-only lane, two scopes and correct app/redirect; real journal confirms official production API. Vercel env names metadata omits deployment overrides.",
+  "disconnectNegativeReceipt": {
+    "observedRequestAt": "2026-10-17T17:05:34.207Z",
+    "httpStatus": 403,
+    "revoked": false,
+    "accessErased": false,
+    "refreshErased": false
+  }
+}

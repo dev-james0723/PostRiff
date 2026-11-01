@@ -339,7 +339,7 @@ function ChannelsPage() {
   if (deepLinkRequest) {
     return (
       <main className='bg-background min-h-dvh'>
-        <ConnectSheet open onOpenChange={closeDirectConnect} providers={providers} request={deepLinkRequest} />
+        <ConnectSheet open onOpenChange={closeDirectConnect} providers={providers} discordIdentities={data?.discordIdentities ?? []} request={deepLinkRequest} />
       </main>
     );
   }
@@ -537,7 +537,7 @@ function ChannelsPage() {
         </div>
       )}
 
-      <ConnectSheet open={connectOpen} onOpenChange={setConnectOpen} providers={providers} request={connectRequest} />
+      <ConnectSheet open={connectOpen} onOpenChange={setConnectOpen} providers={providers} discordIdentities={data?.discordIdentities ?? []} request={connectRequest} />
     </PageContainer>
   );
 }

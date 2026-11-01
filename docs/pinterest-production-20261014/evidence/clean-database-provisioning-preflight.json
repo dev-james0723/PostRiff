@@ -1,0 +1,93 @@
+{
+  "checkedAt": "2026-10-14T23:20:00.774563+00:00",
+  "sourceCommit": "a54fadf519a69e125ebd1d0d4c3139f2946ee183",
+  "proposalSha256": "c728864a5e620d00109f2dc3c31352db0adf3e73a8d5a829ec69df39318115f1",
+  "approval": "APPROVED: one empty Micro project only; user reply approve",
+  "target": {
+    "name": "rafii-pinterest-isolated-staging",
+    "organizationId": "gztpsyvraqdcoklwpvdo",
+    "region": "us-east-1",
+    "compute": "Micro",
+    "projectRef": null
+  },
+  "costQualification": {
+    "status": "PASS",
+    "authenticatedProviderCreationQuote": "Additional costs $10/m",
+    "microHourlyUsd": 0.01344,
+    "spendCapEnabled": true,
+    "quotasExceeded": false,
+    "egressGB": {
+      "used": 10.327,
+      "included": 250
+    },
+    "storageGB": {
+      "used": 0.015,
+      "included": 100
+    },
+    "mau": {
+      "used": 2,
+      "included": 100000
+    },
+    "observedAt": "2026-10-14T23:15Z",
+    "sources": [
+      "https://supabase.com/dashboard/new/gztpsyvraqdcoklwpvdo",
+      "https://supabase.com/dashboard/org/gztpsyvraqdcoklwpvdo/billing",
+      "https://supabase.com/dashboard/org/gztpsyvraqdcoklwpvdo/usage"
+    ],
+    "limits": "Provider usage dashboard may lag one hour; disk and compute charges must still remain within approved base scope. No spend-cap or organization settings changed."
+  },
+  "preSubmitDuplicateCheck": {
+    "status": "PASS",
+    "matchingProjectCount": 0,
+    "method": "Supabase list_projects via Rafii database connection"
+  },
+  "preparedForm": {
+    "nameVerified": true,
+    "microVerified": true,
+    "regionNorthVirginiaVerified": true,
+    "passwordEntered": false,
+    "submitted": false,
+    "url": "https://supabase.com/dashboard/new/gztpsyvraqdcoklwpvdo"
+  },
+  "toolRecovery": {
+    "getCost": "UNAVAILABLE: not returned by tools/list",
+    "confirmCost": "UNAVAILABLE: not returned by tools/list",
+    "supabaseCliVersion": "2.90.0",
+    "supabaseCliAuth": "BLOCKED: access token not provided",
+    "browserCostAndQuotaRead": "PASS",
+    "browserTaskVerification": "Verified page URL/title only; not evidence of creation"
+  },
+  "localVault": {
+    "generated": true,
+    "storedInGitIgnoredFile": true,
+    "mode": "0600",
+    "valueExported": false,
+    "sha256": "a020c4062abbae003e459ed20a83bc759572c6ea92caab95e77eace822013478",
+    "installedExternally": false
+  },
+  "schemaInventory": {
+    "count": 81,
+    "bundleSha256": "1ffa45e1ca9d77e6883be4ee679ded7384f17d0b0b1ae16ec3a7bbf1c12ea96f",
+    "apply": "NOT RUN",
+    "cleanBootstrapRehearsal": "NOT RUN"
+  },
+  "provisioning": "BLOCKED: human database-password entry and submission required by Computer Use confirmation policy",
+  "providerProjectCreated": false,
+  "externalResourceMutations": 0,
+  "productionConnection": false,
+  "productionSecretRead": false,
+  "schemaApply": "NOT RUN",
+  "authSettingsChange": "NOT RUN",
+  "deployment": "NOT RUN",
+  "pin": "NOT RUN",
+  "authorizationUpdate": {
+    "at": "2026-10-14T23:23:30.713124+00:00",
+    "latestUserSteering": "Avoid US$10; investigate other methods",
+    "paidCreation": "ON HOLD; do not execute prior Micro approval",
+    "matchingCreatedProjectsAfterSteering": 0,
+    "paidFormTabsClosed": true,
+    "freeOrganizationQuote": "Free - $0/month",
+    "freeQuotaEligibility": "NOT VERIFIED",
+    "freeTargetProvisioningAuthorized": false
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-10-17T16:19:18.260296+00:00",
+  "status": "FAIL",
+  "sourceCommit": "5b8d4e0809bf0e2d0efa0d7f52b4671e84e4133e",
+  "runId": "dh1zml7sfh",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/dh1zml7sfh",
+  "elapsedSeconds": 93.061,
+  "controllerExitCode": 1,
+  "pythonTests": 412,
+  "pythonResult": "PASS",
+  "postgresCluster": "FAIL: new Pinterest old-environment custody regression; other five scripts exit0",
+  "failure": "Sandbox token was returned by token_for_worker after provider environment switch; later provider use already rejected it, but custody boundary did not. No network sent in failing probe.",
+  "remediation": "Validate Pinterest app/environment envelope in protected provider selection before returning custody. Keep real DB regression unchanged.",
+  "nodeAndFrontend": "NOT RUN",
+  "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261017T161717912058Z-ci.json",
+  "sourceHashes": "readonly-trial-attempt1-source-hashes.json",
+  "realProviderCalls": 0,
+  "productionWrites": 0,
+  "remoteExitCode": 1
+}

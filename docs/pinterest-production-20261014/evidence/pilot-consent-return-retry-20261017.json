@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-10-17T18:36:34.462956+00:00",
+  "classification": "REAL provider-consent return did not establish new Rafii custody",
+  "humanReport": "User reports Give access was clicked.",
+  "priorTransaction": {
+    "id": "ba9beab3-972a-4805-ad69-487da97a83fa",
+    "createdAt": "2026-10-17T17:39:24.936967Z",
+    "expiresAt": "2026-10-17T17:49:24.936967Z",
+    "observedAt": "2026-10-17T18:26:09Z",
+    "outcome": null,
+    "consumed": false,
+    "credentialStillRevoked": true,
+    "browserReturnedToRafii": true,
+    "observedReturnQueryKeys": []
+  },
+  "reasonNotPassed": "Transaction expired before current check; no successful exchange recorded. The exact historical callback failure response was not captured, so no claim of a specific provider error.",
+  "recovery": "Ordinary new read-only transaction, same account/scopes/deadline. No old state/code reuse or expiry mutation.",
+  "freshTransaction": {
+    "id": "f43bcc9f-bcbb-471d-8449-fdda1a11b638",
+    "createdAt": "2026-10-17T18:33:18.407103Z",
+    "expiresAt": "2026-10-17T18:43:18.407103Z",
+    "scopes": [
+      "user_accounts:read",
+      "boards:read"
+    ],
+    "officialHumanConsentScreenVerified": true
+  },
+  "pilotExpiresAt": "2026-10-17T20:40:56Z",
+  "pilotExtended": false,
+  "newProviderTokensObserved": false,
+  "pinsCreated": 0,
+  "pendingHumanAction": "Native choice: explicitly authorize agent to click this Give access (overriding former manual-click step), or human clicks it personally."
+}
