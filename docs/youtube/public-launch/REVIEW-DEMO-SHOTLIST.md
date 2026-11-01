@@ -1,8 +1,8 @@
 # Google and YouTube review demonstration candidate
 
-2026-10-08. **SCRIPT / CAPTURE PLAN ONLY. No new demonstration video exists, no unlisted link has been created, and no upload or scheduling segment has been executed.** Existing screenshots of staging consent are supporting historical evidence, not a truthful end-to-end demonstration of this release. Capture against the exact submitted release after prerequisites are satisfied. Use English UI/narration where Google requests it.
+2026-10-08 script; reconciled 2026-10-11. **SCRIPT / CAPTURE PLAN ONLY. No new demonstration video exists, no unlisted link has been created, and no upload or scheduling segment has been executed.** Existing screenshots of staging consent are supporting historical evidence, not a truthful end-to-end demonstration of this release. Capture against the exact submitted release after prerequisites are satisfied. Use English UI/narration where Google requests it.
 
-Before recording, verify actual production clients, consent branding, approved operator/legal copy, account-holder consent, a disposable original video/image/caption asset and a permitted review-sharing destination. Public or unlisted publication of any test content requires affected-owner approval. Never expose client secrets, tokens, codes, session URLs, unrelated accounts, customer media or reviewer credentials.
+Before recording, follow [REVIEWER-INSTRUCTIONS-20261011.md](REVIEWER-INSTRUCTIONS-20261011.md) and [BRAND-APPROVAL-20261011.md](BRAND-APPROVAL-20261011.md). The existing postriff brand decision is separate from the dedicated YouTube review. Verify actual production clients, consent branding, approved operator/legal copy, account-holder consent, a disposable original video/image/caption asset and a permitted review-sharing destination. Public or unlisted publication of any test content requires affected-owner approval. Never expose client secrets, tokens, codes, session URLs, unrelated accounts, customer media or reviewer credentials.
 
 | Shot | Show and narrate | Evidence / gate |
 | --- | --- | --- |

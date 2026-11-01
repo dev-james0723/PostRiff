@@ -1,25 +1,81 @@
 {
   "schemaVersion": 1,
-  "observedOn": "2026-10-09",
-  "execution": "MISSION EVIDENCE RECORD; NO PUBLIC LAUNCH CLAIM",
+  "observedOn": "2026-10-11",
+  "execution": "READ-ONLY GOOGLE BRAND RECONCILIATION; YOUTUBE PUBLIC LAUNCH STILL INCOMPLETE",
   "productionGoogleProject": {
     "id": "rafii-youtube-production",
     "number": "568838253270",
     "name": "Rafii YouTube Production",
     "status": "VERIFIED PROJECT AND DATA/ANALYTICS API ACTIVATION",
     "evidence": "Google Console project identity and both API Enabled states observed during this mission; API terms explicitly approved by owner before activation.",
-    "oauthClientId": null,
-    "oauthConfiguration": "NOT CONFIGURED",
+    "oauthClientId": "568838253270-gt1ggh4hecedn0c67hdfqk7pirqa5dc4.apps.googleusercontent.com",
+    "oauthConfiguration": "CONFIGURED; CLIENT EXISTENCE AND STANDARD ID REVALIDATED 2026-10-11; OTHER VALUES RETAIN DATED 2026-10-10 EVIDENCE",
     "apisEnabled": [
       "youtube.googleapis.com",
       "youtubeanalytics.googleapis.com"
     ],
-    "oauthAudience": null,
-    "oauthPublishingStatus": null,
+    "oauthAudience": "External",
+    "oauthPublishingStatus": "In Production",
     "verificationStatus": "NOT SUBMITTED",
-    "consoleBlocker": "Browser control unavailable again on2026-10-09. API activation/quota observations from2026-10-08 remain dated verified evidence. Reconnect pending; contacts/legal policy agreement/client configuration/review submissions still incomplete.",
+    "consoleBlocker": "Partial current Console readback succeeded: production project, two client names, standard client ID and verification controls. Field values, current approval text and agentic client ID remain unverified because browser backend subsequently became unavailable. Vercel environment list returned 403; bounded Mac CLI reads did not dispatch.",
     "existingReferenceProjectId": "rafii-509720",
-    "domainOwnership": "Google verification TXT is present in live DNS and the canonical Vercel binding is verified (2026-10-09). Google property ownership and OAuth domain approval still require current Console readback; do not infer approval from TXT or resubmit DNS blindly."
+    "domainOwnership": "OAUTH-VERIFICATION.md records Google property ownership and rafii.io authorized domain verified 2026-10-10. Retained as dated source evidence; not revalidated on 2026-10-11.",
+    "oauthConfigurationSource": "OAUTH-VERIFICATION.md dated 2026-10-10; authenticated Console client navigation and review controls dated 2026-10-11",
+    "oauthConfigurationValuesLastVerifiedOn": "2026-10-10",
+    "brandVerification": {
+      "status": "NO APPROVAL EVIDENCE",
+      "applicationId": null,
+      "submittedAt": null,
+      "approvedAt": null,
+      "observedOn": "2026-10-11",
+      "consoleObservation": "Branding has an enabled Verify branding control; Verification Centre has disabled Prepare for verification. This control observation is not a submission or a full status readback."
+    },
+    "scopeVerification": {
+      "status": "NOT SUBMITTED",
+      "scopeCoverage": [],
+      "approvalReference": null,
+      "evidence": "Existing submission packet reports no submission; no subsequent confirmation found in the two authorized Gmail accounts. Full current Console status text could not be read.",
+      "statusLastReportedOn": "2026-10-10",
+      "currentConsoleStatus": "UNVERIFIED"
+    },
+    "declaredScopes": [
+      "https://www.googleapis.com/auth/youtube.readonly",
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/youtube.force-ssl",
+      "https://www.googleapis.com/auth/yt-analytics.readonly"
+    ],
+    "declaredScopesSource": "OAUTH-VERIFICATION.md 2026-10-10; declarations are not approved scopes",
+    "oauthClients": [
+      {
+        "name": "Rafii Production Standard",
+        "id": "568838253270-gt1ggh4hecedn0c67hdfqk7pirqa5dc4.apps.googleusercontent.com",
+        "authorizationLane": "standard",
+        "consoleMembership": "VERIFIED",
+        "observedAt": "2026-10-11T18:20:30.584Z",
+        "registeredRedirects": [
+          "https://rafii.io/api/oauth/youtube/callback"
+        ],
+        "javascriptOrigins": [],
+        "redirectEvidence": "OAUTH-VERIFICATION.md 2026-10-10; exact field values not re-read 2026-10-11",
+        "productionCredentialSelection": "UNVERIFIED CURRENT ENVIRONMENT"
+      },
+      {
+        "name": "Rafii Production Agentic",
+        "id": null,
+        "authorizationLane": "agentic",
+        "consoleMembership": "CLIENT NAME VERIFIED; ID NOT REVALIDATED",
+        "observedAt": "2026-10-11T18:18:07.498Z",
+        "registeredRedirects": [
+          "https://rafii.io/api/oauth/youtube/callback"
+        ],
+        "javascriptOrigins": [],
+        "redirectEvidence": "OAUTH-VERIFICATION.md 2026-10-10; exact field values not re-read 2026-10-11",
+        "aiDesignation": "VERIFIED IN 2026-10-10 DOCUMENT; NOT REVALIDATED",
+        "productionCredentialSelection": "UNVERIFIED CURRENT ENVIRONMENT"
+      }
+    ],
+    "verificationStatusLastReportedOn": "2026-10-10",
+    "currentFullVerificationStatus": "UNVERIFIED CURRENT CONSOLE TEXT"
   },
   "stagingGoogleProject": {
     "id": "rafii-509720",
@@ -31,13 +87,15 @@
   },
   "runningProduction": {
     "url": "https://rafii.io",
-    "commit": "4a0bd786ac43f50de9f00c4fbb63d6d65e7434ba",
-    "deploymentId": "dpl_7YesdY948N4cCwrzcM9ZhB5bhTU2",
-    "source": "Live canonical and protected health + Vercel readback2026-10-09T17:17:09Z",
+    "commit": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+    "deploymentId": "dpl_BUZ9hDn7pY8KwWTV2paXjtbuqv9T",
+    "source": "Authenticated Vercel production alias readback and live /api/health on 2026-10-11",
     "integrationBranchDeployed": true,
-    "youtubeGateFixCandidateDeployed": false,
     "youtubePublicLaunchReady": false,
-    "libraryPreservation": "PR136/137, OpenUI PR146 and Google privacy PR147 preserved. Gate-fix candidate reconciled with4a0bd786; its deployment is still pending."
+    "pr162Merged": true,
+    "pr162MergeCommit": "e96220d3820b2186342e2322b0f379c8049360df",
+    "pr162SourcePresent": true,
+    "libraryPreservation": "Documentation reconciliation only; no source, credential, customer data or deployment mutation in this workstream."
   },
   "approvedProductionQuotas": {
     "dailyUploads": 100,
@@ -54,10 +112,11 @@
     "observedOn": "2026-10-08"
   },
   "submissions": {
-    "googleOAuth": "NOT SUBMITTED",
+    "googleOAuth": "NOT SUBMITTED for rafii-youtube-production",
     "youtubeAudit": "NOT SUBMITTED",
     "quotaExtension": "NOT SUBMITTED",
-    "applicationIds": []
+    "applicationIds": [],
+    "postriffBrand": "APPROVED BRAND ONLY"
   },
   "thisMissionProviderEffects": {
     "googleProjectCreated": true,
@@ -69,7 +128,7 @@
     "youtubeDataApiEnabled": true,
     "youtubeAnalyticsApiEnabled": true
   },
-  "releaseGate": "Current production4a0bd786. Prior dirty-source JCB cknkhlfd0c passed499 Python/845 Node tests,10 disposable PostgreSQL modules, build and Chromium1440/390/320. Follow-up t5grdmf94r passed195 proposal/calendar contracts,845 Node tests, source scanner and frontend/browser checks. Calendar/presentation fixes:252 unchanged contracts passed in brphvmtnft; its2 failed test assumptions were corrected and2 projection contracts passed in0nbxg1jm9g. Exact-head GitHub release checks, merge and deployment remain pending. No Google provider acceptance; public/agentic/fleet flags remain off.",
+  "releaseGate": "PR162 merged 2026-10-10; its credential compatibility code is present in production b7b9b3ee observed 2026-10-11. Source validation/deployment is not Google approval or real-provider acceptance. Protected current environment could not be read; this workstream changed no activation flags.",
   "ownerInputsPending": [
     "verified operator/legal/contact facts",
     "legal approval/required attestations",
@@ -132,7 +191,7 @@
       "blocker": "Two apply_migration calls returned INVALID_ARGUMENT/invalid_request_state; live readback confirmed no table/migration. The authenticated Supabase CLI account has no Rafii projects. Exact Rafii Vercel database variables are Secret and not decrypted; safe direct credential binding cannot be established. Reconnect or exact-target credentials remain required."
     }
   },
-  "recordScope": "Dated observations; current production4a0bd786 verified2026-10-09T17:17:09Z. Exact-SHA final receipt supersedes this snapshot. No public launch claim.",
+  "recordScope": "2026-10-11 reconciliation supersedes project/client and running-production fields. Quota/storage and earlier provider-effect/migration sections retain their own dated historical scope; they were not revalidated by this workstream.",
   "productionEnvironmentChanges": {
     "execution": "VERIFIED VERCEL CONFIGURATION AND RUNNING READBACK; PUBLIC/AGENTIC FLAGS REMAIN OFF",
     "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
@@ -162,6 +221,16 @@
       "integrationBranchDeployed": true,
       "youtubePublicLaunchReady": false,
       "libraryPreservation": "PR136 included in newer OpenUI PR137; new gate-fix candidate starts from current production."
+    },
+    {
+      "url": "https://rafii.io",
+      "commit": "4a0bd786ac43f50de9f00c4fbb63d6d65e7434ba",
+      "deploymentId": "dpl_7YesdY948N4cCwrzcM9ZhB5bhTU2",
+      "source": "Live canonical and protected health + Vercel readback2026-10-09T17:17:09Z",
+      "integrationBranchDeployed": true,
+      "youtubeGateFixCandidateDeployed": false,
+      "youtubePublicLaunchReady": false,
+      "libraryPreservation": "PR136/137, OpenUI PR146 and Google privacy PR147 preserved. Gate-fix candidate reconciled with4a0bd786; its deployment is still pending."
     },
     {
       "url": "https://rafii.io",
@@ -204,5 +273,255 @@
     "videoContentUnderstanding": "NOT ANALYZED BY THE PLANNER",
     "privateAttribution": "Server provenance retained in storage; scoped Creator and ordinary workspace presentation exclude internal attribution/authority.",
     "calendar": "At most 100 current future unqueued exact-bound plans are projected as awaiting approval. No publishing authority is created."
-  }
+  },
+  "googleProjects": [
+    {
+      "id": "postriff",
+      "number": "692391842023",
+      "name": "PostRiff",
+      "purpose": "Existing production Sign in with Google through Supabase Auth; brand decision must stay with this project",
+      "brandVerification": {
+        "status": "APPROVED",
+        "verificationType": "Brand Verification",
+        "approvedOn": "2026-10-09",
+        "approvedAt": null,
+        "notifiedAt": "2026-10-09T07:31:31Z",
+        "evidenceType": "OWNER_AUTHENTICATED_GOOGLE_EMAIL",
+        "providerCaseReference": null,
+        "approvalReference": "Google OAuth Verification Response retained in the owner Gmail; notification received 2026-10-09T07:31:31Z; no provider case number supplied.",
+        "coverage": "Brand only for postriff / 692391842023; no sensitive/restricted-scope approval or cross-project inheritance established",
+        "reSubmissionRequiredForUnchangedBrand": false,
+        "consoleFullStatusReadback": "PENDING"
+      },
+      "oauthClients": [
+        {
+          "name": "PostRiff Web (Supabase Auth)",
+          "id": "692391842023-hb6avpmgmg9034fuudckjqai46rn7a62.apps.googleusercontent.com",
+          "clientIdSource": "Live production Supabase Google authorization 302, 2026-10-11T18:14:11.756663Z",
+          "consoleNameSource": "Authenticated PostRiff Clients page, 2026-10-11T18:20:36.716Z; exact detail membership still needs final readback",
+          "registeredRedirects": [
+            "https://buoyhkbodnhzngaotoel.supabase.co/auth/v1/callback"
+          ],
+          "redirectSource": "Actual Google authorization redirect; full Console allowlist not revalidated",
+          "requestedScopes": [
+            "email",
+            "profile"
+          ],
+          "productionUse": true
+        }
+      ],
+      "consentScreen": {
+        "publishingStatus": "UNVERIFIED CURRENT CONSOLE",
+        "audience": "UNVERIFIED CURRENT CONSOLE",
+        "brandStatusSource": "Google approval notification; current Console exact status text unavailable"
+      },
+      "scopeVerification": {
+        "status": "UNVERIFIED",
+        "approvedSensitiveScopes": [],
+        "approvedRestrictedScopes": [],
+        "evidenceLimit": "The brand notification lists no approved API scopes. An empty approval-evidence array is not a Google rejection or proof that no prior approval exists."
+      },
+      "sensitiveScopesObservedInExistingGrant": [
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/calendar.readonly"
+      ],
+      "restrictedScopesObservedInExistingGrant": [
+        "https://www.googleapis.com/auth/gmail.readonly"
+      ],
+      "existingGrantScopeEvidence": "Read-only production DB metadata; client issuer of encrypted historical grant was not inspected, so these grant scopes are not attributed to this project as configured/approved scopes",
+      "requiredNextAction": "Preserve sign-in client and callback; do not resubmit unchanged approved branding. Establish project-specific data-access review evidence before claiming sensitive/restricted scope approval."
+    },
+    {
+      "id": "rafii-youtube-production",
+      "number": "568838253270",
+      "name": "Rafii YouTube Production",
+      "status": "VERIFIED PROJECT AND DATA/ANALYTICS API ACTIVATION",
+      "evidence": "Google Console project identity and both API Enabled states observed during this mission; API terms explicitly approved by owner before activation.",
+      "oauthClientId": "568838253270-gt1ggh4hecedn0c67hdfqk7pirqa5dc4.apps.googleusercontent.com",
+      "oauthConfiguration": "CONFIGURED; CLIENT EXISTENCE AND STANDARD ID REVALIDATED 2026-10-11; OTHER VALUES RETAIN DATED 2026-10-10 EVIDENCE",
+      "apisEnabled": [
+        "youtube.googleapis.com",
+        "youtubeanalytics.googleapis.com"
+      ],
+      "oauthAudience": "External",
+      "oauthPublishingStatus": "In Production",
+      "verificationStatus": "NOT SUBMITTED",
+      "consoleBlocker": "Partial current Console readback succeeded: production project, two client names, standard client ID and verification controls. Field values, current approval text and agentic client ID remain unverified because browser backend subsequently became unavailable. Vercel environment list returned 403; bounded Mac CLI reads did not dispatch.",
+      "existingReferenceProjectId": "rafii-509720",
+      "domainOwnership": "OAUTH-VERIFICATION.md records Google property ownership and rafii.io authorized domain verified 2026-10-10. Retained as dated source evidence; not revalidated on 2026-10-11.",
+      "oauthConfigurationSource": "OAUTH-VERIFICATION.md dated 2026-10-10; authenticated Console client navigation and review controls dated 2026-10-11",
+      "oauthConfigurationValuesLastVerifiedOn": "2026-10-10",
+      "brandVerification": {
+        "status": "NO APPROVAL EVIDENCE",
+        "applicationId": null,
+        "submittedAt": null,
+        "approvedAt": null,
+        "observedOn": "2026-10-11",
+        "consoleObservation": "Branding has an enabled Verify branding control; Verification Centre has disabled Prepare for verification. This control observation is not a submission or a full status readback."
+      },
+      "scopeVerification": {
+        "status": "NOT SUBMITTED",
+        "scopeCoverage": [],
+        "approvalReference": null,
+        "evidence": "Existing submission packet reports no submission; no subsequent confirmation found in the two authorized Gmail accounts. Full current Console status text could not be read.",
+        "statusLastReportedOn": "2026-10-10",
+        "currentConsoleStatus": "UNVERIFIED"
+      },
+      "declaredScopes": [
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "declaredScopesSource": "OAUTH-VERIFICATION.md 2026-10-10; declarations are not approved scopes",
+      "oauthClients": [
+        {
+          "name": "Rafii Production Standard",
+          "id": "568838253270-gt1ggh4hecedn0c67hdfqk7pirqa5dc4.apps.googleusercontent.com",
+          "authorizationLane": "standard",
+          "consoleMembership": "VERIFIED",
+          "observedAt": "2026-10-11T18:20:30.584Z",
+          "registeredRedirects": [
+            "https://rafii.io/api/oauth/youtube/callback"
+          ],
+          "javascriptOrigins": [],
+          "redirectEvidence": "OAUTH-VERIFICATION.md 2026-10-10; exact field values not re-read 2026-10-11",
+          "productionCredentialSelection": "UNVERIFIED CURRENT ENVIRONMENT"
+        },
+        {
+          "name": "Rafii Production Agentic",
+          "id": null,
+          "authorizationLane": "agentic",
+          "consoleMembership": "CLIENT NAME VERIFIED; ID NOT REVALIDATED",
+          "observedAt": "2026-10-11T18:18:07.498Z",
+          "registeredRedirects": [
+            "https://rafii.io/api/oauth/youtube/callback"
+          ],
+          "javascriptOrigins": [],
+          "redirectEvidence": "OAUTH-VERIFICATION.md 2026-10-10; exact field values not re-read 2026-10-11",
+          "aiDesignation": "VERIFIED IN 2026-10-10 DOCUMENT; NOT REVALIDATED",
+          "productionCredentialSelection": "UNVERIFIED CURRENT ENVIRONMENT"
+        }
+      ],
+      "verificationStatusLastReportedOn": "2026-10-10",
+      "currentFullVerificationStatus": "UNVERIFIED CURRENT CONSOLE TEXT"
+    },
+    {
+      "id": "rafii-509720",
+      "number": "81579135390",
+      "audience": "External",
+      "publishingStatus": "Testing",
+      "evidence": "Prior same-day acceptance public-rollout-20261008/RECEIPT.md; prior source, not revalidated in this mission.",
+      "productionUse": false,
+      "purpose": "Separate staging/reference YouTube project; historical client/grants may require compatibility custody, not public production verification",
+      "oauthClients": [
+        {
+          "id": "81579135390-fbaui3k787sv1v2clgn6ead480mopjkd.apps.googleusercontent.com",
+          "name": "Rafii YouTube",
+          "source": "SEVEN_PROVIDER_ONBOARDING_STATUS_2026-09-28.md; historical general client, not the separate later staging acceptance client"
+        },
+        {
+          "id": null,
+          "name": "Rafii YouTube Staging acceptance",
+          "registeredRedirects": [
+            "https://rafii-consumer-staging.vercel.app/api/oauth/youtube/callback"
+          ],
+          "source": "2026-10-08 staging receipt; exact client ID not revalidated"
+        }
+      ],
+      "brandVerification": {
+        "status": "NO APPROVAL EVIDENCE"
+      },
+      "scopeVerification": {
+        "status": "NO APPROVAL EVIDENCE",
+        "scopeCoverage": []
+      },
+      "declaredScopesSource": "Historical staging read/upload entries; later real read-only receipt. Full current Console declarations and status remain unknown.",
+      "currentConsoleReadback": "NOT COMPLETED"
+    }
+  ],
+  "reconciliationReadOnlyChecks": {
+    "publicRoutes": {
+      "/": "200",
+      "/privacy": "200",
+      "/terms": "200",
+      "/api/health": "200; configured=true; exact sourceRevision"
+    },
+    "callbackDenialRouting": {
+      "youtube": "https://rafii.io/channels/connect?error=access_denied&provider=youtube",
+      "gmail": "https://rafii.io/connectors/connect?error=access_denied&provider=gmail",
+      "scope": "Transport-only denied callback; no actual Google code exchange"
+    },
+    "googleSignIn": "302 to accounts.google.com with the existing client, email/profile scopes and the production Supabase callback; no new consent or authenticated session",
+    "existingYouTubeGrant": "A retained non-revoked historical record has expired access and refresh_supported=false. Metadata is not provider refresh/health acceptance; do not delete or silently upgrade it.",
+    "googleSessionAcceptance": "Existing Google identity rows retained; no fresh successful Google sign-in since the brand notification was proven by this workstream."
+  },
+  "reconciliationConfigurationVerification": {
+    "vercelEnvironmentList": "403 FORBIDDEN",
+    "macCliFallback": "Bounded read-only attempts returned DEVICE_TIMEOUT before dispatch",
+    "currentYouTubeCredentialSource": "UNVERIFIED",
+    "currentCreatorAgenticFleetFlagValues": "UNVERIFIED CURRENT ENVIRONMENT",
+    "lastReleaseInstruction": "PR162 creator, agentic and fleet activation remain off",
+    "runtimeSourceGate": "project_public_gate requires three distinct fresh Google project/client-bound decisions. Brand-only evidence supplies none.",
+    "configurationWrites": 0,
+    "providerGrantsChanged": 0,
+    "databaseWrites": 0,
+    "newSubmissions": 0
+  },
+  "submissionReadiness": {
+    "status": "BLOCKED; NOT READY TO SUBMIT",
+    "operatorTypeAndLegalAddress": "MISSING VERIFIED FORM FACTS",
+    "legalPolicies": "DRAFT in released source; governing-law placeholder retained",
+    "englishDemonstration": "SCRIPT ONLY; NO REAL DEMO URL",
+    "reviewerAccount": "NOT PREPARED/TESTED",
+    "scopeAndClientReadback": "PARTIAL; CURRENT FIELD VALUES STILL NEEDED",
+    "ownerFinalAttestations": "NOT ACCEPTED",
+    "nextProcedure": "Finish factual and demonstrated prerequisites, verify/publish production-project branding as required, then submit exact data-access scopes and the separate applicable YouTube form. Record only actual confirmation and real case references."
+  },
+  "reconciliationProviderEffects": {
+    "newConsent": false,
+    "credentialChanges": false,
+    "privateUpload": false,
+    "publicPublication": false,
+    "reviewSubmission": false,
+    "legalAttestationsAccepted": false
+  },
+  "projectInventoryComplete": false,
+  "projectInventoryScope": "Three relevant projects grounded in approval notification, current Console and existing packet; complete account-wide project inventory was not available.",
+  "readOnlyChecks": {
+    "publicRoutes": {
+      "/": "200",
+      "/privacy": "200",
+      "/terms": "200",
+      "/api/health": "200; configured=true; exact sourceRevision"
+    },
+    "callbackDenialRouting": {
+      "youtube": "https://rafii.io/channels/connect?error=access_denied&provider=youtube",
+      "gmail": "https://rafii.io/connectors/connect?error=access_denied&provider=gmail",
+      "scope": "Transport-only denied callback; no actual Google code exchange"
+    },
+    "googleSignIn": "302 to accounts.google.com with the existing client, email/profile scopes and the production Supabase callback; no new consent or authenticated session",
+    "existingYouTubeGrant": "A retained non-revoked historical record has expired access and refresh_supported=false. Metadata is not provider refresh/health acceptance; do not delete or silently upgrade it.",
+    "googleSessionAcceptance": "Existing Google identity rows retained; no fresh successful Google sign-in since the brand notification was proven by this workstream.",
+    "publicLegalPages": {
+      "https://rafii.io/privacy": {
+        "httpStatus": 200,
+        "source": "Vercel authenticated web fetch of live production 2026-10-11",
+        "pageTitle": "Privacy Policy · Rafii",
+        "legalReviewStatus": "DRAFT / PENDING QUALIFIED LEGAL REVIEW",
+        "placeholdersRemain": true
+      },
+      "https://rafii.io/terms": {
+        "httpStatus": 200,
+        "source": "Vercel authenticated web fetch of live production 2026-10-11",
+        "pageTitle": "Terms of Service · Rafii",
+        "legalReviewStatus": "DRAFT / PENDING QUALIFIED LEGAL REVIEW",
+        "placeholdersRemain": true
+      }
+    }
+  },
+  "reconciliationDocuments": [
+    "BRAND-APPROVAL-20261011.md",
+    "REVIEWER-INSTRUCTIONS-20261011.md"
+  ]
 }

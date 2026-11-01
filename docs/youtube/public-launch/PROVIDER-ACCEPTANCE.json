@@ -28,7 +28,7 @@
       "currentResourceIds": {},
       "priorSource": "/Users/ouxianxing/.codex/visualizations/2026/10/08/01a11a3b-c9a4-7ed0-8992-4f220a76bbb2/rafii-youtube-acceptance/public-rollout-20261008/STAGING-CONNECTION-ACCEPTANCE.json",
       "requiredEvidence": "Actual consent, encrypted credential metadata and channels.list identity readback.",
-      "remainingGate": "Prior staging source only; current production client not configured. Legacy refresh migration requires one reconnect."
+      "remainingGate": "Prior staging source only; current production standard client exists but fresh bound-grant/provider acceptance is absent. Expired legacy production access and disabled refresh were observed in read-only metadata."
     },
     {
       "id": "readonly.manual_verify",
@@ -61,7 +61,7 @@
       "currentResourceIds": {},
       "priorSource": null,
       "requiredEvidence": "Verified production standard client, approved required scopes and independent non-tester consent.",
-      "remainingGate": "Production OAuth/Google verification not configured or approved; independent holder consent absent."
+      "remainingGate": "Production clients exist; exact required scope approval, fresh non-tester holder consent and current environment readback remain absent."
     },
     {
       "id": "oauth.readonly_upgrade",
@@ -405,5 +405,7 @@
     "note": "Increasing Rafii configuration or using resumable chunks does not override global provider file limits. The 500 MiB media forecast is hypothetical and cannot currently be uploaded to this Free-plan storage configuration."
   },
   "newPhaseProviderCalls": 0,
-  "newPhaseProviderAcceptance": "UNEXECUTED"
+  "newPhaseProviderAcceptance": "UNEXECUTED",
+  "reconciledOn": "2026-10-11",
+  "currentReconciliation": "BRAND-APPROVAL-20261011.md; production clients configured per dated 2026-10-10 document and partially revalidated 2026-10-11. No new Google creator acceptance."
 }

@@ -1,0 +1,43 @@
+# Google brand approval and Rafii authorization reconciliation
+
+Reconciled 2026-10-11 UTC. **PARTIAL VERIFIED RECONCILIATION. YouTube review is NOT SUBMITTED in the last dated evidence; no subsequent submission or public-launch approval was established here.** [SUBMISSION-TRACKER.json](SUBMISSION-TRACKER.json) contains the project registry and independent review states. This reconciliation supersedes old statements that the dedicated production OAuth clients do not exist; it does not turn earlier configuration, staging or synthetic evidence into current provider acceptance.
+
+## Project and client map
+
+| Google project | Actual use and verified evidence | Approval and remaining boundary |
+| --- | --- | --- |
+| `postriff` / `692391842023` | Google approval notification received 2026-10-09 07:31:31 UTC. Production Google sign-in redirects to `accounts.google.com` using client `692391842023-hb6avpmgmg9034fuudckjqai46rn7a62.apps.googleusercontent.com`, `email`/`profile` and `https://buoyhkbodnhzngaotoel.supabase.co/auth/v1/callback`. Current Console lists **PostRiff Web (Supabase Auth)**. | **Brand Verification APPROVED for this project only.** The notification contains no sensitive/restricted-scope approval or provider case number. Complete Console client-detail and data-access status readback remains pending. Preserve the existing sign-in client. |
+| `rafii-youtube-production` / `568838253270` | Current authenticated Console lists **Rafii Production Standard** and **Rafii Production Agentic**. Navigating the Standard client gives `568838253270-gt1ggh4hecedn0c67hdfqk7pirqa5dc4.apps.googleusercontent.com` in its project-specific Console detail URL. | No brand or scope approval evidence; existing packet reports **NOT SUBMITTED**. Current Branding offers **Verify branding**; Verification Centre has disabled **Prepare for verification**. Exact status text and the Agentic client ID were not obtained before the browser backend became unavailable. |
+| `rafii-509720` / `81579135390` | Separate staging/reference project. Historical general client is `81579135390-fbaui3k787sv1v2clgn6ead480mopjkd.apps.googleusercontent.com`; a later, separate **Rafii YouTube Staging acceptance** client has real 2026-10-08 read-only staging evidence. | External/Testing is dated prior evidence, not a fresh Console observation. No approval reference was established. Preserve exact legacy issuer custody while needed; do not use this project to claim production review. |
+
+The 2026-10-10 [OAuth configuration record](OAUTH-VERIFICATION.md) establishes the dedicated project's External/In Production configuration, `rafii.io` authorized domain, domain ownership, four scope declarations and separate Standard/AI-designated Agentic Web clients. Both recorded clients have only `https://rafii.io/api/oauth/youtube/callback` and no JavaScript origins. Those field values retain their **2026-10-10** provenance: current client existence and the Standard ID were revalidated, while exact callback, branding, audience, designation and scope values were not fully re-read.
+
+## Scope approval is separate from configured or granted scopes
+
+| Scope | Use in this flow | Approval evidence |
+| --- | --- | --- |
+| `email`, `profile` | Actual production Sign in with Google request | Basic sign-in scopes; `postriff` brand approval is recorded separately. |
+| `youtube.readonly` | Selected creator identity and owned state | Declared in the dedicated project's dated configuration; real historical grants do not prove project-wide verification. |
+| `youtube.upload` | Incremental, exact-asset upload | Declared; dedicated production scope review NOT SUBMITTED. No real production write acceptance. |
+| `youtube.force-ssl` | Reviewed management, captions, playlists, comments and native schedules | Declared; dedicated production scope review NOT SUBMITTED. Powerful scope is not blanket effect consent. |
+| `yt-analytics.readonly` | Nonmonetary creator reports | Declared; dedicated production scope review NOT SUBMITTED. |
+| `gmail.readonly`, `calendar.readonly` | Present alongside YouTube read scope in an existing encrypted historical grant's scope metadata | Historical grant issuer was not decrypted/inspected. Do not attribute these to a configured or approved project merely from stored scopes. Gmail restricted-scope and Calendar sensitive-scope approval remain unverified. |
+
+Google's [verification procedure](https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification) distinguishes branding and data-access review. Published branding is required before data-access submission, which needs scope justification and an English demonstration of actual consent and each requested feature. Do not resubmit `postriff`'s unchanged approved brand, copy its decision to another project, or populate YouTube's runtime `oauthVerification` evidence with a brand-only response. A future branding/scope change must follow Google's applicable re-verification procedure.
+
+## Production and existing connections
+
+- Authenticated Vercel alias readback and live `/api/health` agree on production `b7b9b3ee94f89a80b1d80826226584d214b17847`, deployment `dpl_BUZ9hDn7pY8KwWTV2paXjtbuqv9T`. Homepage, Privacy and Terms returned 200. Live Privacy and Terms explicitly remain draft with placeholders; HTTP availability is not legal review. No production deployment was performed by this workstream.
+- Denied YouTube and Gmail callbacks resolve to the canonical `rafii.io` connection pages. This checks transport routing, not a registered Google allowlist, successful code exchange or fresh account consent.
+- The Google sign-in redirect was inspected without consent or code exchange. Existing Google identities were retained; this workstream establishes no fresh successful sign-in after approval.
+- Read-only production DB metadata shows a retained historical YouTube grant with expired access and `refresh_supported=false`. It is not marked revoked. Keep its ciphertext and authorization history; do not claim it works or erase it. A fresh exact-client consent/connection and subsequent provider readback are still needed.
+- [PR #162](https://github.com/dev-james0723/PostRiff/pull/162) merged 2026-10-10. Its compatibility implementation is present in the running source: new Standard consent selects the dedicated pair; exact bound legacy read-only grants retain their issuer; unknown/raw refresh custody requires reconnect; Agentic never falls back to Standard. Gmail/Calendar configuration paths remain separate. Code and prior CI do not prove this historical grant can refresh.
+- Vercel's protected environment list returned **403**. Bounded Mac CLI/read attempts timed out before dispatch. Current credential selection, actual Creator/Agentic/Fleet flag values and complete callback allowlists remain **UNVERIFIED**. This workstream made zero environment, credential, DB, consent, publication or activation changes. The last release instruction keeps those features off; source gates still require independent Google scope/audit/public-upload decisions bound to the client.
+
+## Submission packet and next prerequisite
+
+Reuse [OAUTH-VERIFICATION.md](OAUTH-VERIFICATION.md), [YOUTUBE-AUDIT.md](YOUTUBE-AUDIT.md), [QUOTA-EXTENSION.md](QUOTA-EXTENSION.md), [REVIEW-DEMO-SHOTLIST.md](REVIEW-DEMO-SHOTLIST.md) and the new [REVIEWER-INSTRUCTIONS-20261011.md](REVIEWER-INSTRUCTIONS-20261011.md). No duplicate application was started.
+
+The released legal configuration remains `draft`, with a governing-law placeholder. The published operator name and documented privacy contact are reusable source facts; applicant type/legal address, exact final form statements and operational disclosures still need verified completion. There is no real English demonstration URL or tested reviewer account. New account-holder scope consent, a reviewed disposable private test asset, and reviewer sharing are also unresolved. These facts prevent a truthful full scope/audit submission now.
+
+After prerequisites are met, verify/publish **this production project's** branding as the current portal requires, submit only demonstrated scopes, then use the separate applicable YouTube audit/quota flow. Record actual provider confirmation, timestamp and any real application/case identifier. Keep absent references null; a script, clicked button, form's static success text or prepared packet is not a receipt. Re-read current quotas before selecting a justified request; existing allocations and forecasts retain their dated provenance. Public publishing and automation remain gated until applicable approval and separately authorized provider acceptance are complete.
