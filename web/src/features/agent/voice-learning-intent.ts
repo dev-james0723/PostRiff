@@ -1,5 +1,5 @@
 export interface VoiceLearningRequest {
-  platform?: 'Instagram' | 'LinkedIn';
+  platform?: 'Instagram' | 'LinkedIn' | 'Bluesky';
   instructions: string;
 }
 
@@ -12,5 +12,7 @@ export function voiceLearningIntent(text: string): VoiceLearningRequest | null {
   if (!analysis || !writing || /\b(?:another|their|his|her)\b|他人|別人|别人/i.test(body)) return null;
   const instagram = /\binstagram\b|\big\b/i.test(body);
   const linkedin = /\blinkedin\b/i.test(body);
-  return { platform: instagram === linkedin ? undefined : instagram ? 'Instagram' : 'LinkedIn', instructions: body };
+  const bluesky = /\bbluesky\b/i.test(body);
+  const platforms = [instagram && 'Instagram', linkedin && 'LinkedIn', bluesky && 'Bluesky'].filter(Boolean) as NonNullable<VoiceLearningRequest['platform']>[];
+  return { platform: platforms.length === 1 ? platforms[0] : undefined, instructions: body };
 }

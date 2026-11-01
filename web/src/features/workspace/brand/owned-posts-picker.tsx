@@ -53,7 +53,7 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
     },
     []
   );
-  const accounts = channels.data?.channels.filter((item) => ['Instagram', 'LinkedIn'].includes(item.platform) && (!preferredPlatform || item.platform === preferredPlatform)) ?? [];
+  const accounts = channels.data?.channels.filter((item) => ['Instagram', 'LinkedIn', 'Bluesky'].includes(item.platform) && (!preferredPlatform || item.platform === preferredPlatform)) ?? [];
   const connectionId = chosenConnectionId || (autoPropose && accounts.length === 1 ? accounts[0].id : '');
   const account = accounts.find((item) => item.id === connectionId);
   const provider = channels.data?.providers.find((item) => item.platform === account?.platform);
@@ -161,7 +161,7 @@ function PickerSession({ workspaceId, revision, preferredPlatform, autoPropose }
           setError('');
         }}
       >
-        <option value=''>{t('Choose an Instagram or LinkedIn account', '選擇 Instagram 或 LinkedIn 帳戶', '选择 Instagram 或 LinkedIn 账户')}</option>
+        <option value=''>{t('Choose an Instagram, LinkedIn or Bluesky account', '選擇 Instagram、LinkedIn 或 Bluesky 帳戶', '选择 Instagram、LinkedIn 或 Bluesky 账户')}</option>
         {accounts.map((item) => (
           <option key={item.id} value={item.id}>
             {item.platform} · {item.account}

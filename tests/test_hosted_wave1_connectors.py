@@ -585,7 +585,7 @@ class Publishing(unittest.TestCase):
         facet = record["facets"][0]["index"]
         self.assertEqual(record["text"].encode()[facet["byteStart"]:facet["byteEnd"]].decode(), "https://rafii.example/x")
         rkey = result["reference"].rsplit("/", 1)[1]
-        bluesky.transport = Wire([ok({"value": {"text": manifest("Bluesky", DID)["payload"]["text"]}})])
+        bluesky.transport = Wire([ok({"value": copy.deepcopy(record)})])
         verified = social.reconcile(manifest("Bluesky", DID), {"providerReference": result["reference"]})
         self.assertEqual(verified["state"], "verified")
         self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Bluesky"}})["state"], "verified")
@@ -734,7 +734,8 @@ class BlueskyIdempotency(unittest.TestCase):
 
     def test_a_retry_that_finds_its_own_earlier_record_is_accepted_not_duplicated(self):
         job = manifest("Bluesky", DID)
-        wire = Wire([ok({"error": "InvalidRequest", "message": "Record already exists"}, 400), ok({"value": {"text": job["payload"]["text"]}})])
+        record = {'$type': 'app.bsky.feed.post', 'text': job['payload']['text'], 'facets': HostedSocial._bluesky_facets(job['payload']['text'])}
+        wire = Wire([ok({"error": "InvalidRequest", "message": "Record already exists"}, 400), ok({"value": record})])
         result = self.social(wire).submit(job)
         self.assertEqual(result["state"], "provider_accepted")
         self.assertEqual(wire.calls[0]["body"]["rkey"], wire.calls[1]["url"].split("rkey=")[1])

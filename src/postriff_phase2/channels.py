@@ -67,8 +67,8 @@ def connection_state(channel, now):
         return "reauthorization_required"
     if not channel.get("identityVerified"):
         return "identity_known" if channel.get("providerAccountId") else "disconnected"
-    refreshable_youtube = channel.get("platform") == "YouTube" and channel.get("refreshSupported") is True
-    if channel.get("expiresAt", 0) <= now and not refreshable_youtube:
+    refreshable = channel.get("platform") in ("YouTube", "Bluesky") and channel.get("refreshSupported") is True
+    if channel.get("expiresAt", 0) <= now and not refreshable:
         return "client_binding_missing" if channel.get('refreshBindingRequired') else "token_expired"
     if not channel.get("scopes"):
         return "scope_missing"

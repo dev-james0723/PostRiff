@@ -47,6 +47,9 @@ test('only selected verified unexpired posts can form a bounded retention reques
 test('Ask Rafii recognizes explicit own-writing analysis without treating it as a draft', () => {
   assert.deepEqual(v.voiceLearningIntent('Analyze my recent Instagram posts and learn how I write.'), { platform: 'Instagram', instructions: 'Analyze my recent Instagram posts and learn how I write.' });
   assert.equal(v.voiceLearningIntent('Analyse my LinkedIn posts and learn my voice').platform, 'LinkedIn');
+  assert.equal(v.voiceLearningIntent('Analyze my recent Bluesky posts and learn my writing style').platform, 'Bluesky');
+  assert.equal(v.voiceLearningIntent('Analyse my Instagram and Bluesky posts').platform, undefined);
+  assert.equal(v.voiceLearningIntent('Publish my Bluesky post now'), null);
   assert.equal(v.voiceLearningIntent('幫我分析 Instagram 貼文，學習我的寫作風格').platform, 'Instagram');
   assert.equal(v.voiceLearningIntent('Write an Instagram post about my piano recital'), null);
   assert.equal(v.voiceLearningIntent('Analyse another author\'s Instagram posts'), null);

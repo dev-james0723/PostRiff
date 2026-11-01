@@ -65,7 +65,7 @@ def public_https_url(url, resolver=socket.getaddrinfo):
 
 
 def pinned_public_json_transport(method, url, headers=None, form=None, body=None, data=None,
-                                 *, resolver=socket.getaddrinfo):
+                                 *, resolver=socket.getaddrinfo, allow_text=False):
     """HTTPS request to a public address resolved once, with TLS verified for the original host.
 
     This avoids the validation/connect DNS race for user-selected Pixelfed instances.
@@ -121,6 +121,13 @@ def pinned_public_json_transport(method, url, headers=None, form=None, body=None
         if len(raw) > 262144:
             raise AlphaError("Provider response limit exceeded.", 502)
         content_type = response.getheader("content-type", "").split(";", 1)[0].strip().lower()
+        if allow_text and content_type == "text/plain":
+            try:
+                decoded = raw.decode("utf-8", errors="strict")
+            except UnicodeError as error:
+                raise AlphaError("The instance returned invalid UTF-8.", 502) from error
+            return {"status": response.status, "headers": {k.lower(): v for k, v in response.getheaders()},
+                    "body": {"raw": decoded}}
         if raw and content_type not in ("application/json", "application/problem+json"):
             raise AlphaError("The instance returned an unsupported response.", 502)
         try:

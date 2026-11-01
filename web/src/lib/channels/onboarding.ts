@@ -10,7 +10,7 @@ export function defaultConnectCapability(provider: ProviderView | undefined, wan
 
 /** Browser hints only. The server rechecks identity, entitlement and actual read permission. */
 export function historyBlocker(channel: ChannelView | undefined, provider: ProviderView | undefined): string | null {
-  if (!channel) return 'Choose a connected Instagram or LinkedIn account.';
+  if (!channel) return 'Choose a connected Instagram, LinkedIn or Bluesky account.';
   const platform = channel.platform;
   if (provider?.executionPaused) return `${platform} is paused. Add samples manually instead.`;
   if (!provider || provider.configured === false || provider.connectReady === false) return `Importing from ${platform} isn't available yet.`;
