@@ -183,6 +183,34 @@ export function Allowances({
   const terms = currentTerms(usage);
   const ent = usage.entitlement;
 
+  if (ent.unlimited) {
+    const accounts = channels.data ? `${connectedAccountCount(channels.data.channels).toLocaleString()} connected` : channels.isPending ? 'Loading…' : 'Unavailable';
+    const people = members.data ? `${activeMemberCount(members.data.members).toLocaleString()} active` : members.isPending ? 'Loading…' : 'Unavailable';
+    const founderRows = [
+      ['AI writing batches', 'Unlimited'],
+      ['Media credits', 'Unlimited'],
+      ['Connected accounts', accounts],
+      ['Members', people],
+      ['Storage', 'Unlimited']
+    ] as const;
+    return (
+      <section className='flex flex-col gap-3' aria-labelledby='usage-heading' data-tour='billing-allowances'>
+        <div className='flex flex-wrap items-center gap-2 px-1'>
+          <h2 id='usage-heading' className='text-foreground text-lg font-medium tracking-tight'>Usage</h2>
+          <span className='text-muted-foreground ml-auto text-sm'>Founder · Unlimited</span>
+        </div>
+        <Surface material='quiet' radius='card' padding='md' className='grid gap-x-8 gap-y-5 sm:grid-cols-2'>
+          {founderRows.map(([label, value]) => (
+            <div key={label} className='flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-sm'>
+              <span className='text-foreground'>{label}</span>
+              <span className='text-muted-foreground tabular-nums'>{value}</span>
+            </div>
+          ))}
+        </Surface>
+      </section>
+    );
+  }
+
   const meters: { label: string; mode: MeterMode; state: MeterState; onRetry?: () => void; over?: ReactNode }[] = [
     {
       label: 'AI writing batches',

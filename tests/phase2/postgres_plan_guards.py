@@ -1,13 +1,14 @@
 """Run after postgres_repository.py; disposable SQL and synthetic worker only."""
 import copy
 import json
+import os
 import sys
 import time
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"src"))
 import psycopg
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.billing import Billing, FixturePaymentProvider, require_plan_capacity
+from postriff_phase2.billing import Billing, FixturePaymentProvider, Ledger, require_plan_capacity, require_publishing
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.hosted_worker import PostgresWorker
 DSN="host=127.0.0.1 port=55438 dbname=postgres"
@@ -44,6 +45,22 @@ with connection() as db:
     try: require_plan_capacity(cur,wid,"members")
     except AlphaError: pass
     else: raise AssertionError("second new join accepted at limit")
+
+    # The designated Founder UUID removes commercial plan ceilings for every workspace they actively own.
+    previous_founder = os.environ.get("RAFII_FOUNDER_UNLIMITED_USER_IDS")
+    os.environ["RAFII_FOUNDER_UNLIMITED_USER_IDS"] = ONE
+    try:
+        require_plan_capacity(cur,wid,"members")
+        require_plan_capacity(cur,wid,"connected_accounts","founder-new-channel")
+        founder_entitlement = Ledger().ensure_entitlement(cur,wid,None)
+        assert founder_entitlement["unlimited"] is True
+        assert founder_entitlement["source"] == "founder"
+        require_publishing(cur,wid,now + 365 * 86400)
+    finally:
+        if previous_founder is None:
+            os.environ.pop("RAFII_FOUNDER_UNLIMITED_USER_IDS", None)
+        else:
+            os.environ["RAFII_FOUNDER_UNLIMITED_USER_IDS"] = previous_founder
 # Private spend does not leave the server for a viewer.
 owner=service.usage(wid,"one"); viewer=service.usage(wid,"two")
 assert owner["budget"] is not None and viewer["budget"] is None
@@ -88,4 +105,4 @@ with connection() as db:
 worker.step()
 assert social.submits==0 and social.checks==1
 assert service.usage(wid,"one")["lifecycle"]["canPublish"] is False
-print(json.dumps({"status":"pass","execution":"disposable local PostgreSQL; synthetic worker","checks":["same period does not refill","new period refills once","member and account caps","non-owner spend redaction","expired trial stops submission","uncertain posts still reconcile"]}))
+print(json.dumps({"status":"pass","execution":"disposable local PostgreSQL; synthetic worker","checks":["same period does not refill","new period refills once","member and account caps","Founder-owned workspace bypasses commercial plan caps","non-owner spend redaction","expired trial stops submission","uncertain posts still reconcile"]}))

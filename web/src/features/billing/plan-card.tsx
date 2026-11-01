@@ -18,6 +18,18 @@ import { PORTAL, type BillingRedirect } from './use-billing-redirect';
  * plan shows its price, because money stays visible. Payment trouble is announced, not tucked away.
  */
 export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOwner: boolean; redirect: BillingRedirect; now: number }) {
+  if (usage.entitlement.unlimited) {
+    return (
+      <Surface material='glass' radius='card' padding='md' className='flex flex-col gap-2' data-tour='billing-plan' aria-labelledby='plan-heading' role='region'>
+        <h2 id='plan-heading' className='flex flex-wrap items-center gap-2 text-2xl font-medium tracking-tight md:text-3xl'>
+          <span className='text-foreground'>Founder</span>
+          <AnimatedBadge status={lifecycleTone('active')} size='sm' contentKey='Unlimited'>Unlimited</AnimatedBadge>
+        </h2>
+        <p className='text-foreground/90 text-base'>Customer plan ceilings do not apply to this workspace.</p>
+      </Surface>
+    );
+  }
+
   const sub = usage.subscription;
   const status = usage.lifecycle?.status;
   const trial = isTrial(usage);

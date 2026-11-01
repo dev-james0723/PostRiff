@@ -16,7 +16,9 @@ import { KIND_LABEL, costCopy, routeKind } from './catalog';
 function BatchesLeft() {
   const usage = useUsage();
   if (usage.isLoading) return <span aria-hidden className='t-skel-pulse bg-muted inline-block h-4 w-24 rounded-md align-middle' />;
-  const remaining = usage.data?.entitlement?.writingBatchesRemaining;
+  const entitlement = usage.data?.entitlement;
+  if (entitlement?.unlimited) return <span>Unlimited writing · Founder</span>;
+  const remaining = entitlement?.writingBatchesRemaining;
   if (typeof remaining !== 'number') return null;
   return (
     <span>

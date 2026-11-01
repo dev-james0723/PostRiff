@@ -115,8 +115,8 @@ export function BillingView() {
           {usage.isError && <LoadError error={usage.error} hasData updatedAt={usage.dataUpdatedAt} onRetry={() => usage.refetch()} />}
           <PlanCard usage={data} isOwner={isOwner} redirect={redirect} now={now} />
           {data.credits ? <CreditBalance balance={data.credits} /> : <Allowances usage={data} channels={channels} members={members} isOwner={isOwner} now={now} />}
-          <Plans usage={data} isOwner={isOwner} redirect={redirect} />
-          {data.credits && isOwner && <CreditPacks />}
+          {!data.entitlement.unlimited && <Plans usage={data} isOwner={isOwner} redirect={redirect} />}
+          {!data.entitlement.unlimited && data.credits && isOwner && <CreditPacks />}
           {/* Run-by-run costs are the owner's; other members simply don't see the section. */}
           {isOwner && <Ledger entries={data.ledger} canEdit={canEdit} />}
         </div>
