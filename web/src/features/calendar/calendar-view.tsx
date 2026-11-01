@@ -24,16 +24,19 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ScheduleDialog } from '@/features/queue/schedule-dialog';
 import { StatusChip } from '@/features/queue/status-chip';
 import { ApiError } from '@/lib/api/client';
-import { useSnapshot } from '@/lib/api/hooks';
+import { useChannels, useSnapshot } from '@/lib/api/hooks';
 import type { Job, Manifest } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { cn } from '@/lib/utils';
+import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { substackManualEntries, substackManualLabel, type SubstackManualEntry } from '@/lib/substack/manual-queue';
 import { CalendarFilters, type ChannelOption } from './calendar-filters';
 import { jobKind, KIND_META, KINDS, reviewExpired, reviewKind, type Kind } from './calendar-kinds';
 import { useLiveSnapshotRefresh, useMinWidth, useNowSeconds } from './use-calendar-live';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
 interface Post {
+  source: 'publishing';
   kind: Kind;
   platform: string;
   account: string;
@@ -48,9 +51,21 @@ interface Post {
   job?: Job;
 }
 
+interface ManualHandoff {
+  source: 'substack';
+  kind: 'manual_handoff';
+  platform: 'Substack';
+  account: string;
+  channelKey: string;
+  at: Date;
+  entry: SubstackManualEntry;
+}
+
+type CalendarItem = Post | ManualHandoff;
+
 const VIEWS = ['month', 'week', 'day'] as const;
 
-const NOUN = { one: 'post', other: 'posts' };
+const NOUN = { one: 'entry', other: 'entries' };
 
 /** Kinds that will not go out as they are: the way forward is a new review of the draft. */
 const NEEDS_NEW_REVIEW = new Set<Kind>(['expired', 'stale', 'held', 'failed']);
@@ -62,11 +77,11 @@ const infoContent = {
   sections: [
     {
       title: 'What shows here',
-      description: 'Posts waiting for review and scheduled posts, at their times in your time zone. Expired and held posts stay visible.'
+      description: 'Posts waiting for review, scheduled posts, and Substack manual handoff targets, in your time zone. A manual handoff target does not publish a post.'
     },
     {
       title: 'Filters',
-      description: 'The chips count posts in the period on screen. Choose one to show only those.'
+      description: 'The chips count entries in the period on screen. Choose one to show only those.'
     },
     {
       title: 'Moving a post',
@@ -134,11 +149,30 @@ function StatusNotes({ post, timeZone, context }: { post: Post; timeZone: string
   );
 }
 
-function PostDetails({ event, context, timeZone, wide }: { event: CalendarEvent<Post>; context: CalendarDetailsContext; timeZone: string; wide: boolean }) {
+function PostDetails({ event, context, timeZone, wide }: { event: CalendarEvent<CalendarItem>; context: CalendarDetailsContext; timeZone: string; wide: boolean }) {
   const post = event.data;
   if (!post) return null;
   const meta = KIND_META[post.kind];
   const when = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(post.at);
+  if (post.source === 'substack') {
+    return (
+      <div className={cn('flex min-w-0 flex-col gap-2', context === 'popover' && 'w-72 max-w-full shrink-0')}>
+        <div className='flex items-center justify-between gap-2'>
+          <span className='flex items-center gap-2 font-medium'><ChannelIcon platform='Substack' name='Substack' size='xs' />Substack</span>
+          <StatusChip tone={post.entry.due ? 'warning' : 'neutral'}>{substackManualLabel(post.entry)}</StatusChip>
+        </div>
+        <p className='text-muted-foreground truncate text-xs'>{post.account}</p>
+        <p className='text-muted-foreground text-xs'>Manual handoff target: {when}</p>
+        <p className='line-clamp-3 text-sm'>{post.entry.title}</p>
+        <p className='text-muted-foreground text-xs'>Finish this draft in Substack. This target and a prepared handoff do not confirm publication.</p>
+        {context === 'popover' && (
+          <Link href={post.entry.href} className={cn('t-learn mt-1 self-start', buttonVariants({ variant: 'quiet', size: 'sm' }))}>
+            Open Substack draft <LearnMoreChevron />
+          </Link>
+        )}
+      </div>
+    );
+  }
   // The approving zone's clock, only when it reads differently from this one (another name for the same offset adds nothing).
   const approvedTime = post.approvedZone && post.approvedZone !== timeZone ? zoneTime(post.at, post.approvedZone) : null;
   const approvedElsewhere = approvedTime && approvedTime !== zoneTime(post.at, timeZone) ? approvedTime : null;
@@ -229,6 +263,8 @@ function errorMessage(error: unknown) {
 
 export function CalendarView() {
   const snapshot = useSnapshot();
+  const connectedChannels = useChannels();
+  const { workspaceId } = useWorkspaceApi();
   const timeZone = useLocalTimeZone();
   const nowSeconds = useNowSeconds();
   const wide = useMinWidth(640);
@@ -265,7 +301,7 @@ export function CalendarView() {
 
   const channels = useMemo(() => phase2?.channels ?? [], [phase2]);
 
-  const allEvents = useMemo<CalendarEvent<Post>[]>(() => {
+  const publishingEvents = useMemo<CalendarEvent<Post>[]>(() => {
     if (!phase2 || !timeZone || expiredKey === null) return [];
     const expired = new Set(expiredKey.split(','));
     const out: CalendarEvent<Post>[] = [];
@@ -284,6 +320,7 @@ export function CalendarView() {
         status: `${manifest.platform}, ${KIND_META[kind].label}`,
         icon: <ChannelIcon platform={manifest.platform} name={manifest.platform} size='xs' />,
         data: {
+          source: 'publishing',
           kind,
           platform: manifest.platform,
           account: manifest.account,
@@ -304,6 +341,32 @@ export function CalendarView() {
     for (const job of phase2.jobs) add(`j-${job.id}`, jobKind(job.state), job.manifest, job);
     return out;
   }, [phase2, channels, timeZone, expiredKey]);
+
+  const allEvents = useMemo<CalendarEvent<CalendarItem>[]>(() => {
+    if (!timeZone || nowSeconds === null) return publishingEvents;
+    const manual = substackManualEntries(
+      snapshot.data?.state,
+      workspaceId,
+      !connectedChannels.isError && connectedChannels.data?.substack?.available === true,
+      nowSeconds
+    );
+    const out: CalendarEvent<CalendarItem>[] = [...publishingEvents];
+    for (const entry of manual) {
+      // Unscheduled handoffs belong to Queue; the calendar never invents a publication time.
+      if (entry.atSeconds === null) continue;
+      const at = new Date(entry.atSeconds * 1000);
+      out.push({
+        id: `substack-${entry.id}`,
+        title: entry.title,
+        start: fromDate(at, timeZone),
+        tone: KIND_META.manual_handoff.tone,
+        status: `Substack, ${substackManualLabel(entry)}`,
+        icon: <ChannelIcon platform='Substack' name='Substack' size='xs' />,
+        data: { source: 'substack', kind: 'manual_handoff', platform: 'Substack', account: entry.publicationUrl, channelKey: entry.connectionId, at, entry }
+      });
+    }
+    return out;
+  }, [publishingEvents, snapshot.data?.state, workspaceId, connectedChannels.isError, connectedChannels.data?.substack?.available, timeZone, nowSeconds]);
 
   // Every connected account, then any account a post went out through that is no longer listed.
   const channelOptions = useMemo<ChannelOption[]>(() => {
@@ -368,7 +431,7 @@ export function CalendarView() {
     if (loading || !timeZone || !focusedDate) return <CalendarSkeleton />;
 
     const range = visibleRange(params.view, focusedDate, DEFAULT_LOCALE, DEFAULT_FIRST_DAY_OF_WEEK);
-    const inRange = (event: CalendarEvent<Post>) => {
+    const inRange = (event: CalendarEvent<CalendarItem>) => {
       const day = toCalendarDate(event.start);
       return day.compare(range.start) >= 0 && day.compare(range.end) <= 0;
     };
@@ -401,10 +464,10 @@ export function CalendarView() {
         : null;
       periodNote = (
         <span className='flex flex-wrap items-center gap-x-2'>
-          {events.length === 0 ? 'No posts match these filters.' : filtering ? `Nothing ${unitPhrase} matches the filters.` : `Nothing ${unitPhrase}.`}
+          {events.length === 0 ? 'No entries match these filters.' : filtering ? `Nothing ${unitPhrase} matches the filters.` : `Nothing ${unitPhrase}.`}
           {target && label && (
             <Button variant='link' size='xs' className='text-foreground h-auto px-0 text-xs' onClick={() => goToDay(toCalendarDate(target.start))}>
-              {after ? 'Next post' : 'Latest post'}: {label}
+              {after ? 'Next entry' : 'Latest entry'}: {label}
               {after ? <Icons.arrowRight /> : null}
             </Button>
           )}

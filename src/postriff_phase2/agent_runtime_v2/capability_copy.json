@@ -589,6 +589,18 @@
   "tool.library_metadata_apply": {
    "en": "Apply reviewed Library details",
    "zh-Hant": "套用已審閱的資料庫詳細資料"
+  },
+  "tool.substack_workspace": {
+   "en": "See Substack drafts and connection capabilities",
+   "zh-Hant": "查看 Substack 草稿與連接能力"
+  },
+  "tool.substack_draft_get": {
+   "en": "Read a Substack draft in Rafii",
+   "zh-Hant": "讀取 Rafii 內的 Substack 草稿"
+  },
+  "tool.substack_draft_save": {
+   "en": "Save Substack drafts for human review",
+   "zh-Hant": "儲存 Substack 草稿供人工審核"
   }
  },
  "providers": {

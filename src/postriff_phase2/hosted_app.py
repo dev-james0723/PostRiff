@@ -303,7 +303,7 @@ def runtime_from_environment(environ=None):
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values), substack_enabled=values.get("RAFII_SUBSTACK_ENABLED") == "1")
     verify.on_first_sighting = lambda principal, session_id, label, eligible: service._alert_new_device(principal, session_id, label, eligible=eligible)
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
@@ -986,6 +986,9 @@ class HostedApplication:
                 return self._json(start_response, 200, service.skill_preview(parts[2], token, parts[4]))
             if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "ideas":
                 return self._ideas(environ, start_response, service, token, method, parts)
+            if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "substack":
+                from .substack_http import handle as substack_handle
+                return substack_handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "connectors":
                 connectors = service.productivity_connectors
                 if len(parts) == 4 and method == "GET":
@@ -1084,7 +1087,10 @@ class HostedApplication:
                 oauth = service.oauth
                 if len(parts) == 4 and method == "GET":
                     from .connection_health import annotate_channels, environment
-                    return self._json(start_response, 200, annotate_channels(oauth.channels(parts[2], token), parts[2], environment(service)))
+                    channels = annotate_channels(oauth.channels(parts[2], token), parts[2], environment(service))
+                    if bool(getattr(getattr(service, "substack", None), "enabled", False)):
+                        channels["substack"] = {"available": True}
+                    return self._json(start_response, 200, channels)
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "start" and method == "POST":
                     body = self._body(environ)
                     extra = {"inputs": body["input"]} if body.get("input") is not None else {}

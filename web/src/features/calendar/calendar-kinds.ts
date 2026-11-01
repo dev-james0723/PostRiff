@@ -7,7 +7,7 @@ import type { Job, Review } from '@/lib/api/types';
  * passed `manifest.expiresAt` (approving it now returns 409), `stale` was invalidated by the backend because
  * something it was checked against changed. Jobs follow `job.state`; `held` is a job the worker will not run.
  */
-export const KINDS = ['review', 'expired', 'stale', 'waiting', 'held', 'in-flight', 'processing', 'accepted', 'uncertain', 'unknown', 'assisted', 'manual', 'verified', 'failed', 'canceled'] as const;
+export const KINDS = ['review', 'expired', 'stale', 'waiting', 'held', 'in-flight', 'processing', 'accepted', 'uncertain', 'unknown', 'assisted', 'manual_handoff', 'manual', 'verified', 'failed', 'canceled'] as const;
 
 export type Kind = (typeof KINDS)[number];
 
@@ -35,6 +35,7 @@ export const KIND_META: Record<Kind, KindMeta> = {
   uncertain: { label: 'Result not confirmed', tone: 'attention', status: 'warning' },
   unknown: { label: 'Unknown', tone: 'attention', status: 'warning' },
   assisted: { label: 'Finish in app', tone: 'attention', status: 'warning' },
+  manual_handoff: { label: 'Manual handoff', tone: 'attention', status: 'warning' },
   manual: { label: 'Marked done', tone: 'quiet', status: 'neutral' },
   verified: { label: 'Published', tone: 'success', status: 'success' },
   failed: { label: 'Failed', tone: 'failure', status: 'danger' },

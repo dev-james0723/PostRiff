@@ -76,6 +76,9 @@ _FOUNDER_READS = ("founder_metric_query", "founder_chart_explain", "founder_enti
                   "founder_cost_breakdown", "founder_incident_read", "founder_source_health", "founder_navigate")
 
 TOOL_POLICY: dict[str, dict] = {
+    # Inline ToolSpecs declare effect/data policy. This metadata names the
+    # server flag; none of these tools can approve or write to Substack.
+    **{name: {"feature_flag": "RAFII_SUBSTACK_ENABLED"} for name in ("substack_workspace", "substack_draft_get", "substack_draft_save")},
     # help and navigation: public product content
     **{name: _read("public", background_eligible=True) for name in ("help_search", "help_get", "route_describe", "skills_list")},
     "ui_navigate": _nav("public"),
@@ -561,6 +564,9 @@ def _build() -> _Built:
     # Its since-2 declaration prevents it joining the immutable legacy grant baseline.
     if "library_browse" in tool_adapter.REGISTRY:
         bind("manager", "library_browse", "tool.library_browse", "none", timeout=tool_adapter.REGISTRY["library_browse"].spec.timeout_seconds)
+    for name in ("substack_workspace", "substack_draft_get", "substack_draft_save"):
+        if name in tool_adapter.REGISTRY:
+            bind("manager", name, _tool_cap_id(name), "none", timeout=tool_adapter.REGISTRY[name].spec.timeout_seconds)
     for key, spec in specialists.SPECIALISTS.items():
         for name in specialists.available(list(spec["tools"]) + specialists.EXTRA_SCOPES.get(key, [])):
             bind("specialist", name, _tool_cap_id(name), tool_legacy(name), timeout=tool_adapter.REGISTRY[name].spec.timeout_seconds)

@@ -49,7 +49,7 @@ DATA_DOMAINS = ("public", "web", "account", "screen", "content", "campaigns", "l
 CONSENT_KEYS = ("memory_cloud", "research_web", "media_cloud", "connector_cloud", "growth", "radar",
                 "voice_sample_route", "library_purpose")
 AUTONOMY = ("ask", "assist")             # autopilot is never a grant level; it is a bounded policy (CF-2 §2)
-CATALOGUE_GENERATION = 2                 # Library metadata writes are post-freeze; old grants still ask.
+CATALOGUE_GENERATION = 3                 # Substack editorial tools are post-freeze; old grants still ask.
 R3_REAUTH_SECONDS = 300                  # DP-5: agent-originated R3 needs a sign-in verified within 5 minutes
 
 
