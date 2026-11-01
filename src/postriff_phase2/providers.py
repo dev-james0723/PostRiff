@@ -226,6 +226,7 @@ from .wave4_connectors import (BilibiliProvider, DouyinProvider, GoogleBusinessP
                                KuaishouProvider, WeiboProvider)  # noqa: E402
 from .wave4b_connectors import LineOfficialAccountProvider, RedditProvider, ZhihuProvider  # noqa: E402
 from .wave4c_connectors import PixelfedProvider, XiaohongshuProvider  # noqa: E402
+from .twitch_oauth import TwitchProvider  # noqa: E402
 
 ADAPTERS = {"linkedin": LinkedInProvider, "threads": ThreadsProvider, "instagram": InstagramProvider,
             "bluesky": BlueskyProvider, "mastodon": MastodonProvider, "telegram": TelegramConnector,
@@ -234,7 +235,7 @@ ADAPTERS = {"linkedin": LinkedInProvider, "threads": ThreadsProvider, "instagram
             "weibo": WeiboProvider, "bilibili": BilibiliProvider, "douyin": DouyinProvider, "kuaishou": KuaishouProvider,
             "google_business_profile": GoogleBusinessProfileProvider,
             "line_official_account": LineOfficialAccountProvider, "reddit": RedditProvider, "zhihu": ZhihuProvider,
-            "pixelfed": PixelfedProvider, "xiaohongshu": XiaohongshuProvider}
+            "pixelfed": PixelfedProvider, "xiaohongshu": XiaohongshuProvider, "twitch": TwitchProvider}
 
 
 def adapter_class_for_platform(platform):
@@ -272,11 +273,16 @@ def registry_from_environment(values, transport=None):
             adapter.webhook_secret = webhook_secret if _credential_shape(webhook_secret) and len(webhook_secret) >= 32 else None
             webhook_configured = bool(adapter.webhook_secret)
         enabled = str(values.get(prefix + "ENABLED", "")).lower() == "true"
+        if provider_id == 'twitch':
+            enabled = adapter.public_connect_enabled
         provider_verified = str(values.get(prefix + "VERIFIED", "")).lower() == "true"
         operator_disabled = str(values.get(prefix + "DISABLED", "")).lower() == "true"
         adapter.execution_enabled = (not operator_disabled
                                      and (enabled or not getattr(cls, "feature_flag_required", False))
                                      and (provider_verified or not getattr(cls, "provider_approval_required", False)))
+        if provider_id == 'twitch':
+            adapter.execution_enabled = adapter.execution_enabled and adapter.commercial_approved
+            adapter.production_reviewed = adapter.production_reviewed and adapter.commercial_approved
         approved_scopes = [scope for scope in re.split(r"[\s,]+", str(values.get(prefix + "APPROVED_SCOPES", "")).strip()) if scope]
         registry.diagnostics[provider_id].update({
             "featureFlagEnabled": enabled if getattr(cls, "feature_flag_required", False) else True,
@@ -292,7 +298,7 @@ def registry_from_environment(values, transport=None):
             "publishLiveTest": adapter.publish_live_tested,
             "analyticsPermission": str(values.get(prefix + "ANALYTICS_APPROVED", "")).lower() == "true",
             "commentsPermission": str(values.get(prefix + "COMMENTS_APPROVED", "")).lower() == "true",
-            "productionEnabled": enabled and adapter.production_reviewed and (provider_verified or not getattr(cls, "provider_approval_required", False)),
+            "productionEnabled": enabled and adapter.production_reviewed and (provider_id != 'twitch' or adapter.execution_enabled) and (provider_verified or not getattr(cls, "provider_approval_required", False)),
         })
         if provider_id == "linkedin":
             # Allows requesting the restricted scope, never substitutes for a real grant.

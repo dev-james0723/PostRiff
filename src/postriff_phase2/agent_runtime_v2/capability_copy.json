@@ -458,6 +458,18 @@
    "en": "Read your workspace summary",
    "zh-Hant": "查看你的工作區摘要"
   },
+  "tool.twitch_action_prepare": {
+   "en": "Prepare a Twitch action for your approval",
+   "zh-Hant": "準備 Twitch 操作供你逐項批准"
+  },
+  "tool.twitch_connection_context": {
+   "en": "Check your connected Twitch accounts",
+   "zh-Hant": "查看已連接的 Twitch 帳戶"
+  },
+  "tool.twitch_metrics_snapshot": {
+   "en": "Read a selected Twitch viewer or follower count",
+   "zh-Hant": "查看指定的 Twitch 觀眾或追蹤人數"
+  },
   "tool.youtube_analytics_summary": {
    "en": "Read your YouTube analytics",
    "zh-Hant": "查看你的 YouTube 分析數據"

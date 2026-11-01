@@ -1,0 +1,45 @@
+{
+  "canonicalRepository": "dev-james0723/PostRiff",
+  "canonicalBranch": "consumer-saas",
+  "canonicalHead": "7432c56d96bc9d042b6f00bdbb6acc1b5bb271f1",
+  "canonicalHeadRecheckedAt": "2026-10-18T17:37:01.718338+00:00",
+  "productionSupabase": "buoyhkbodnhzngaotoel",
+  "forbiddenProductionSubstitute": "oxacvkhpfgytkepxcaqh",
+  "macPreflight": {
+    "observedAt": "2026-10-18T17:36:22.232847+00:00",
+    "head": "80bc24d20397a90257cb5571f8a3914a652bfb51",
+    "trackedStatus": "M src/postriff_phase2/official_social.py\n M src/postriff_phase2/wave3_connectors.py\n M tests/test_official_social.py\n m vendor/xiaohongshu-mcp-v2.5.0-login-fix\n M web/src/features/channels/official-capabilities.tsx\n M web/src/lib/channels/capabilities.ts\n M web/src/lib/channels/state.ts",
+    "worktreeCount": 231,
+    "existingTwitchWorktrees": [],
+    "basePresent": true,
+    "newIsolatedGit": "/Users/ouxianxing/Documents/Rafii-Twitch-FullAccess-20261018/Engineering-G1/git",
+    "canonicalMainMutated": false
+  },
+  "macResourceObservation": {
+    "observedAt": "2026-10-18T17:37:01.718338+00:00",
+    "memoryPressure": {
+      "exit": 0,
+      "value": "2"
+    },
+    "swap": {
+      "exit": 0,
+      "value": "vm.swapusage: total = 41984.00M  used = 40818.56M  free = 1165.44M  (encrypted)"
+    }
+  },
+  "engineeringRunner": "Free isolated Linux workspace; no Mac builds",
+  "addedPaidResources": false,
+  "productionChanges": false,
+  "liveTwitchCalls": false,
+  "otherMissionProcessesStopped": false,
+  "gitPushOrPR": false,
+  "skillsUsed": [
+    "using-git-worktrees",
+    "verification-before-completion"
+  ],
+  "ownership": {
+    "root": "Twitch service, migration, HTTP integration, worker, database/runtime acceptance, commit and delivery",
+    "twitch_oauth_engineering": "OAuth/custody, current Channels projections, composite connection attribution, scoped Agent tools and regression",
+    "twitch_api_verification": "Native API, EventSub verifier hardening, boundary tests and official source mapping",
+    "twitch_native_ui": "Native UI, shared channel/API integration, privacy-aware Site Agent metadata and frontend acceptance"
+  }
+}

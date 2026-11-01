@@ -155,6 +155,12 @@ TOOL_POLICY: dict[str, dict] = {
     "youtube_plan_prepare": _write("content", "connections", idempotency="none", retry_class="never", explicit_request=True, feature_flag=_YOUTUBE),
     "youtube_analytics_summary": _read("analytics", "connections", explicit_request=True, feature_flag=_YOUTUBE,
                                        provider_scopes=(ProviderScope("YouTube", (_YT_READ, _YT_ANALYTICS), lane="agentic", capability="analytics"),)),
+    # Twitch: explicit current-human requests; executors also enforce commercial readiness.
+    # Native mutations remain unapproved drafts even under Full agent permission.
+    "twitch_connection_context": _read("connections", explicit_request=True, feature_flag="RAFII_TWITCH_PUBLIC_CONNECT"),
+    "twitch_metrics_snapshot": _read("analytics", "connections", explicit_request=True, feature_flag="RAFII_TWITCH_PUBLIC_CONNECT"),
+    "twitch_action_prepare": _write("content", "connections", idempotency="none", retry_class="never", explicit_request=True,
+                                     feature_flag="RAFII_TWITCH_PUBLIC_CONNECT"),
     # founder console (tenant 'founder'): consumer grants never apply (INV-7); rafii_control Boundary.authorize decides
     **{name: {"data_grants": (), "resource_scope": "founder_console"} for name in _FOUNDER_READS},
     "founder_draft_message": {"data_grants": (), "idempotency": "none", "retry_class": "never", "resource_scope": "founder_console"},

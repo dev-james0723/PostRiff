@@ -1,0 +1,3920 @@
+{
+  "schemaVersion": 1,
+  "title": "Twitch OAuth, channel projection, pinned SDK and host regression acceptance",
+  "startedAt": "2026-10-18T17:37:16.331834+00:00",
+  "completedAt": "2026-10-18T17:37:22.455422+00:00",
+  "environment": {
+    "python": "3.12.14",
+    "dependencies": {
+      "openai-agents": "0.22.3",
+      "openai": "3.19.2",
+      "cryptography": "50.0.2"
+    },
+    "pythonPath": [
+      "src",
+      "tests",
+      "/workspace/scratch/84c4d423cd8c/twitch-sdk-deps",
+      "/workspace/scratch/84c4d423cd8c/twitch-test-deps"
+    ],
+    "baseCommit": "7432c56d96bc9d042b6f00bdbb6acc1b5bb271f1",
+    "branch": "codex/rafii-twitch-full-20261018",
+    "networkConnections": 0,
+    "blockedNetworkAttempts": 0,
+    "database": "Synthetic semantic SQL fixtures only; no database connection or production RLS claim.",
+    "tracingDisabled": true,
+    "sandbox": "Run outside PID sandbox after a stdlib-only asyncio.to_thread shutdown reproduced a sandbox hang. Socket connections and DNS remained patched closed."
+  },
+  "selection": [
+    "test_agent_capability_registry",
+    "test_agent_permissions",
+    "test_agent_permissions_surfaces",
+    "test_postriff_account_security",
+    "test_postriff_channels",
+    "test_postriff_phase2_hosted",
+    "test_postriff_providers",
+    "test_twitch_agent",
+    "test_twitch_oauth",
+    "test_twitch_refresh_projection",
+    "test_youtube_acceptance",
+    "test_youtube_acceptance_binding",
+    "test_youtube_agent",
+    "test_youtube_agent_calendar",
+    "test_youtube_agent_context",
+    "test_youtube_agent_disconnect",
+    "test_youtube_agent_history",
+    "test_youtube_agent_pagination",
+    "test_youtube_agent_tools",
+    "test_youtube_analytics_grants",
+    "test_youtube_callback_origin",
+    "test_youtube_capacity",
+    "test_youtube_composer_refresh",
+    "test_youtube_connection_safety",
+    "test_youtube_creator",
+    "test_youtube_fleet",
+    "test_youtube_fleet_http",
+    "test_youtube_identity_fence",
+    "test_youtube_journal_fence",
+    "test_youtube_oauth_binding",
+    "test_youtube_openui_fence",
+    "test_youtube_policy_acceptance",
+    "test_youtube_privacy_erasure",
+    "test_youtube_refresh_projection",
+    "test_youtube_reschedule_tracking",
+    "test_youtube_schedule_guard",
+    "test_youtube_service_controls",
+    "test_youtube_thumbnail_receipts",
+    "test_youtube_upload_recovery_safety",
+    "test_youtube_worker_refresh",
+    "test_youtube_workspace_projection",
+    "test_youtube_workspace_provider_data"
+  ],
+  "counts": {
+    "uniqueCollected": 657,
+    "uniqueExecuted": 657,
+    "pass": 657,
+    "fail": 0,
+    "error": 0,
+    "skip": 0,
+    "expectedFailure": 0,
+    "unexpectedSuccess": 0,
+    "duplicateIdsDiscarded": 0,
+    "subtestsCountedAsTests": false
+  },
+  "runtimeSeconds": 6.133015,
+  "testExecutionSeconds": 4.103093,
+  "success": true,
+  "sdkGate": {
+    "id": "test_agent_capability_registry.RegistryMatchesToday.test_sdk_bindings_read_the_registry_timeout",
+    "status": "pass",
+    "runtimeSeconds": 0.006254
+  },
+  "moduleSummaries": {
+    "test_agent_capability_registry": {
+      "uniqueTests": 36,
+      "pass": 36,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.320523
+    },
+    "test_agent_permissions": {
+      "uniqueTests": 48,
+      "pass": 48,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 1.91028
+    },
+    "test_agent_permissions_surfaces": {
+      "uniqueTests": 15,
+      "pass": 15,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.088927
+    },
+    "test_postriff_account_security": {
+      "uniqueTests": 43,
+      "pass": 43,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.081411
+    },
+    "test_postriff_channels": {
+      "uniqueTests": 7,
+      "pass": 7,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.008088
+    },
+    "test_postriff_phase2_hosted": {
+      "uniqueTests": 19,
+      "pass": 19,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.171355
+    },
+    "test_postriff_providers": {
+      "uniqueTests": 14,
+      "pass": 14,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.155932
+    },
+    "test_twitch_agent": {
+      "uniqueTests": 24,
+      "pass": 24,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.029063
+    },
+    "test_twitch_oauth": {
+      "uniqueTests": 51,
+      "pass": 51,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.16834
+    },
+    "test_twitch_refresh_projection": {
+      "uniqueTests": 9,
+      "pass": 9,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.006063
+    },
+    "test_youtube_acceptance": {
+      "uniqueTests": 16,
+      "pass": 16,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.353193
+    },
+    "test_youtube_acceptance_binding": {
+      "uniqueTests": 1,
+      "pass": 1,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.00053
+    },
+    "test_youtube_agent": {
+      "uniqueTests": 31,
+      "pass": 31,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.098633
+    },
+    "test_youtube_agent_calendar": {
+      "uniqueTests": 14,
+      "pass": 14,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.043833
+    },
+    "test_youtube_agent_context": {
+      "uniqueTests": 11,
+      "pass": 11,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.01173
+    },
+    "test_youtube_agent_disconnect": {
+      "uniqueTests": 7,
+      "pass": 7,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.015346
+    },
+    "test_youtube_agent_history": {
+      "uniqueTests": 21,
+      "pass": 21,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.010443
+    },
+    "test_youtube_agent_pagination": {
+      "uniqueTests": 9,
+      "pass": 9,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.012746
+    },
+    "test_youtube_agent_tools": {
+      "uniqueTests": 25,
+      "pass": 25,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.040776
+    },
+    "test_youtube_analytics_grants": {
+      "uniqueTests": 1,
+      "pass": 1,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.000562
+    },
+    "test_youtube_callback_origin": {
+      "uniqueTests": 10,
+      "pass": 10,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.007596
+    },
+    "test_youtube_capacity": {
+      "uniqueTests": 17,
+      "pass": 17,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.016422
+    },
+    "test_youtube_composer_refresh": {
+      "uniqueTests": 10,
+      "pass": 10,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.019188
+    },
+    "test_youtube_connection_safety": {
+      "uniqueTests": 1,
+      "pass": 1,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.005236
+    },
+    "test_youtube_creator": {
+      "uniqueTests": 49,
+      "pass": 49,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.097478
+    },
+    "test_youtube_fleet": {
+      "uniqueTests": 14,
+      "pass": 14,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.025142
+    },
+    "test_youtube_fleet_http": {
+      "uniqueTests": 5,
+      "pass": 5,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.005775
+    },
+    "test_youtube_identity_fence": {
+      "uniqueTests": 11,
+      "pass": 11,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.013418
+    },
+    "test_youtube_journal_fence": {
+      "uniqueTests": 8,
+      "pass": 8,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.00084
+    },
+    "test_youtube_oauth_binding": {
+      "uniqueTests": 41,
+      "pass": 41,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.02837
+    },
+    "test_youtube_openui_fence": {
+      "uniqueTests": 9,
+      "pass": 9,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.086896
+    },
+    "test_youtube_policy_acceptance": {
+      "uniqueTests": 8,
+      "pass": 8,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.00216
+    },
+    "test_youtube_privacy_erasure": {
+      "uniqueTests": 7,
+      "pass": 7,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.004958
+    },
+    "test_youtube_refresh_projection": {
+      "uniqueTests": 2,
+      "pass": 2,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.003557
+    },
+    "test_youtube_reschedule_tracking": {
+      "uniqueTests": 19,
+      "pass": 19,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.072004
+    },
+    "test_youtube_schedule_guard": {
+      "uniqueTests": 5,
+      "pass": 5,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.000611
+    },
+    "test_youtube_service_controls": {
+      "uniqueTests": 3,
+      "pass": 3,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.000568
+    },
+    "test_youtube_thumbnail_receipts": {
+      "uniqueTests": 2,
+      "pass": 2,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.000253
+    },
+    "test_youtube_upload_recovery_safety": {
+      "uniqueTests": 9,
+      "pass": 9,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.118475
+    },
+    "test_youtube_worker_refresh": {
+      "uniqueTests": 14,
+      "pass": 14,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.021801
+    },
+    "test_youtube_workspace_projection": {
+      "uniqueTests": 2,
+      "pass": 2,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.003071
+    },
+    "test_youtube_workspace_provider_data": {
+      "uniqueTests": 9,
+      "pass": 9,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "runtimeSeconds": 0.008572
+    }
+  },
+  "discardedDuplicateIds": [],
+  "tests": [
+    {
+      "id": "test_agent_capability_registry.Fixtures.test_legacy_baseline_v1_is_frozen",
+      "status": "pass",
+      "runtimeSeconds": 0.005764
+    },
+    {
+      "id": "test_agent_capability_registry.Fixtures.test_post_freeze_tool_never_joins_legacy",
+      "status": "pass",
+      "runtimeSeconds": 0.004678
+    },
+    {
+      "id": "test_agent_capability_registry.Fixtures.test_registry_policy_is_frozen",
+      "status": "pass",
+      "runtimeSeconds": 0.005607
+    },
+    {
+      "id": "test_agent_capability_registry.Fixtures.test_todays_behaviour_is_unchanged",
+      "status": "pass",
+      "runtimeSeconds": 9.7e-05
+    },
+    {
+      "id": "test_agent_capability_registry.Invariants.test_consents_only_where_the_executor_refuses_first",
+      "status": "pass",
+      "runtimeSeconds": 0.00018
+    },
+    {
+      "id": "test_agent_capability_registry.Invariants.test_founder_tenant_isolation",
+      "status": "pass",
+      "runtimeSeconds": 0.001128
+    },
+    {
+      "id": "test_agent_capability_registry.Invariants.test_inv10_confirmation_never_drops",
+      "status": "pass",
+      "runtimeSeconds": 0.000688
+    },
+    {
+      "id": "test_agent_capability_registry.Invariants.test_inv6_genui_contract_unchanged",
+      "status": "pass",
+      "runtimeSeconds": 0.000548
+    },
+    {
+      "id": "test_agent_capability_registry.Invariants.test_inv9_new_fields_never_enter_the_tool_digest",
+      "status": "pass",
+      "runtimeSeconds": 0.003594
+    },
+    {
+      "id": "test_agent_capability_registry.Invariants.test_manager_expansion_only_after_an_explicit_choice",
+      "status": "pass",
+      "runtimeSeconds": 0.002578
+    },
+    {
+      "id": "test_agent_capability_registry.Invariants.test_r3_is_native_only",
+      "status": "pass",
+      "runtimeSeconds": 0.000739
+    },
+    {
+      "id": "test_agent_capability_registry.Invariants.test_youtube_provider_scope_matches_the_executor",
+      "status": "pass",
+      "runtimeSeconds": 8.9e-05
+    },
+    {
+      "id": "test_agent_capability_registry.NoUndeclaredDispatch.test_an_undeclared_tool_fails_lint",
+      "status": "pass",
+      "runtimeSeconds": 0.103961
+    },
+    {
+      "id": "test_agent_capability_registry.NoUndeclaredDispatch.test_every_dispatchable_resolves_to_a_declared_entry",
+      "status": "pass",
+      "runtimeSeconds": 0.006979
+    },
+    {
+      "id": "test_agent_capability_registry.NoUndeclaredDispatch.test_lint_is_clean",
+      "status": "pass",
+      "runtimeSeconds": 0.036328
+    },
+    {
+      "id": "test_agent_capability_registry.NoUndeclaredDispatch.test_unknown_ids_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.000203
+    },
+    {
+      "id": "test_agent_capability_registry.NoUndeclaredDispatch.test_wrong_site_executor_is_not_mistaken_for_an_adapter",
+      "status": "pass",
+      "runtimeSeconds": 0.114953
+    },
+    {
+      "id": "test_agent_capability_registry.PublicCatalogue.test_human_titles_in_english_and_traditional_chinese",
+      "status": "pass",
+      "runtimeSeconds": 0.000172
+    },
+    {
+      "id": "test_agent_capability_registry.PublicCatalogue.test_native_only_routes_and_reauth",
+      "status": "pass",
+      "runtimeSeconds": 0.000206
+    },
+    {
+      "id": "test_agent_capability_registry.PublicCatalogue.test_no_internal_scope_names_schemas_or_prompts",
+      "status": "pass",
+      "runtimeSeconds": 0.001803
+    },
+    {
+      "id": "test_agent_capability_registry.PublicCatalogue.test_one_entry_per_consumer_capability",
+      "status": "pass",
+      "runtimeSeconds": 0.004657
+    },
+    {
+      "id": "test_agent_capability_registry.PublicCatalogue.test_per_surface_legacy_confirmation_is_published",
+      "status": "pass",
+      "runtimeSeconds": 0.000109
+    },
+    {
+      "id": "test_agent_capability_registry.RegistryMatchesToday.test_every_tool_capability_mirrors_its_spec",
+      "status": "pass",
+      "runtimeSeconds": 0.003876
+    },
+    {
+      "id": "test_agent_capability_registry.RegistryMatchesToday.test_legacy_confirmation_is_exact_for_every_baseline_surface",
+      "status": "pass",
+      "runtimeSeconds": 0.006013
+    },
+    {
+      "id": "test_agent_capability_registry.RegistryMatchesToday.test_legacy_confirmation_per_surface",
+      "status": "pass",
+      "runtimeSeconds": 0.000501
+    },
+    {
+      "id": "test_agent_capability_registry.RegistryMatchesToday.test_limits_are_the_surfaces_own",
+      "status": "pass",
+      "runtimeSeconds": 0.000558
+    },
+    {
+      "id": "test_agent_capability_registry.RegistryMatchesToday.test_role_requirement_per_surface",
+      "status": "pass",
+      "runtimeSeconds": 0.004737
+    },
+    {
+      "id": "test_agent_capability_registry.RegistryMatchesToday.test_sdk_bindings_read_the_registry_timeout",
+      "status": "pass",
+      "runtimeSeconds": 0.006254
+    },
+    {
+      "id": "test_agent_capability_registry.RegistryMatchesToday.test_site_id_rule_and_exact_executor_are_frozen",
+      "status": "pass",
+      "runtimeSeconds": 0.002008
+    },
+    {
+      "id": "test_agent_capability_registry.RegistryMatchesToday.test_surface_reach_is_todays",
+      "status": "pass",
+      "runtimeSeconds": 0.000615
+    },
+    {
+      "id": "test_agent_capability_registry.RunContextSeams.test_defaults_are_absent",
+      "status": "pass",
+      "runtimeSeconds": 8e-05
+    },
+    {
+      "id": "test_agent_capability_registry.RunContextSeams.test_effect_key_format",
+      "status": "pass",
+      "runtimeSeconds": 0.000282
+    },
+    {
+      "id": "test_agent_capability_registry.ToolSpecFields.test_derivation_table",
+      "status": "pass",
+      "runtimeSeconds": 0.000153
+    },
+    {
+      "id": "test_agent_capability_registry.ToolSpecFields.test_invalid_values_and_combinations_are_refused",
+      "status": "pass",
+      "runtimeSeconds": 0.000262
+    },
+    {
+      "id": "test_agent_capability_registry.ToolSpecFields.test_positional_construction_and_defaults",
+      "status": "pass",
+      "runtimeSeconds": 3.7e-05
+    },
+    {
+      "id": "test_agent_capability_registry.ToolSpecFields.test_public_gains_the_capability_fields",
+      "status": "pass",
+      "runtimeSeconds": 8.6e-05
+    },
+    {
+      "id": "test_agent_permissions.ApprovalEvidenceTest.test_a_valid_approval_allows_exactly_once",
+      "status": "pass",
+      "runtimeSeconds": 0.000266
+    },
+    {
+      "id": "test_agent_permissions.ApprovalEvidenceTest.test_autopilot_is_bounded",
+      "status": "pass",
+      "runtimeSeconds": 0.000782
+    },
+    {
+      "id": "test_agent_permissions.ApprovalEvidenceTest.test_replayed_expired_drifted_or_foreign_approvals_are_refused",
+      "status": "pass",
+      "runtimeSeconds": 0.000333
+    },
+    {
+      "id": "test_agent_permissions.BaselineTest.test_frozen_baseline_is_everything_reachable_at_the_freeze",
+      "status": "pass",
+      "runtimeSeconds": 0.000222
+    },
+    {
+      "id": "test_agent_permissions.BaselineTest.test_legacy_confirmations_are_equal_on_every_registered_surface",
+      "status": "pass",
+      "runtimeSeconds": 0.011326
+    },
+    {
+      "id": "test_agent_permissions.BaselineTest.test_legacy_role_rules_are_unchanged",
+      "status": "pass",
+      "runtimeSeconds": 0.007692
+    },
+    {
+      "id": "test_agent_permissions.ContextGateTest.test_actual_registry_and_only_allow_reads",
+      "status": "pass",
+      "runtimeSeconds": 0.003322
+    },
+    {
+      "id": "test_agent_permissions.ContractTest.test_authz_error_bodies",
+      "status": "pass",
+      "runtimeSeconds": 3.8e-05
+    },
+    {
+      "id": "test_agent_permissions.ContractTest.test_copy_has_every_key_the_contract_names",
+      "status": "pass",
+      "runtimeSeconds": 4.2e-05
+    },
+    {
+      "id": "test_agent_permissions.ContractTest.test_every_membership_end_path_ends_agent_permissions",
+      "status": "pass",
+      "runtimeSeconds": 0.032081
+    },
+    {
+      "id": "test_agent_permissions.ContractTest.test_migration_109_is_the_frozen_proposal",
+      "status": "pass",
+      "runtimeSeconds": 0.000204
+    },
+    {
+      "id": "test_agent_permissions.ContractTest.test_one_error_vocabulary",
+      "status": "pass",
+      "runtimeSeconds": 0.000887
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_ask_assist_and_categories",
+      "status": "pass",
+      "runtimeSeconds": 0.000324
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_confirmation_never_drops_below_the_surface",
+      "status": "pass",
+      "runtimeSeconds": 0.020296
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_explicit_request_counts_only_the_current_human_message",
+      "status": "pass",
+      "runtimeSeconds": 0.00029
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_founder_tenant_bypasses_consumer_grants",
+      "status": "pass",
+      "runtimeSeconds": 8.7e-05
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_membership_role_and_unknown_inputs_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.000637
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_new_capabilities_ask_once_and_ceilings_narrow",
+      "status": "pass",
+      "runtimeSeconds": 0.000529
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_provider_grants",
+      "status": "pass",
+      "runtimeSeconds": 0.000568
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_r2_keeps_its_proposal_and_full_never_lowers_it",
+      "status": "pass",
+      "runtimeSeconds": 0.000857
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_r3_and_native_only",
+      "status": "pass",
+      "runtimeSeconds": 0.000674
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_spend_floor_and_credit_quote",
+      "status": "pass",
+      "runtimeSeconds": 0.000687
+    },
+    {
+      "id": "test_agent_permissions.DecideTest.test_workspace_consent_readers",
+      "status": "pass",
+      "runtimeSeconds": 0.000339
+    },
+    {
+      "id": "test_agent_permissions.GrantsAndPresetsTest.test_custom_starts_from_recommended_for_a_legacy_person",
+      "status": "pass",
+      "runtimeSeconds": 3.9e-05
+    },
+    {
+      "id": "test_agent_permissions.GrantsAndPresetsTest.test_fingerprint_binds_the_person_and_the_body",
+      "status": "pass",
+      "runtimeSeconds": 9.3e-05
+    },
+    {
+      "id": "test_agent_permissions.GrantsAndPresetsTest.test_manager_reach_expansion_is_a_widening_and_none_narrows",
+      "status": "pass",
+      "runtimeSeconds": 0.036079
+    },
+    {
+      "id": "test_agent_permissions.GrantsAndPresetsTest.test_put_validation",
+      "status": "pass",
+      "runtimeSeconds": 0.006243
+    },
+    {
+      "id": "test_agent_permissions.GrantsAndPresetsTest.test_recommended_full_and_none_literals",
+      "status": "pass",
+      "runtimeSeconds": 3.6e-05
+    },
+    {
+      "id": "test_agent_permissions.GrantsAndPresetsTest.test_revoke_from_legacy_never_widens",
+      "status": "pass",
+      "runtimeSeconds": 1.700218
+    },
+    {
+      "id": "test_agent_permissions.GrantsAndPresetsTest.test_step_up_rules",
+      "status": "pass",
+      "runtimeSeconds": 0.002239
+    },
+    {
+      "id": "test_agent_permissions.GrantsAndPresetsTest.test_step_verdict_mapping",
+      "status": "pass",
+      "runtimeSeconds": 0.000333
+    },
+    {
+      "id": "test_agent_permissions.GrantsAndPresetsTest.test_token_changes_with_the_basis_and_is_compared_for_equality_only",
+      "status": "pass",
+      "runtimeSeconds": 0.00022
+    },
+    {
+      "id": "test_agent_permissions.ModeConfigTest.test_dark_by_default_and_fail_closed_activation",
+      "status": "pass",
+      "runtimeSeconds": 0.000178
+    },
+    {
+      "id": "test_agent_permissions.ModeConfigTest.test_permissions_do_not_change_genui_contract_flags",
+      "status": "pass",
+      "runtimeSeconds": 1.9e-05
+    },
+    {
+      "id": "test_agent_permissions.ModeConfigTest.test_task_engine_canonical_switches_are_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 8.5e-05
+    },
+    {
+      "id": "test_agent_permissions.StepUpTest.test_amr_method_time_ignores_iat",
+      "status": "pass",
+      "runtimeSeconds": 0.000262
+    },
+    {
+      "id": "test_agent_permissions.StepUpTest.test_fresh_sign_in_within_five_minutes",
+      "status": "pass",
+      "runtimeSeconds": 3.8e-05
+    },
+    {
+      "id": "test_agent_permissions.StepUpTest.test_stale_refreshed_or_missing_proof_is_refused",
+      "status": "pass",
+      "runtimeSeconds": 9.1e-05
+    },
+    {
+      "id": "test_agent_permissions.TaskStepGateTest.test_only_external_cron_observer_survives_inactive_creator",
+      "status": "pass",
+      "runtimeSeconds": 0.001716
+    },
+    {
+      "id": "test_agent_permissions.TaskStepGateTest.test_shadow_equals_off_even_when_grants_deny_or_fail",
+      "status": "pass",
+      "runtimeSeconds": 0.002073
+    },
+    {
+      "id": "test_agent_permissions.TaskStepGateTest.test_step_reloads_grants_and_preserves_proposal_floor",
+      "status": "pass",
+      "runtimeSeconds": 0.001636
+    },
+    {
+      "id": "test_agent_permissions.ToolGateTest.test_cross_workspace_and_missing_membership",
+      "status": "pass",
+      "runtimeSeconds": 0.009284
+    },
+    {
+      "id": "test_agent_permissions.ToolGateTest.test_enforce_asks_for_confirmation_under_ask",
+      "status": "pass",
+      "runtimeSeconds": 0.002255
+    },
+    {
+      "id": "test_agent_permissions.ToolGateTest.test_enforce_denies_before_the_executor",
+      "status": "pass",
+      "runtimeSeconds": 0.035708
+    },
+    {
+      "id": "test_agent_permissions.ToolGateTest.test_grant_writes_refuse_inside_a_tool",
+      "status": "pass",
+      "runtimeSeconds": 0.000428
+    },
+    {
+      "id": "test_agent_permissions.ToolGateTest.test_off_reads_nothing",
+      "status": "pass",
+      "runtimeSeconds": 0.007402
+    },
+    {
+      "id": "test_agent_permissions.ToolGateTest.test_revocation_applies_to_the_next_tool_call_and_to_resumed_jobs",
+      "status": "pass",
+      "runtimeSeconds": 0.002528
+    },
+    {
+      "id": "test_agent_permissions.ToolGateTest.test_shadow_changes_nothing_golden",
+      "status": "pass",
+      "runtimeSeconds": 0.018594
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_app_state_narrows_without_enabling_context_lens",
+      "status": "pass",
+      "runtimeSeconds": 0.002715
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_background_capability_absence_keeps_human_automations_unchanged",
+      "status": "pass",
+      "runtimeSeconds": 0.001152
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_context_adapter_fails_closed_for_every_non_allow_decision",
+      "status": "pass",
+      "runtimeSeconds": 0.005141,
+      "subtests": 4
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_current_human_youtube_matcher_rejects_quotes_and_negations",
+      "status": "pass",
+      "runtimeSeconds": 0.000122
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_every_ui_binding_resolves_shadow_and_enforced_decisions",
+      "status": "pass",
+      "runtimeSeconds": 0.052824,
+      "subtests": 55
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_executor_rechecks_current_grants_in_effect_transaction",
+      "status": "pass",
+      "runtimeSeconds": 0.001444
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_grounded_site_call_is_gated_and_shadow_result_matches_off",
+      "status": "pass",
+      "runtimeSeconds": 0.000942
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_historical_derived_prose_is_not_replayed_after_domain_revoke",
+      "status": "pass",
+      "runtimeSeconds": 0.000851
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_live_approval_is_rechecked_between_tool_gate_and_effect",
+      "status": "pass",
+      "runtimeSeconds": 0.00134
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_manager_and_specialist_tool_reach_only_narrows_in_enforce",
+      "status": "pass",
+      "runtimeSeconds": 0.003735
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_manifest_shadow_is_identical_including_private_fields_and_revision",
+      "status": "pass",
+      "runtimeSeconds": 0.015814
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_private_style_and_raw_screen_are_removed_before_manager_instructions",
+      "status": "pass",
+      "runtimeSeconds": 0.000698
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_proposal_gate_uses_creator_current_rights_not_decider",
+      "status": "pass",
+      "runtimeSeconds": 0.000914
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_provider_scope_is_bound_to_exact_connection_argument",
+      "status": "pass",
+      "runtimeSeconds": 3.4e-05
+    },
+    {
+      "id": "test_agent_permissions_surfaces.PermissionSurfaces.test_revoked_view_cannot_replay_source_or_reuse_selection",
+      "status": "pass",
+      "runtimeSeconds": 0.001201
+    },
+    {
+      "id": "test_postriff_account_security.AccountRoutes.test_account_routes_are_wired_and_mutations_need_the_guard",
+      "status": "pass",
+      "runtimeSeconds": 0.032167,
+      "subtests": 7
+    },
+    {
+      "id": "test_postriff_account_security.AgentStyleOnProfile.test_a_first_save_starts_from_the_default_style",
+      "status": "pass",
+      "runtimeSeconds": 0.013067
+    },
+    {
+      "id": "test_postriff_account_security.AgentStyleOnProfile.test_a_patch_merges_into_the_saved_style_under_a_row_lock",
+      "status": "pass",
+      "runtimeSeconds": 0.001195
+    },
+    {
+      "id": "test_postriff_account_security.AgentStyleOnProfile.test_a_patch_without_a_style_reads_it_back_guarded",
+      "status": "pass",
+      "runtimeSeconds": 0.000514
+    },
+    {
+      "id": "test_postriff_account_security.AgentStyleOnProfile.test_invalid_styles_are_refused_before_any_query",
+      "status": "pass",
+      "runtimeSeconds": 0.00436,
+      "subtests": 11
+    },
+    {
+      "id": "test_postriff_account_security.AgentStyleOnProfile.test_me_answers_with_the_default_style_before_migration_030",
+      "status": "pass",
+      "runtimeSeconds": 0.001179
+    },
+    {
+      "id": "test_postriff_account_security.AgentStyleOnProfile.test_me_reads_the_saved_style_through_a_savepoint_and_normalises_it",
+      "status": "pass",
+      "runtimeSeconds": 0.00075
+    },
+    {
+      "id": "test_postriff_account_security.AgentStyleOnProfile.test_patch_route_passes_the_style_through",
+      "status": "pass",
+      "runtimeSeconds": 0.00026
+    },
+    {
+      "id": "test_postriff_account_security.AgentStyleOnProfile.test_saving_waits_for_migration_030_and_writes_nothing_else",
+      "status": "pass",
+      "runtimeSeconds": 0.002694,
+      "subtests": 2
+    },
+    {
+      "id": "test_postriff_account_security.AgentStyleOnProfile.test_style_saves_with_other_preferences_in_one_write",
+      "status": "pass",
+      "runtimeSeconds": 0.000932
+    },
+    {
+      "id": "test_postriff_account_security.AssuranceLevel.test_verified_aal_is_aal2_only_when_stamped",
+      "status": "pass",
+      "runtimeSeconds": 0.0001
+    },
+    {
+      "id": "test_postriff_account_security.AssuranceLevel.test_verifier_refuses_aal1_sessions_once_two_factor_is_enforced",
+      "status": "pass",
+      "runtimeSeconds": 0.001069
+    },
+    {
+      "id": "test_postriff_account_security.ChannelsAndWorkspaces.test_my_channels_spans_workspaces_and_marks_who_may_manage",
+      "status": "pass",
+      "runtimeSeconds": 0.000538
+    },
+    {
+      "id": "test_postriff_account_security.ChannelsAndWorkspaces.test_workspace_summary_reads_plan_owner_and_role_counts",
+      "status": "pass",
+      "runtimeSeconds": 3e-05
+    },
+    {
+      "id": "test_postriff_account_security.ChannelsAndWorkspaces.test_workspaces_route_carries_the_summary",
+      "status": "pass",
+      "runtimeSeconds": 0.000276
+    },
+    {
+      "id": "test_postriff_account_security.IdentityAdmin.test_verified_factors_and_logout_others_use_the_right_endpoints",
+      "status": "pass",
+      "runtimeSeconds": 6.1e-05
+    },
+    {
+      "id": "test_postriff_account_security.MyInvitations.test_accept_matches_the_email_and_joins_like_the_link_does",
+      "status": "pass",
+      "runtimeSeconds": 0.000476
+    },
+    {
+      "id": "test_postriff_account_security.MyInvitations.test_accept_refuses_someone_elses_or_settled_invitation",
+      "status": "pass",
+      "runtimeSeconds": 0.001357
+    },
+    {
+      "id": "test_postriff_account_security.MyInvitations.test_decline_revokes_and_audits_against_the_workspace",
+      "status": "pass",
+      "runtimeSeconds": 0.000527
+    },
+    {
+      "id": "test_postriff_account_security.MyInvitations.test_lists_pending_invitations_for_my_email_only",
+      "status": "pass",
+      "runtimeSeconds": 0.00023
+    },
+    {
+      "id": "test_postriff_account_security.MyInvitations.test_unavailable_without_a_confirmed_email",
+      "status": "pass",
+      "runtimeSeconds": 0.000574
+    },
+    {
+      "id": "test_postriff_account_security.NewDeviceAlerts.test_first_sighting_emails_only_when_the_person_opted_in",
+      "status": "pass",
+      "runtimeSeconds": 0.002521
+    },
+    {
+      "id": "test_postriff_account_security.NewDeviceAlerts.test_mailer_renders_the_alert_with_device_and_profile_link",
+      "status": "pass",
+      "runtimeSeconds": 0.001206
+    },
+    {
+      "id": "test_postriff_account_security.NewDeviceAlerts.test_no_public_base_url_means_no_alert",
+      "status": "pass",
+      "runtimeSeconds": 0.000516
+    },
+    {
+      "id": "test_postriff_account_security.NewDeviceAlerts.test_sessions_route_takes_the_same_path",
+      "status": "pass",
+      "runtimeSeconds": 0.000403
+    },
+    {
+      "id": "test_postriff_account_security.OwnershipTransfer.test_cannot_transfer_to_self",
+      "status": "pass",
+      "runtimeSeconds": 0.000492
+    },
+    {
+      "id": "test_postriff_account_security.OwnershipTransfer.test_members_route_reports_display_name",
+      "status": "pass",
+      "runtimeSeconds": 0.000253
+    },
+    {
+      "id": "test_postriff_account_security.OwnershipTransfer.test_needs_a_fresh_sign_in",
+      "status": "pass",
+      "runtimeSeconds": 0.000323
+    },
+    {
+      "id": "test_postriff_account_security.OwnershipTransfer.test_only_the_owner_can_transfer",
+      "status": "pass",
+      "runtimeSeconds": 0.000396
+    },
+    {
+      "id": "test_postriff_account_security.OwnershipTransfer.test_swaps_roles_atomically_and_audits_it",
+      "status": "pass",
+      "runtimeSeconds": 0.00025
+    },
+    {
+      "id": "test_postriff_account_security.OwnershipTransfer.test_target_must_be_an_active_admin",
+      "status": "pass",
+      "runtimeSeconds": 0.000677
+    },
+    {
+      "id": "test_postriff_account_security.SecondFactorService.test_dev_identities_report_two_factor_unavailable",
+      "status": "pass",
+      "runtimeSeconds": 0.000625
+    },
+    {
+      "id": "test_postriff_account_security.SecondFactorService.test_disable_needs_a_fresh_aal2_session",
+      "status": "pass",
+      "runtimeSeconds": 0.000712
+    },
+    {
+      "id": "test_postriff_account_security.SecondFactorService.test_enable_needs_aal2_and_a_verified_factor_then_records_and_audits",
+      "status": "pass",
+      "runtimeSeconds": 0.000784
+    },
+    {
+      "id": "test_postriff_account_security.SecondFactorService.test_enable_works_without_an_identity_admin",
+      "status": "pass",
+      "runtimeSeconds": 0.000368
+    },
+    {
+      "id": "test_postriff_account_security.SecondFactorService.test_me_reports_enforcement_and_current_session",
+      "status": "pass",
+      "runtimeSeconds": 0.000366
+    },
+    {
+      "id": "test_postriff_account_security.SecurityActivity.test_feed_merges_audit_events_about_me_with_first_sign_ins_newest_first",
+      "status": "pass",
+      "runtimeSeconds": 0.000258
+    },
+    {
+      "id": "test_postriff_account_security.SecurityActivity.test_limit_is_bounded",
+      "status": "pass",
+      "runtimeSeconds": 0.000218
+    },
+    {
+      "id": "test_postriff_account_security.SecuritySurfaceContract.test_hosted_mfa_offers_totp_while_passkeys_are_account_unlock",
+      "status": "pass",
+      "runtimeSeconds": 0.00038
+    },
+    {
+      "id": "test_postriff_account_security.SessionsAndProfile.test_display_name_is_bounded_and_normalised",
+      "status": "pass",
+      "runtimeSeconds": 0.00222,
+      "subtests": 4
+    },
+    {
+      "id": "test_postriff_account_security.SessionsAndProfile.test_leave_workspace_refuses_the_owner",
+      "status": "pass",
+      "runtimeSeconds": 0.000545
+    },
+    {
+      "id": "test_postriff_account_security.SessionsAndProfile.test_preferences_are_validated_and_only_present_keys_change",
+      "status": "pass",
+      "runtimeSeconds": 0.004731,
+      "subtests": 6
+    },
+    {
+      "id": "test_postriff_account_security.SessionsAndProfile.test_revoke_others_spares_the_current_session_and_signs_out_remotely",
+      "status": "pass",
+      "runtimeSeconds": 0.000811
+    },
+    {
+      "id": "test_postriff_channels.Routes.test_callback_uri_requires_public_https_base",
+      "status": "pass",
+      "runtimeSeconds": 0.0003
+    },
+    {
+      "id": "test_postriff_channels.Routes.test_channel_routes_and_public_callback_redirect",
+      "status": "pass",
+      "runtimeSeconds": 0.002519
+    },
+    {
+      "id": "test_postriff_channels.Taxonomy.test_connection_state_dimensions",
+      "status": "pass",
+      "runtimeSeconds": 3.3e-05
+    },
+    {
+      "id": "test_postriff_channels.Taxonomy.test_levels_require_evidence_and_states_are_independent",
+      "status": "pass",
+      "runtimeSeconds": 4.9e-05
+    },
+    {
+      "id": "test_postriff_channels.Taxonomy.test_resolve_time_records_tzdb",
+      "status": "pass",
+      "runtimeSeconds": 0.001524
+    },
+    {
+      "id": "test_postriff_channels.Vault.test_pkce_pair_is_s256",
+      "status": "pass",
+      "runtimeSeconds": 6.5e-05
+    },
+    {
+      "id": "test_postriff_channels.Vault.test_roundtrip_key_binding_and_unconfigured",
+      "status": "pass",
+      "runtimeSeconds": 0.003598
+    },
+    {
+      "id": "test_postriff_phase2_hosted.AcceptUpdateFromIdeas.test_accept_update_works_for_hosted_candidates_without_a_local_run",
+      "status": "pass",
+      "runtimeSeconds": 0.00025
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_client_address_and_label_are_bounded",
+      "status": "pass",
+      "runtimeSeconds": 0.000138
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_error_codes_preserve_status_and_message",
+      "status": "pass",
+      "runtimeSeconds": 0.000318
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_grants_cannot_escalate_beyond_granter",
+      "status": "pass",
+      "runtimeSeconds": 5.4e-05
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_health_reports_only_a_valid_deployment_commit",
+      "status": "pass",
+      "runtimeSeconds": 0.00194,
+      "subtests": 3
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_hosted_command_engine_reuses_state_logic_and_blocks_backend_shortcuts",
+      "status": "pass",
+      "runtimeSeconds": 0.000215,
+      "subtests": 4
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_identity_admin_never_places_service_key_in_url",
+      "status": "pass",
+      "runtimeSeconds": 4e-05
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_media_edits_use_live_membership_and_samples_stay_read_only",
+      "status": "pass",
+      "runtimeSeconds": 0.003086,
+      "subtests": 4
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_model_rescan_is_an_authenticated_mutation",
+      "status": "pass",
+      "runtimeSeconds": 0.000639
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_permission_matrix_matches_architecture_roles",
+      "status": "pass",
+      "runtimeSeconds": 6.2e-05
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_restoring_voice_requires_owner",
+      "status": "pass",
+      "runtimeSeconds": 6.3e-05,
+      "subtests": 4
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_signed_delivery_url_accepts_storage_relative_paths_and_rejects_other_targets",
+      "status": "pass",
+      "runtimeSeconds": 0.007947,
+      "subtests": 11
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_storage_descriptors_are_private_immutable_and_bounded",
+      "status": "pass",
+      "runtimeSeconds": 0.000569
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_verified_auth_time_is_stale_when_missing",
+      "status": "pass",
+      "runtimeSeconds": 6.9e-05
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_verified_session_id_is_bound_to_verified_subject",
+      "status": "pass",
+      "runtimeSeconds": 3.7e-05
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_wsgi_auth_origin_and_cron_boundaries",
+      "status": "pass",
+      "runtimeSeconds": 0.149243
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_wsgi_hosted_lifecycle_routes_require_verified_mutations",
+      "status": "pass",
+      "runtimeSeconds": 0.003946
+    },
+    {
+      "id": "test_postriff_phase2_hosted.HostedPhase2Acceptance.test_wsgi_membership_invitation_session_routes",
+      "status": "pass",
+      "runtimeSeconds": 0.002565
+    },
+    {
+      "id": "test_postriff_phase2_hosted.LearningExtractorDisclosureTest.test_configured_extractor_and_effective_consent",
+      "status": "pass",
+      "runtimeSeconds": 0.000174
+    },
+    {
+      "id": "test_postriff_providers.Adapters.test_linkedin_flow_shapes",
+      "status": "pass",
+      "runtimeSeconds": 0.001106
+    },
+    {
+      "id": "test_postriff_providers.Adapters.test_linkedin_introspection_binds_active_token_and_client",
+      "status": "pass",
+      "runtimeSeconds": 0.000112
+    },
+    {
+      "id": "test_postriff_providers.Adapters.test_provider_error_is_502_not_silent",
+      "status": "pass",
+      "runtimeSeconds": 0.000133
+    },
+    {
+      "id": "test_postriff_providers.Adapters.test_provider_kill_switch_stops_before_any_grant_or_transport",
+      "status": "pass",
+      "runtimeSeconds": 0.000308
+    },
+    {
+      "id": "test_postriff_providers.Adapters.test_registry_mounts_only_with_credentials_and_reviewed_flag_is_explicit",
+      "status": "pass",
+      "runtimeSeconds": 0.0005
+    },
+    {
+      "id": "test_postriff_providers.Adapters.test_threads_and_instagram_two_step_exchange",
+      "status": "pass",
+      "runtimeSeconds": 0.001034,
+      "subtests": 2
+    },
+    {
+      "id": "test_postriff_providers.Adapters.test_threads_scope_inspection_never_substitutes_requested_permissions",
+      "status": "pass",
+      "runtimeSeconds": 5.5e-05
+    },
+    {
+      "id": "test_postriff_providers.HostedPlatformsHaveLimits.test_every_hosted_oauth_platform_has_publish_limits",
+      "status": "pass",
+      "runtimeSeconds": 7e-05
+    },
+    {
+      "id": "test_postriff_providers.MultiDestination.test_approve_many_groups_jobs_under_one_schedule_and_daily_limit_holds",
+      "status": "pass",
+      "runtimeSeconds": 0.151904
+    },
+    {
+      "id": "test_postriff_providers.Worker.test_instagram_requires_image_and_holds_without_grant",
+      "status": "pass",
+      "runtimeSeconds": 9.3e-05
+    },
+    {
+      "id": "test_postriff_providers.Worker.test_linkedin_submit_and_reconcile_classification",
+      "status": "pass",
+      "runtimeSeconds": 0.000356
+    },
+    {
+      "id": "test_postriff_providers.Worker.test_threads_container_flow_and_reconcile_by_container",
+      "status": "pass",
+      "runtimeSeconds": 0.000137
+    },
+    {
+      "id": "test_postriff_providers.Worker.test_threads_readback_needs_exact_author_even_when_id_and_text_match",
+      "status": "pass",
+      "runtimeSeconds": 0.000102
+    },
+    {
+      "id": "test_postriff_providers.Worker.test_unreviewed_provider_holds_and_never_calls_network",
+      "status": "pass",
+      "runtimeSeconds": 2.2e-05
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_agent_schedule_contract_matches_native_service_rfc3339",
+      "status": "pass",
+      "runtimeSeconds": 0.009614
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_ai_purpose_authorization_is_independent_and_only_local_context_survives",
+      "status": "pass",
+      "runtimeSeconds": 0.001605
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_both_operator_flags_required_before_any_workspace_or_native_call",
+      "status": "pass",
+      "runtimeSeconds": 0.001196,
+      "subtests": 5
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_connection_facts_are_workspace_bound_and_strip_all_provider_prose",
+      "status": "pass",
+      "runtimeSeconds": 0.000345
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_connection_projection_is_bounded_and_malformed_rows_are_not_reported",
+      "status": "pass",
+      "runtimeSeconds": 0.000511
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_current_human_request_cannot_come_from_args_or_earlier_context",
+      "status": "pass",
+      "runtimeSeconds": 0.000302
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_educational_and_negated_prose_never_authorizes",
+      "status": "pass",
+      "runtimeSeconds": 0.000228
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_english_and_chinese_explicit_owned_requests_are_accepted",
+      "status": "pass",
+      "runtimeSeconds": 0.000168
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_foreign_non_twitch_unverified_and_revoked_connections_fail_before_service",
+      "status": "pass",
+      "runtimeSeconds": 0.002013,
+      "subtests": 12
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_instructions_explain_native_human_approval_and_metric_limits",
+      "status": "pass",
+      "runtimeSeconds": 0.000163
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_invalid_and_missing_counters_never_become_a_zero",
+      "status": "pass",
+      "runtimeSeconds": 0.002707,
+      "subtests": 16
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_model_cannot_select_workspace_token_consent_approval_or_dispatch",
+      "status": "pass",
+      "runtimeSeconds": 0.00062
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_native_metrics_are_exact_numeric_snapshots_without_private_text",
+      "status": "pass",
+      "runtimeSeconds": 0.000637
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_no_live_stream_is_not_reported_as_zero_viewers",
+      "status": "pass",
+      "runtimeSeconds": 0.00028
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_no_oauth_stream_key_download_read_or_unsupported_action_can_be_prepared",
+      "status": "pass",
+      "runtimeSeconds": 0.00098
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_non_finite_large_payloads_and_times_never_reach_preview",
+      "status": "pass",
+      "runtimeSeconds": 0.000613
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_permissions_intersect_current_request_domain_role_and_generation",
+      "status": "pass",
+      "runtimeSeconds": 0.000648
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_prepare_only_calls_preview_under_agent_context_and_remains_unapproved",
+      "status": "pass",
+      "runtimeSeconds": 0.000378
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_quoted_code_and_lazy_markdown_instructions_are_data",
+      "status": "pass",
+      "runtimeSeconds": 0.001449,
+      "subtests": 8
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_registered_once_with_small_scopes_and_no_effect_tools",
+      "status": "pass",
+      "runtimeSeconds": 0.000512
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_tools_require_the_real_permissioned_execution_context",
+      "status": "pass",
+      "runtimeSeconds": 0.000425
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_upstream_approval_claims_and_malformed_receipts_do_not_enter_effect_ledger",
+      "status": "pass",
+      "runtimeSeconds": 0.001354
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_voice_wrong_scope_cancel_and_live_role_do_not_create_drafts",
+      "status": "pass",
+      "runtimeSeconds": 0.001254,
+      "subtests": 5
+    },
+    {
+      "id": "test_twitch_agent.TwitchToolTests.test_wrong_subject_accepted_unconfirmed_and_wrong_shapes_are_blocked",
+      "status": "pass",
+      "runtimeSeconds": 0.001061
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_app_rotation_projects_reconnect_without_exposing_or_using_old_tokens",
+      "status": "pass",
+      "runtimeSeconds": 0.006629
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_channels_project_current_expiry_refresh_and_scope_loss_without_network",
+      "status": "pass",
+      "runtimeSeconds": 0.003669
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_common_flow_encrypts_tokens_and_returns_no_credentials",
+      "status": "pass",
+      "runtimeSeconds": 0.003406
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_concurrent_refresh_is_serialized_once",
+      "status": "pass",
+      "runtimeSeconds": 0.004799
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_configuration_change_after_start_rejected_before_exchange",
+      "status": "pass",
+      "runtimeSeconds": 0.001378
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_cross_workspace_callback_cannot_exchange",
+      "status": "pass",
+      "runtimeSeconds": 0.001041
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_current_twitch_metadata_remains_workspace_bound",
+      "status": "pass",
+      "runtimeSeconds": 0.003284
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_disconnect_before_profile_save_prevents_stale_restoration",
+      "status": "pass",
+      "runtimeSeconds": 0.00271
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_disconnect_revokes_refresh_custody_and_native_jobs_atomically",
+      "status": "pass",
+      "runtimeSeconds": 0.002723
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_disconnected_token_is_unavailable_across_tenants",
+      "status": "pass",
+      "runtimeSeconds": 0.002791
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_every_worker_access_validates_including_new_process",
+      "status": "pass",
+      "runtimeSeconds": 0.003276
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_expired_token_rotates_both_credentials_atomically",
+      "status": "pass",
+      "runtimeSeconds": 0.088263
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_expired_twitch_access_is_refreshable_without_inventing_publish",
+      "status": "pass",
+      "runtimeSeconds": 0.003066
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_failed_provider_exchange_stays_consumed",
+      "status": "pass",
+      "runtimeSeconds": 0.00173
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_foreign_connection_id_does_not_expand_scopes",
+      "status": "pass",
+      "runtimeSeconds": 0.001027
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_hourly_sweep_validates_active_and_never_calls_when_paused",
+      "status": "pass",
+      "runtimeSeconds": 0.002267
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_missing_refresh_does_not_hide_expired_access",
+      "status": "pass",
+      "runtimeSeconds": 0.003308
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_native_upgrade_preserves_and_displays_old_granted_scopes",
+      "status": "pass",
+      "runtimeSeconds": 0.002876
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_new_consent_cannot_be_erased_by_stale_revocation",
+      "status": "pass",
+      "runtimeSeconds": 0.003621
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_other_member_callback_cannot_exchange",
+      "status": "pass",
+      "runtimeSeconds": 0.001336
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_reconnect_is_bound_to_selected_account",
+      "status": "pass",
+      "runtimeSeconds": 0.002757
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_reconnect_replaces_consent_generation",
+      "status": "pass",
+      "runtimeSeconds": 0.002761
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_revoked_refresh_persists_local_disconnect",
+      "status": "pass",
+      "runtimeSeconds": 0.002319
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_scope_loss_is_recorded_and_invalidates_queued_authority",
+      "status": "pass",
+      "runtimeSeconds": 0.002582
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_stale_channel_cannot_hide_revoked_or_missing_custody",
+      "status": "pass",
+      "runtimeSeconds": 0.002889
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_state_replay_never_reexchanges",
+      "status": "pass",
+      "runtimeSeconds": 0.002788
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_transient_validation_failure_preserves_tokens_and_scopes",
+      "status": "pass",
+      "runtimeSeconds": 0.001789
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_viewer_cannot_request_native_scopes",
+      "status": "pass",
+      "runtimeSeconds": 0.001029
+    },
+    {
+      "id": "test_twitch_oauth.TwitchCustodyTests.test_wrong_refresh_subject_invalidates_only_local_generation",
+      "status": "pass",
+      "runtimeSeconds": 0.002011
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_app_token_without_user_cannot_be_a_user_connection",
+      "status": "pass",
+      "runtimeSeconds": 4.8e-05
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_callback_is_exact_and_ignores_request_input",
+      "status": "pass",
+      "runtimeSeconds": 0.000101,
+      "subtests": 6
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_cleanup_revoke_allowed_even_while_release_paused",
+      "status": "pass",
+      "runtimeSeconds": 7.8e-05
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_client_rotation_rejects_old_vault_envelope_without_network",
+      "status": "pass",
+      "runtimeSeconds": 6e-05
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_cold_callback_and_authorization_use_the_same_canonical_origin",
+      "status": "pass",
+      "runtimeSeconds": 0.000135,
+      "subtests": 5
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_defaults_cannot_start_or_exchange",
+      "status": "pass",
+      "runtimeSeconds": 2.4e-05
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_envelope_version_must_be_an_integer",
+      "status": "pass",
+      "runtimeSeconds": 5.8e-05
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_eventsub_consent_is_selected_subtype_only",
+      "status": "pass",
+      "runtimeSeconds": 0.001808,
+      "subtests": 35
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_exchange_uses_validate_scopes_and_seals_both_tokens",
+      "status": "pass",
+      "runtimeSeconds": 0.000211
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_identity_checks_token_subject_and_never_returns_email",
+      "status": "pass",
+      "runtimeSeconds": 0.000107
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_malformed_credentials_do_not_mount_or_leak",
+      "status": "pass",
+      "runtimeSeconds": 0.000176
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_minimal_identity_authorize_has_no_pkce_or_email",
+      "status": "pass",
+      "runtimeSeconds": 0.00022
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_progressive_native_scopes_only",
+      "status": "pass",
+      "runtimeSeconds": 0.000151
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_refresh_and_access_envelopes_cannot_be_swapped",
+      "status": "pass",
+      "runtimeSeconds": 0.000103
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_refresh_preserves_generation_and_subject",
+      "status": "pass",
+      "runtimeSeconds": 7.4e-05
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_refresh_rejects_changed_subject",
+      "status": "pass",
+      "runtimeSeconds": 5.4e-05
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_registry_rejects_conflicting_callback_pin",
+      "status": "pass",
+      "runtimeSeconds": 0.000141
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_registry_requires_both_independent_flags",
+      "status": "pass",
+      "runtimeSeconds": 0.000367,
+      "subtests": 4
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_token_shapes_and_scope_shapes_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.000171,
+      "subtests": 6
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_token_validation_subject_matches_saved_connection",
+      "status": "pass",
+      "runtimeSeconds": 7.2e-05
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_transport_error_and_upstream_body_are_not_exposed",
+      "status": "pass",
+      "runtimeSeconds": 2.6e-05
+    },
+    {
+      "id": "test_twitch_oauth.TwitchProviderTests.test_wrong_client_rejected_before_helix_identity",
+      "status": "pass",
+      "runtimeSeconds": 3e-05
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_client_rotation_and_wrong_subject_are_local_reconnect_facts",
+      "status": "pass",
+      "runtimeSeconds": 0.001611
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_connected_by_is_bound_to_workspace_and_connection_together",
+      "status": "pass",
+      "runtimeSeconds": 0.000296
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_current_refresh_expiry_and_zero_scope_identity_reach_both_views",
+      "status": "pass",
+      "runtimeSeconds": 0.001202
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_expired_refreshable_access_does_not_become_false_reconnect",
+      "status": "pass",
+      "runtimeSeconds": 0.000614
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_failed_session_verification_precedes_any_projection_query",
+      "status": "pass",
+      "runtimeSeconds": 0.000156
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_identical_connection_ids_keep_each_workspaces_vault_and_role_facts",
+      "status": "pass",
+      "runtimeSeconds": 0.000304
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_missing_or_disabled_refresh_has_the_current_custody_state",
+      "status": "pass",
+      "runtimeSeconds": 0.000958,
+      "subtests": 2
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_revoked_and_absent_custody_override_stale_verified_channel",
+      "status": "pass",
+      "runtimeSeconds": 0.000643
+    },
+    {
+      "id": "test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_serialized_mixed_provider_profiles_preserve_unrelated_state",
+      "status": "pass",
+      "runtimeSeconds": 0.000279
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_a_single_case_cannot_mark_identity_ready",
+      "status": "pass",
+      "runtimeSeconds": 0.009948
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_apply_requires_exact_snapshot_digest_and_merges_only_acceptance",
+      "status": "pass",
+      "runtimeSeconds": 0.007393
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_cli_apply_without_digest_stops_before_database_access",
+      "status": "pass",
+      "runtimeSeconds": 0.002224
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_connected_requires_all_ten_connection_cases",
+      "status": "pass",
+      "runtimeSeconds": 0.009015
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_fixture_injected_missing_and_secret_provenance_are_rejected",
+      "status": "pass",
+      "runtimeSeconds": 0.049691,
+      "subtests": 7
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_foreign_client_or_actual_scopes_are_rejected",
+      "status": "pass",
+      "runtimeSeconds": 0.01543,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_foreign_response_route_method_and_resource_are_rejected",
+      "status": "pass",
+      "runtimeSeconds": 0.034074,
+      "subtests": 5
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_hash_and_complete_behavior_attestation_are_required",
+      "status": "pass",
+      "runtimeSeconds": 0.021511,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_identity_preview_is_deterministic_and_does_not_mutate_settings",
+      "status": "pass",
+      "runtimeSeconds": 0.007146
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_json_duplicates_nonfinite_and_path_escape_are_rejected",
+      "status": "pass",
+      "runtimeSeconds": 0.000856,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_metadata_needs_four_verified_real_bound_actions",
+      "status": "pass",
+      "runtimeSeconds": 0.054043,
+      "subtests": 7
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_revoked_or_foreign_active_credential_is_rejected",
+      "status": "pass",
+      "runtimeSeconds": 0.018614,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_single_metadata_action_and_missing_readback_links_are_rejected",
+      "status": "pass",
+      "runtimeSeconds": 0.015673,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_stale_future_and_unzoned_proof_is_rejected",
+      "status": "pass",
+      "runtimeSeconds": 0.018371,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_template_and_canonical_case_changes_are_rejected",
+      "status": "pass",
+      "runtimeSeconds": 0.036594,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_acceptance.AcceptancePreviewTests.test_unsupported_upload_and_sensitive_imports_are_rejected",
+      "status": "pass",
+      "runtimeSeconds": 0.05261,
+      "subtests": 9
+    },
+    {
+      "id": "test_youtube_acceptance_binding.AcceptanceBindingTests.test_ready_requires_current_channel_client_and_project",
+      "status": "pass",
+      "runtimeSeconds": 0.00053,
+      "subtests": 6
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_activation_requires_fresh_interactive_owner_signin",
+      "status": "pass",
+      "runtimeSeconds": 0.000395
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_agentic_activation_requires_actual_scopes_and_deployment_enablement",
+      "status": "pass",
+      "runtimeSeconds": 0.000402
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_api_token_scope_does_not_authorize_agent_routes",
+      "status": "pass",
+      "runtimeSeconds": 2.5e-05
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_daily_limit_applies_to_planned_publication_day",
+      "status": "pass",
+      "runtimeSeconds": 0.002998
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_dispatch_actor_must_match_standing_authority_owner",
+      "status": "pass",
+      "runtimeSeconds": 0.001076
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_exact_channel_confirmation_and_digest_required",
+      "status": "pass",
+      "runtimeSeconds": 0.000646
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_expired_revoked_and_tampered_policies_cannot_resume",
+      "status": "pass",
+      "runtimeSeconds": 0.000897
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_legal_agentic_route_requires_exact_protected_client_binding",
+      "status": "pass",
+      "runtimeSeconds": 0.000251
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_pause_and_revoke_stop_claim_authority",
+      "status": "pass",
+      "runtimeSeconds": 0.003496,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_plan_scope_does_not_authorize_other_library_video",
+      "status": "pass",
+      "runtimeSeconds": 0.000691
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_policy_cannot_outlive_30_days_or_include_unbounded_sources",
+      "status": "pass",
+      "runtimeSeconds": 0.000909,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_server_policy_route_requires_owner_even_if_editor_can_publish",
+      "status": "pass",
+      "runtimeSeconds": 0.000228
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_standard_oauth_never_reused_for_agentic_provider_calls",
+      "status": "pass",
+      "runtimeSeconds": 9.2e-05
+    },
+    {
+      "id": "test_youtube_agent.BoundedPolicyTests.test_unexpired_policy_limit_preserves_history_without_lifetime_cap",
+      "status": "pass",
+      "runtimeSeconds": 0.001691
+    },
+    {
+      "id": "test_youtube_agent.DispatchTests.test_dispatcher_queues_exact_plan_once_without_provider_submission",
+      "status": "pass",
+      "runtimeSeconds": 0.003538
+    },
+    {
+      "id": "test_youtube_agent.DispatchTests.test_fleet_claim_rotates_without_dispatch_progress_even_when_clock_stalls",
+      "status": "pass",
+      "runtimeSeconds": 0.008319,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent.DispatchTests.test_indexed_claim_discards_invalid_cursor_and_honors_workspace_exclusion",
+      "status": "pass",
+      "runtimeSeconds": 0.019274,
+      "subtests": 8
+    },
+    {
+      "id": "test_youtube_agent.DispatchTests.test_indexed_hint_accepts_expired_equal_and_missing_lease_clocks",
+      "status": "pass",
+      "runtimeSeconds": 0.013612,
+      "subtests": 6
+    },
+    {
+      "id": "test_youtube_agent.DispatchTests.test_owner_loss_creates_paused_intervention_and_no_job",
+      "status": "pass",
+      "runtimeSeconds": 0.001738
+    },
+    {
+      "id": "test_youtube_agent.DispatchTests.test_stale_indexed_hint_rechecks_hydrated_active_lease_and_selects_later_workspace",
+      "status": "pass",
+      "runtimeSeconds": 0.00257
+    },
+    {
+      "id": "test_youtube_agent.DispatchTests.test_stale_indexed_hint_rejects_bad_nonfinite_or_overflowed_source_lease",
+      "status": "pass",
+      "runtimeSeconds": 0.027301,
+      "subtests": 10
+    },
+    {
+      "id": "test_youtube_agent.LibraryPlanTests.test_foreign_asset_and_connection_are_unavailable",
+      "status": "pass",
+      "runtimeSeconds": 0.000129
+    },
+    {
+      "id": "test_youtube_agent.LibraryPlanTests.test_future_unlisted_plan_cannot_expose_video_before_planned_time",
+      "status": "pass",
+      "runtimeSeconds": 0.00049
+    },
+    {
+      "id": "test_youtube_agent.LibraryPlanTests.test_manual_approval_queues_normal_manifest_and_duplicate_is_reused",
+      "status": "pass",
+      "runtimeSeconds": 0.001241
+    },
+    {
+      "id": "test_youtube_agent.LibraryPlanTests.test_media_rights_and_audience_are_not_inferred",
+      "status": "pass",
+      "runtimeSeconds": 0.000475
+    },
+    {
+      "id": "test_youtube_agent.LibraryPlanTests.test_metadata_or_media_change_voids_plan",
+      "status": "pass",
+      "runtimeSeconds": 0.001382,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent.LibraryPlanTests.test_nonexistent_dst_time_rejected_and_ambiguous_time_requires_choice",
+      "status": "pass",
+      "runtimeSeconds": 0.000337,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent.LibraryPlanTests.test_pending_plan_limit_does_not_become_a_lifetime_creator_limit",
+      "status": "pass",
+      "runtimeSeconds": 0.001466
+    },
+    {
+      "id": "test_youtube_agent.LibraryPlanTests.test_publication_in_past_never_becomes_immediate",
+      "status": "pass",
+      "runtimeSeconds": 0.00061
+    },
+    {
+      "id": "test_youtube_agent.LibraryPlanTests.test_queue_upload_later_has_separate_time_from_publication",
+      "status": "pass",
+      "runtimeSeconds": 0.00162
+    },
+    {
+      "id": "test_youtube_agent.LibraryPlanTests.test_too_late_queued_upload_does_not_silently_use_publication_time",
+      "status": "pass",
+      "runtimeSeconds": 0.000734
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlanCalendarTests.test_inconsistent_more_than_100_pending_plans_fails_instead_of_truncating",
+      "status": "pass",
+      "runtimeSeconds": 0.006231
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlanCalendarTests.test_malformed_job_and_review_reference_ids_do_not_break_valid_plan_projection",
+      "status": "pass",
+      "runtimeSeconds": 0.006684,
+      "subtests": 8
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlanCalendarTests.test_projection_excludes_authority_private_goals_descriptions_and_storage",
+      "status": "pass",
+      "runtimeSeconds": 0.000699
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlanCalendarTests.test_queued_or_existing_job_review_reference_is_never_duplicated",
+      "status": "pass",
+      "runtimeSeconds": 0.002607,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlanCalendarTests.test_stale_foreign_revoked_and_malformed_plan_bindings_are_hidden",
+      "status": "pass",
+      "runtimeSeconds": 0.00548,
+      "subtests": 8
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlanCalendarTests.test_unapproved_plan_is_awaiting_approval_in_both_calendar_readers",
+      "status": "pass",
+      "runtimeSeconds": 0.001226
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlanCalendarTests.test_unhashable_draft_bindings_are_hidden_before_reference_membership",
+      "status": "pass",
+      "runtimeSeconds": 0.005712,
+      "subtests": 8
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlanCalendarTests.test_workspace_identity_is_checked_and_expired_proposals_use_history",
+      "status": "pass",
+      "runtimeSeconds": 0.000753
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlannerAttentionTests.test_facts_are_bounded_deduplicated_and_not_lost_to_existing_attention_cap",
+      "status": "pass",
+      "runtimeSeconds": 0.00233
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlannerAttentionTests.test_foreign_erased_revoked_and_malformed_records_are_hidden",
+      "status": "pass",
+      "runtimeSeconds": 0.007833,
+      "subtests": 9
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlannerAttentionTests.test_foreign_workspace_and_denied_read_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.000856,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlannerAttentionTests.test_matching_held_job_deduplicates_policy_but_foreign_job_does_not",
+      "status": "pass",
+      "runtimeSeconds": 0.001468,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlannerAttentionTests.test_projection_never_exposes_error_secret_url_owner_grant_or_asset_payload",
+      "status": "pass",
+      "runtimeSeconds": 0.000665
+    },
+    {
+      "id": "test_youtube_agent_calendar.YouTubePlannerAttentionTests.test_real_prepared_policy_intervention_surfaces_without_job_or_state_mutation",
+      "status": "pass",
+      "runtimeSeconds": 0.001289
+    },
+    {
+      "id": "test_youtube_agent_context.ContextLifecycleTests.test_after_native_read_no_untracked_draft_task_or_external_read_copy_is_created",
+      "status": "pass",
+      "runtimeSeconds": 0.001736
+    },
+    {
+      "id": "test_youtube_agent_context.ContextLifecycleTests.test_all_three_model_history_readers_exclude_only_provider_assistant_output",
+      "status": "pass",
+      "runtimeSeconds": 0.000354
+    },
+    {
+      "id": "test_youtube_agent_context.ContextLifecycleTests.test_current_source_persists_with_exact_transaction_fence",
+      "status": "pass",
+      "runtimeSeconds": 0.000523
+    },
+    {
+      "id": "test_youtube_agent_context.ContextLifecycleTests.test_deletion_removes_text_facts_state_and_trace_extensions_preserving_effect_receipts",
+      "status": "pass",
+      "runtimeSeconds": 0.00012
+    },
+    {
+      "id": "test_youtube_agent_context.ContextLifecycleTests.test_late_revoked_or_replaced_source_cannot_persist_any_native_copy",
+      "status": "pass",
+      "runtimeSeconds": 0.001065,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent_context.ContextLifecycleTests.test_machine_sources_and_human_prose_have_distinct_history_eligibility",
+      "status": "pass",
+      "runtimeSeconds": 7.2e-05
+    },
+    {
+      "id": "test_youtube_agent_context.ContextLifecycleTests.test_optional_followup_model_and_paused_state_are_narrowly_disabled",
+      "status": "pass",
+      "runtimeSeconds": 0.000887
+    },
+    {
+      "id": "test_youtube_agent_context.ContextLifecycleTests.test_ordinary_chat_does_not_gain_provider_checks_or_redaction",
+      "status": "pass",
+      "runtimeSeconds": 0.000628
+    },
+    {
+      "id": "test_youtube_agent_context.ContextLifecycleTests.test_wrong_tenant_expired_and_unverifiable_context_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.000158
+    },
+    {
+      "id": "test_youtube_agent_context.ModelContextFenceTests.test_continuation_checks_current_grant_before_dispatch_without_false_attempt",
+      "status": "pass",
+      "runtimeSeconds": 0.003447
+    },
+    {
+      "id": "test_youtube_agent_context.ModelContextFenceTests.test_stream_checks_context_before_dispatch_and_preserves_usage_metering",
+      "status": "pass",
+      "runtimeSeconds": 0.00274
+    },
+    {
+      "id": "test_youtube_agent_disconnect.ConnectionAuthorityTests.test_all_unrevoked_policies_are_fenced_without_removing_plans_receipts_or_other_channel",
+      "status": "pass",
+      "runtimeSeconds": 0.002024
+    },
+    {
+      "id": "test_youtube_agent_disconnect.ConnectionAuthorityTests.test_disconnect_transaction_revokes_authority_before_reconnect_and_has_no_late_mutation",
+      "status": "pass",
+      "runtimeSeconds": 0.003296
+    },
+    {
+      "id": "test_youtube_agent_disconnect.ConnectionAuthorityTests.test_generic_provider_disconnect_keeps_legacy_path_and_youtube_authority",
+      "status": "pass",
+      "runtimeSeconds": 0.002855
+    },
+    {
+      "id": "test_youtube_agent_disconnect.ConnectionAuthorityTests.test_phase2_disconnect_revokes_youtube_only_and_preserves_unrelated_lease",
+      "status": "pass",
+      "runtimeSeconds": 0.001893
+    },
+    {
+      "id": "test_youtube_agent_disconnect.ConnectionAuthorityTests.test_provider_revocation_fences_stale_observation_then_revokes_current_policy_atomically",
+      "status": "pass",
+      "runtimeSeconds": 0.002812
+    },
+    {
+      "id": "test_youtube_agent_disconnect.ConnectionAuthorityTests.test_provider_revocation_rolls_back_if_policy_state_cannot_commit",
+      "status": "pass",
+      "runtimeSeconds": 0.001746
+    },
+    {
+      "id": "test_youtube_agent_disconnect.ConnectionAuthorityTests.test_reconnect_preserves_manual_plan_but_requires_new_explicit_policy_activation",
+      "status": "pass",
+      "runtimeSeconds": 0.00072
+    },
+    {
+      "id": "test_youtube_agent_history.AtomicHistoryTests.test_archives_exact_records_and_saves_locked_state_in_same_cursor",
+      "status": "pass",
+      "runtimeSeconds": 0.001006
+    },
+    {
+      "id": "test_youtube_agent_history.AtomicHistoryTests.test_explicit_cleanup_only_deletes_scoped_local_archive",
+      "status": "pass",
+      "runtimeSeconds": 0.000604
+    },
+    {
+      "id": "test_youtube_agent_history.AtomicHistoryTests.test_logical_immutable_conflict_rolls_back_partial_archive_before_rethrow",
+      "status": "pass",
+      "runtimeSeconds": 0.000871
+    },
+    {
+      "id": "test_youtube_agent_history.AtomicHistoryTests.test_missing_schema_and_autocommit_never_compact",
+      "status": "pass",
+      "runtimeSeconds": 0.000208
+    },
+    {
+      "id": "test_youtube_agent_history.AtomicHistoryTests.test_no_live_connection_fallback",
+      "status": "pass",
+      "runtimeSeconds": 0.000186
+    },
+    {
+      "id": "test_youtube_agent_history.AtomicHistoryTests.test_same_original_retry_is_idempotent_without_archive_update",
+      "status": "pass",
+      "runtimeSeconds": 0.000496
+    },
+    {
+      "id": "test_youtube_agent_history.CandidateTests.test_active_or_malformed_lease_and_account_fences_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 7.5e-05
+    },
+    {
+      "id": "test_youtube_agent_history.CandidateTests.test_all_job_states_and_references_are_retained",
+      "status": "pass",
+      "runtimeSeconds": 0.000451,
+      "subtests": 21
+    },
+    {
+      "id": "test_youtube_agent_history.CandidateTests.test_bound_never_splits_group_and_later_independent_draft_progresses",
+      "status": "pass",
+      "runtimeSeconds": 0.000558
+    },
+    {
+      "id": "test_youtube_agent_history.CandidateTests.test_expired_pair_is_closed_and_originals_are_not_mutated",
+      "status": "pass",
+      "runtimeSeconds": 0.000103
+    },
+    {
+      "id": "test_youtube_agent_history.CandidateTests.test_future_drafts_and_live_policies_remain",
+      "status": "pass",
+      "runtimeSeconds": 4.9e-05
+    },
+    {
+      "id": "test_youtube_agent_history.CandidateTests.test_malformed_times_and_reference_shapes_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.000106
+    },
+    {
+      "id": "test_youtube_agent_history.CandidateTests.test_review_and_foreign_policy_references_prevent_draft_compaction",
+      "status": "pass",
+      "runtimeSeconds": 4.1e-05
+    },
+    {
+      "id": "test_youtube_agent_history.CandidateTests.test_revoked_policy_can_archive_only_with_expired_unqueued_drafts",
+      "status": "pass",
+      "runtimeSeconds": 6.7e-05
+    },
+    {
+      "id": "test_youtube_agent_history.CandidateTests.test_unreferenced_expired_drafts_are_bounded_and_connection_scoped",
+      "status": "pass",
+      "runtimeSeconds": 0.001576
+    },
+    {
+      "id": "test_youtube_agent_history.CandidateTests.test_valid_expired_lease_is_retained_and_does_not_block",
+      "status": "pass",
+      "runtimeSeconds": 7.6e-05
+    },
+    {
+      "id": "test_youtube_agent_history.CursorTests.test_changed_anchor_checksum_is_not_a_page_authority",
+      "status": "pass",
+      "runtimeSeconds": 0.000697
+    },
+    {
+      "id": "test_youtube_agent_history.CursorTests.test_cross_tenant_connection_and_kind_cursors_fail_before_database_access",
+      "status": "pass",
+      "runtimeSeconds": 0.001305
+    },
+    {
+      "id": "test_youtube_agent_history.CursorTests.test_keyset_page_uses_scoped_original_anchor_and_maximum_limit",
+      "status": "pass",
+      "runtimeSeconds": 0.001094
+    },
+    {
+      "id": "test_youtube_agent_history.CursorTests.test_malformed_noncanonical_and_removed_anchor_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.000826
+    },
+    {
+      "id": "test_youtube_agent_history.CursorTests.test_projection_never_exposes_private_records_or_reactivates_authority",
+      "status": "pass",
+      "runtimeSeconds": 4.8e-05
+    },
+    {
+      "id": "test_youtube_agent_pagination.HistoryRouteTests.test_archive_requires_locked_owner_and_revision_and_has_content_free_audit",
+      "status": "pass",
+      "runtimeSeconds": 0.001319,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_agent_pagination.HistoryRouteTests.test_overview_and_history_queries_are_bounded_and_explicit",
+      "status": "pass",
+      "runtimeSeconds": 0.003751,
+      "subtests": 5
+    },
+    {
+      "id": "test_youtube_agent_pagination.PagingTests.test_erased_tombstone_markers_survive_display_without_private_erasure_details",
+      "status": "pass",
+      "runtimeSeconds": 0.001436,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent_pagination.PagingTests.test_expired_authority_and_drafts_are_read_only_without_mutating_storage",
+      "status": "pass",
+      "runtimeSeconds": 0.001226
+    },
+    {
+      "id": "test_youtube_agent_pagination.PagingTests.test_foreign_wrong_kind_tampered_and_changed_anchors_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.001529,
+      "subtests": 5
+    },
+    {
+      "id": "test_youtube_agent_pagination.PagingTests.test_only_known_proposal_origin_is_public_without_private_provenance",
+      "status": "pass",
+      "runtimeSeconds": 7.4e-05
+    },
+    {
+      "id": "test_youtube_agent_pagination.PagingTests.test_overview_never_projects_fleet_lease_or_other_channel",
+      "status": "pass",
+      "runtimeSeconds": 0.001681
+    },
+    {
+      "id": "test_youtube_agent_pagination.PagingTests.test_pages_are_bounded_and_complete_with_equal_timestamps",
+      "status": "pass",
+      "runtimeSeconds": 0.000711
+    },
+    {
+      "id": "test_youtube_agent_pagination.PagingTests.test_policy_preview_rejects_changed_off_page_selection",
+      "status": "pass",
+      "runtimeSeconds": 0.001019
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_ambiguous_native_columns_are_not_shared_and_old_derived_evidence_is_ignored",
+      "status": "pass",
+      "runtimeSeconds": 0.001057
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_date_budget_and_foreign_connection_fail_before_provider",
+      "status": "pass",
+      "runtimeSeconds": 0.001037
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_educational_no_access_and_quoted_instructions_do_not_authorize_account_reads",
+      "status": "pass",
+      "runtimeSeconds": 0.003183,
+      "subtests": 12
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_explicit_current_owned_channel_analytics_requests_remain_available",
+      "status": "pass",
+      "runtimeSeconds": 0.004171,
+      "subtests": 7
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_fenced_and_indented_code_never_authorizes_analytics",
+      "status": "pass",
+      "runtimeSeconds": 0.002622,
+      "subtests": 8
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_markdown_quotes_and_lazy_continuations_never_authorize_analytics",
+      "status": "pass",
+      "runtimeSeconds": 0.001628,
+      "subtests": 5
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_missing_generation_and_voice_do_not_read_provider_data",
+      "status": "pass",
+      "runtimeSeconds": 0.000569,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_native_context_binds_exact_grant_and_rejects_late_disconnect_or_replacement",
+      "status": "pass",
+      "runtimeSeconds": 0.001054,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_native_projection_preserves_values_order_and_gaps_with_a_bounded_payload",
+      "status": "pass",
+      "runtimeSeconds": 0.000959
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_no_evidence_means_no_performance_or_hour_claim_and_no_implicit_fetch",
+      "status": "pass",
+      "runtimeSeconds": 0.000373
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_only_actual_current_user_request_can_request_analytics",
+      "status": "pass",
+      "runtimeSeconds": 0.001145
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_read_exact_agentic_owned_nonmonetary_route_and_only_numeric_projection",
+      "status": "pass",
+      "runtimeSeconds": 0.000719
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_standard_lane_bad_envelope_wrong_channel_and_missing_scopes_never_read",
+      "status": "pass",
+      "runtimeSeconds": 0.00313
+    },
+    {
+      "id": "test_youtube_agent_tools.AnalyticsToolTests.test_wrong_report_identity_or_changed_membership_is_not_shared",
+      "status": "pass",
+      "runtimeSeconds": 0.000991
+    },
+    {
+      "id": "test_youtube_agent_tools.DraftToolTests.test_chat_provenance_is_derived_only_from_the_server_context",
+      "status": "pass",
+      "runtimeSeconds": 0.002985
+    },
+    {
+      "id": "test_youtube_agent_tools.DraftToolTests.test_context_projects_only_inspected_technical_assets_and_exact_channels",
+      "status": "pass",
+      "runtimeSeconds": 0.00062
+    },
+    {
+      "id": "test_youtube_agent_tools.DraftToolTests.test_current_role_foreign_asset_expired_time_and_cancel_are_enforced",
+      "status": "pass",
+      "runtimeSeconds": 0.003109
+    },
+    {
+      "id": "test_youtube_agent_tools.DraftToolTests.test_missing_or_contradictory_human_declarations_save_nothing",
+      "status": "pass",
+      "runtimeSeconds": 0.000548
+    },
+    {
+      "id": "test_youtube_agent_tools.DraftToolTests.test_public_prepare_cannot_claim_chat_model_or_selected_writer_provenance",
+      "status": "pass",
+      "runtimeSeconds": 0.001979
+    },
+    {
+      "id": "test_youtube_agent_tools.DraftToolTests.test_quoted_declarations_cannot_supply_rights_or_audience_flags",
+      "status": "pass",
+      "runtimeSeconds": 0.003305,
+      "subtests": 7
+    },
+    {
+      "id": "test_youtube_agent_tools.DraftToolTests.test_real_local_plan_path_stays_unapproved_and_is_reread",
+      "status": "pass",
+      "runtimeSeconds": 0.001953
+    },
+    {
+      "id": "test_youtube_agent_tools.DraftToolTests.test_save_return_without_authoritative_matching_plan_is_not_verified",
+      "status": "pass",
+      "runtimeSeconds": 0.001573
+    },
+    {
+      "id": "test_youtube_agent_tools.RegistrationTests.test_creator_flag_controls_both_hook_and_all_registered_tools",
+      "status": "pass",
+      "runtimeSeconds": 0.001215,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_agent_tools.RegistrationTests.test_model_cannot_supply_consent_approval_or_other_tenant",
+      "status": "pass",
+      "runtimeSeconds": 0.000287
+    },
+    {
+      "id": "test_youtube_agent_tools.RegistrationTests.test_runtime_registers_only_bounded_tools_and_scopes_idempotently",
+      "status": "pass",
+      "runtimeSeconds": 0.000564
+    },
+    {
+      "id": "test_youtube_analytics_grants.YouTubeAnalyticsGrantTests.test_reports_require_read_access_and_keep_sensitive_authorization_separate",
+      "status": "pass",
+      "runtimeSeconds": 0.000562,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_callback_origin.YouTubeCallbackOriginTests.test_dedicated_origin_is_youtube_only_and_normalizes_a_root_slash",
+      "status": "pass",
+      "runtimeSeconds": 0.000182
+    },
+    {
+      "id": "test_youtube_callback_origin.YouTubeCallbackOriginTests.test_dedicated_youtube_origin_supersedes_legacy_pin_without_changing_other_pins",
+      "status": "pass",
+      "runtimeSeconds": 3.8e-05
+    },
+    {
+      "id": "test_youtube_callback_origin.YouTubeCallbackOriginTests.test_hot_callback_uses_mounted_configuration_and_unset_cold_callback_stays_legacy",
+      "status": "pass",
+      "runtimeSeconds": 0.00201
+    },
+    {
+      "id": "test_youtube_callback_origin.YouTubeCallbackOriginTests.test_invalid_dedicated_origins_fail_closed_without_affecting_other_providers",
+      "status": "pass",
+      "runtimeSeconds": 0.000623,
+      "subtests": 19
+    },
+    {
+      "id": "test_youtube_callback_origin.YouTubeCallbackOriginTests.test_legacy_pin_cannot_bypass_strict_dedicated_youtube_origin_validation",
+      "status": "pass",
+      "runtimeSeconds": 2.7e-05
+    },
+    {
+      "id": "test_youtube_callback_origin.YouTubeCallbackOriginTests.test_legacy_provider_pin_preserves_registered_callback_and_canonical_landing",
+      "status": "pass",
+      "runtimeSeconds": 0.000249
+    },
+    {
+      "id": "test_youtube_callback_origin.YouTubeCallbackOriginTests.test_malformed_public_override_fails_before_runtime_and_preserves_gmail",
+      "status": "pass",
+      "runtimeSeconds": 0.002077,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_callback_origin.YouTubeCallbackOriginTests.test_preview_override_cannot_send_codes_outside_approved_staging_origin",
+      "status": "pass",
+      "runtimeSeconds": 0.000607
+    },
+    {
+      "id": "test_youtube_callback_origin.YouTubeCallbackOriginTests.test_public_hot_and_cold_callbacks_use_same_fixed_origin_and_drop_unknown_inputs",
+      "status": "pass",
+      "runtimeSeconds": 0.001468,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_callback_origin.YouTubeCallbackOriginTests.test_unset_or_empty_override_preserves_legacy_origin_and_other_provider_callbacks",
+      "status": "pass",
+      "runtimeSeconds": 0.000315,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_capacity.AnalyticsCapacityTests.test_analytics_daily_project_minute_and_workspace_rate_backoffs_are_distinct",
+      "status": "pass",
+      "runtimeSeconds": 0.000407
+    },
+    {
+      "id": "test_youtube_capacity.AnalyticsCapacityTests.test_analytics_defaults_are_separate_request_limits_and_cannot_be_raised_by_environment",
+      "status": "pass",
+      "runtimeSeconds": 5.6e-05
+    },
+    {
+      "id": "test_youtube_capacity.AnalyticsCapacityTests.test_analytics_invalid_limits_fail_to_conservative_defaults",
+      "status": "pass",
+      "runtimeSeconds": 5.1e-05
+    },
+    {
+      "id": "test_youtube_capacity.AnalyticsCapacityTests.test_analytics_limits_lower_or_raise_only_with_fresh_exact_google_project_evidence",
+      "status": "pass",
+      "runtimeSeconds": 0.000213
+    },
+    {
+      "id": "test_youtube_capacity.AnalyticsCapacityTests.test_null_analytics_cost_routes_to_request_counter_without_inventing_data_units",
+      "status": "pass",
+      "runtimeSeconds": 0.000127
+    },
+    {
+      "id": "test_youtube_capacity.CapacityPolicyTests.test_chunks_are_aligned_and_memory_bounded",
+      "status": "pass",
+      "runtimeSeconds": 7.3e-05
+    },
+    {
+      "id": "test_youtube_capacity.CapacityPolicyTests.test_clients_in_same_bound_project_share_budget_without_fake_verification",
+      "status": "pass",
+      "runtimeSeconds": 5.9e-05
+    },
+    {
+      "id": "test_youtube_capacity.CapacityPolicyTests.test_environment_cannot_manufacture_approved_capacity",
+      "status": "pass",
+      "runtimeSeconds": 3e-05
+    },
+    {
+      "id": "test_youtube_capacity.CapacityPolicyTests.test_identity_reservation_has_fixed_method_and_no_invented_connection",
+      "status": "pass",
+      "runtimeSeconds": 8e-05
+    },
+    {
+      "id": "test_youtube_capacity.CapacityPolicyTests.test_only_canonical_permanent_held_markers_release_queue_slots",
+      "status": "pass",
+      "runtimeSeconds": 0.00015,
+      "subtests": 14
+    },
+    {
+      "id": "test_youtube_capacity.CapacityPolicyTests.test_only_fresh_bound_google_evidence_can_raise_ceiling",
+      "status": "pass",
+      "runtimeSeconds": 0.000174
+    },
+    {
+      "id": "test_youtube_capacity.CapacityPolicyTests.test_operator_can_lower_limits_but_never_raise_above_approval",
+      "status": "pass",
+      "runtimeSeconds": 3.7e-05
+    },
+    {
+      "id": "test_youtube_capacity.CapacityPolicyTests.test_project_workspace_and_rate_limits_are_distinct",
+      "status": "pass",
+      "runtimeSeconds": 4.7e-05
+    },
+    {
+      "id": "test_youtube_capacity.CapacityPolicyTests.test_queue_limits_count_pending_across_channels_only_in_this_workspace",
+      "status": "pass",
+      "runtimeSeconds": 3.4e-05
+    },
+    {
+      "id": "test_youtube_capacity.CapacityPolicyTests.test_retained_erasure_history_does_not_exhaust_pending_admission",
+      "status": "pass",
+      "runtimeSeconds": 0.00073
+    },
+    {
+      "id": "test_youtube_capacity.UploadCapacityDelayTests.test_delayed_resume_preserves_encrypted_session_and_acknowledged_offset",
+      "status": "pass",
+      "runtimeSeconds": 0.00624
+    },
+    {
+      "id": "test_youtube_capacity.UploadCapacityDelayTests.test_denied_initiation_sends_no_request_then_resumes_same_journal_once",
+      "status": "pass",
+      "runtimeSeconds": 0.007914
+    },
+    {
+      "id": "test_youtube_composer_refresh.YouTubeComposerRefreshTests.test_authorized_creator_refreshes_then_explicitly_retries_same_review",
+      "status": "pass",
+      "runtimeSeconds": 0.000832
+    },
+    {
+      "id": "test_youtube_composer_refresh.YouTubeComposerRefreshTests.test_credential_rotation_and_worker_wrapper_preserve_existing_boundaries",
+      "status": "pass",
+      "runtimeSeconds": 0.00139
+    },
+    {
+      "id": "test_youtube_composer_refresh.YouTubeComposerRefreshTests.test_fresh_channel_still_requires_the_actual_composer_actors_policy_acceptance",
+      "status": "pass",
+      "runtimeSeconds": 0.000374
+    },
+    {
+      "id": "test_youtube_composer_refresh.YouTubeComposerRefreshTests.test_identity_or_scope_change_invalidates_review_without_capability_upgrade",
+      "status": "pass",
+      "runtimeSeconds": 0.001611,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_composer_refresh.YouTubeComposerRefreshTests.test_missing_refresh_revocation_and_transient_rate_limits_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.005775,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_composer_refresh.YouTubeComposerRefreshTests.test_permission_revision_and_step_up_are_rechecked_at_commit",
+      "status": "pass",
+      "runtimeSeconds": 0.002284,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_composer_refresh.YouTubeComposerRefreshTests.test_review_and_bulk_refresh_at_most_one_exact_selected_connection",
+      "status": "pass",
+      "runtimeSeconds": 0.001385
+    },
+    {
+      "id": "test_youtube_composer_refresh.YouTubeComposerRefreshTests.test_same_token_replacement_consent_cannot_refresh_old_identity_result",
+      "status": "pass",
+      "runtimeSeconds": 0.000331
+    },
+    {
+      "id": "test_youtube_composer_refresh.YouTubeComposerRefreshTests.test_session_permission_revision_digest_and_batch_bounds_precede_provider_reads",
+      "status": "pass",
+      "runtimeSeconds": 0.004669,
+      "subtests": 12
+    },
+    {
+      "id": "test_youtube_composer_refresh.YouTubeComposerRefreshTests.test_stale_revocation_observation_cannot_purge_the_current_composer_grant",
+      "status": "pass",
+      "runtimeSeconds": 0.000537
+    },
+    {
+      "id": "test_youtube_connection_safety.YouTubeConnectionSafetyTests.test_scope_observations_and_scheduling_authority",
+      "status": "pass",
+      "runtimeSeconds": 0.005236,
+      "subtests": 7
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_declarations_and_exact_content",
+      "status": "pass",
+      "runtimeSeconds": 0.00018
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_identity_success_never_means_full_access",
+      "status": "pass",
+      "runtimeSeconds": 0.000182
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_immediate_publishing_cannot_carry_a_native_schedule",
+      "status": "pass",
+      "runtimeSeconds": 2.8e-05
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_incremental_oauth_has_no_unrequested_sensitive_scope",
+      "status": "pass",
+      "runtimeSeconds": 0.000156
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_interactive_analytics_pages_are_complete_or_explicitly_bounded",
+      "status": "pass",
+      "runtimeSeconds": 0.000944
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_merge_preserves_omitted_fields_and_drops_read_only_fields",
+      "status": "pass",
+      "runtimeSeconds": 5.2e-05
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_mutator_error_callback_receives_revocation",
+      "status": "pass",
+      "runtimeSeconds": 8.7e-05
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_podcast_square_image_and_caption_validation",
+      "status": "pass",
+      "runtimeSeconds": 0.020233
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_processing_is_not_publication",
+      "status": "pass",
+      "runtimeSeconds": 3e-05
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_project_and_real_evidence_are_independent",
+      "status": "pass",
+      "runtimeSeconds": 0.00024
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_quota_errors_never_become_generic_retry",
+      "status": "pass",
+      "runtimeSeconds": 0.0001
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_schedule_lead_is_rechecked_after_authorization_fence_wait",
+      "status": "pass",
+      "runtimeSeconds": 8.2e-05
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_scheduling_timezone_future_public_constraints",
+      "status": "pass",
+      "runtimeSeconds": 0.000134
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_shorts_square_and_vertical_boundary_no_synthetic_flag",
+      "status": "pass",
+      "runtimeSeconds": 8.2e-05
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_signed_push_feed_cannot_change_channel_or_expand_entities",
+      "status": "pass",
+      "runtimeSeconds": 0.000419
+    },
+    {
+      "id": "test_youtube_creator.ContractTests.test_upload_quota_current_separate_bucket",
+      "status": "pass",
+      "runtimeSeconds": 2.4e-05
+    },
+    {
+      "id": "test_youtube_creator.FinancialReportGuards.test_default_report_jobs_hide_financial_and_unclassified_types",
+      "status": "pass",
+      "runtimeSeconds": 0.001633
+    },
+    {
+      "id": "test_youtube_creator.FinancialReportGuards.test_explicit_financial_list_requires_separate_authorization",
+      "status": "pass",
+      "runtimeSeconds": 6e-05
+    },
+    {
+      "id": "test_youtube_creator.FinancialReportGuards.test_financial_report_content_never_requested_without_permission",
+      "status": "pass",
+      "runtimeSeconds": 0.000119
+    },
+    {
+      "id": "test_youtube_creator.OwnershipTests.test_chat_delete_and_poll_close_require_observed_same_chat_resource",
+      "status": "pass",
+      "runtimeSeconds": 8.8e-05
+    },
+    {
+      "id": "test_youtube_creator.OwnershipTests.test_live_transition_requires_an_active_bound_stream",
+      "status": "pass",
+      "runtimeSeconds": 5.4e-05
+    },
+    {
+      "id": "test_youtube_creator.OwnershipTests.test_owned_resource_requires_connected_channel_id",
+      "status": "pass",
+      "runtimeSeconds": 8.2e-05
+    },
+    {
+      "id": "test_youtube_creator.OwnershipTests.test_review_plan_survives_jsonb_object_key_reordering",
+      "status": "pass",
+      "runtimeSeconds": 0.000146
+    },
+    {
+      "id": "test_youtube_creator.OwnershipTests.test_stream_metadata_preserves_immutable_ingestion_and_rejects_mutation",
+      "status": "pass",
+      "runtimeSeconds": 0.000117
+    },
+    {
+      "id": "test_youtube_creator.OwnershipTests.test_unsupported_method_and_partner_impersonation_fail_before_network",
+      "status": "pass",
+      "runtimeSeconds": 4.8e-05
+    },
+    {
+      "id": "test_youtube_creator.OwnershipTests.test_upload_scope_alone_cannot_edit_or_moderate",
+      "status": "pass",
+      "runtimeSeconds": 4e-05
+    },
+    {
+      "id": "test_youtube_creator.PublicationGuards.test_caption_processing_precedes_visibility",
+      "status": "pass",
+      "runtimeSeconds": 9e-05
+    },
+    {
+      "id": "test_youtube_creator.PublicationGuards.test_declaration_mismatch_holds_before_publication",
+      "status": "pass",
+      "runtimeSeconds": 5.8e-05
+    },
+    {
+      "id": "test_youtube_creator.PublicationGuards.test_exact_declarations_and_metadata_can_release_visibility",
+      "status": "pass",
+      "runtimeSeconds": 9.5e-05
+    },
+    {
+      "id": "test_youtube_creator.PublicationGuards.test_missing_thumbnail_receipt_never_repeats_upload_or_publishes",
+      "status": "pass",
+      "runtimeSeconds": 5.3e-05
+    },
+    {
+      "id": "test_youtube_creator.PublicationGuards.test_title_mismatch_holds_before_publication",
+      "status": "pass",
+      "runtimeSeconds": 4.1e-05
+    },
+    {
+      "id": "test_youtube_creator.RecoveryApprovalGuards.test_only_exact_original_youtube_approver_can_extend_dispatch_window",
+      "status": "pass",
+      "runtimeSeconds": 0.000792
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_cancellation_stops_bytes_without_deletion",
+      "status": "pass",
+      "runtimeSeconds": 0.00341
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_cancellation_write_rechecks_authority_after_its_own_admission",
+      "status": "pass",
+      "runtimeSeconds": 0.000171
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_chunk_timeout_reconciles_acknowledged_offset_without_duplicate",
+      "status": "pass",
+      "runtimeSeconds": 0.004371
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_disconnect_during_initialization_never_restores_session_or_sends_bytes",
+      "status": "pass",
+      "runtimeSeconds": 0.000179
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_disconnect_during_media_read_stops_chunk_dispatch",
+      "status": "pass",
+      "runtimeSeconds": 0.008421
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_disconnect_during_quota_admission_stops_initialization",
+      "status": "pass",
+      "runtimeSeconds": 0.000225
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_disconnect_during_status_probe_stops_the_next_chunk",
+      "status": "pass",
+      "runtimeSeconds": 0.001152
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_finalization_write_rechecks_authority_after_its_own_admission",
+      "status": "pass",
+      "runtimeSeconds": 0.000135
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_idempotency_key_rejects_changed_content",
+      "status": "pass",
+      "runtimeSeconds": 0.00682
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_known_session_rate_limit_is_backed_off_without_new_initialization",
+      "status": "pass",
+      "runtimeSeconds": 0.009294
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_missing_journal_reconciliation_never_opens_a_session",
+      "status": "pass",
+      "runtimeSeconds": 8.4e-05
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_multichunk_upload_commits_session_and_probes_before_every_chunk",
+      "status": "pass",
+      "runtimeSeconds": 0.006186
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_no_legacy_container_required_for_durable_progress",
+      "status": "pass",
+      "runtimeSeconds": 0.010291
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_normal_access_token_refresh_retains_generation_and_resumes_session",
+      "status": "pass",
+      "runtimeSeconds": 0.019314
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_reconnect_during_initialization_preserves_new_authority_and_purge",
+      "status": "pass",
+      "runtimeSeconds": 0.000205
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_uncertain_initialization_never_creates_replacement_upload",
+      "status": "pass",
+      "runtimeSeconds": 0.000272
+    },
+    {
+      "id": "test_youtube_creator.UploadTests.test_upload_revocation_purge_is_not_recreated_by_error_handling",
+      "status": "pass",
+      "runtimeSeconds": 0.000459
+    },
+    {
+      "id": "test_youtube_fleet.FleetConfigTests.test_default_off_and_exact_flags_make_no_runtime_or_worker_calls",
+      "status": "pass",
+      "runtimeSeconds": 0.002463
+    },
+    {
+      "id": "test_youtube_fleet.FleetConfigTests.test_missing_schema_or_actual_creator_fails_before_work",
+      "status": "pass",
+      "runtimeSeconds": 0.000272
+    },
+    {
+      "id": "test_youtube_fleet.FleetConfigTests.test_server_budgets_are_bounded_and_do_not_take_client_inputs",
+      "status": "pass",
+      "runtimeSeconds": 0.000238,
+      "subtests": 6
+    },
+    {
+      "id": "test_youtube_fleet.LaneTests.test_identity_batch_skips_failed_account_and_cannot_reselect_it",
+      "status": "pass",
+      "runtimeSeconds": 0.000309
+    },
+    {
+      "id": "test_youtube_fleet.LaneTests.test_planner_continues_after_intervention_without_reselecting_workspace",
+      "status": "pass",
+      "runtimeSeconds": 0.000469
+    },
+    {
+      "id": "test_youtube_fleet.LaneTests.test_request_and_time_budget_stop_new_admissions_and_reset_context",
+      "status": "pass",
+      "runtimeSeconds": 5.3e-05
+    },
+    {
+      "id": "test_youtube_fleet.LaneTests.test_request_budget_bounds_identity_batch_and_does_not_renew_after_exhaustion",
+      "status": "pass",
+      "runtimeSeconds": 0.000165
+    },
+    {
+      "id": "test_youtube_fleet.LaneTests.test_upload_lane_uses_no_shared_tick_identity_planner_or_renewals",
+      "status": "pass",
+      "runtimeSeconds": 0.000225
+    },
+    {
+      "id": "test_youtube_fleet.WorkerIsolationTests.test_cleanup_only_runs_retention_without_any_authorization_or_dispatch",
+      "status": "pass",
+      "runtimeSeconds": 0.000144
+    },
+    {
+      "id": "test_youtube_fleet.WorkerIsolationTests.test_default_shared_tick_unchanged_and_fleet_owner_keeps_cleanup_only",
+      "status": "pass",
+      "runtimeSeconds": 0.001113
+    },
+    {
+      "id": "test_youtube_fleet.WorkerIsolationTests.test_old_success_or_error_cannot_use_or_pause_reactivated_authority",
+      "status": "pass",
+      "runtimeSeconds": 0.014712,
+      "subtests": 8
+    },
+    {
+      "id": "test_youtube_fleet.WorkerIsolationTests.test_planner_expired_or_replaced_fence_cannot_approve_or_queue",
+      "status": "pass",
+      "runtimeSeconds": 0.001284
+    },
+    {
+      "id": "test_youtube_fleet.WorkerIsolationTests.test_real_job_filter_never_claims_or_invalidates_another_platform",
+      "status": "pass",
+      "runtimeSeconds": 0.000705
+    },
+    {
+      "id": "test_youtube_fleet.WorkerIsolationTests.test_transient_planner_verification_defers_without_revoking_finite_authority",
+      "status": "pass",
+      "runtimeSeconds": 0.00299
+    },
+    {
+      "id": "test_youtube_fleet_http.FleetHttpTest.test_all_supported_routes_keep_lane_identity",
+      "status": "pass",
+      "runtimeSeconds": 0.001292,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_fleet_http.FleetHttpTest.test_cold_start_uses_server_secret_and_fixed_lane",
+      "status": "pass",
+      "runtimeSeconds": 0.000739
+    },
+    {
+      "id": "test_youtube_fleet_http.FleetHttpTest.test_missing_and_user_tokens_do_not_initialize_runtime",
+      "status": "pass",
+      "runtimeSeconds": 0.000937,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_fleet_http.FleetHttpTest.test_other_methods_and_paths_cannot_dispatch",
+      "status": "pass",
+      "runtimeSeconds": 0.001036,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_fleet_http.FleetHttpTest.test_short_or_missing_server_secret_fails_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.001771,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_completion_after_disconnect_or_new_consent_rolls_back_profile_save",
+      "status": "pass",
+      "runtimeSeconds": 0.002997,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_current_completion_saves_profile_and_captures_picture_generation",
+      "status": "pass",
+      "runtimeSeconds": 0.001537
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_current_manual_and_worker_identity_refresh_remain_available",
+      "status": "pass",
+      "runtimeSeconds": 0.001003,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_current_picture_write_orders_workspace_before_credential",
+      "status": "pass",
+      "runtimeSeconds": 0.000418
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_genuine_current_identity_restores_removed_profile_without_restoring_authority",
+      "status": "pass",
+      "runtimeSeconds": 0.001613,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_late_picture_cannot_restore_disconnected_or_replaced_image",
+      "status": "pass",
+      "runtimeSeconds": 0.002212,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_non_youtube_verification_and_picture_do_not_require_generation",
+      "status": "pass",
+      "runtimeSeconds": 0.000631
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_revocation_error_preserves_observed_generation",
+      "status": "pass",
+      "runtimeSeconds": 0.000135
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_same_token_replacement_preserves_worker_match_drift_and_error",
+      "status": "pass",
+      "runtimeSeconds": 0.000928,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_same_token_replacement_rejects_manual_match_drift_and_error_without_changes",
+      "status": "pass",
+      "runtimeSeconds": 0.001581,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_identity_fence.YouTubeIdentityFenceTests.test_stale_or_missing_generation_cannot_revoke_same_token_new_consent",
+      "status": "pass",
+      "runtimeSeconds": 0.000363
+    },
+    {
+      "id": "test_youtube_journal_fence.JournalFenceTests.test_deleted_workspace_stops_save_before_credential_lock_or_insert",
+      "status": "pass",
+      "runtimeSeconds": 0.000171
+    },
+    {
+      "id": "test_youtube_journal_fence.JournalFenceTests.test_disconnect_or_new_consent_cannot_recreate_purged_state",
+      "status": "pass",
+      "runtimeSeconds": 0.000195,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_journal_fence.JournalFenceTests.test_generic_service_fence_requires_the_exact_nonempty_generation",
+      "status": "pass",
+      "runtimeSeconds": 0.000193,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_journal_fence.JournalFenceTests.test_missing_generation_schema_holds_before_operation",
+      "status": "pass",
+      "runtimeSeconds": 3.2e-05
+    },
+    {
+      "id": "test_youtube_journal_fence.JournalFenceTests.test_no_lock_wrong_operation_or_ended_context_cannot_save",
+      "status": "pass",
+      "runtimeSeconds": 0.000133,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_journal_fence.JournalFenceTests.test_recovery_reuses_its_existing_transaction_cursor",
+      "status": "pass",
+      "runtimeSeconds": 5e-05
+    },
+    {
+      "id": "test_youtube_journal_fence.JournalFenceTests.test_request_fence_does_not_hold_transaction_row_locks",
+      "status": "pass",
+      "runtimeSeconds": 1.7e-05
+    },
+    {
+      "id": "test_youtube_journal_fence.JournalFenceTests.test_save_locks_workspace_before_credential_and_child_insert",
+      "status": "pass",
+      "runtimeSeconds": 4.9e-05
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_acceptance_cli_checks_effective_dedicated_client_before_any_evidence_or_database_read",
+      "status": "pass",
+      "runtimeSeconds": 0.003319,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_acceptance_cli_uses_the_dedicated_canonical_callback_and_preserves_current_callback",
+      "status": "pass",
+      "runtimeSeconds": 0.005134,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_active_standard_refresh_stays_on_active_pair_when_legacy_is_mounted",
+      "status": "pass",
+      "runtimeSeconds": 0.000347
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_agentic_completion_rechecks_owner_and_freshness_after_claim_before_exchange",
+      "status": "pass",
+      "runtimeSeconds": 0.001863,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_agentic_configuration_is_separate_and_disabled_by_default",
+      "status": "pass",
+      "runtimeSeconds": 0.000142
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_agentic_connection_requires_configured_separate_client_and_explicit_consent",
+      "status": "pass",
+      "runtimeSeconds": 4.6e-05
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_agentic_refresh_uses_only_its_own_client",
+      "status": "pass",
+      "runtimeSeconds": 0.00157
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_api_revocation_fence_rejects_stale_observation_and_unbound_call",
+      "status": "pass",
+      "runtimeSeconds": 0.000312
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_bound_expired_access_refreshes_without_requiring_live_old_access",
+      "status": "pass",
+      "runtimeSeconds": 0.000225
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_connection_ids_preserve_standard_and_separate_agentic_channel",
+      "status": "pass",
+      "runtimeSeconds": 2.3e-05
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_cross_client_and_cross_lane_custody_never_reaches_provider",
+      "status": "pass",
+      "runtimeSeconds": 0.000118,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_dedicated_new_standard_can_mount_without_retired_original_pair_but_never_adopts_its_alias",
+      "status": "pass",
+      "runtimeSeconds": 0.000253,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_dedicated_registry_uses_same_effective_client_and_canonical_callback",
+      "status": "pass",
+      "runtimeSeconds": 0.00087,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_dedicated_source_keeps_original_environment_and_routes_each_exact_issuer",
+      "status": "pass",
+      "runtimeSeconds": 0.000393
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_dedicated_source_rejects_conflicting_legacy_reference_and_any_issuer_collision",
+      "status": "pass",
+      "runtimeSeconds": 0.000547,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_dedicated_source_rejects_noncanonical_override_that_would_supersede_the_callback_pin",
+      "status": "pass",
+      "runtimeSeconds": 0.000433,
+      "subtests": 7
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_dedicated_source_requires_complete_valid_pending_pair_without_falling_back",
+      "status": "pass",
+      "runtimeSeconds": 0.000208,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_dedicated_source_requires_exact_canonical_callback",
+      "status": "pass",
+      "runtimeSeconds": 0.000204,
+      "subtests": 6
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_default_current_source_ignores_pending_and_preserves_staging_and_gmail",
+      "status": "pass",
+      "runtimeSeconds": 0.00038
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_direct_dedicated_lane_mounts_keep_original_pair_and_never_adopt_old_refresh",
+      "status": "pass",
+      "runtimeSeconds": 0.000201,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_expired_bound_legacy_read_grant_refreshes_only_with_its_original_client",
+      "status": "pass",
+      "runtimeSeconds": 0.000768
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_failed_old_refresh_cannot_purge_a_concurrent_new_consent",
+      "status": "pass",
+      "runtimeSeconds": 0.000722
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_foreign_raw_v1_and_agentic_custody_never_uses_legacy_adapter",
+      "status": "pass",
+      "runtimeSeconds": 0.001742,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_incremental_upgrade_reuses_only_a_proven_refresh_pair",
+      "status": "pass",
+      "runtimeSeconds": 8.4e-05
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_legacy_access_audience_cannot_prove_a_mixed_refresh_issuer",
+      "status": "pass",
+      "runtimeSeconds": 8e-05
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_legacy_access_does_not_make_unbound_or_other_client_refresh_reusable",
+      "status": "pass",
+      "runtimeSeconds": 0.000468
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_legacy_adapter_cannot_authorize_exchange_or_write",
+      "status": "pass",
+      "runtimeSeconds": 6.6e-05
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_legacy_binding_cannot_bypass_policy_or_operator_pause",
+      "status": "pass",
+      "runtimeSeconds": 0.000164
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_legacy_read_compatibility_never_extends_stored_or_live_scopes",
+      "status": "pass",
+      "runtimeSeconds": 0.000626,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_legacy_retention_preserves_active_creator_policy_requirement",
+      "status": "pass",
+      "runtimeSeconds": 0.000303
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_legacy_verify_requires_the_current_actor_interactive_policy_receipt",
+      "status": "pass",
+      "runtimeSeconds": 0.000536,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_new_grants_encrypt_client_and_lane_metadata_with_both_tokens",
+      "status": "pass",
+      "runtimeSeconds": 0.000102
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_new_standard_consent_replaces_legacy_generation_without_reusing_old_refresh",
+      "status": "pass",
+      "runtimeSeconds": 0.002571
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_optional_legacy_mount_uses_only_server_pair_and_redacted_diagnostics",
+      "status": "pass",
+      "runtimeSeconds": 0.000167
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_production_client_cutover_does_not_send_legacy_staging_refresh",
+      "status": "pass",
+      "runtimeSeconds": 0.000242
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_real_start_and_completion_paths_bind_distinct_channels_and_reserve_unlocked",
+      "status": "pass",
+      "runtimeSeconds": 0.001919
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_runtime_lane_comes_only_from_protected_custody",
+      "status": "pass",
+      "runtimeSeconds": 9.2e-05
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_unknown_credential_source_fails_all_youtube_mounts_without_echoing_value",
+      "status": "pass",
+      "runtimeSeconds": 0.000214,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_unknown_expired_legacy_issuer_is_never_guessed_or_classified_revoked",
+      "status": "pass",
+      "runtimeSeconds": 0.000203
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_valid_legacy_access_survives_but_unknown_refresh_is_not_reused",
+      "status": "pass",
+      "runtimeSeconds": 0.000194
+    },
+    {
+      "id": "test_youtube_oauth_binding.YouTubeOAuthBindingTests.test_worker_binding_intervention_preserves_identity_and_never_purges",
+      "status": "pass",
+      "runtimeSeconds": 0.000519
+    },
+    {
+      "id": "test_youtube_openui_fence.YouTubeOpenUIFence.test_classifier_and_projection_reject_machine_context_before_manifest",
+      "status": "pass",
+      "runtimeSeconds": 0.002315,
+      "subtests": 6
+    },
+    {
+      "id": "test_youtube_openui_fence.YouTubeOpenUIFence.test_create_blocks_cached_eligible_parent_before_sweep_plan_or_claim",
+      "status": "pass",
+      "runtimeSeconds": 0.004583,
+      "subtests": 6
+    },
+    {
+      "id": "test_youtube_openui_fence.YouTubeOpenUIFence.test_existing_attempt_retry_edit_and_replay_recheck_current_parent",
+      "status": "pass",
+      "runtimeSeconds": 0.048682,
+      "subtests": 6
+    },
+    {
+      "id": "test_youtube_openui_fence.YouTubeOpenUIFence.test_foreign_parent_artifact_actor_and_server_scope_cannot_be_spoofed",
+      "status": "pass",
+      "runtimeSeconds": 0.009493
+    },
+    {
+      "id": "test_youtube_openui_fence.YouTubeOpenUIFence.test_late_ready_does_not_persist_derived_source",
+      "status": "pass",
+      "runtimeSeconds": 0.002811
+    },
+    {
+      "id": "test_youtube_openui_fence.YouTubeOpenUIFence.test_late_repair_does_not_resend_derived_source",
+      "status": "pass",
+      "runtimeSeconds": 0.002524
+    },
+    {
+      "id": "test_youtube_openui_fence.YouTubeOpenUIFence.test_ordinary_create_edit_shared_replay_and_cancellation_remain_available",
+      "status": "pass",
+      "runtimeSeconds": 0.010298
+    },
+    {
+      "id": "test_youtube_openui_fence.YouTubeOpenUIFence.test_parent_changed_after_admission_blocks_prebuilt_dispatch_and_raw_writes",
+      "status": "pass",
+      "runtimeSeconds": 0.003171
+    },
+    {
+      "id": "test_youtube_openui_fence.YouTubeOpenUIFence.test_replay_tail_stops_when_parent_is_removed",
+      "status": "pass",
+      "runtimeSeconds": 0.003019
+    },
+    {
+      "id": "test_youtube_policy_acceptance.YouTubePolicyTests.test_every_provider_dispatch_rechecks_but_revocation_remains_available",
+      "status": "pass",
+      "runtimeSeconds": 0.000289
+    },
+    {
+      "id": "test_youtube_policy_acceptance.YouTubePolicyTests.test_generic_callback_pin_preserves_nonpublic_standard_read_only",
+      "status": "pass",
+      "runtimeSeconds": 0.000117
+    },
+    {
+      "id": "test_youtube_policy_acceptance.YouTubePolicyTests.test_legacy_read_does_not_touch_new_schema",
+      "status": "pass",
+      "runtimeSeconds": 6.7e-05
+    },
+    {
+      "id": "test_youtube_policy_acceptance.YouTubePolicyTests.test_no_schema_or_current_document_is_fail_closed_and_not_a_draft",
+      "status": "pass",
+      "runtimeSeconds": 0.000274
+    },
+    {
+      "id": "test_youtube_policy_acceptance.YouTubePolicyTests.test_only_nonpublic_standard_read_only_is_compatible",
+      "status": "pass",
+      "runtimeSeconds": 0.000101,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_policy_acceptance.YouTubePolicyTests.test_only_registered_https_same_origin_documents_are_presented",
+      "status": "pass",
+      "runtimeSeconds": 0.000719,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_policy_acceptance.YouTubePolicyTests.test_pending_state_requires_same_current_policy_and_actual_holders_receipt",
+      "status": "pass",
+      "runtimeSeconds": 0.000371,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_policy_acceptance.YouTubePolicyTests.test_spoofed_receipt_identity_timestamp_and_api_tokens_cannot_accept",
+      "status": "pass",
+      "runtimeSeconds": 0.000222,
+      "subtests": 5
+    },
+    {
+      "id": "test_youtube_privacy_erasure.PrivacyErasureTests.test_erased_action_returns_exact_error_before_provider_or_manifest_access",
+      "status": "pass",
+      "runtimeSeconds": 0.000301
+    },
+    {
+      "id": "test_youtube_privacy_erasure.PrivacyErasureTests.test_erased_agent_approvals_never_reactivate_dispatch_or_use_existing_job",
+      "status": "pass",
+      "runtimeSeconds": 0.000239
+    },
+    {
+      "id": "test_youtube_privacy_erasure.PrivacyErasureTests.test_exact_fixed_slots_preserve_original_digests_actor_time_and_user_content",
+      "status": "pass",
+      "runtimeSeconds": 0.000199
+    },
+    {
+      "id": "test_youtube_privacy_erasure.PrivacyErasureTests.test_foreign_workspace_connection_and_other_platform_remain_unchanged",
+      "status": "pass",
+      "runtimeSeconds": 0.000653
+    },
+    {
+      "id": "test_youtube_privacy_erasure.PrivacyErasureTests.test_late_success_or_error_cannot_restore_erased_action_receipt",
+      "status": "pass",
+      "runtimeSeconds": 0.002293,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_privacy_erasure.PrivacyErasureTests.test_old_api_revocation_error_carries_exact_generation",
+      "status": "pass",
+      "runtimeSeconds": 9.8e-05
+    },
+    {
+      "id": "test_youtube_privacy_erasure.PrivacyErasureTests.test_source_clock_not_recent_approval_or_unknown_clock_extends_retention",
+      "status": "pass",
+      "runtimeSeconds": 0.001175
+    },
+    {
+      "id": "test_youtube_refresh_projection.YouTubeRefreshProjectionTests.test_refresh_metadata_does_not_change_other_provider_expiry",
+      "status": "pass",
+      "runtimeSeconds": 9.7e-05
+    },
+    {
+      "id": "test_youtube_refresh_projection.YouTubeRefreshProjectionTests.test_vault_refresh_and_revocation_facts_reach_both_channel_views",
+      "status": "pass",
+      "runtimeSeconds": 0.00346,
+      "subtests": 7
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_conflicting_bound_action_branches_fail_closed",
+      "status": "pass",
+      "runtimeSeconds": 0.00234
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_early_or_unapproved_provider_schedule_change_is_not_adopted",
+      "status": "pass",
+      "runtimeSeconds": 0.000703,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_late_preview_after_disconnect_cannot_recreate_prepared_action",
+      "status": "pass",
+      "runtimeSeconds": 0.000627
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_late_receipt_cannot_overwrite_an_erased_action",
+      "status": "pass",
+      "runtimeSeconds": 0.004752,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_metadata_and_declaration_guards_precede_tracking_override",
+      "status": "pass",
+      "runtimeSeconds": 0.004239,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_missing_or_corrupt_receipt_does_not_verify_an_action",
+      "status": "pass",
+      "runtimeSeconds": 0.014615,
+      "subtests": 5
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_old_receipt_reconciliation_cannot_override_newer_approved_action",
+      "status": "pass",
+      "runtimeSeconds": 0.004825
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_pending_predecessor_blocks_new_schedule_write",
+      "status": "pass",
+      "runtimeSeconds": 0.001903
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_recovery_marker_cannot_restore_superseded_original_schedule",
+      "status": "pass",
+      "runtimeSeconds": 0.003189
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_review_binds_exact_original_upload_in_approval_digest",
+      "status": "pass",
+      "runtimeSeconds": 0.001747
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_stale_predecessor_review_cannot_send_another_write",
+      "status": "pass",
+      "runtimeSeconds": 0.003385
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_tampered_review_manifest_is_rejected_before_provider_write",
+      "status": "pass",
+      "runtimeSeconds": 0.001102
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_unbound_legacy_receipt_and_changed_video_identity_are_not_adopted",
+      "status": "pass",
+      "runtimeSeconds": 0.006247,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_unknown_action_never_promotes_from_matching_state_and_has_bounded_polls",
+      "status": "pass",
+      "runtimeSeconds": 0.009612,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_unrelated_operation_or_other_channel_receipt_cannot_supply_override",
+      "status": "pass",
+      "runtimeSeconds": 0.003628,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_verification_race_stays_read_only_and_recovers_on_later_verified_receipt",
+      "status": "pass",
+      "runtimeSeconds": 0.002143
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_verified_reschedule_follows_new_time_without_changing_original_approval",
+      "status": "pass",
+      "runtimeSeconds": 0.002085
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_verified_reschedule_publication_is_checked_against_effective_time",
+      "status": "pass",
+      "runtimeSeconds": 0.002513
+    },
+    {
+      "id": "test_youtube_reschedule_tracking.ApprovedNativeScheduleTrackingTests.test_verified_unschedule_ends_pending_job_and_keeps_video_private",
+      "status": "pass",
+      "runtimeSeconds": 0.002349
+    },
+    {
+      "id": "test_youtube_schedule_guard.NativeScheduleDispatchTests.test_admission_wait_consuming_timeout_buffer_sends_nothing",
+      "status": "pass",
+      "runtimeSeconds": 0.000218
+    },
+    {
+      "id": "test_youtube_schedule_guard.NativeScheduleDispatchTests.test_admission_wait_expiring_future_schedule_sends_nothing",
+      "status": "pass",
+      "runtimeSeconds": 0.00011
+    },
+    {
+      "id": "test_youtube_schedule_guard.NativeScheduleDispatchTests.test_exact_minimum_lead_is_preserved",
+      "status": "pass",
+      "runtimeSeconds": 6.9e-05
+    },
+    {
+      "id": "test_youtube_schedule_guard.NativeScheduleDispatchTests.test_expired_and_short_lead_rejected_before_admission",
+      "status": "pass",
+      "runtimeSeconds": 0.000139,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_schedule_guard.NativeScheduleDispatchTests.test_metadata_and_schedule_removal_retain_behavior",
+      "status": "pass",
+      "runtimeSeconds": 7.5e-05,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_service_controls.CreatorControlTests.test_bulk_approval_checks_final_queue_but_idempotent_retry_does_not_add_work",
+      "status": "pass",
+      "runtimeSeconds": 8.8e-05
+    },
+    {
+      "id": "test_youtube_service_controls.CreatorControlTests.test_returned_legacy_binding_requires_intervention_without_revoking_grant",
+      "status": "pass",
+      "runtimeSeconds": 0.000381
+    },
+    {
+      "id": "test_youtube_service_controls.CreatorControlTests.test_verified_channel_accepts_bound_lane_and_rejects_unknown_lane",
+      "status": "pass",
+      "runtimeSeconds": 9.9e-05
+    },
+    {
+      "id": "test_youtube_thumbnail_receipts.ThumbnailReceiptTests.test_different_video_or_missing_urls_are_not_observed",
+      "status": "pass",
+      "runtimeSeconds": 0.000187,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_thumbnail_receipts.ThumbnailReceiptTests.test_stable_resource_url_is_not_image_content_verification",
+      "status": "pass",
+      "runtimeSeconds": 6.6e-05
+    },
+    {
+      "id": "test_youtube_upload_recovery_safety.UploadRecoverySafetyTests.test_cancel_after_preflight_cannot_resurrect_job_or_change_upload",
+      "status": "pass",
+      "runtimeSeconds": 0.012312,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_upload_recovery_safety.UploadRecoverySafetyTests.test_final_role_freshness_and_original_approver_are_rechecked",
+      "status": "pass",
+      "runtimeSeconds": 0.0124,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_upload_recovery_safety.UploadRecoverySafetyTests.test_job_write_failure_rolls_back_the_upload_recovery_update",
+      "status": "pass",
+      "runtimeSeconds": 0.00449
+    },
+    {
+      "id": "test_youtube_upload_recovery_safety.UploadRecoverySafetyTests.test_legacy_recovery_preserves_original_created_at_retention_lower_bound",
+      "status": "pass",
+      "runtimeSeconds": 0.004005
+    },
+    {
+      "id": "test_youtube_upload_recovery_safety.UploadRecoverySafetyTests.test_new_consent_after_preflight_fences_shared_journal_save_before_any_commit",
+      "status": "pass",
+      "runtimeSeconds": 0.004225
+    },
+    {
+      "id": "test_youtube_upload_recovery_safety.UploadRecoverySafetyTests.test_paused_revoked_or_owner_demoted_autopilot_requires_current_owner_authority",
+      "status": "pass",
+      "runtimeSeconds": 0.01565,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_upload_recovery_safety.UploadRecoverySafetyTests.test_purged_or_changed_upload_is_not_recreated_from_stale_preview",
+      "status": "pass",
+      "runtimeSeconds": 0.016992,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_upload_recovery_safety.UploadRecoverySafetyTests.test_terminal_or_canceled_jobs_and_nonheld_journals_cannot_resume",
+      "status": "pass",
+      "runtimeSeconds": 0.033662,
+      "subtests": 11
+    },
+    {
+      "id": "test_youtube_upload_recovery_safety.UploadRecoverySafetyTests.test_valid_recovery_preserves_same_session_or_video_and_commits_exact_job_once",
+      "status": "pass",
+      "runtimeSeconds": 0.014739,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_accepted_native_schedule_readback_survives_paused_autopilot",
+      "status": "pass",
+      "runtimeSeconds": 0.000998,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_age_deferral_never_applies_to_revoked_unverified_or_local_channels",
+      "status": "pass",
+      "runtimeSeconds": 0.000139,
+      "subtests": 6
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_approver_security_hold_or_unreadable_controls_block_before_any_attempt",
+      "status": "pass",
+      "runtimeSeconds": 0.002448,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_autopilot_pause_before_claim_and_during_refresh_stops_forward_work",
+      "status": "pass",
+      "runtimeSeconds": 0.001074,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_disconnect_hold_or_terminal_state_survives_reconnect_during_refresh",
+      "status": "pass",
+      "runtimeSeconds": 0.002022,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_missing_capacity_migration_defers_youtube_but_claims_other_platform",
+      "status": "pass",
+      "runtimeSeconds": 0.001112
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_missing_migration_is_visible_without_claiming_any_youtube_attempt",
+      "status": "pass",
+      "runtimeSeconds": 0.000754
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_new_cancellation_or_changed_fence_during_refresh_stops_forward_work",
+      "status": "pass",
+      "runtimeSeconds": 0.001463,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_queued_autopilot_owner_demotion_blocks_claim_and_forward_write",
+      "status": "pass",
+      "runtimeSeconds": 0.002072,
+      "subtests": 4
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_reconciliation_and_existing_native_schedule_cancellation_are_reverified",
+      "status": "pass",
+      "runtimeSeconds": 0.002501,
+      "subtests": 3
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_revoked_grant_identity_scope_digest_and_approval_changes_block",
+      "status": "pass",
+      "runtimeSeconds": 0.004006,
+      "subtests": 7
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_server_worker_budget_tuning_preserves_defaults_and_hard_bounds",
+      "status": "pass",
+      "runtimeSeconds": 0.000112,
+      "subtests": 5
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_two_stale_connections_refresh_independently_before_forward_bytes",
+      "status": "pass",
+      "runtimeSeconds": 0.00134
+    },
+    {
+      "id": "test_youtube_worker_refresh.YouTubeWorkerRefreshTests.test_unavailable_or_missing_refresh_retries_without_attempt_or_write",
+      "status": "pass",
+      "runtimeSeconds": 0.00176,
+      "subtests": 2
+    },
+    {
+      "id": "test_youtube_workspace_projection.YouTubeWorkspaceProjectionTests.test_hosted_workspace_presentation_keeps_stored_provenance_and_hides_internal_branch",
+      "status": "pass",
+      "runtimeSeconds": 0.002492
+    },
+    {
+      "id": "test_youtube_workspace_projection.YouTubeWorkspaceProjectionTests.test_presentation_of_legacy_workspace_without_internal_youtube_state_is_unchanged",
+      "status": "pass",
+      "runtimeSeconds": 0.000579
+    },
+    {
+      "id": "test_youtube_workspace_provider_data.WorkspaceProviderDataTests.test_cached_receipts_cannot_restart_the_retention_clock",
+      "status": "pass",
+      "runtimeSeconds": 9.9e-05
+    },
+    {
+      "id": "test_youtube_workspace_provider_data.WorkspaceProviderDataTests.test_claim_captures_database_generation_for_native_read_only_work",
+      "status": "pass",
+      "runtimeSeconds": 0.000263
+    },
+    {
+      "id": "test_youtube_workspace_provider_data.WorkspaceProviderDataTests.test_current_completion_stamps_exact_source_and_runs_hooks",
+      "status": "pass",
+      "runtimeSeconds": 0.00159
+    },
+    {
+      "id": "test_youtube_workspace_provider_data.WorkspaceProviderDataTests.test_journal_stamps_once_and_tombstone_blocks_stale_save_and_new_consent",
+      "status": "pass",
+      "runtimeSeconds": 0.000688
+    },
+    {
+      "id": "test_youtube_workspace_provider_data.WorkspaceProviderDataTests.test_non_youtube_completion_does_not_acquire_credentials_or_redact",
+      "status": "pass",
+      "runtimeSeconds": 0.001471
+    },
+    {
+      "id": "test_youtube_workspace_provider_data.WorkspaceProviderDataTests.test_only_deterministic_youtube_output_slots_are_legacy_candidates",
+      "status": "pass",
+      "runtimeSeconds": 0.000112
+    },
+    {
+      "id": "test_youtube_workspace_provider_data.WorkspaceProviderDataTests.test_revoked_replaced_actor_and_expired_sources_never_run_stale_hooks",
+      "status": "pass",
+      "runtimeSeconds": 0.002679,
+      "subtests": 6
+    },
+    {
+      "id": "test_youtube_workspace_provider_data.WorkspaceProviderDataTests.test_runtime_outputs_are_removed_without_rewriting_approval_or_user_content",
+      "status": "pass",
+      "runtimeSeconds": 0.000114
+    },
+    {
+      "id": "test_youtube_workspace_provider_data.WorkspaceProviderDataTests.test_workspace_scan_remains_cron_only",
+      "status": "pass",
+      "runtimeSeconds": 0.001556
+    }
+  ],
+  "sourceSha256": {
+    "tests/test_agent_capability_registry.py": "3d3c7f9f8a953bd58fc8a3aa20035de8afa8c014d82704bfceafd75d18347417",
+    "tests/test_agent_permissions.py": "20138e054a12cd9063efde341f7ffd4583646431782c74502c332c66bf211656",
+    "tests/test_agent_permissions_surfaces.py": "a9e6cf508cd334f4520d3d2657336b9c2ccb70734bfb031acea00a6ea0c419f8",
+    "tests/test_postriff_account_security.py": "9753cf0c9fa6ecbbc310f27efb86cef1e9ddbf58b52fd8ee2dd51c0b91b0c978",
+    "tests/test_postriff_channels.py": "69f24dc5a9ebfaeaa97563e8c16aac2235606f0e03b551c2e115ca8f849f8a72",
+    "tests/test_postriff_phase2_hosted.py": "8910c49bd91d08f244cb85a415b551f8ecaadfaeb70a4fc333b9529aefc09d4f",
+    "tests/test_postriff_providers.py": "0d7ff93823dbc7e9d862755974e4bfe1127d273a8f123b8923b15a1c7da82a88",
+    "tests/test_twitch_agent.py": "a5a1022c8113b4c5727f5cb4fe7db35dab5f4b3f193be51bc4a4c963df6a2c74",
+    "tests/test_twitch_oauth.py": "9b5038d2f9f931e9c9ca8eb1b39447944bc7a2cdf4148fb1a62b08764e16dab5",
+    "tests/test_twitch_refresh_projection.py": "7f3843b75e41f6b60721938ea82ec723bda1b06a06f32ec6c636de2cfda47ec0",
+    "tests/test_youtube_acceptance.py": "294b77c6e331fed8d63480bed51d5df7c5769c1e3a889d36bc17198c701c5584",
+    "tests/test_youtube_acceptance_binding.py": "eca068ce3047e52a1be8f2361b3258df6d62de00a43b064b29ffb057178c024c",
+    "tests/test_youtube_agent.py": "861783e92057c94d579385b9134fdae464664c92d868fae91930bbc4737b38ef",
+    "tests/test_youtube_agent_calendar.py": "b252fd2525e587910173b2769c437174a11c3b8b2e22a87980a1b625c8da8ac1",
+    "tests/test_youtube_agent_context.py": "7b328513f5809c030b51847fe8174c882545f6e909144f6f124519dd83e32d9d",
+    "tests/test_youtube_agent_disconnect.py": "83c412b7e4d670c48ce77212a50ceb4204364dec895363607e4bcb0b610b67ac",
+    "tests/test_youtube_agent_history.py": "94e13779fdcb577080da16ef7e585d9ba1daf8fee8e4bb1c3acfe3b569d0f8bd",
+    "tests/test_youtube_agent_pagination.py": "46e911d37fa35047dee9b30adbee56e85000202c36dee8f73907755a6546183b",
+    "tests/test_youtube_agent_tools.py": "ad31803bbcaf05f8cce43ee4f78a4599bcf68b00e963b1d04ba6888c59721c9e",
+    "tests/test_youtube_analytics_grants.py": "dbe224edd3bab609b71cbd38f7889732310c3736675bea62e962fddb09794a99",
+    "tests/test_youtube_callback_origin.py": "790d6d9855e54a90cecfbd81a7991a511ab31aa8800800a0bbc7118dc43c363a",
+    "tests/test_youtube_capacity.py": "3156773b8ec254256b2f5b883f26c9ba33e6fec4baed006fd6846e53b9c2ee34",
+    "tests/test_youtube_composer_refresh.py": "5a0f8a940afe95ec80465fc46aea49f70ad912c1bd5b6f86dfae7f760b5fbaee",
+    "tests/test_youtube_connection_safety.py": "7a4311a54a6d3393dc17ed59ce140c65f97c95efc622bc2c96f81073a2a4594e",
+    "tests/test_youtube_creator.py": "8fe6daa5d320d55976c2daf8b55c628b1429f4ce7756461f0824df51647f8d18",
+    "tests/test_youtube_fleet.py": "d26ef010885a96faa9fdfd3590aa269d2f80c9342b69075008429799ada8c9ef",
+    "tests/test_youtube_fleet_http.py": "dfae42375221bec797c9ab818429dc34896d49dbef801792f0934f40b80f7315",
+    "tests/test_youtube_identity_fence.py": "b629d7614a71a59e49be83dd09c742aac1a1fde20156cbf3c4cde986d226a8b1",
+    "tests/test_youtube_journal_fence.py": "16c78dc29c796d2cfdd134f8becbba7b5f4cce261ba85107606d06085e3b2b16",
+    "tests/test_youtube_oauth_binding.py": "ac4f33fa5a645334d29bdd99cd1c7007e4559a76c127a2b7541717b6c3f98e94",
+    "tests/test_youtube_openui_fence.py": "6538ce2842c6bcedd5ab37481884c3bd3d98697ab6e4bfaa8a9eedcf008aa365",
+    "tests/test_youtube_policy_acceptance.py": "33ec069c043ff7884c422d22ee8f10dc3bbd67485f24388a57e4b18ce0b9f532",
+    "tests/test_youtube_privacy_erasure.py": "1d3085af7a2590dbf580645ccf4821c1a6b8c62063129cb5e7c34cbf3633dc13",
+    "tests/test_youtube_refresh_projection.py": "0b263fe9b06901b4d248eec82b86b251a443670df8a82c05ada6b6666785409b",
+    "tests/test_youtube_reschedule_tracking.py": "b082325c405e225db830722a537282630c7c945c555525cf4058cffec7266b03",
+    "tests/test_youtube_schedule_guard.py": "606a343a82a71445999c9619f44f7f28540c959867fd0a90cc208fdf659b9724",
+    "tests/test_youtube_service_controls.py": "dfcee4f90ef63cf5dc93c89d3daf5db0ce92bf2d70404f9e9e928523b8d3772e",
+    "tests/test_youtube_thumbnail_receipts.py": "8524fedfb04a2399e3dcc05c5849808dcc6c362b2f5336b8023d6a50e6dbdd95",
+    "tests/test_youtube_upload_recovery_safety.py": "1572f4a917cb9f7094bd8ab935a7ed6851a15b976fffc9ef04d2172f2ee9c70f",
+    "tests/test_youtube_worker_refresh.py": "ee6ddad494d6a1a8527094d136bd0271e86c22c1f47ec33eb9f7ba73f4b74110",
+    "tests/test_youtube_workspace_projection.py": "8f039918557d6cd9e26a169450b29e639d0a425f2d79e28d3b12d47ae653d3dc",
+    "tests/test_youtube_workspace_provider_data.py": "d85213617d42eebc771a3d8b959fcb808fff87e802c2b217f433fb4e7a352b8a",
+    ".env.example": "49fad8bfb506f6e719d6b8bc35db381324df6ebc19d4747d878162533c8fa1ca",
+    "src/postriff_phase2/twitch_oauth.py": "8141e20cbe953d5766ddef2165efbcc010e7f79bc6f7f014b4fa351e6e57e11c",
+    "src/postriff_phase2/oauth.py": "59e06856578483b336d1e4633fb21109ba20ab37c168525bcfa4b83110800006",
+    "src/postriff_phase2/providers.py": "c3daf55c53214268a6198f41887a8193946b4c9aa0476de0ae7030f816ad2698",
+    "src/postriff_phase2/channels.py": "f899b0ad6490e3887ab5949ff789b9a989779f2f39fbc4d0ff6ea1983054fd18",
+    "src/postriff_phase2/hosted.py": "584c01d88d1355078f80ebc74655ae0569ed50b5c9ed919a5d6bbc33325e77c8",
+    "src/postriff_phase2/twitch_agent.py": "db45f71958d7aeb3468789dd53f6c0fa5e0fff241c4967723081a1f6b06dc023",
+    "src/postriff_phase2/agent_runtime_v2/authz.py": "cd58234158028d57c52152a02e634c6565a3d272c6c92ae0491584b259137110",
+    "src/postriff_phase2/agent_runtime_v2/capability_registry.py": "5d09735619f0249c83e881d77f99c6aadcc5b458cf36218265d9187534b5746f",
+    "src/postriff_phase2/agent_runtime_v2/capability_copy.json": "67403a3ccc83703cc13677e3c8fd6008fdea17e563f02109df592f6398af5610",
+    "src/postriff_phase2/agent_runtime_v2/domain_tools.py": "064ce86425d82764b56c93a4c120e1861cb5f62726852cb02463f10571dc5344"
+  },
+  "limits": [
+    "Offline verification only; public OAuth browser consent, token refresh/revoke and callbacks remain live-unverified.",
+    "Does not include native HTTP, EventSub or PostgreSQL suites run by the parent agent.",
+    "Totals count each test.id() once. Prior runs and subtest iterations are not added."
+  ]
+}

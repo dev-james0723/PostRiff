@@ -622,7 +622,7 @@ class ChannelsAndWorkspaces(unittest.TestCase):
             (WORKSPACE, "admin", False, False, False, False, "Studio", [live, placeholder]),
             (OTHER, "viewer", False, False, False, False, "", json.dumps([expired])),
         ]
-        cursor = FakeCursor([(rows, 2), ([("c1", OTHER, "Ada", now - 10)], 1)])
+        cursor = FakeCursor([(rows, 2), ([(WORKSPACE, "c1", OTHER, "Ada", now - 10)], 1)])
         result = service(cursor, verifier()).my_channels("t")["channels"]
         self.assertEqual([(c["workspaceName"], c["id"], c["connectionState"], c["canManage"]) for c in result], [("Studio", "c1", "publish_verified", True), ("My workspace", "c2", "token_expired", False)])
         self.assertNotIn("scopes", result[0])

@@ -1,7 +1,8 @@
 """PostRiff-owned OAuth transactions and encrypted credential custody (architecture §12.2).
 
 Flow: authenticated `start` → provider consent → PostRiff public callback (redirect only,
-never exchanges) → authenticated `complete` (same member, same workspace, single use, PKCE)
+never exchanges) → authenticated `complete` (same member, same workspace, single use,
+with PKCE where the provider supports it)
 → tokens encrypted at rest → channel + capability rows. Tokens are decrypted only for the
 server-side connector worker; they never reach the browser, the agent, or a log.
 """
@@ -18,7 +19,9 @@ from postriff_alpha.domain import AlphaError, clean
 from .audience import COMMENT_READ_PROVIDERS
 from . import account_pictures
 from .permissions import require
-from .channels import CAPABILITIES, assisted_matrix, customer_view, set_level, unsupported_matrix, with_youtube_credential_status, youtube_credential_status
+from .channels import (CAPABILITIES, assisted_matrix, customer_view, set_level, unsupported_matrix,
+                       with_youtube_credential_status, youtube_credential_status,
+                       with_twitch_credential_status, twitch_credential_status)
 
 TRANSACTION_TTL = 600
 PUBLISH_CAPABILITIES = ("publish", "schedule")
@@ -70,6 +73,7 @@ class OAuthService:
         self.youtube_public_base_url = youtube_public_base_url or None
         self.picture_fetch = account_pictures.fetch_image  # replaced in tests; never reached without a picture URL
         self.identity_admission = None  # hosted service wires durable quota reservation outside workspace locks
+        self.twitch_lifecycle = None  # local durable invalidation hook; called inside workspace/credential transaction
         from .youtube.policy_acceptance import YouTubePolicyAcceptance
         self.youtube_policy = YouTubePolicyAcceptance(self)
         from .social_history import SocialHistoryService
@@ -103,6 +107,8 @@ class OAuthService:
             feature_enabled = bool(diagnostic.get('featureFlagEnabled', not getattr(cls, 'feature_flag_required', False)))
             if getattr(cls, 'feature_flag_required', False) and not feature_enabled:
                 issues.append('This connector is behind its independent server feature flag.')
+            if pid == 'twitch' and not diagnostic.get('commercialApproved', getattr(adapter, 'commercial_approved', False)):
+                issues.append('Twitch commercial use authorization is not recorded; operator review is required.')
             contract_verified = bool(getattr(cls, 'oauth_contract_verified', True))
             if not contract_verified:
                 issues.append('Current OAuth endpoint details remain behind the provider approval portal; connection stays unavailable until they are independently verified.')
@@ -115,6 +121,8 @@ class OAuthService:
             normalized = cls.normalized_capabilities() if getattr(cls, 'wave', None) else None
             if normalized is None:
                 legacy = {cap: bool(adapter and adapter.capability_scopes(cap)) for cap in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply')}
+                if pid == 'twitch':
+                    legacy['identity'] = adapter is not None
             else:
                 legacy = {
                     'identity': bool(adapter and normalized['identity'] == 'supported' and adapter.capability_scopes('identity')),
@@ -127,6 +135,8 @@ class OAuthService:
                     'reply': bool(adapter and normalized['comments_reply'] == 'supported' and adapter.capability_scopes('reply')),
                 }
             requested = list(getattr(cls, 'documented_scopes', ())) or sorted({scope for scopes in cls.SCOPES.values() for scope in scopes})
+            if pid == 'twitch' and adapter:
+                requested = sorted(adapter.available_scopes())
             checklist = {
                 'clientIdConfigured': bool(presence.get('clientId')), 'clientSecretConfigured': bool(presence.get('clientSecret')),
                 'redirectUriConfigured': callback is not None,
@@ -277,6 +287,10 @@ class OAuthService:
 
     def callback_base_url(self, provider_id):
         base = self.youtube_public_base_url if provider_id == 'youtube' and self.youtube_public_base_url else self.public_base_url
+        if provider_id == 'twitch':
+            from .twitch_oauth import TwitchProvider
+            if base != TwitchProvider.callback_origin:
+                raise AlphaError('Twitch OAuth requires the exact registered Rafii HTTPS origin.', 503, code='twitch_callback_mismatch')
         # The opt-in origin is stricter than legacy normalization; malformed configuration
         # fails only the YouTube callback and cannot supply a request-controlled destination.
         if provider_id == 'youtube' and self.youtube_public_base_url:
@@ -304,7 +318,11 @@ class OAuthService:
         pinned = getattr(self.providers.get(provider_id), 'callback_origin', None) if hasattr(self.providers, 'get') else None
         if provider_id == 'youtube' and self.youtube_public_base_url:
             pinned = None
-        return f"{pinned or base}/api/oauth/{provider_id}/callback"
+        callback = f"{pinned or base}/api/oauth/{provider_id}/callback"
+        if provider_id == 'twitch':
+            from .twitch_oauth import TwitchProvider
+            TwitchProvider.assert_callback(callback)
+        return callback
 
     # --- start ----------------------------------------------------------------------
     def start(self, workspace_id, token, provider_id, capability, inputs=None):
@@ -326,10 +344,11 @@ class OAuthService:
                 raise AlphaError("This connection is waiting for provider application approval.", 409)
             raise AlphaError("This connection is not enabled yet.", 409)
         youtube_features = tuple(adapter.SCOPES) if provider_id == 'youtube' else ()
-        if capability not in (*CAPABILITIES, 'posts_read', *youtube_features) or capability in ("media_types", "webhooks"):
+        twitch_capability = provider_id == 'twitch' and adapter.supports_capability(capability)
+        if (capability not in (*CAPABILITIES, 'posts_read', *youtube_features) and not twitch_capability) or capability in ("media_types", "webhooks"):
             raise AlphaError("Choose the capability you want to enable.", 400)
         scopes = adapter.capability_scopes(capability)
-        if not scopes:
+        if not scopes and not twitch_capability:
             raise AlphaError(f"{adapter.platform} does not offer '{capability}' through its official API for this app.", 409)
         redirect = self.callback_uri(provider_id)
         # Class attributes, so a mocked adapter keeps the plain redirect path.
@@ -338,6 +357,17 @@ class OAuthService:
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit, throttle
             require(_membership(row), "manage_connections")
+            twitch_context = None
+            if provider_id == 'twitch':
+                adapter.assert_enabled()
+                twitch_context = {'clientId': adapter.client_id, 'connectionId': inputs.get('connectionId')}
+                if inputs.get('connectionId'):
+                    cur.execute("SELECT provider_account_id,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='twitch'", (workspace_id, inputs['connectionId']))
+                    previous = cur.fetchone()
+                    if not previous:
+                        raise AlphaError('Twitch connection unavailable.', 404)
+                    twitch_context['providerAccountId'] = previous[0]
+                    scopes = sorted(set(scopes) | (set(previous[1] or []) & adapter.available_scopes()))
             policy_acceptance = self.youtube_policy.require_user(cur, workspace_id, principal, token, adapter,
                 capability=capability, scopes=scopes) if provider_id == 'youtube' else None
             if provider_id == 'youtube' and lane == 'agentic':
@@ -360,6 +390,8 @@ class OAuthService:
             custody = json.dumps({'pkce': verifier, 'connectionId': (inputs or {}).get('connectionId'),
                                   'clientId': adapter.client_id, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard'),
                                   'policyAcceptance': policy_acceptance}) if provider_id == 'youtube' else verifier
+            if provider_id == 'twitch':
+                custody = json.dumps({**twitch_context, 'pkce': verifier})
             ciphertext, key_id = self.vault.encrypt(custody)
             stored_capability = capability if capability in CAPABILITIES else 'identity'
             cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, stored_capability, redirect, list(scopes), hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
@@ -413,7 +445,7 @@ class OAuthService:
 
     # --- complete (authenticated exchange) ----------------------------------------
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
-        if provider_id != 'youtube':
+        if provider_id not in ('youtube', 'twitch'):
             return self._complete(workspace_id, token, provider_id, state, code, error, iss)
         if not isinstance(state, str) or not 20 <= len(state) <= 128:
             raise AlphaError('Connection request unavailable.', 404)
@@ -427,10 +459,12 @@ class OAuthService:
             if txn[3] <= self.clock():
                 raise AlphaError('This connection request expired. Start again.', 409)
             context = json.loads(self.vault.decrypt(txn[5], txn[6]))
-            adapter = self._youtube_provider(context.get('authorizationLane', 'standard'))
+            adapter = self._youtube_provider(context.get('authorizationLane', 'standard')) if provider_id == 'youtube' else self._provider('twitch')
             if context.get('clientId') != adapter.client_id:
-                raise AlphaError('The YouTube OAuth configuration changed. Start again.', 409, code='youtube_oauth_binding_changed')
-            if code and not error:
+                raise AlphaError('The OAuth configuration changed. Start again.', 409, code=provider_id + '_oauth_binding_changed')
+            if provider_id == 'twitch':
+                adapter.assert_enabled()
+            if provider_id == 'youtube' and code and not error:
                 self.youtube_policy.require_pending(cur, workspace_id, principal, token, adapter, txn[7], context)
             if getattr(adapter, 'authorization_lane', 'standard') == 'agentic':
                 require(_membership(row), 'owner')
@@ -517,6 +551,17 @@ class OAuthService:
                     self.repository.assert_fresh(token, principal)
                 if not getattr(adapter, 'execution_enabled', True):
                     raise AlphaError('This YouTube authorization workflow is paused. Start again when enabled.', 503)
+            twitch_context = {}
+            if provider_id == 'twitch':
+                try:
+                    twitch_context = json.loads(verifier)
+                except (TypeError, ValueError):
+                    raise AlphaError('The Twitch authorization request is unavailable.', 404) from None
+                if not isinstance(twitch_context, dict) or twitch_context.get('clientId') != adapter.client_id:
+                    raise AlphaError('The Twitch OAuth configuration changed. Start again.', 409, code='twitch_oauth_binding_changed')
+                adapter.assert_enabled()
+                adapter.assert_callback(redirect)
+                verifier = twitch_context['pkce']
             policy_acceptance = self.youtube_policy.require_pending(cur, workspace_id, principal, token, adapter,
                 scopes, youtube_context) if provider_id == 'youtube' else None
             if bot_code:
@@ -553,6 +598,9 @@ class OAuthService:
             connection_id = self._connection_id(provider_id, identity['providerAccountId'], getattr(adapter, 'authorization_lane', 'standard'))
             if youtube_context.get('connectionId') and youtube_context['connectionId'] != connection_id:
                 raise AlphaError('You selected a different YouTube channel. Connect it separately; the existing channel was not replaced.', 409, code='youtube_channel_changed')
+            if twitch_context.get('connectionId') and (twitch_context['connectionId'] != connection_id
+                    or twitch_context.get('providerAccountId') != identity['providerAccountId']):
+                raise AlphaError('You selected a different Twitch account. Connect it separately.', 409, code='twitch_account_changed')
             from .billing import require_plan_capacity
             require_plan_capacity(cur, workspace_id, "connected_accounts", connection_id)
             access_ct, key_id = self.vault.encrypt(grant["accessToken"])
@@ -568,6 +616,9 @@ class OAuthService:
             # Keep Gmail/Calendar and other consent paths independent of 098.
             consent_generation_sql = ',authorization_generation=gen_random_uuid()' if provider_id == 'youtube' else ''
             cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s) ON CONFLICT(workspace_id,connection_id) DO UPDATE SET access_ciphertext=excluded.access_ciphertext,refresh_ciphertext=excluded.refresh_ciphertext,key_id=excluded.key_id,scopes=excluded.scopes,access_expires_at=excluded.access_expires_at,refresh_supported=excluded.refresh_supported,revoked_at=NULL" + consent_generation_sql + ",rotated_at=now(),updated_at=now()", (workspace_id, connection_id, provider_id, identity["providerAccountId"], access_ct, refresh_ct, key_id, granted, expires, bool(refresh_ct)))
+            if provider_id == 'twitch':
+                consent_generation = adapter.credential_generation(grant['accessToken'])
+                self._twitch_changed(cur, workspace_id, connection_id, 'connected', consent_generation)
             if provider_id == 'youtube':
                 # This is a genuine identity observation from this new consent.
                 # Restore an erased canonical ID only after its exact hashed
@@ -595,8 +646,11 @@ class OAuthService:
         # this workspace save. The same-transaction fence rolls back a stale
         # profile restoration rather than trusting a newly fetched revision.
         def consent_fence(cur, _state, _actor):
-            self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
-        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id == 'youtube' else {}))
+            if provider_id == 'twitch':
+                self._assert_twitch_generation(cur, workspace_id, connection_id, consent_generation)
+            else:
+                self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
+        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id in ('youtube', 'twitch') else {}))
         self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': consent_generation} if provider_id == 'youtube' else {}))
         return {"connected": True, "connectionId": connection_id, "account": channel["account"], "providerAccountId": identity["providerAccountId"], "confirmAccount": True, "missingScopes": missing, "capabilities": matrix, "revision": saved["revision"]}
 
@@ -875,6 +929,10 @@ class OAuthService:
         and an account-scoped Standard Access grant remain distinct: the latter can prove Direct
         execution only for the exact connected account.
         """
+        if getattr(adapter, 'id', None) == 'twitch':
+            matrix = unsupported_matrix()
+            set_level(matrix, 'identity', 'Direct', 'Twitch user and client verified. Open Twitch native actions for per-operation permissions and eligibility.', now, adapter.capability_version)
+            return matrix  # No fictitious text-feed publishing or automatic stream start.
         if getattr(adapter, 'id', None) == 'youtube':
             from .youtube.model import READ, UPLOAD, MANAGE, ANALYTICS, has_scopes, project_public_gate
             matrix = unsupported_matrix()
@@ -930,6 +988,10 @@ class OAuthService:
         return matrix
 
     # --- read / refresh / disconnect -------------------------------------------------
+    def _twitch_projection_binding(self, access_ciphertext, key_id, account_id):
+        adapter = self.providers.get('twitch')
+        return bool(adapter and adapter.credential_subject(self.vault.decrypt(access_ciphertext, key_id)) == account_id)
+
     def channels(self, workspace_id, token):
         snapshot = self.repository.get(workspace_id, token)
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
@@ -937,18 +999,171 @@ class OAuthService:
             rows = cur.fetchall()
             pictures = account_pictures.guarded(cur, account_pictures.digests, workspace_id) or {}
             credentials = youtube_credential_status(cur, [workspace_id])
+            has_twitch = any(c.get('platform') == 'Twitch' for c in snapshot['state'].get('phase2', {}).get('channels', []))
+            twitch_credentials = twitch_credential_status(cur, [workspace_id], validate_binding=self._twitch_projection_binding) if has_twitch else {}
         matrices = {}
         for connection_id, capability, level, evidence, version, verified in rows:
             matrices.setdefault(connection_id, unsupported_matrix())[capability] = {"level": level, "evidence": evidence, "capabilityVersion": version, "verifiedAt": float(verified) if verified else None}
         now = self.clock()
         catalog = self.provider_catalog()
         by_platform = {provider['platform']: provider for provider in catalog}
-        views = [{**customer_view(with_youtube_credential_status(c, credentials.get((workspace_id, c['id']))), matrices.get(c['id'], assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
+        views = []
+        for channel in snapshot['state'].get('phase2', {}).get('channels', []):
+            key = (workspace_id, channel['id'])
+            current = with_youtube_credential_status(channel, credentials.get(key))
+            current = with_twitch_credential_status(current, twitch_credentials.get(key))
+            fallback = unsupported_matrix() if channel.get('platform') == 'Twitch' else assisted_matrix()
+            views.append({**customer_view(current, matrices.get(channel['id'], fallback), now), 'pictureDigest': pictures.get(channel['id'])})
         for view in views:
             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
         return {'channels': views, 'providers': catalog}
 
+    def _twitch_changed(self, cur, workspace_id, connection_id, event, generation):
+        if callable(self.twitch_lifecycle):
+            self.twitch_lifecycle(cur, workspace_id, connection_id, event, generation)
+        elif event in ('connected', 'scope_changed'):
+            raise AlphaError('Twitch durable lifecycle is not configured.', 503, code='twitch_lifecycle_unavailable')
+
+    def _assert_twitch_generation(self, cur, workspace_id, connection_id, generation):
+        cur.execute("SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='twitch' AND revoked_at IS NULL FOR NO KEY UPDATE", (workspace_id, connection_id))
+        row = cur.fetchone()
+        if not row or self._provider('twitch').credential_generation(self.vault.decrypt(row[0], row[1])) != generation:
+            raise AlphaError('Twitch authorization changed. Reload the connection.', 409, code='twitch_connection_changed')
+
+    def _twitch_token_for_worker(self, workspace_id, connection_id):
+        """Serializes rotation and scope revocation with workspace→credential locks.
+
+        /validate runs on every active use (including the first use in a new
+        process). A startup/hourly worker also calls validate_twitch_connections
+        for idle sessions. Transient errors preserve the last confirmed grant;
+        invalid refresh or mismatched issuer/subject removes only the observed
+        generation after this transaction rolls back.
+        """
+        observed_ciphertext = None
+        try:
+            with self.repository.connection_factory() as db, db.cursor() as cur:
+                cur.execute('SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
+                if not cur.fetchone():
+                    raise AlphaError('Connection unavailable.', 404)
+                cur.execute("SELECT provider,access_ciphertext,refresh_ciphertext,key_id,extract(epoch from access_expires_at)::float8,refresh_supported,revoked_at IS NOT NULL,scopes,provider_account_id,extract(epoch from coalesce(rotated_at,updated_at,created_at))::float8 FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s FOR UPDATE", (workspace_id, connection_id))
+                row = cur.fetchone()
+                if not row or row[0] != 'twitch' or row[6]:
+                    raise AlphaError('Connection unavailable.', 404)
+                _, observed_ciphertext, refresh_ct, key_id, expires, refresh_supported, _, previous_scopes, account_id, _ = row
+                adapter = self._provider('twitch')
+                adapter.assert_enabled()
+                access = self.vault.decrypt(observed_ciphertext, key_id)
+                generation = adapter.credential_generation(access)
+                if adapter.credential_subject(access) != account_id:
+                    raise AlphaError('Twitch account binding changed. Reconnect.', 409, code='twitch_revoked_oauth')
+                refresh_needed = expires is not None and expires <= self.clock() + adapter.refresh_margin
+                receipt = None
+                if not refresh_needed:
+                    try:
+                        receipt = adapter.validate_credentials(access, account_id)
+                    except AlphaError as error:
+                        if error.code != 'twitch_access_invalid':
+                            raise
+                        refresh_needed = True
+                if refresh_needed:
+                    if not refresh_supported or not refresh_ct:
+                        raise AlphaError('Twitch access expired. Reconnect.', 409, code='twitch_revoked_oauth')
+                    sealed_refresh = self.vault.decrypt(refresh_ct, key_id)
+                    refresh_binding = adapter._bound(sealed_refresh, 'rt')
+                    if refresh_binding['sub'] != account_id or refresh_binding['generation'] != generation:
+                        raise AlphaError('Twitch refresh binding changed. Reconnect.', 409, code='twitch_revoked_oauth')
+                    refreshed = adapter.refresh(sealed_refresh)
+                    if (refreshed['providerAccountId'] != account_id
+                            or adapter.credential_generation(refreshed['accessToken']) != generation):
+                        raise AlphaError('Twitch refresh changed its authority.', 409, code='twitch_revoked_oauth')
+                    access = refreshed['accessToken']
+                    access_ct, new_key = self.vault.encrypt(access)
+                    new_refresh = self.vault.encrypt(refreshed['refreshToken'])[0]
+                    expires = self.clock() + refreshed['expiresIn']
+                    cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,access_expires_at=to_timestamp(%s),rotated_at=now(),updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='twitch' AND revoked_at IS NULL", (access_ct, new_refresh, new_key, expires, workspace_id, connection_id))
+                    receipt = refreshed
+                else:
+                    expires = receipt['validatedAt'] + receipt['expiresIn']
+                scopes = list(receipt['scopes'])
+                cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,access_expires_at=to_timestamp(%s),updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='twitch' AND revoked_at IS NULL", (scopes, expires, workspace_id, connection_id))
+                if set(scopes) != set(previous_scopes or []):
+                    self._twitch_changed(cur, workspace_id, connection_id, 'scope_changed', generation)
+                return {'provider': 'twitch', 'accessToken': access, 'scopes': scopes,
+                        'expiresAt': expires, 'providerAccountId': account_id, 'authorizationGeneration': generation,
+                        'validatedAt': receipt['validatedAt'],
+                        'nextValidationAt': min(receipt['validatedAt'] + 3600, expires)}
+        except AlphaError as error:
+            if observed_ciphertext and error.code in ('twitch_revoked_oauth', 'twitch_oauth_binding_changed'):
+                self.mark_twitch_revoked(workspace_id, connection_id, expected_ciphertext=observed_ciphertext)
+            raise
+
+    def mark_twitch_revoked(self, workspace_id, connection_id, *, expected_ciphertext):
+        """Compare before deleting: an old failed refresh cannot erase new consent."""
+        if not expected_ciphertext:
+            return False
+        from .hosted import audit
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
+            workspace = cur.fetchone()
+            if not workspace:
+                return False
+            cur.execute("SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='twitch' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+            row = cur.fetchone()
+            if not row or row[0] != expected_ciphertext:
+                return False
+            try:
+                generation = self._provider('twitch').credential_generation(self.vault.decrypt(row[0], row[1]))
+            except AlphaError:
+                generation = None
+            cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,scopes='{}',refresh_supported=false,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='twitch'", (workspace_id, connection_id))
+            cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Twitch authorization revoked. Reconnect.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
+            self._twitch_changed(cur, workspace_id, connection_id, 'revoked', generation)
+            state = json.loads(workspace[0]) if isinstance(workspace[0], str) else workspace[0]
+            changed = False
+            for channel in state.get('phase2', {}).get('channels', []):
+                if channel.get('id') == connection_id and channel.get('platform') == 'Twitch':
+                    channel.update(revoked=True, identityVerified=False, capabilityVerified=False, scopes=[])
+                    changed = True
+            if changed:
+                cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
+            audit(cur, workspace_id, None, 'twitch.authorization_revoked', connection_id)
+            return True
+
+    def validate_twitch_connections(self, *, limit=100, after=None):
+        """Server-only bounded startup/hourly sweep. Cursor contains IDs, no secrets.
+
+        Caller must page until next is None and schedule each full sweep at least
+        hourly. A disabled deployment performs no provider calls.
+        """
+        adapter = self.providers.get('twitch')
+        if adapter is None or not adapter.execution_enabled:
+            return {'validated': 0, 'blocked': 0, 'next': None, 'enabled': False}
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise AlphaError('Choose a Twitch validation batch from 1 to 100.', 400)
+        if after is not None and (not isinstance(after, (list, tuple)) or len(after) != 2 or any(not isinstance(x, str) for x in after)):
+            raise AlphaError('Invalid Twitch validation cursor.', 400)
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cursor_sql = ' AND (workspace_id::text,connection_id)>(%s,%s)' if after else ''
+            cur.execute("SELECT workspace_id::text,connection_id FROM public.pr_encrypted_credentials WHERE provider='twitch' AND revoked_at IS NULL" + cursor_sql + ' ORDER BY workspace_id::text,connection_id LIMIT %s', (*after, limit + 1) if after else (limit + 1,))
+            candidates = cur.fetchall()
+        validated = blocked = 0
+        for workspace_id, connection_id in candidates[:limit]:
+            try:
+                self._twitch_token_for_worker(workspace_id, connection_id)
+                validated += 1
+            except AlphaError:
+                blocked += 1
+        return {'validated': validated, 'blocked': blocked, 'next': list(candidates[limit - 1]) if len(candidates) > limit else None, 'enabled': True}
+
     def token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False):
+        if 'twitch' in self.providers:
+            # Read routing before acquiring any lock: Twitch uses workspace then
+            # credential locking, matching disconnect and the native dispatcher.
+            with self.repository.connection_factory() as db, db.cursor() as cur:
+                cur.execute('SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL', (workspace_id, connection_id))
+                route = cur.fetchone()
+            if route and route[0] == 'twitch':
+                return self._twitch_token_for_worker(workspace_id, connection_id)
         try:
             return self._token_for_worker(workspace_id, connection_id, youtube_policy_required=youtube_policy_required)
         except AlphaError as error:
@@ -1483,6 +1698,12 @@ class OAuthService:
             if not stored:
                 raise AlphaError("Connection unavailable.", 404)
             remote = None
+            twitch_generation = None
+            if stored[0] == 'twitch':
+                try:
+                    twitch_generation = self._provider('twitch').credential_generation(self.vault.decrypt(stored[1], stored[2]))
+                except AlphaError:
+                    pass  # Local disconnect still works after a client rotation.
             shared = self._shared_elsewhere(cur, workspace_id, connection_id, stored[0])
             if shared:
                 remote = False  # another connection still uses Rafii's bot there; removing it would disconnect them too
@@ -1494,10 +1715,17 @@ class OAuthService:
                     remote = False
             cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
             cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Disconnected by the customer.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
+            if stored[0] == 'twitch':
+                self._twitch_changed(cur, workspace_id, connection_id, 'disconnected', twitch_generation)
             from .social_history import revoke_connection_samples
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             revoked_samples = revoke_connection_samples(state, connection_id, principal, self.clock())
             state_changed = bool(revoked_samples)
+            if stored[0] == 'twitch':
+                for channel in state.get('phase2', {}).get('channels', []):
+                    if channel.get('id') == connection_id and channel.get('platform') == 'Twitch':
+                        channel.update(revoked=True, identityVerified=False, capabilityVerified=False, scopes=[])
+                        state_changed = True
             if stored[0] == 'youtube':
                 from .youtube.agent import revoke_connection_authority
                 state_changed = revoke_connection_authority(state, connection_id, principal, self.clock(),
@@ -1532,7 +1760,7 @@ class OAuthService:
         purge_after_disconnect(self.repository.connection_factory, workspace_id, connection_id)
         snapshot = self.repository.get(workspace_id, token)
         revision = snapshot["revision"]
-        if stored[0] != 'youtube':
+        if stored[0] not in ('youtube', 'twitch'):
             try:
                 saved = self.repository.mutate(workspace_id, token, snapshot["revision"], "p2_channel_disconnect", {"channelId": connection_id})
                 revision = saved["revision"]

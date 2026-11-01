@@ -304,6 +304,8 @@ def runtime_from_environment(environ=None):
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
     service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
+    service.twitch.content_storage_approved = values.get('RAFII_TWITCH_CONTENT_STORAGE_APPROVED') == 'true'
+    service.twitch.agent_processing_approved = values.get('RAFII_TWITCH_AI_PROCESSING_APPROVED') == 'true'
     verify.on_first_sighting = lambda principal, session_id, label, eligible: service._alert_new_device(principal, session_id, label, eligible=eligible)
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
@@ -660,6 +662,9 @@ class HostedApplication:
                 from . import privacy
                 return self._json(start_response, 200, privacy.notice())
             # Email-provider webhook and one-click unsubscribe authenticate by signature/token, before the origin guard.
+            if path.startswith('/api/twitch/eventsub/') and method == 'POST' and len(path.strip('/').split('/')) == 4:
+                from .twitch_http import webhook as twitch_webhook
+                return twitch_webhook(self, environ, start_response, self._runtime(), path.rsplit('/', 1)[-1])
             if path.startswith('/api/youtube/notifications/') and method in ('GET', 'POST'):
                 from .youtube.http import notification_callback
                 return notification_callback(self, environ, start_response, self._runtime(), method, path.rsplit('/', 1)[-1])
@@ -780,6 +785,12 @@ class HostedApplication:
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
+                twitch = getattr(service, 'twitch', None)
+                if twitch is not None:
+                    try:
+                        result['twitch'] = twitch.maintenance(limit=1)
+                    except Exception as exc:
+                        result['twitch'] = {'status': 'unavailable', 'error': type(exc).__name__}
                 sign_in_alerts = getattr(service, 'deliver_sign_in_alerts', None)
                 if sign_in_alerts is not None:   # RAP-143: new-sign-in mail leaves the request path in observe mode
                     try:
@@ -1071,6 +1082,9 @@ class HostedApplication:
                     return self._json(start_response, 200, service.oauth.youtube_policy.status(parts[2], token))
                 if method == 'POST':
                     return self._json(start_response, 200, service.oauth.youtube_policy.accept(parts[2], token, self._body(environ)))
+            if len(parts) >= 4 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'twitch':
+                from .twitch_http import handle as twitch_handle
+                return twitch_handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube':
                 from .youtube.http import handle as youtube_handle
                 return youtube_handle(self, environ, start_response, service, token, method, parts)

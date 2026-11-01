@@ -1,0 +1,22 @@
+{
+  "observedAt": "2026-10-18T17:28:35.258447+00:00",
+  "authenticated": false,
+  "codesOrTokensProvided": false,
+  "mutations": false,
+  "probes": [
+    {
+      "url": "https://rafii.io/api/health",
+      "method": "GET",
+      "status": 200,
+      "body": "{\"status\": \"ok\", \"execution\": \"phase2-hosted-candidate\", \"configured\": true, \"phase0\": \"incomplete\", \"customerValidated\": false, \"sourceRevision\": null}",
+      "bodySha256": "1dbe64cfd403e4785510fac7b2a496c0197696ec917a7ddf116b42ec70fe67db"
+    },
+    {
+      "url": "https://rafii.io/api/oauth/twitch/callback",
+      "method": "GET",
+      "status": 404,
+      "body": "{\"error\": \"Unknown OAuth provider.\", \"code\": \"not_found\"}",
+      "bodySha256": "1e0584025ec2ecc2ceaac91c6960eb1095a95d88fed7bb5e7b90bd15e70af8ab"
+    }
+  ]
+}

@@ -59,6 +59,48 @@ def with_youtube_credential_status(channel, status):
             "revoked": bool(channel.get("revoked") or status["revoked"])}
 
 
+def twitch_credential_status(cur, workspace_ids, *, validate_binding=None):
+    """Current vault facts, without returning any encrypted or plaintext secrets.
+
+    The optional server validator checks the stored app/subject envelope locally;
+    this projection never validates or refreshes against Twitch over the network.
+    Presence of a rotating refresh credential means access expiry is recoverable,
+    subject to the mandatory validation before the next native operation.
+    """
+    if not workspace_ids:
+        return {}
+    cur.execute("SELECT workspace_id::text,connection_id,refresh_supported,refresh_ciphertext IS NOT NULL AND refresh_ciphertext<>'',extract(epoch from access_expires_at)::float8,revoked_at IS NOT NULL,scopes,provider_account_id,access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=ANY(%s::uuid[]) AND provider='twitch'", (list(workspace_ids),))
+    result = {}
+    for workspace, connection, supported, present, expires, revoked, scopes, account, access, key in cur.fetchall():
+        binding_missing = bool(not revoked and (not access or present and not supported))
+        if not revoked and access and callable(validate_binding):
+            try:
+                binding_missing = binding_missing or validate_binding(access, key, account) is not True
+            except AlphaError:
+                binding_missing = True
+        result[(workspace, connection)] = {
+            'refreshSupported': bool(supported and present and not revoked and not binding_missing),
+            'refreshBindingRequired': binding_missing,
+            'accessTokenExpiresAt': float(expires) if expires is not None else None,
+            'revoked': bool(revoked),
+            'scopes': list(scopes or []) if not revoked and not binding_missing else [],
+        }
+    return result
+
+
+def with_twitch_credential_status(channel, status):
+    """Keep current Twitch custody separate from a stale initial OAuth snapshot."""
+    if channel.get('platform') != 'Twitch':
+        return channel
+    if status is None:
+        return {**channel, 'refreshSupported': False, 'refreshBindingRequired': False,
+                'revoked': True, 'identityVerified': False, 'capabilityVerified': False,
+                'scopes': [], 'accessTokenExpiresAt': None}
+    return {**channel, **status, 'capabilityVerified': False,
+            'expiresAt': status['accessTokenExpiresAt'] if status['accessTokenExpiresAt'] is not None else 0,
+            'revoked': bool(channel.get('revoked') or status['revoked'])}
+
+
 def connection_state(channel, now):
     """Provider-neutral OAuth candidate dimensions (improvement SPEC §5)."""
     if not channel.get("configured"):
@@ -67,10 +109,14 @@ def connection_state(channel, now):
         return "reauthorization_required"
     if not channel.get("identityVerified"):
         return "identity_known" if channel.get("providerAccountId") else "disconnected"
-    refreshable_youtube = channel.get("platform") == "YouTube" and channel.get("refreshSupported") is True
-    if channel.get("expiresAt", 0) <= now and not refreshable_youtube:
+    if channel.get('platform') == 'Twitch' and channel.get('refreshBindingRequired'):
+        return 'client_binding_missing'
+    refreshable = channel.get("platform") in ("YouTube", "Twitch") and channel.get("refreshSupported") is True
+    if channel.get("expiresAt", 0) <= now and not refreshable:
         return "client_binding_missing" if channel.get('refreshBindingRequired') else "token_expired"
-    if not channel.get("scopes"):
+    # Twitch's validated /helix/users identity flow requires no optional scope.
+    # An empty grant proves identity only; every native action checks its own scopes.
+    if not channel.get("scopes") and channel.get("platform") != "Twitch":
         return "scope_missing"
     if channel.get("capabilityVerified"):
         return "publish_verified"

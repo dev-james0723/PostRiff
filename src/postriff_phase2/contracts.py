@@ -12,6 +12,9 @@ LIMITS = {"LinkedIn": {"version": "local-conservative-2026-09-14", "characters":
           "Instagram": {"version": "local-conservative-2026-09-14", "characters": 2200, "operation": "professional_image"},
           # Threads text limit per the connector audit (500 chars, 250 posts/24h); hosted OAuth connector.
           "Threads": {"version": "hosted-2026-09-16", "characters": 500, "operation": "text_post"},
+          # Input taxonomy only. Twitch never enters the feed-post manifest;
+          # its native service owns chat, moderation, calendars and live actions.
+          "Twitch": {"version": "native-2026-10-18", "characters": 500, "operation": "native_only"},
           # Xiaohongshu note body; the title is the draft's first line, at most 20 characters (`title`). Wave 4C
           # connects identity/basic_info only; this draft limit does not imply publishing permission.
           "Xiaohongshu": {"version": "wave4c-draft-2026-09-28", "characters": 1000, "operation": "draft_note", "title": 20},
