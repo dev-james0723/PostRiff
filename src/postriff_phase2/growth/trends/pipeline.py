@@ -206,9 +206,18 @@ class TrendPipeline:
                 AND newer.available_at<=%s AND newer.revision_sequence>o.revision_sequence) AS latest_known
             FROM candidates o) SELECT """+','.join('CASE WHEN current_valid THEN '+key+' END AS '+key for key in OBSERVATION_FIELDS)+""",
             current_valid,latest_known FROM gated"""
+        # Aged-out evidence (purged, past retention, or bound to an expired but
+        # never revoked contract row, such as the pre-renewal 2026-10-04 rows) is
+        # not a coverage truncation, so it is excluded before the bounded scan.
+        # Rights, revocation and deletion denials remain candidates and still
+        # mark the receipt truncated.
+        unexpired="""AND o.purged_at IS NULL AND o.retention_until>clock_timestamp()
+            AND NOT EXISTS(SELECT 1 FROM public.pr_trend_provider_contracts xc
+                WHERE(xc.provider_id,xc.version)=(o.provider_id,o.provider_contract_version)
+                AND xc.revoked_at IS NULL AND xc.expires_at<=clock_timestamp())"""
         cur.execute('''WITH candidates AS MATERIALIZED (SELECT '''+columns+''',o.source_identity_digest
             FROM public.pr_trend_observations o WHERE o.scope_key=%s AND o.provider_id=%s AND o.available_at<=%s
-            AND (o.event_at>=%s OR (o.event_at IS NULL AND o.received_at>=%s))
+            AND (o.event_at>=%s OR (o.event_at IS NULL AND o.received_at>=%s)) '''+unexpired+'''
             ORDER BY o.available_at,o.revision_sequence,o.observation_id LIMIT %s) '''+checks,
             (event['scope_key'],p['provider_id'],p['decision_cutoff'],start,start,self.max_observations+1,p['decision_cutoff']))
         found=rows(cur)
@@ -220,7 +229,7 @@ class TrendPipeline:
         if wanted-set(o['observation_id'] for o in records):
             cur.execute('''WITH candidates AS MATERIALIZED (SELECT '''+columns+''',o.source_identity_digest
                 FROM public.pr_trend_observations o WHERE o.scope_key=%s AND o.provider_id=%s
-                AND o.observation_id=ANY(%s::uuid[]) AND o.available_at<=%s) '''+checks,
+                AND o.observation_id=ANY(%s::uuid[]) AND o.available_at<=%s '''+unexpired+''') '''+checks,
                 (event['scope_key'],p['provider_id'],sorted(wanted),p['decision_cutoff'],p['decision_cutoff']))
             triggered=rows(cur)
             truncated |= any(not r['current_valid'] for r in triggered)

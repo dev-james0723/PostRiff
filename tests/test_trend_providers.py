@@ -35,8 +35,35 @@ def frame(seq=10, op="create", **changes):
 
 
 def marker(kind, seq=10, **kw):
+    """Official v2 lexicon shape: #account/#identity/#sync nest their fields under data[kind]."""
+    return {"$type":"message", "payload":{"$type":"network.bsky.jetstream.subscribeEvents#"+kind,
+            "seq":seq,"did":DID,"time":F.BEFORE, kind:{"seq":seq,"did":DID,"time":F.BEFORE, **kw}}}
+
+
+def flat_marker(kind, seq=10, **kw):
+    """The pre-fix (wrong) flat shape; it must never be read as an account decision."""
     return {"$type":"message", "payload":{"$type":"network.bsky.jetstream.subscribeEvents#"+kind,
             "seq":seq,"did":DID, **kw}}
+
+
+def info(name):
+    return {"$type":"message", "payload":{"$type":"network.bsky.jetstream.subscribeEvents#info", "name":name,
+            "message":"synthetic advisory"}}
+
+
+def stream_of(*frames):
+    """Fake websockets.sync context manager returning frames, then the receive timeout."""
+    stream = Mock(); stream.recv.side_effect = [json.dumps(f) for f in frames] + [TimeoutError()]
+    context = Mock(); context.__enter__ = Mock(return_value=stream); context.__exit__ = Mock(return_value=False)
+    return context
+
+
+def handshake_rejection(status, body):
+    """Pin websockets==16.1.1: a non-101 handshake raises InvalidStatus(Response)."""
+    from websockets.datastructures import Headers
+    from websockets.exceptions import InvalidStatus
+    from websockets.http11 import Response
+    return InvalidStatus(Response(status, "Bad Request", Headers({"Content-Type": "application/json"}), body))
 
 
 def status(id="101", **changes):
@@ -76,14 +103,136 @@ class BlueskyV2(F.OfflineTest):
             with self.subTest(seq=seq): self.reject(bluesky.normalize_frame,frame(seq),policy=bpolicy(),**ARG_TIMES)
 
     def test_account_identity_sync_and_gap_markers_not_filtered(self):
-        values=[marker("account",11,active=False,status="deactivated"),marker("identity",12),marker("sync",13),
+        values=[marker("account",11,active=False,status="deactivated"),marker("identity",12,handle="fixture.bsky.social"),
+                marker("sync",13,rev="3fixture"),
                 {"$type":"message","payload":{"$type":"network.bsky.jetstream.subscribeEvents#info"}}]
         batch=self.fold(values)
         self.assertEqual([m["kind"] for m in batch.markers],["account","identity","sync","gap"])
-        self.assertFalse(batch.markers[0]["active"])
+        self.assertIs(batch.markers[0]["active"],False)
+        self.assertEqual(batch.markers[0]["status"],"deactivated")
+        self.assertEqual(batch.markers[1]["handle"],"fixture.bsky.social")
         self.assertTrue(batch.markers[2]["requires_reconciliation"])
         self.assertEqual(batch.cursor["sequence"],13);self.assertEqual(batch.completeness,"gap")
         self.assertEqual(batch.observations,())
+
+    def test_v2_account_marker_reads_nested_account_object_not_flat_fields(self):
+        nested=self.fold([marker("account",11,active=False,status="deleted")])
+        self.assertIs(nested.markers[0]["active"],False)
+        self.assertEqual(nested.markers[0]["status"],"deleted")
+        active=self.fold([marker("account",11,active=True)])
+        self.assertIs(active.markers[0]["active"],True)
+        # The old flat fixture shape can no longer produce a revocation decision:
+        # the envelope is unusable, so the fold stops before advancing past it.
+        cursor={"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":10}
+        flat=self.fold([flat_marker("account",11,active=False,status="deactivated")],cursor=cursor)
+        self.assertEqual(flat.markers,())
+        self.assertEqual(flat.cursor["sequence"],10)
+        self.assertEqual(flat.quarantined,({"index":0,"reason_code":"jetstream_invalid_marker"},))
+        for bad in (None,"deactivated",[False]):
+            with self.subTest(account=bad):
+                frame_=marker("account",11);frame_["payload"]["account"]=bad
+                self.assertEqual(self.fold([frame_],cursor=cursor).cursor["sequence"],10)
+        # Unknown status strings are not echoed; non-boolean active is not a decision.
+        odd=self.fold([marker("account",11,active="false",status="x"*500)])
+        self.assertIsNone(odd.markers[0]["active"]);self.assertIsNone(odd.markers[0]["status"])
+
+    def test_identity_and_sync_markers_never_filtered_even_with_sparse_subobject(self):
+        for kind in ("identity","sync"):
+            with self.subTest(kind=kind):
+                sparse=marker(kind,21);sparse["payload"].pop(kind)
+                batch=self.fold([sparse])
+                self.assertEqual([m["kind"] for m in batch.markers],[kind])
+                self.assertEqual(batch.cursor["sequence"],21)
+
+    def test_info_frames_map_lexicon_names_to_explicit_gap_reasons(self):
+        batch=self.fold([info("OutdatedCursor"),info("FutureCursor"),info("SomethingNew"),frame(30)])
+        self.assertEqual([(m["kind"],m["reason_code"]) for m in batch.markers],
+                         [("gap","cursor_outdated"),("gap","cursor_future"),("gap","cursor_clamped")])
+        self.assertEqual(batch.completeness,"gap");self.assertEqual(batch.cursor["sequence"],30)
+
+    def test_inclusive_cursor_redelivery_then_record_poison_does_not_stall(self):
+        # Production shape: the cursor's own event is re-sent first (inclusive v2
+        # cursor), then a record-level poison. The cursor must move past it.
+        cursor={"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":5}
+        naive=frame(6,record={"$type":"app.bsky.feed.post","text":"x","createdAt":"2026-09-26T12:00:00","langs":["en"]})
+        batch=self.fold([frame(5),naive,frame(7)],cursor=cursor)
+        self.assertEqual([r["revision_sequence"] for r in batch.observations],[5,7])
+        self.assertEqual(batch.quarantined,({"index":1,"reason_code":"timestamp_must_be_utc"},))
+        self.assertEqual(batch.cursor["sequence"],7)
+        self.assertEqual(batch.completeness,"gap")
+        stuck={"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":26613419375}
+        poison=frame(26613419376,record={"$type":"app.bsky.feed.post","text":"x","createdAt":"not-a-time"})
+        replay=self.fold([frame(26613419375),poison],cursor=stuck)
+        self.assertEqual(replay.cursor["sequence"],26613419376)
+        self.assertEqual(replay.quarantined,({"index":1,"reason_code":"invalid_timestamp"},))
+        # The next inclusive redelivery starts at the poison itself and still advances.
+        again=self.fold([poison,frame(26613419377)],cursor=replay.cursor)
+        self.assertEqual(again.cursor["sequence"],26613419377)
+        self.assertEqual([r["revision_sequence"] for r in again.observations],[26613419377])
+
+    def test_record_level_failures_quarantine_with_precise_code_and_advance(self):
+        cursor={"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":40}
+        record=lambda **kw:{"$type":"app.bsky.feed.post","text":"ok","createdAt":F.BEFORE,"langs":["en"],**kw}
+        cases=[("invalid_text_field",frame(41,record=record(text=123))),
+               ("jetstream_invalid_record",frame(41,record=[])),
+               ("jetstream_invalid_record",frame(41,record={**record(),"$type":"app.bsky.feed.like"})),
+               ("jetstream_invalid_record",frame(41,rkey="../escape")),
+               ("payload_limit",frame(41,record=record(text="😀"*15999))),
+               ("invalid_text_field",frame(41,rev="r"*400)),
+               ("invalid_timestamp",frame(41,record=record(createdAt=12345)))]
+        for expected,poison in cases:
+            with self.subTest(expected=expected,changes=sorted(poison["payload"])):
+                batch=self.fold([poison,frame(42)],cursor=cursor)
+                self.assertEqual(batch.quarantined,({"index":0,"reason_code":expected},))
+                self.assertEqual(batch.cursor["sequence"],42)
+                self.assertEqual([r["revision_sequence"] for r in batch.observations],[42])
+                self.assertEqual(batch.health,"health_degraded")
+                self.assertEqual(batch.completeness,"gap")
+
+    def test_systemic_policy_failure_stops_instead_of_skipping_every_record(self):
+        # A policy/clock-wide contract failure is not a poison record: advancing
+        # would silently discard every post, so it keeps stop-before-advance.
+        cursor={"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":40}
+        batch=bluesky.fold_frames([frame(41),frame(42)],policy=bpolicy(),received_at=F.AFTER,available_at=NOW,
+                                  coverage_epoch="fixture-epoch",cursor=cursor)
+        self.assertEqual(batch.cursor["sequence"],40)
+        self.assertEqual(batch.quarantined,({"index":0,"reason_code":"invalid_knowledge_or_retention_time"},))
+
+    def test_envelope_failures_still_stop_before_advancing(self):
+        cursor={"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":40}
+        cases=[frame(41,did="https://example.com"),frame(None),frame(41,operation="purge"),
+               frame(41,"delete",rkey="../escape"),
+               {"$type":"message","payload":{"$type":"network.bsky.jetstream.subscribeEvents#mystery","seq":41,"did":DID}},
+               None,{"broken":True}]
+        for poison in cases:
+            with self.subTest(poison=poison):
+                batch=self.fold([poison,frame(42)],cursor=cursor)
+                self.assertEqual(batch.cursor["sequence"],40)
+                self.assertEqual(batch.observations,())
+                self.assertEqual(batch.quarantined[0]["index"],0)
+
+    def test_non_utc_offset_created_at_is_normalized_not_quarantined(self):
+        cases={"2026-09-26T21:00:00+09:00":"2026-09-26T12:00:00Z","2026-09-26T08:00:00-04:00":"2026-09-26T12:00:00Z",
+               # Already-UTC values stay byte-identical to the pre-fix behaviour.
+               "2026-09-26T12:00:00.123456789Z":"2026-09-26T12:00:00.123456789Z",
+               "2026-09-26T21:00:00.123456789+09:00":"2026-09-26T12:00:00.123456Z",
+               "2026-09-26T17:30:00.5+05:30":"2026-09-26T12:00:00.500000Z",
+               F.BEFORE:F.BEFORE, "2026-09-26T12:00:00.000Z":"2026-09-26T12:00:00.000Z"}
+        for created,expected in cases.items():
+            with self.subTest(created=created):
+                value=frame(10,record={"$type":"app.bsky.feed.post","text":"x","createdAt":created,"langs":["en"]})
+                batch=self.fold([value])
+                self.assertEqual(batch.quarantined,())
+                self.assertEqual(batch.observations[0]["event_at"],expected)
+                self.assertEqual(batch.observations[0]["time_basis"],"provider_event")
+
+    def test_langs_null_or_non_list_does_not_escape_fold(self):
+        for langs,expected in ((None,"und"),("yue","und"),({"en":True},"und"),([1,None,["en"],"en"],"en"),([],"und")):
+            with self.subTest(langs=langs):
+                value=frame(10,record={"$type":"app.bsky.feed.post","text":"x","createdAt":F.BEFORE,"langs":langs})
+                batch=self.fold([value])
+                self.assertEqual(batch.quarantined,())
+                self.assertEqual(batch.observations[0]["payload"]["language"],expected)
 
     def test_replayed_duplicate_deduplicated_but_revision_order_preserved(self):
         delete,old=frame(30,"delete"),frame(10,"create")
@@ -144,6 +293,98 @@ class BlueskyV2(F.OfflineTest):
         self.assertEqual(query["cursor"],["20"])
         self.assertEqual(kw["subprotocols"],["xrpc.v1.json"]);self.assertIsNone(kw["proxy"])
         self.assertEqual(batch.cursor["sequence"],21)
+
+    def collect(self, connect, cursor=None, **kw):
+        return bluesky.collect(policy=bpolicy(),enabled=True,entitlement_current=True,connect=connect,
+                               cursor=cursor,seconds=kw.pop("seconds",5),**ARG_TIMES,**kw)
+
+    def test_collect_requests_server_side_max_message_size_matching_client_limit(self):
+        connect=Mock(return_value=stream_of(frame(21)))
+        self.collect(connect)
+        args,kw=connect.call_args;query=parse_qs(urlsplit(args[0]).query)
+        self.assertEqual(query["maxMessageSizeBytes"],[str(kw["max_size"])])
+        self.assertEqual(query["collections"],["app.bsky.feed.post"])
+        self.assertNotIn("cursor",query)
+
+    def test_cursor_too_old_reanchors_at_live_tip_with_explicit_gap(self):
+        stale={"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":26613419375}
+        body=json.dumps({"error":"CursorTooOld","message":"floor 26700000000 SECRET-BODY"}).encode()
+        connect=Mock(side_effect=[handshake_rejection(400,body),stream_of(frame(26800000001),frame(26800000002))])
+        with self.assertNoLogs("postriff.trends",level="DEBUG"):
+            batch=self.collect(connect,cursor=stale)
+        self.assertEqual(connect.call_count,2)
+        first=parse_qs(urlsplit(connect.call_args_list[0].args[0]).query)
+        second=parse_qs(urlsplit(connect.call_args_list[1].args[0]).query)
+        self.assertEqual(first["cursor"],["26613419375"]);self.assertNotIn("cursor",second)
+        self.assertEqual(batch.markers[0],{"kind":"gap","reason_code":"cursor_too_old","previous_sequence":26613419375})
+        self.assertEqual(batch.completeness,"gap");self.assertEqual(batch.health,"health_degraded")
+        self.assertEqual(batch.reason_code,"stream_cursor_reanchored")
+        self.assertEqual(batch.cursor,{"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":26800000002})
+        self.assertEqual([r["revision_sequence"] for r in batch.observations],[26800000001,26800000002])
+        self.assertNotIn("SECRET-BODY",repr(batch))
+        # The reconnect stays inside the one admitted time budget.
+        self.assertLessEqual(connect.call_args_list[1].kwargs["open_timeout"],5)
+
+    def test_cursor_too_old_reanchor_with_empty_live_tip_records_gap_without_cursor(self):
+        stale={"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":100}
+        connect=Mock(side_effect=[handshake_rejection(400,b'{"error":"CursorTooOld"}'),stream_of()])
+        batch=self.collect(connect,cursor=stale)
+        self.assertIsNone(batch.cursor)
+        self.assertEqual(batch.markers,({"kind":"gap","reason_code":"cursor_too_old","previous_sequence":100},))
+        self.assertEqual(batch.completeness,"gap")
+
+    def test_other_handshake_status_raises_typed_transport_error_without_body(self):
+        cursor={"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":20}
+        for status,body in ((400,b'{"error":"InvalidRequest","message":"SECRET-BODY"}'),(400,b"SECRET-BODY not json"),
+                            (400,b'{"error":"CursorTooOld"}'),(503,b"SECRET-BODY"),(429,b""),(404,b"{}")):
+            with self.subTest(status=status,body=body):
+                connect=Mock(side_effect=[handshake_rejection(status,body)])
+                # CursorTooOld without a supplied cursor is not re-anchorable.
+                use_cursor=None if b"CursorTooOld" in body else cursor
+                with self.assertRaises(base.ProviderTransportError) as caught:
+                    self.collect(connect,cursor=use_cursor)
+                self.assertEqual(caught.exception.status,status)
+                self.assertEqual(caught.exception.code,"provider_handshake_rejected")
+                self.assertNotIn("SECRET",str(caught.exception)+repr(caught.exception.args))
+                self.assertIsNone(caught.exception.__cause__)
+                self.assertEqual(connect.call_count,1)
+
+    def test_second_cursor_too_old_after_reanchor_is_not_retried_again(self):
+        cursor={"host":bluesky.HOST,"protocol":bluesky.PROTOCOL,"sequence":20}
+        rejection=lambda:handshake_rejection(400,b'{"error":"CursorTooOld"}')
+        connect=Mock(side_effect=[rejection(),handshake_rejection(503,b"")])
+        with self.assertRaises(base.ProviderTransportError) as caught:
+            self.collect(connect,cursor=cursor)
+        self.assertEqual(caught.exception.status,503);self.assertEqual(connect.call_count,2)
+
+    def test_connection_failures_are_typed_transient_transport_errors(self):
+        from websockets.exceptions import ConnectionClosedError
+        from websockets.frames import Close
+        for error in (OSError("SECRET-HOST unreachable"),TimeoutError("SECRET handshake timeout")):
+            with self.subTest(error=type(error).__name__):
+                with self.assertRaises(base.ProviderTransportError) as caught:
+                    self.collect(Mock(side_effect=[error]))
+                self.assertIsNone(caught.exception.status)
+                self.assertEqual(caught.exception.code,"provider_transport_unavailable")
+                self.assertNotIn("SECRET",str(caught.exception))
+        # A close before any frame is a typed failure carrying only the close code.
+        closed=stream_of();closed.__enter__.return_value.recv.side_effect=ConnectionClosedError(Close(1009,"SECRET too big"),None)
+        with self.assertRaises(base.ProviderTransportError) as caught:
+            self.collect(Mock(return_value=closed))
+        self.assertEqual(caught.exception.close_code,1009);self.assertIsNone(caught.exception.status)
+        # A close after frames keeps the bounded partial sample instead of failing the job.
+        partial=stream_of(frame(30));partial.__enter__.return_value.recv.side_effect=[json.dumps(frame(30)),
+            ConnectionClosedError(Close(1011,"SECRET"),None)]
+        batch=self.collect(Mock(return_value=partial))
+        self.assertEqual(batch.cursor["sequence"],30)
+
+    def test_undecodable_frame_stops_reading_and_is_quarantined_not_raised(self):
+        context=stream_of();stream=context.__enter__.return_value
+        stream.recv.side_effect=[json.dumps(frame(30)),"{not json SECRET",json.dumps(frame(31))]
+        batch=self.collect(Mock(return_value=context))
+        self.assertEqual(batch.cursor["sequence"],30)
+        self.assertEqual(batch.quarantined,({"index":1,"reason_code":"jetstream_invalid_frame"},))
+        self.assertEqual(stream.recv.call_count,2)
 
 
 class MastodonAdapter(F.OfflineTest):

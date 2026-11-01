@@ -235,8 +235,17 @@ class TrendStore:
                 if cur.fetchone():
                     raise TrendStorageError('author_deleted')
             from .providers.registry import contract_runtime_version
-            if contract_runtime_version(p['provider_contract_version'], p.get('contract_manifest') or {}) != o['provider_contract_version']:
+            runtime = contract_runtime_version(p['provider_contract_version'], p.get('contract_manifest') or {})
+            if runtime != o['provider_contract_version']:
                 raise TrendStorageError('provider_contract_mismatch')
+            # Bind the row to the AUTHORIZING reviewed contract (a renewal changes the
+            # review row id, not the pinned runtime protocol). Expiry and revocation
+            # then follow the renewed row in trend_node_valid, pipeline sources,
+            # storage/status checks and forecasts. The protocol stays as provenance;
+            # observation_id, payload_digest and dedup identity include neither.
+            o['provider_contract_version'] = p['provider_contract_version']
+            if runtime != p['provider_contract_version']:
+                o['provenance'] = {**o['provenance'], 'runtime_protocol': runtime}
             if not permits(o['rights'],'retrieve',o['scope_key'],now):
                 raise TrendStorageError('source_right_not_permitted')
             permission = 'store_metrics' if o['kind']=='aggregate_metric' else 'store_raw' if o['payload'].get('text') else 'retrieve'
