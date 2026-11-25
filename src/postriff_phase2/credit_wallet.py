@@ -4,10 +4,29 @@ Disabled unless explicitly enabled AND the workspace has active versioned credit
 terms. This module does not contact payment providers or activate plan terms.
 """
 import json
+import os
+import re
 import time
+import uuid
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
 from .credit_meter import SUPPORTED_POLICY_VERSIONS, millicredits, actual_millicredits
+
+
+AUTO_LIMIT_ENV = 'POSTRIFF_CREDIT_AUTO_LIMIT_CREDITS'
+AUTO_LIMIT_MAX_CREDITS = 1000
+
+
+def automatic_limit(environ=None):
+    """The deployment's automatic per-request credit limit in millicredits, or None when it is off.
+
+    Whole credits, 1 to 1,000. Unset, zero or anything malformed is off: every paid request then needs its own
+    approved limit, as before. Within the limit, one request is approved for that request only (CreditBook.automatic_quote).
+    """
+    raw = str((os.environ if environ is None else environ).get(AUTO_LIMIT_ENV, '')).strip()
+    if not re.fullmatch(r'[1-9][0-9]{0,3}', raw) or int(raw) > AUTO_LIMIT_MAX_CREDITS:
+        return None
+    return int(raw) * 1000
 
 
 def amount(value):
@@ -190,10 +209,36 @@ class CreditBook:
         # The approved model travels with the authority: a turn under Auto writes with the model the limit was set for.
         return {'quoteId':str(quote_id),'requestDigest':request_digest,'model':quote['model']}
 
+    def automatic_quote(self, cur, workspace_id, actor, revision, binding, model, provider, maximum, *, committed=0):
+        """Approve one person's own request under the automatic limit: a quote for exactly its maximum, bound and claimed
+        like an explicit one, so every later check (prepare, the per-attempt credit guard, settlement) is unchanged.
+
+        Only request boundaries that know a signed-in person is asking call this. `committed` is what the same request has
+        already held or spent (a Rafii turn's earlier holds), so the request as a whole stays within the limit. Refused
+        when the limit is off, the request would exceed it, or the balance cannot cover it; nothing is written then.
+        """
+        limit = automatic_limit()
+        if limit is None:
+            raise AlphaError('Set a credit limit for this request.', 402, code='credit_limit_required')
+        amount(maximum); amount(committed)
+        if committed + maximum > limit:
+            raise AlphaError(f'This request could use up to {(committed + maximum) / 1000:,.1f} credits, more than the automatic limit of '
+                             f'{limit / 1000:,.1f} per request. Nothing was sent or charged. Set a credit limit for this request, '
+                             'or choose a lighter model.', 402, code='credit_auto_limit')
+        try:
+            quote = self.issue(cur, workspace_id, actor, revision, binding, model, provider, maximum)
+        except AlphaError as error:
+            if error.status != 402:
+                raise
+            raise AlphaError('Not enough credits left for this request. Nothing was sent or charged.', 402, code='credit_balance') from error
+        return {**self.authorize(cur, workspace_id, actor, revision, binding, quote['quoteId']), 'automatic': True}
+
     def prepare(self, cur, workspace_id, actor, estimate, model, provider, authority):
         policy=self.policy(cur,workspace_id)
         if not policy: return None
         if not isinstance(authority,dict): raise AlphaError('Confirm this task credit limit before generating.',402)
+        # Server-made only (automatic_quote); a client never supplies an authority dict, only a quote id.
+        automatic = authority.get('automatic') is True
         quote=self.quote(cur,workspace_id,actor,authority.get('quoteId'))
         if quote['policy']!=policy or quote['digest']!=authority.get('requestDigest') or quote['model']!=model or quote['provider']!=provider:
             raise AlphaError('The model or credit policy changed. Review again.',409)
@@ -207,7 +252,9 @@ class CreditBook:
             if take: allocations.append({'grantId':lot['grantId'],'milli':take});remaining-=take
             if not remaining: break
         if remaining: raise AlphaError('Credit allocation is incomplete.',409)
-        return {'op':'reserve','quoteId':authority['quoteId'],'policy':policy,'maximum':quote['maximum'],'allocations':allocations}
+        # 'automatic' records that the automatic limit, not a typed per-request limit, approved this hold.
+        return {'op':'reserve','quoteId':authority['quoteId'],'policy':policy,'maximum':quote['maximum'],'allocations':allocations,
+                **({'automatic':True} if automatic else {})}
 
     def claim(self, cur, workspace_id, reservation_id, credit):
         cur.execute('UPDATE public.pr_credit_quotes SET reservation_id=%s WHERE workspace_id=%s AND id::text=%s AND reservation_id IS NULL RETURNING id',(reservation_id,workspace_id,credit['quoteId']))
@@ -239,7 +286,7 @@ def request_digest(operation, payload, conversation_id=None):
         raise ValueError('Unknown credit operation.')
     if any(not isinstance(key,str) or key.startswith('_') for key in payload):
         raise ValueError('Private execution fields are not accepted.')
-    binding={key:value for key,value in payload.items() if key not in ('creditQuoteId','expectedRevision','idempotencyKey')}
+    binding={key:value for key,value in payload.items() if key not in ('creditQuoteId','creditApproval','expectedRevision','idempotencyKey')}
     if operation=='post-doctor-rewrite':
         from .growth.credit_policy import request
         if conversation_id is not None: raise ValueError('A rewrite cannot name a conversation.')

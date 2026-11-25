@@ -17,7 +17,7 @@ import uuid
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
 from .credit_meter import SUPPORTED_POLICY_VERSIONS, V2_POLICY_VERSION, actual_millicredits
-from .credit_wallet import CreditBook, project_credit_wallet
+from .credit_wallet import CreditBook, automatic_limit, project_credit_wallet
 from .developer_usage import ai_usage_exempt
 from .plan_pricing import DEFAULT_VARIANT, PlanPricing
 from .growth.usage import MAX_USD_MICRO
@@ -459,7 +459,9 @@ class Ledger:
             # Existing qualified media-notes also use credits. This does not qualify
             # image/video generation or the forthcoming Growth rewrite bridge.
             credits.update(mode="credits", policy=policy, quoteType="spending_limit", textOnly=False,
-                           spendAvailable=reason is None, spendUnavailableReason=reason)
+                           spendAvailable=reason is None, spendUnavailableReason=reason,
+                           # Requests up to this maximum are approved without a typed limit; None: every request needs one.
+                           automaticLimitMilliCredits=automatic_limit())
         cur.execute("SELECT to_regclass('public.pr_plan_price_variants') IS NOT NULL")
         catalog_v2 = cur.fetchone()[0]
         cur.execute("SELECT s.plan_terms_id,s.provider,s.status,extract(epoch from s.current_period_end),s.cancel_at_period_end,extract(epoch from s.grace_until),p.plan,p.label,p.price_cents,p.currency,p.status,p.version FROM public.pr_subscriptions s JOIN public.pr_plan_terms p ON p.id=s.plan_terms_id WHERE s.workspace_id=%s", (workspace_id,))

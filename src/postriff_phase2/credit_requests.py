@@ -156,6 +156,11 @@ class CreditRequests:
     def authorize(self, workspace_id, token, revision, payload, operation, conversation=None):
         book=getattr(self.ideas.ledger,'credits',None)
         if book is None: return None
+        automatic=isinstance(payload,dict) and payload.get('creditApproval')=='automatic'
+        if automatic:
+            # Only a signed-in person's own request may ask for it: API tokens and automations send no such field.
+            if is_api_token(token): raise AlphaError('Sign in to approve a credit limit.',403)
+            if payload.get('creditQuoteId') is not None: raise AlphaError('Send a credit limit or automatic approval, not both.',400)
         with self.ideas.repository.transaction(token,workspace_id) as (cur,row,actor):
             require(self.ideas._member(row),'edit')
             self.ideas.ledger.ensure_entitlement(cur,workspace_id,None)
@@ -172,6 +177,10 @@ class CreditRequests:
             if current!=row[0]: raise AlphaError('Workspace changed. Review the credit limit again.',409)
             try: binding=request_digest(operation,payload,conversation)
             except (ValueError,TypeError): raise AlphaError('Invalid draft request.',400)
+            if automatic:
+                # Exactly the ceiling the estimate shows and an explicit limit would need (issue()), for the writer this run uses.
+                runtime,model,request=self._priced_request(self.ideas._state(row),payload,operation,actor)
+                return book.automatic_quote(cur,workspace_id,actor,current,binding,model,runtime.provider,self._ceiling(runtime,model,request))
             return book.authorize(cur,workspace_id,actor,current,binding,payload.get('creditQuoteId'))
 
     def _notes_authority(self, cur, workspace_id, row, actor, revision, payload, book):

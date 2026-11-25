@@ -53,7 +53,7 @@ import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning
 import { VoiceLearningPanel } from './voice-learning-panel';
 import { useAuth } from '@/lib/auth/session';
 import { CreditLimitField } from './credit-limit-field';
-import { parseCreditLimit } from './credit-limit';
+import { creditLimitReady, parseCreditLimit } from './credit-limit';
 import { workSurfacePolicy, workSurfaceCommands } from './work-surface-policy';
 import { creditRequestFor } from './credit-turn';
 import { useCreditEstimate } from './use-credit-estimate';
@@ -331,7 +331,8 @@ function HomeWorkspace() {
   // On Auto the body names no model, so a changed workspace default must still ask for a fresh estimate.
   const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.destinations.length > 0 && !policy.blocked, { operation: 'quick-start', request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
-  const creditInvalid = Boolean(policy.blocked) || creditMode && (!creditEstimate.estimate || !maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || (ceiling !== null && maximum < ceiling));
+  const creditInvalid = Boolean(policy.blocked) || creditMode && !creditLimitReady({ estimated: Boolean(creditEstimate.estimate), typed: creditLimit.trim() !== '', maximum, ceiling,
+    available: usage.data?.credits?.availableMilliCredits ?? 0, automatic: usage.data?.credits?.spendAvailable ? usage.data.credits.automaticLimitMilliCredits : null });
   const voiceAvailable = voiceSourceIds.length > 0 || manualVoice;
   const imageCapability = models.data?.imageGeneration;
   const generation = useHomeGeneration(params.get('run'));
@@ -498,7 +499,7 @@ function HomeWorkspace() {
       const result = await generation.start({ text: body, ownContent: own, destinations: formatted, ...(capabilityRevision ? { capabilityRevision } : {}),
         ...choice.requestFields, voiceMode, voiceSourceIds,
         imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined,
-        timeZone, sourceIds: included, maxMilliCredits: creditMode ? maximum : null, ...chipFields }, current);
+        timeZone, sourceIds: included, automaticCredits: creditMode && maximum === null, maxMilliCredits: creditMode ? maximum : null, ...chipFields }, current);
       if (result && result.status !== 'automation') {
         // Only the chips that went out are cleared, and the template was for this message only.
         if (sent.length) attachments.clearSent(sent);
@@ -710,7 +711,7 @@ function HomeWorkspace() {
                   voice={{ value: voiceMode === 'personalized' ? `Writing like you${voiceRevision ? ` · v${voiceRevision}` : ''}` : 'Neutral override', onClick: () => setDialog('voice'), expanded: dialog === 'voice', controls: ids.voice }}
                 />
               }
-              notes={creditMode && usage.data?.credits ? <div className='mb-3'><CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={preparing || generation.busy || generation.running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} task={imageRequested ? 'image' : 'draft'} autoModel={!imageRequested && choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} /></div> : undefined}
+              notes={creditMode && usage.data?.credits ? <div className='mb-3'><CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} automaticLimitMilliCredits={usage.data.credits.spendAvailable ? usage.data.credits.automaticLimitMilliCredits : null} disabled={preparing || generation.busy || generation.running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} task={imageRequested ? 'image' : 'draft'} autoModel={!imageRequested && choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} /></div> : undefined}
               generate={{ label: slash ? 'Run command' : generation.run ? 'Generate again' : 'Generate drafts', count: slash ? 0 : destinationCount, disabled: !canGenerate || commandUnavailable, onClick: () => void start(), help: commandUnavailable ? 'This command has no qualified credit approval route yet. Keep your text or use the draft composer.' : slash ? 'Runs this Rafii command in a conversation.' : helpText }}
               consent={
                 <div className='mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 pt-3'>

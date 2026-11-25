@@ -3,7 +3,7 @@ import { previewAccount } from './composer-accounts';
 import { createSubmissionGate } from './submission-gate';
 import { creditRequestFor, submitConversationTurn } from './credit-turn';
 import { useCreditEstimate } from './use-credit-estimate';
-import { parseCreditLimit } from './credit-limit';
+import { creditLimitReady, parseCreditLimit } from './credit-limit';
 import { workSurfacePolicy, workSurfaceCommands } from './work-surface-policy';
 import { CreditLimitField } from './credit-limit-field';
 
@@ -377,7 +377,8 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const estimateRequest = creditRequestFor(turnPayload(text.trim()));
   const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.selection.length > 0 && !policy.blocked, { operation: 'turn', conversationId, request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
-  const creditInvalid = Boolean(policy.blocked) || creditMode && (!creditEstimate.estimate || !maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || (ceiling !== null && maximum < ceiling));
+  const creditInvalid = Boolean(policy.blocked) || creditMode && !creditLimitReady({ estimated: Boolean(creditEstimate.estimate), typed: creditLimit.trim() !== '', maximum, ceiling,
+    available: usage.data?.credits?.availableMilliCredits ?? 0, automatic: usage.data?.credits?.spendAvailable ? usage.data.credits.automaticLimitMilliCredits : null });
   const imageCapability = models.data?.imageGeneration;
   const composerSlash = parseSlash(text.trim());
   const commandUnavailable = composerSlash?.command.kind === 'agent' && usage.data?.billingMode !== 'legacy_allowances';
@@ -519,7 +520,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
       if (withChips && attachmentsOn) await attachments.settleReads();
       const sent = withChips && attachmentsOn && !imageRequested ? attachments.sentKeys : [];
       const request = { ...turnPayload(body, withChips), idempotencyKey: crypto.randomUUID() };
-      const result = await submitConversationTurn({ api, workspaceId, conversationId, request, maxMilliCredits: creditMode ? maximum : null, isCurrent: gate.alive });
+      const result = await submitConversationTurn({ api, workspaceId, conversationId, request, maxMilliCredits: creditMode ? maximum : null, automatic: creditMode && maximum === null, isCurrent: gate.alive });
       if (!result || !gate.alive()) return;
       if (result.status === 'memory') {
         // A standing instruction opened no run; the reply carries a proposal for the Memory page and this thread.
@@ -796,7 +797,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
 
           {learning?.workspaceId === workspaceId && learning.conversationId === conversationId && <VoiceLearningPanel key={learning.id} request={learning} onClose={() => setLearning(null)} />}
 
-          {canEdit && creditMode && usage.data?.credits && <CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={busy || running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} task={imageRequested ? 'image' : 'draft'} autoModel={!imageRequested && choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} />}
+          {canEdit && creditMode && usage.data?.credits && <CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} automaticLimitMilliCredits={usage.data.credits.spendAvailable ? usage.data.credits.automaticLimitMilliCredits : null} disabled={busy || running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} task={imageRequested ? 'image' : 'draft'} autoModel={!imageRequested && choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} />}
           {messages.at(-1)?.body.intent === 'onboarding' ? (
             <OnboardingAnswer key={messages.at(-1)!.messageId} message={messages.at(-1)!} conversationId={conversationId} canEdit={canEdit} />
           ) : canEdit ? (

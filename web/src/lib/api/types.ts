@@ -1682,6 +1682,8 @@ export interface CreditBalance {
   spendUnavailableReason: 'credits_disabled' | 'policy_inactive' | 'ai_paused' | 'credit_debt' | null;
   quoteType: "spending_limit";
   textOnly: boolean;
+  /** A request whose maximum fits is approved without a typed limit; null or absent: every request needs one. */
+  automaticLimitMilliCredits?: number | null;
 }
 
 export interface CreditLot {

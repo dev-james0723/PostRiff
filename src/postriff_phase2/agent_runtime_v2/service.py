@@ -799,9 +799,14 @@ class AgentRuntimeService:
             return None
 
     def _reservation_approval(self, cur, workspace_id, principal, revision, cost, route, run_id):
-        """Optional authenticated transport authority; text/browser retain their existing credit gates."""
+        """An authenticated transport's own authority (phone, Founder); otherwise, on a credit plan with the automatic limit
+        on, the person's own turn is approved within that limit as a whole (credit_automatic.run_approval). Without either,
+        the ledger keeps its existing credit gate."""
         approve = getattr(self, 'reservation_approval', None)
-        return approve(cur, workspace_id, principal, revision, cost, route, run_id) if approve else (None, {})
+        if approve:
+            return approve(cur, workspace_id, principal, revision, cost, route, run_id)
+        from ..credit_automatic import run_approval
+        return run_approval(self.service.ledger, cur, workspace_id, principal, revision, cost, route, run_id)
 
     def _finish_simple(self, workspace_id, token, conversation_id, run_id, trace_id, result, blocks, *, pending=None, trace_extra=None, site_extra=None, ask=None) -> dict:
         from ..site_agent import contracts as site_contracts

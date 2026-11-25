@@ -107,3 +107,15 @@ test('references and attachments reach the quote and the turn byte-identically (
  assert.equal(strip(sent),strip(quoted),'the quote binds exactly the body that is submitted');
  assert.equal(JSON.stringify(request),before,'the caller\'s request is not mutated');
 });
+test('with no typed limit, an automatic request is marked for the server and normalized like an approved one',async()=>{
+ const {api,calls}=fixture();await load()({...base,api,maxMilliCredits:null,automatic:true});
+ assert.deepEqual(calls.map(c=>c[0]),['turn'],'no quote is requested');
+ assert.equal(calls[0][3].creditApproval,'automatic');assert.equal(calls[0][3].research,false);assert.equal(calls[0][3].creditQuoteId,undefined);
+ assert.equal(base.request.creditApproval,undefined,'the caller\'s request is not changed');
+});
+test('a typed limit wins over automatic approval, and automatic never asks for research',async()=>{
+ const {api,calls}=fixture();await load()({...base,api,maxMilliCredits:12000,automatic:true});
+ assert.deepEqual(calls.map(c=>c[0]),['snapshot','quote','turn']);assert.equal(calls[2][3].creditApproval,undefined);
+ const second=fixture();await assert.rejects(load()({...base,request:{...base.request,research:true},api:second.api,maxMilliCredits:null,automatic:true}));
+ assert.deepEqual(second.calls,[]);
+});

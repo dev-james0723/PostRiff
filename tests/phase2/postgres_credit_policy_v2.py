@@ -1,17 +1,21 @@
 """Task2: real disposable PostgreSQL accounting; synthetic local funding only."""
 from local_pg_target import selected_target
+import contextlib
 import json
+import os
 import time
 import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
 import psycopg
 from consumer_fixtures import approve_budgets
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.billing import Ledger
 from postriff_phase2.credit_meter import POLICY_VERSION
+from postriff_phase2.credit_wallet import AUTO_LIMIT_ENV
 from postriff_phase2.hosted import HostedWorkspaceService
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -314,6 +318,131 @@ class CreditPolicyV2PostgresTests(unittest.TestCase):
             self.assertEqual(view['availableMilliCredits'], 10_000)
             self.assert_period(view)
             db.rollback()
+
+
+    # --- Automatic per-request limit (POSTRIFF_CREDIT_AUTO_LIMIT_CREDITS) -----------------------------------------
+    # Only request boundaries that know a signed-in person is asking (credit_requests.authorize with creditApproval,
+    # the Rafii turn's reservation approval) issue an automatic quote; the ledger itself never approves anything.
+    def automatic(self, key, estimate=10_000, limit='10', committed=0):
+        """What such a boundary does: approve this one request automatically, then hold it with that authority."""
+        from postriff_phase2.contracts import digest
+        from postriff_phase2.credit_meter import millicredits
+        with (patch.dict(os.environ, {AUTO_LIMIT_ENV: limit}) if limit is not None else contextlib.nullcontext()), connection() as db:
+            cur = db.cursor()
+            authority = self.ledger.credits.automatic_quote(cur, self.wid, self.actor, self.revision, digest({'request': key}),
+                                                            'fixture-model', 'fixture-provider', millicredits(estimate), committed=committed)
+            return self.ledger.reserve(cur, self.wid, self.actor, 'text_model', estimate, key, charge_batch=False,
+                                       provider='fixture-provider', model='fixture-model', credit_authority=authority)
+
+    def written(self):
+        with connection() as db:
+            return (db.execute('SELECT count(*) FROM pr_credit_quotes WHERE workspace_id=%s', (self.wid,)).fetchone()[0],
+                    db.execute("SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s AND kind='reserve'", (self.wid,)).fetchone()[0])
+
+    def test_ledger_never_approves_by_itself_even_with_the_automatic_limit_on(self):
+        # API tokens, automations and other server-started work reach the ledger with no authority: still refused.
+        self.grant()
+        with patch.dict(os.environ, {AUTO_LIMIT_ENV: '100'}), self.assertRaises(AlphaError) as raised, connection() as db:
+            self.ledger.reserve(db.cursor(), self.wid, self.actor, 'text_model', 10_000, 'no-authority', charge_batch=False,
+                                provider='fixture-provider', model='fixture-model')
+        self.assertEqual(raised.exception.status, 402)
+        self.assertIn('Confirm this task credit limit', str(raised.exception))
+        self.assertEqual(self.written(), (0, 0))
+
+    def test_automatic_limit_off_or_malformed_issues_nothing(self):
+        self.grant()
+        for raw in ('', '0', 'unlimited'):
+            with self.subTest(raw=raw), self.assertRaises(AlphaError) as raised:
+                self.automatic('off-' + (raw or 'unset'), limit=raw)
+            self.assertEqual((raised.exception.status, raised.exception.code), (402, 'credit_limit_required'))
+        self.assertEqual(self.written(), (0, 0))
+
+    def test_automatic_quote_holds_exactly_one_request_and_charges_actual_cost(self):
+        self.grant()
+        reservation = self.automatic('auto-1')
+        with connection() as db:
+            credit = db.execute("SELECT meta->'credits' FROM pr_usage_ledger WHERE id=%s", (reservation['reservationId'],)).fetchone()[0]
+            quote = db.execute('SELECT actor::text,max_millicredits,reservation_id::text,model,provider FROM pr_credit_quotes WHERE id::text=%s',
+                               (credit['quoteId'],)).fetchone()
+        self.assertIs(credit['automatic'], True)
+        self.assertEqual(credit['maximum'], 3_000)  # USD 0.01 at 300 credits per USD: exactly this request's maximum
+        self.assertEqual(quote, (self.actor, 3_000, reservation['reservationId'], 'fixture-model', 'fixture-provider'))
+        self.assertEqual(self.view()['heldMilliCredits'], 3_000)
+        self.settle(reservation, 'completed', 5_000)
+        view = self.view()
+        self.assertEqual((view['usedMilliCredits'], view['heldMilliCredits'], view['availableMilliCredits']), (1_500, 0, 28_500))
+        self.assertEqual(self.written(), (1, 1))
+
+    def test_automatic_quote_refuses_larger_requests_and_short_balances_before_writing(self):
+        self.grant(milli=4_000)
+        for estimate, committed in ((40_000, 0), (10_000, 8_000)):  # 12 credits; or 3 more on top of 8 already held by the request
+            with self.subTest(estimate=estimate, committed=committed), self.assertRaises(AlphaError) as raised:
+                self.automatic(f'auto-large-{committed}', estimate=estimate, committed=committed)
+            self.assertEqual((raised.exception.status, raised.exception.code), (402, 'credit_auto_limit'))
+            self.assertIn('Nothing was sent or charged', str(raised.exception))
+        self.automatic('auto-fits')  # 3 of the 4 available credits are now held
+        with self.assertRaises(AlphaError) as raised:
+            self.automatic('auto-short')
+        self.assertEqual((raised.exception.status, raised.exception.code), (402, 'credit_balance'))
+        self.assertEqual(self.written(), (1, 1))
+
+    def test_explicit_limits_are_unchanged_with_the_automatic_limit_on(self):
+        self.grant()
+        with patch.dict(os.environ, {AUTO_LIMIT_ENV: '10'}):
+            explicit = self.reserve('explicit-with-automatic-on')
+        with connection() as db:
+            credit = db.execute("SELECT meta->'credits' FROM pr_usage_ledger WHERE id=%s", (explicit['reservationId'],)).fetchone()[0]
+        self.assertNotIn('automatic', credit)
+        self.assertEqual(credit['maximum'], 9_000)
+
+    def test_parallel_automatic_requests_cannot_overspend(self):
+        self.grant(milli=6_000)  # room for two 3-credit holds
+        def attempt(index):
+            try:
+                self.automatic(f'auto-parallel-{index}', limit=None)
+                return 'held'
+            except AlphaError as error:
+                return error.code
+        with patch.dict(os.environ, {AUTO_LIMIT_ENV: '10'}), ThreadPoolExecutor(max_workers=4) as pool:  # patch.dict is not thread-safe
+            outcomes = sorted(pool.map(attempt, range(4)))
+        self.assertEqual(outcomes, ['credit_balance', 'credit_balance', 'held', 'held'])
+        self.assertEqual(self.view()['heldMilliCredits'], 6_000)
+
+    def test_usage_shows_the_automatic_limit(self):
+        self.grant()
+        for raw, expected in (('100', 100_000), ('', None)):
+            with self.subTest(raw=raw), patch.dict(os.environ, {AUTO_LIMIT_ENV: raw}):
+                self.assertEqual(self.service.usage(self.wid, 'fixture')['credits']['automaticLimitMilliCredits'], expected)
+
+    def test_rafii_turn_is_approved_as_a_whole_within_the_automatic_limit(self):
+        from postriff_phase2.agent_runtime_v2 import config
+        from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService
+        from postriff_phase2.credit_automatic import run_approval
+        self.grant(milli=100_000)
+        cfg = config.RuntimeConfig.from_environment({'OPENAI_API_KEY': 'sk-synthetic-task2-not-a-key', 'RAFII_AGENT_V2_ENABLED': '1'})
+        runtime = AgentRuntimeService(self.service, cfg, clock=lambda: self.clock[0])  # no model factory: real admission
+        cid = self.service.ideas.create_conversation(self.wid, 'fixture', 'assistant credits')['conversationId']
+        route = cfg.route('standard_reasoning', reason='test')
+        def open_run(key):
+            return runtime._open_run(self.wid, 'fixture', cid, 'What should I post this week?', 'text', key, 'trace-' + key, [],
+                                     model=route.model, reserve_for='standard_reasoning')
+        with patch.dict(os.environ, {AUTO_LIMIT_ENV: ''}), self.assertRaises(AlphaError) as raised:
+            open_run('assistant-automatic-off')
+        self.assertIn('Confirm this task credit limit', str(raised.exception))
+        with patch.dict(os.environ, {AUTO_LIMIT_ENV: '30'}):
+            run_id, reservation = open_run('assistant-automatic-on')
+            with connection() as db:
+                credit, meta_approval, via = db.execute("SELECT meta->'credits',meta->>'creditApproval',meta->>'via' FROM pr_usage_ledger WHERE id=%s",
+                                                        (reservation['reservationId'],)).fetchone()
+                self.assertEqual((via, meta_approval), ('rafii_agent', 'automatic'))
+                self.assertIs(credit['automatic'], True)
+                # A later hold on the same run (a resumed step, its generated view) counts the turn's open hold in full.
+                room = 30_000 - credit['maximum']
+                with self.assertRaises(AlphaError) as raised:
+                    run_approval(self.ledger, db.cursor(), self.wid, self.actor, self.revision, (room + 1_000) * 10 // 3, route, run_id)
+                self.assertEqual(raised.exception.code, 'credit_auto_limit')
+                db.rollback()
+        self.assertEqual(self.view()['heldMilliCredits'], credit['maximum'])
 
 
 if __name__ == '__main__':

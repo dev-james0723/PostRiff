@@ -236,3 +236,40 @@ assert run['status']=='completed',run
 assert not sent[-1].get('referenceNotes'),'no reader here: the run sends no note, the estimate priced a full one'
 print('PASS: a reference photo priced as a full note keeps the ceiling above the run (no 402)')
 
+
+# Automatic per-request limit (POSTRIFF_CREDIT_AUTO_LIMIT_CREDITS): a signed-in person's draft and turn opt in with
+# creditApproval and need no typed limit; each hold is approved for its own request and recorded as automatic. Without
+# opting in (automations, scripts) a request is refused as before, and a quote id that is sent is still checked.
+import os
+from unittest import mock
+from postriff_phase2.credit_wallet import AUTO_LIMIT_ENV
+def automatic_holds(prefix='run:'):
+    with connection() as db:
+        return db.execute("SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s AND kind='reserve' AND idempotency_key LIKE %s "
+                          "AND (meta->'credits'->>'automatic')::boolean",(wid,prefix+'%')).fetchone()[0]
+def open_writer_holds():
+    with connection() as db:
+        return db.execute("SELECT count(*) FROM pr_usage_ledger r WHERE r.workspace_id=%s AND r.kind='reserve' AND r.idempotency_key LIKE 'run:%%' "
+                          "AND (r.meta->'credits'->>'automatic')::boolean AND NOT EXISTS (SELECT 1 FROM pr_usage_ledger s "
+                          "WHERE s.workspace_id=r.workspace_id AND s.reservation_id=r.id AND s.kind IN ('settle','release'))",(wid,)).fetchone()[0]
+def refused(call, status):
+    try: call()
+    except AlphaError as error: assert error.status==status,error
+    else: raise AssertionError('expected a refusal')
+with mock.patch.dict(os.environ,{AUTO_LIMIT_ENV:'100'}):
+    revision=lambda: service.get(wid,'one')['revision']
+    refused(lambda: service.ideas.quick_start(wid,'one',revision(),{**payload,'text':'No approval was asked for.'}),402)
+    drafted=service.ideas.quick_start(wid,'one',revision(),{**payload,'text':'A small creative habit, once more.','creditApproval':'automatic'})
+    assert drafted['status']=='completed',drafted
+    assert automatic_holds()==1
+    assert automatic_holds('understanding:')==0, 'side calls are not approved by the request\'s automatic limit'
+    answered=service.ideas.turn(wid,'one',cid,{'text':'Shorter, please.','model':'test/cloud','reasoning':'quick','research':False,'timeZone':'UTC',
+                                               'destinations':[{'platform':'LinkedIn','language':'en-US'}],'creditApproval':'automatic'})
+    assert answered['status']=='completed',answered
+    assert automatic_holds()==2
+    refused(lambda: service.ideas.quick_start(wid,'one',revision(),{**payload,'text':'A forged approval.','creditQuoteId':'not-a-quote'}),402)
+    refused(lambda: service.ideas.quick_start(wid,'one',revision(),{**payload,'text':'Both.','creditQuoteId':'not-a-quote','creditApproval':'automatic'}),400)
+with mock.patch.dict(os.environ,{AUTO_LIMIT_ENV:''}):
+    refused(lambda: service.ideas.quick_start(wid,'one',service.get(wid,'one')['revision'],{**payload,'text':'Automatic is off.','creditApproval':'automatic'}),402)
+assert open_writer_holds()==0
+print('PASS: a signed-in draft and turn opt in to the automatic limit; requests that do not opt in, forged quotes and the off switch are refused')
