@@ -1,10 +1,11 @@
-"""FINAL-06/10 on disposable PostgreSQL: the owner's billing email is sent after the webhook commits.
+"""Disposable PostgreSQL: signed webhook queues atomically and returns before email I/O.
 
-The mail transport probes, at send time, whether the workspace's subscription row is still locked by the
-webhook transaction (SELECT ... FOR UPDATE NOWAIT from another connection). The address lookup and the
-send are network calls; neither may run while billing rows are locked. Nothing is sent anywhere.
+A separate notification-worker tick performs the identity lookup and simulated
+email dispatch after commit. Detector overlap and signed replay cannot duplicate
+that durable delivery. No external services are used.
 """
-import hashlib, hmac, json, sys, time
+from local_pg_target import selected_target
+import hashlib, hmac, json, os, sys, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
 import psycopg
@@ -12,8 +13,10 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.billing_stripe import StripePaymentProvider
 from postriff_phase2.email import Mailer, NullTransport
 from postriff_phase2.hosted import HostedWorkspaceService
+from postriff_phase2.notifications.service import NotificationService
+from postriff_phase2.notifications import detector
 
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 clock = [time.time()]
 
@@ -73,15 +76,36 @@ with connection() as db:
 service.usage(wid, 'one')  # creates the trial subscription row the probe locks
 body = json.dumps({'id': 'evt_notice_1', 'type': 'checkout.session.completed', 'created': int(clock[0]), 'livemode': False, 'data': {'object': {'mode': 'subscription', 'client_reference_id': wid, 'customer': 'cus_1', 'subscription': 'sub_1', 'metadata': {'workspace_id': wid, 'plan_terms_id': 'studio-v1'}}}}).encode()
 signature = 't=%d,v1=%s' % (int(clock[0]), hmac.new(b'whsec_test', f'{int(clock[0])}.'.encode() + body, hashlib.sha256).hexdigest())
+os.environ['RAFII_NOTIFICATIONS_V2_ENABLED'] = '1'
+service.notifications = NotificationService(service, email_transport=mail, clock=lambda: clock[0])
 lookups.clear()
 mail.locked_at_send.clear()
 result = service.billing_webhook(signature, body)
-assert result['outcome'] == 'applied' and result['notification']['sent'] is True, result
-assert mail.locked_at_send == [False], ('email sent while billing rows were locked', mail.locked_at_send)
-assert lookups == [False], ('address looked up while billing rows were locked', lookups)
+assert result['outcome'] == 'applied' and result['notification']['queued'] is True, result
+assert result['notification']['sent'] is False, result
+assert mail.locked_at_send == [] and lookups == [], 'webhook performed network I/O'
 with connection() as db:
-    sent = db.execute("SELECT sent FROM public.pr_notifications WHERE workspace_id=%s AND kind='subscription_activated'", (wid,)).fetchall()
-assert sent == [(True,)], sent
+    rows = db.execute("SELECT d.status,d.idempotency_key FROM public.pr_notification_deliveries d "
+                      "JOIN public.pr_notification_events e ON e.id=d.event_id WHERE e.workspace_id=%s "
+                      "AND e.event_type='billing.subscription_active' AND d.channel='email'", (wid,)).fetchall()
+    assert len(rows) == 1 and rows[0][0] == 'pending', rows
+    # The database detector must resolve to the same durable notification key.
+    with db.cursor() as cur:
+        for event in detector.from_database(cur, wid, clock[0]):
+            if event['event_type'] == 'billing.subscription_active':
+                assert not service.notifications.emit(cur, workspace_id=wid, **event)['created']
 again = service.billing_webhook(signature, body)
-assert again['outcome'] == 'duplicate' and len(mail.locked_at_send) == 1, again
-print('PASS: owner billing email: address lookup and send happen after commit (no row lock held), recorded once as sent, replay sends nothing')
+assert again['outcome'] == 'duplicate' and mail.locked_at_send == [] and lookups == [], again
+# A newly created worker can resume the persisted notification after the request/process ended.
+worker = service.notifications.worker()
+outcome = worker.tick(max_items=10, max_seconds=10)
+assert mail.locked_at_send == [False], ('worker did not deliver after commit', outcome, mail.locked_at_send)
+assert lookups == [False], ('worker looked up an address with rows locked', lookups)
+worker.tick(max_items=10, max_seconds=10)
+assert mail.locked_at_send == [False] and lookups == [False], 'worker duplicated delivery'
+with connection() as db:
+    sent = db.execute("SELECT status FROM public.pr_notification_deliveries d "
+                      "JOIN public.pr_notification_events e ON e.id=d.event_id WHERE e.workspace_id=%s "
+                      "AND e.event_type='billing.subscription_active' AND d.channel='email'", (wid,)).fetchall()
+assert sent == [('sent',)], sent
+print('PASS: webhook has zero identity/email I/O; atomic outbox survives request; worker sends once after commit; signed replay and detector overlap dedupe')

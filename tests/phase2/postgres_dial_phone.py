@@ -1,4 +1,5 @@
 """Real PostgreSQL + signed Dial ASGI + shared Rafii commands; synthetic SMS/REST/Live only."""
+from local_pg_target import selected_target
 import asyncio
 import base64
 import hashlib
@@ -30,7 +31,7 @@ from postriff_phase2.phone.asgi import create_app, create_lazy_app
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-DSN=os.environ['POSTRIFF_TEST_DSN']
+DSN=selected_target(require_dsn=True).dsn()
 USER=str(uuid.uuid4())
 def connection():return psycopg.connect(DSN)
 def verify(token):

@@ -13,7 +13,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, type PostRiffApi } from '@/lib/api/client';
-import type { Membership, WorkspaceListItem } from '@/lib/api/types';
+import type { BootstrapPlan, Membership, WorkspaceListItem } from '@/lib/api/types';
 import { WorkspaceAccessProvider, type WorkspaceAccess } from '@/lib/auth/access';
 import { permissionsFor } from '@/lib/auth/permissions';
 import { useAuth } from '@/lib/auth/session';
@@ -23,11 +23,13 @@ import type { WorkspacePlan } from '@/types';
 const WORKSPACE_KEY = 'postriff-workspace';
 const PLAN_KEY = 'postriff-plan';
 
-export type TrialPlan = 'studio' | 'assist';
+/** Backward-compatible signup transport; paid terms are always server-owned. */
+export type TrialPlan = BootstrapPlan;
 
 export function selectedPlan(): TrialPlan {
   try {
-    return localStorage.getItem(PLAN_KEY) === 'assist' ? 'assist' : 'studio';
+    const saved = localStorage.getItem(PLAN_KEY);
+    return saved === 'free' || saved === 'assist' ? saved : 'studio';
   } catch {
     return 'studio';
   }
@@ -35,7 +37,7 @@ export function selectedPlan(): TrialPlan {
 
 export function rememberPlan(plan: string) {
   try {
-    localStorage.setItem(PLAN_KEY, plan === 'assist' ? 'assist' : 'studio');
+    localStorage.setItem(PLAN_KEY, plan === 'free' || plan === 'assist' ? plan : 'studio');
   } catch {
     /* ignore */
   }
@@ -66,8 +68,8 @@ export interface WorkspaceContextValue {
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
-function toPlan(value: string | undefined | null): WorkspacePlan {
-  return value === 'studio' || value === 'assist' ? value : 'trial';
+export function toPlan(value: string | undefined | null): WorkspacePlan {
+  return value === 'free' || value === 'starter' || value === 'creator' || value === 'studio' || value === 'assist' ? value : 'trial';
 }
 
 export function WorkspaceProvider({ children, initial }: { children: ReactNode; initial?: WorkspaceBootstrap | null }) {
@@ -86,7 +88,7 @@ export function WorkspaceProvider({ children, initial }: { children: ReactNode; 
     try {
       let list = (await api.workspaces()).workspaces;
       if (list.length === 0) {
-        // First sign-in: create the trial workspace with the plan chosen at sign-up, then read the
+        // First sign-in: bootstrap using the legacy-compatible signup intent, then read the
         // list back so its summary (name, plan, member counts) comes from the one place that owns it.
         await api.bootstrap(selectedPlan());
         list = (await api.workspaces()).workspaces;
@@ -146,7 +148,7 @@ export function WorkspaceProvider({ children, initial }: { children: ReactNode; 
     enabled: status === 'ready' && Boolean(selected),
     staleTime: 60_000
   });
-  const plan = toPlan(usage.data?.subscription?.plan ?? seed?.workspaces.find((w) => w.workspaceId === selected)?.plan);
+  const plan = toPlan(usage.data?.entitlement.plan ?? workspaces.find((w) => w.workspaceId === selected)?.plan);
 
   const access = useMemo<WorkspaceAccess>(
     () => ({

@@ -1,4 +1,5 @@
 """Account deletion must fence work before storage I/O and retain honest retry state."""
+from local_pg_target import selected_target
 import json
 import time
 import uuid
@@ -8,7 +9,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 
 
 def connection():
-    return psycopg.connect('host=127.0.0.1 port=55438 dbname=postgres')
+    return psycopg.connect(selected_target().dsn())
 
 
 def verify(token):

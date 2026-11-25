@@ -8,7 +8,7 @@ import { cents } from '@/lib/api/client';
 import type { Usage } from '@/lib/api/types';
 import { cn } from '@/lib/utils';
 import { planSummary } from './billing-copy';
-import { isTrial, lifecycleTone, planTimeline } from './billing-model';
+import { canCheckoutFromUsage, isTrial, latestTermsPerPlan, lifecycleTone, planTimeline } from './billing-model';
 import { ACTION_STATEFUL } from './lifecycle-alert';
 import { PORTAL, type BillingRedirect } from './use-billing-redirect';
 
@@ -17,10 +17,11 @@ import { PORTAL, type BillingRedirect } from './use-billing-redirect';
  * one (UI simplification spec §9). Price and exact dates sit behind Details for a trial; a paid
  * plan shows its price, because money stays visible. Payment trouble is announced, not tucked away.
  */
-export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOwner: boolean; redirect: BillingRedirect; now: number }) {
+export function PlanCard({ usage, usageReadSucceeded, isOwner, redirect, now }: { usage: Usage; usageReadSucceeded: boolean; isOwner: boolean; redirect: BillingRedirect; now: number }) {
   const sub = usage.subscription;
   const status = usage.lifecycle?.status;
-  const trial = isTrial(usage);
+  const trial = usage.billingMode === 'legacy_allowances' && isTrial(usage);
+  const checkoutAvailable = latestTermsPerPlan(usage.planTerms, usage.entitlement.planTermsId).some(terms => canCheckoutFromUsage(usage, usageReadSucceeded, isOwner, terms.id));
   const summary = planSummary({
     timeline: planTimeline(usage, now),
     planLabel: sub?.label,
@@ -28,10 +29,11 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
     status,
     isOwner,
     portalAvailable: usage.billing?.portalAvailable === true,
-    checkoutAvailable: usage.billing?.checkoutAvailable === true
+    checkoutAvailable,
+    billingMode: usage.billingMode
   });
   const portalError = redirect.errorFor(PORTAL);
-  const price = sub ? `${cents(sub.priceCents, sub.currency)}${trial ? '' : ' / month'}${!trial && sub.priceStatus !== 'active' ? ' · proposed price' : ''}` : null;
+  const price = sub ? `${cents(sub.priceCents, sub.currency)}${trial ? '' : ' / month'}` : null;
 
   return (
     <Surface
@@ -57,7 +59,13 @@ export function PlanCard({ usage, isOwner, redirect, now }: { usage: Usage; isOw
             {summary.line}
           </p>
         )}
-        {!trial && price && <p className='text-muted-foreground text-sm tabular-nums'>{price}</p>}
+        {usage.billingMode === 'free_preview' && sub ? (
+          <details className='mt-1 text-muted-foreground text-sm'>
+            <summary className='rafii-focus w-fit cursor-pointer rounded-md'>Previous plan</summary>
+            <p className='mt-1 tabular-nums'>{sub.label} · {price}</p>
+          </details>
+        ) : !trial && price && <p className='text-muted-foreground text-sm tabular-nums'>{price}</p>}
+        {usage.billingMode === 'legacy_allowances' && !trial && <p className='text-muted-foreground text-sm'>Legacy plan</p>}
         {trial && (price || summary.exactDate) && (
           <details className='group text-muted-foreground mt-1 text-sm'>
             <summary className='rafii-focus hover:text-foreground w-fit cursor-pointer list-none rounded-md underline-offset-4 hover:underline [&::-webkit-details-marker]:hidden'>

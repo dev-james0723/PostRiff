@@ -5,6 +5,7 @@ cancellation wins over late results, and the model catalog lists the route.
 
 Run through scripts/postriff_disposable_postgres.py (loads rls.sql with migrations 004+005).
 """
+from local_pg_target import selected_target
 import sys
 import threading
 import time
@@ -16,7 +17,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.agent_runtime import AgentRuntime, FixtureAgentRuntime, safe_event
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 clock = [1789524000.0]
 

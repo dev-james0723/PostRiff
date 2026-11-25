@@ -1,4 +1,5 @@
 """Disposable PostgreSQL acceptance: real SQL/services, fake SMS/Push/Phone only."""
+from local_pg_target import selected_target
 import base64
 import hashlib
 import hmac
@@ -7,6 +8,7 @@ import os
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 import psycopg
 from postriff_alpha.domain import AlphaError
@@ -18,7 +20,7 @@ from postriff_phase2.notifications.service import NotificationService
 from postriff_phase2.phone.service import PhoneService
 from postriff_phase2.phone.providers.fake import FakeTelephonyProvider
 
-DSN=os.environ['POSTRIFF_TEST_DSN']
+DSN=selected_target(require_dsn=True).dsn()
 ONE,TWO=str(uuid.uuid4()),str(uuid.uuid4())
 def connection(): return psycopg.connect(DSN)
 def verify(token):
@@ -54,10 +56,14 @@ def denied(fn,status):
     else: raise AssertionError('Expected refusal')
 def consent(**extra):
     return ns.set_sms(wid,ONE,{'mode':'important_only','consent':True,'consentVersion':sms.CONSENT_VERSION,**extra})
+emission_clock={}
 def emit(kind='publish.failed',**extra):
     if kind.startswith('security.'): extra.setdefault('actor',ONE)
-    with connection() as db:
+    at=time.time()
+    # Bind each persisted schedule to its exact injected emission clock.
+    with patch.object(ns,'clock',return_value=at),connection() as db:
         result=ns.emit(db.cursor(),workspace_id=wid,event_type=kind,dedupe_key=extra.pop('dedupe_key',str(uuid.uuid4())),**extra)
+    emission_clock[result['eventId']]=at
     return result
 def deliveries(event): return sql("SELECT id::text,channel,status,extract(epoch from next_attempt_at),failure_detail FROM pr_notification_deliveries WHERE event_id=%s",event['eventId'])
 def sms_row(event): return next(r for r in deliveries(event) if r[1]=='sms')
@@ -94,9 +100,9 @@ denied(lambda:ns.set_sms(wid,ONE,{'mode':'important_only'}),400)
 consent()
 subscribe()
 event=emit(); row=sms_row(event)
-assert row[2]=='pending' and 599 <= float(row[3])-time.time() <= 601,row
+assert row[2]=='pending' and 599 <= float(row[3])-emission_clock[event['eventId']] <= 601,row
 timely=emit('campaign.approval_required',time_sensitive=True)
-assert 1799 <= float(sms_row(timely)[3])-time.time() <= 1801
+assert 1799 <= float(sms_row(timely)[3])-emission_clock[timely['eventId']] <= 1801
 ordinary=emit('campaign.approval_required'); assert sms_row(ordinary)[2]=='suppressed'
 repeat=emit(dedupe_key='one-event'); again=emit(dedupe_key='one-event')
 assert not again['created'] and len([d for d in deliveries(repeat) if d[1]=='sms'])==1
@@ -131,7 +137,7 @@ print('PASS strong cross-channel acknowledgement, cross-user isolation, read-all
 
 # Fresh boundary checks: no-push immediate, membership/permission, expiry, consent, quiet, mute, caps.
 clear(); consent(); event=emit()
-assert abs(float(sms_row(event)[3])-time.time())<2
+assert abs(float(sms_row(event)[3])-emission_clock[event['eventId']])<2
 assert send(event)['state']=='sent' and len(fake.sent)==1
 clear();consent();event=emit(entity_type='job',entity_id='missing-job',dedupe_key='publish.failed:missing-job:1')
 assert send(event)['state']=='expired' and sms_row(event)[2]=='cancelled' and not fake.sent

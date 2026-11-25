@@ -1,4 +1,5 @@
 """Real SQL/HTTP/signed ASGI/agent mutations; all telephony and model transports are synthetic."""
+from local_pg_target import selected_target
 import asyncio
 import base64
 import hashlib
@@ -26,7 +27,7 @@ from postriff_phase2.phone.asgi import create_app
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-DSN = os.environ['POSTRIFF_TEST_DSN']
+DSN = selected_target(require_dsn=True).dsn()
 users = set()
 def connection(): return psycopg.connect(DSN)
 def verify(token):

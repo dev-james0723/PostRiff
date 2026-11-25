@@ -10,6 +10,7 @@ Candidate policy under test (not approved commercial terms; synthetic plan and p
 - A refund of a plan payment takes back that period's credits proportionally.
 - A legacy plan (no credit policy) keeps its writing batches and receives no credits.
 """
+from local_pg_target import selected_target
 import hashlib, hmac, json, sys, time, uuid
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
@@ -20,7 +21,7 @@ from postriff_phase2.credit_meter import POLICY_VERSION
 from postriff_phase2.hosted import HostedWorkspaceService
 
 ROOT = Path(__file__).resolve().parents[2]
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 T0 = int(time.time())
 clock = [float(T0)]
 USERS = {'one': str(uuid.uuid4()), 'two': str(uuid.uuid4())}
@@ -130,3 +131,93 @@ checks.append('every plan invoice is recorded with its grant; the proration invo
 
 for line in checks:
     print('PASS:', line)
+
+# Task2 v2 policy: signed synthetic invoices through the unchanged payment provider.
+USERS['v2'] = str(uuid.uuid4())
+with connection() as db:
+    db.execute('INSERT INTO auth.users(id) VALUES(%s)', (USERS['v2'],))
+    db.execute("INSERT INTO pr_plan_terms(id,plan,version,label,price_cents,status,entitlements,provider_price_id) VALUES('task2-monthly-v2','studio',992,'Synthetic v2 monthly',4900,'active',%s::jsonb,'price_task2_v2')", (json.dumps({**base, 'creditPolicy': 'credits-v2-2026-09-28', 'monthlyCredits': 3500}),))
+v2wid = service.bootstrap('v2', 'studio')['workspaceId']
+v2start, v2end = int(clock[0]), int(clock[0]) + 30 * DAY
+v2first = invoice('in_v2_first', v2wid, 'task2-monthly-v2', 'subscription_create', v2start, v2end, 'pi_v2_first')
+deliver('invoice.paid', v2first, event_id='evt_v2_first')
+assert wallet(v2wid) == 3500, 'A verified v2 invoice must grant its monthly credits'
+with connection() as db:
+    grant_id = db.execute("SELECT grant_id FROM pr_credit_subscription_grants WHERE invoice_id='in_v2_first'").fetchone()[0]
+    credit = db.execute("SELECT meta->'credits' FROM pr_usage_ledger WHERE id=%s", (grant_id,)).fetchone()[0]
+    assert credit['policy'] == 'credits-v2-2026-09-28' and credit['expiresAt'] == v2end, credit
+    assert service.ledger.credits.view(db.cursor(), v2wid).get('currentPeriodGrantMilliCredits') == 3_500_000
+    assert service.ledger.credits.view(db.cursor(), v2wid).get('currentPeriodExpiresAt') == v2end
+print('PASS: v2 paid invoice grants exactly 3,500 credits with the explicit v2 id and paid period expiry')
+deliver('invoice.paid', v2first, event_id='evt_v2_first_replay')
+assert wallet(v2wid) == 3500
+print('PASS: v2 invoice replay never grants twice')
+
+# Incomplete v2 period evidence must not create a perpetual monthly grant.
+for name, period in (('no_start', {'end': v2end}), ('no_end', {'start': v2start}), ('invalid_period', {'start': v2end, 'end': v2start})):
+    incomplete = invoice('in_v2_' + name, v2wid, 'task2-monthly-v2', 'subscription_cycle', v2start, v2end, 'pi_v2_' + name)
+    incomplete['lines']['data'][0]['period'] = period
+    deliver('invoice.paid', incomplete)
+    assert wallet(v2wid) == 3500, (name, wallet(v2wid))
+print('PASS: incomplete or reversed v2 invoice periods cannot create spendable monthly credits')
+clock[0] = v2end
+with connection() as db:
+    view = service.ledger.credits.view(db.cursor(), v2wid)
+assert view['availableMilliCredits'] == 0 and view['currentPeriodGrantMilliCredits'] is None and view['currentPeriodExpiresAt'] is None, view
+print('PASS: v2 monthly credits and evidence expire at the actual paid period end')
+
+
+# Task2 review fix: delayed verified invoices retain the source terms' policy.
+import unittest
+from concurrent.futures import ThreadPoolExecutor
+
+
+class DelayedInvoicePolicyTests(unittest.TestCase):
+    def assert_transition(self, source_terms, current_terms, source_policy, current_policy):
+        token = 'transition-' + source_policy
+        USERS[token] = str(uuid.uuid4())
+        with connection() as db:
+            db.execute('INSERT INTO auth.users(id) VALUES(%s)', (USERS[token],))
+        workspace = service.bootstrap(token, 'studio')['workspaceId']
+        stamp = int(clock[0])
+        start, end = stamp, stamp + 30 * DAY
+        initial_id = 'in_initial_' + workspace
+        late_id = 'in_delayed_' + workspace
+        deliver('invoice.paid', invoice(initial_id, workspace, source_terms, 'subscription_create', start, end, 'pi_initial_' + workspace), created=stamp + 100)
+        with connection() as db:
+            original = db.execute("SELECT id::text,meta FROM pr_usage_ledger WHERE workspace_id=%s AND meta->'credits'->>'op'='grant'", (workspace,)).fetchall()
+        self.assertEqual(len(original), 1)
+        self.assertEqual(original[0][1]['credits']['policy'], source_policy)
+        deliver('customer.subscription.updated', {'id': 'sub_' + workspace[:6], 'status': 'active', 'customer': 'cus_' + workspace[:6],
+                'metadata': {'workspace_id': workspace, 'plan_terms_id': current_terms}, 'current_period_end': end}, created=stamp + 600)
+        delayed = invoice(late_id, workspace, source_terms, 'subscription_cycle', start, end, 'pi_delayed_' + workspace)
+        late_event = 'evt_delayed_' + workspace
+        result = deliver('invoice.paid', delayed, created=stamp + 300, event_id=late_event)
+        self.assertEqual(result['outcome'], 'stale')
+        self.assertEqual(deliver('invoice.paid', delayed, created=stamp + 300, event_id=late_event)['outcome'], 'duplicate')
+        # Distinct deliveries for the same invoice remain serialized/idempotent.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            repeated = list(pool.map(lambda i: deliver('invoice.paid', delayed, created=stamp + 300, event_id=late_event + '_again_' + str(i)), range(2)))
+        self.assertTrue(all(r['outcome'] == 'stale' for r in repeated))
+        with connection() as db:
+            current = db.execute("SELECT e.plan_terms_id,p.entitlements->>'creditPolicy' FROM pr_entitlements e JOIN pr_plan_terms p ON p.id=e.plan_terms_id WHERE e.workspace_id=%s", (workspace,)).fetchone()
+            grants = db.execute("SELECT id::text,meta FROM pr_usage_ledger WHERE workspace_id=%s AND meta->'credits'->>'op'='grant'", (workspace,)).fetchall()
+            linked = db.execute("SELECT u.meta->'credits',g.period_end FROM pr_credit_subscription_grants g JOIN pr_usage_ledger u ON u.id=g.grant_id WHERE g.invoice_id=%s", (late_id,)).fetchone()
+        self.assertEqual(current, (current_terms, current_policy))
+        self.assertEqual(len(grants), 2)
+        self.assertIn(original[0], grants, 'Existing policy history must remain byte-for-byte equivalent')
+        self.assertEqual(linked[0]['expiresAt'], end)
+        self.assertEqual(linked[1], end)
+        self.assertEqual(linked[0]['source'], 'verified-stripe-invoice')
+        self.assertEqual(linked[0]['policy'], source_policy, 'Use trusted invoice terms, not current entitlement')
+        self.assertEqual(wallet(workspace), 7000)
+
+    def test_delayed_candidate_invoice_after_newer_v2_subscription(self):
+        self.assert_transition('creator-credits', 'task2-monthly-v2', 'credits-candidate-2026-09-23-v1', 'credits-v2-2026-09-28')
+
+    def test_delayed_v2_invoice_after_newer_candidate_subscription(self):
+        self.assert_transition('task2-monthly-v2', 'creator-credits', 'credits-v2-2026-09-28', 'credits-candidate-2026-09-23-v1')
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

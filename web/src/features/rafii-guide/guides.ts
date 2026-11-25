@@ -208,10 +208,10 @@ export const GUIDES: readonly Guide[] = [
     route: '/app/account/billing',
     steps: [
       { target: [tour('billing-plan')], action: 'point', say: 'Your plan, and what changes next.' },
-      { target: [tour('billing-allowances')], action: 'point', say: 'What’s left of each allowance, including media credits for images.' },
+      { target: [tour('billing-credits'), tour('billing-allowances'), tour('billing-plan')], action: 'point', say: 'Check the task allowance available on your plan.' },
       { target: [tour('billing-plans')], action: 'point', optional: true, say: 'Owners can change the plan here.' }
     ],
-    done: 'When an allowance runs out, paid work stops until you top up or change plan.'
+    done: 'When the plan’s allowance runs out, paid work stops. Usage & plan shows what is available.'
   }
 ];
 

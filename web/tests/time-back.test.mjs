@@ -118,7 +118,7 @@ function load(file, cache = new Map()) {
 test('the writing allowance left the Overview strip, so running low or out is an actionable reminder', () => {
   const { deriveAttention } = load(join(SRC, 'lib/attention.ts'));
   const now = 1_800_000_000;
-  const usage = (left, extra = {}) => ({ isError: false, data: { entitlement: { writingBatchesRemaining: left, resetsAt: now + 5 * 86400, source: 'subscription' }, lifecycle: { status: 'active' }, ...extra } });
+  const usage = (left, extra = {}) => ({ isError: false, data: { billingMode: 'legacy_allowances', entitlement: { writingBatchesRemaining: left, resetsAt: now + 5 * 86400, source: 'subscription' }, lifecycle: { status: 'active' }, ...extra } });
   const run = (u) => deriveAttention({ snapshot: { isError: false, data: undefined }, channels: { isError: false, data: undefined }, usage: u, now });
   const item = (u) => run(u).items.find((i) => i.id === 'writing-allowance');
 

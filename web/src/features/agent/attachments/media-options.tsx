@@ -21,10 +21,7 @@ import { useNowPlaying } from '@/lib/media/now-playing';
 import { MediaConsentConfirm } from '@/features/memory/access-card';
 
 import type { Chip, MediaRole, PostRole } from './chips';
-
-function credits(milli: number | undefined): string {
-  return String(Math.max(1, Math.round((milli ?? 0) / 1000)));
-}
+import { formatMediaCredits as credits } from './read-with-credit';
 
 /** Why a reference can't be read here, or null when it can (SPEC §4.6, §13 "Media options: blocked"). */
 export function readBlocker(opts: {
@@ -83,11 +80,12 @@ export interface MediaOptionsProps {
   asset?: Asset | null;
   catalog: AttachmentsCatalog | null | undefined;
   creditMode: boolean;
+  freePreview?: boolean;
   fixtureWriter: boolean;
   isOwner: boolean;
   onRole: (role: MediaRole) => void;
-  onRead: () => void;
-  onRetry: () => void;
+  onRead: (approvedMaxMilliCredits?: number | null) => void;
+  onRetry: (approvedMaxMilliCredits?: number | null) => void;
   onRemove: () => void;
 }
 
@@ -97,6 +95,7 @@ export function MediaOptions({
   asset,
   catalog,
   creditMode,
+  freePreview,
   fixtureWriter,
   isOwner,
   onRole,
@@ -113,8 +112,11 @@ export function MediaOptions({
   const [asking, setAsking] = useState(false);
   const consent = memory.data?.media;
   const blocked =
-    role === 'reference' ? readBlocker({ catalog, fixtureWriter, consent, isOwner }) : null;
+    role === 'reference' && chip.read?.status !== 'read' ? readBlocker({ catalog, fixtureWriter, consent, isOwner }) : null;
   const estimate = catalog?.notes[video ? 'video' : 'photo'];
+  const maximum = estimate?.ceilingMilliCredits;
+  const validMaximum = Number.isSafeInteger(maximum) && maximum! > 0 && maximum! <= 100_000_000;
+  const approveRead = (retry = false) => (retry ? onRetry : onRead)(creditMode && !freePreview ? maximum : null);
 
   function allow() {
     act.mutate(
@@ -162,7 +164,7 @@ export function MediaOptions({
           </p>
           {creditMode ? (
             <p className='text-muted-foreground'>
-              Rafii looks at it with a paid AI model before writing.
+              {freePreview ? 'Free cannot fund new paid notes. You can use existing cached notes or keep this as a manual reference.' : validMaximum ? `Approve up to ${credits(maximum!)} credits for this read. You pay the actual cost; a higher estimate needs a new approval.` : 'A qualified maximum is unavailable. Keep this as a manual reference.'}
             </p>
           ) : null}
           {blocked ? (
@@ -192,13 +194,13 @@ export function MediaOptions({
           ) : chip.read?.status === 'failed' ? (
             <div className='flex flex-col items-start gap-2'>
               <p>Couldn&apos;t read this. Try again.</p>
-              <Button variant='outline' size='sm' onClick={onRetry}>
-                Try again
+              <Button variant='outline' size='sm' disabled={creditMode && !freePreview && !validMaximum} onClick={() => approveRead(true)}>
+                {creditMode ? freePreview ? 'Try cached notes again' : validMaximum ? `Retry · approve MAX ${credits(maximum!)} credits` : 'Reading unavailable' : 'Try again'}
               </Button>
             </div>
           ) : creditMode ? (
-            <Button variant='outline' size='sm' className='self-start' onClick={onRead}>
-              Read · about {credits(estimate?.typicalMilliCredits)} credits
+            <Button variant='outline' size='sm' className='self-start' disabled={!freePreview && !validMaximum} onClick={() => approveRead()}>
+              {freePreview ? 'Use cached notes' : validMaximum ? `Read · approve MAX ${credits(maximum!)} credits` : 'Reading unavailable'}
             </Button>
           ) : null}
         </div>

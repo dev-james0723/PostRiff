@@ -5,6 +5,7 @@ Storage is a fake (no network); the SQL, locks and the hosted command are real.
 
 Run through scripts/postriff_disposable_postgres.py (rls.sql with every migration, 031 included).
 """
+from local_pg_target import selected_target
 import sys
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from postriff_phase2 import video_uploads as vu  # noqa: E402
 from postriff_phase2.hosted import HostedWorkspaceService  # noqa: E402
 from test_video_uploads import FakeAssets, FakeStorage, jpeg_b64, mp4  # noqa: E402
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 clock = [1789524000.0]
 passed = []

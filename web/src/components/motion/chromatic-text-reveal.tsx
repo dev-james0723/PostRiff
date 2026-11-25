@@ -75,13 +75,14 @@ export function ChromaticTextReveal({
   const ref = useRef<HTMLSpanElement>(null);
   const timerRef = useRef<number | null>(null);
   const [wordIndex, setWordIndex] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
   const reduceMotion = useReducedMotion();
   const isInView = useInView(ref, {
     once,
     margin: inViewMargin,
     amount: 0.4
   });
-  const shouldReveal = !startOnView || isInView || reduceMotion;
+  const shouldReveal = hydrated && (!startOnView || isInView || reduceMotion);
   const backgroundImage = composeChromaticGradient(colors, foregroundColor);
   const hasWords = words.length > 0;
   const activeIndex = hasWords ? wordIndex % words.length : 0;
@@ -115,7 +116,10 @@ export function ChromaticTextReveal({
     words.length
   ]);
 
-  useEffect(() => clearPendingWord, [clearPendingWord]);
+  useEffect(() => {
+    setHydrated(true);
+    return clearPendingWord;
+  }, [clearPendingWord]);
 
   return (
     <span ref={ref} className={cn('inline-flex items-baseline', className)}>
@@ -139,15 +143,11 @@ export function ChromaticTextReveal({
           <motion.span
             key={`${activeWord}-${activeIndex}`}
             aria-hidden
-            initial={
-              reduceMotion
-                ? false
-                : {
-                    opacity: 0.56,
-                    filter: 'blur(6px)',
-                    transform: 'translateY(5px)'
-                  }
-            }
+            initial={{
+              opacity: 0.56,
+              filter: 'blur(6px)',
+              transform: 'translateY(5px)'
+            }}
             animate={{
               '--chromatic-sweep': shouldReveal ? REVEAL_FINISH : REVEAL_START,
               opacity: 1,
@@ -166,7 +166,7 @@ export function ChromaticTextReveal({
             className='absolute start-0 top-0 whitespace-nowrap bg-clip-text text-transparent [background-image:var(--chromatic-gradient)] [contain:paint]'
             style={
               {
-                '--chromatic-sweep': reduceMotion ? REVEAL_FINISH : REVEAL_START,
+                '--chromatic-sweep': REVEAL_START,
                 '--chromatic-gradient': backgroundImage,
                 backgroundSize: '100% 100%',
                 backgroundRepeat: 'no-repeat'

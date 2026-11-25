@@ -202,9 +202,10 @@ def _http(url, headers, timeout, data=None, limit=MAX_PAGE_BYTES):
 class ExaSearch:
     """Web search through Exa's MCP server (public, keyless; it refuses requests without a User-Agent)."""
 
-    def __init__(self, url=None, timeout=SEARCH_TIMEOUT):
+    def __init__(self, url=None, timeout=SEARCH_TIMEOUT, *, before_call=None):
         self.url = url or os.environ.get(EXA_URL_ENV) or DEFAULT_EXA_URL
         self.timeout = timeout
+        self.before_call = before_call
 
     def _rpc(self, method, params, session=None, request_id=1):
         headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
@@ -218,6 +219,8 @@ class ExaSearch:
         return (json.loads(text) if text.strip() else {}), session
 
     def _post(self, headers, body):
+        if self.before_call is not None:
+            self.before_call()
         return _http(self.url, headers, self.timeout, data=body, limit=2_000_000)
 
     def __call__(self, query, limit=MAX_RESULTS):

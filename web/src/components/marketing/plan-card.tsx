@@ -1,38 +1,55 @@
+'use client';
+
 import Link from 'next/link';
+import { usePublicPricing } from './public-pricing';
 import { Icons } from '@/components/icons';
 import { Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
-import { TRIAL, formatPrice, type Plan } from '@/config/plans';
+import { formatPrice, v2CardAction, v2PlanCards, type Plan, type V2PlanCard } from '@/config/plans';
+import { cardPrice } from '@/config/pricing-copy';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
 
+/* Legacy data has no new-sale renderer, including during public rollback. */
+export function PlanCard({ plan }: { plan: Plan; priceSize?: 'inline' | 'large'; className?: string }) {
+  if (plan.id !== 'studio' && plan.id !== 'assist') throw new Error('Unsupported legacy public plan');
+  return null;
+}
+
 /**
- * One plan on a glass work surface (DNA §21.18): tagline, name, price, highlights and one
- * dominant action. Prices and limits come from `config/plans`; nothing here is invented.
+ * A Pricing v2 plan (Free or a proposed paid plan) in the same glass recipe.
+ * Free starts signup; Creator stays unavailable until explicit catalog qualification.
+ * A navigation link never authorizes a purchase.
  */
-export function PlanCard({ plan, priceSize = 'inline', className }: { plan: Plan; priceSize?: 'inline' | 'large'; className?: string }) {
+export function V2PlanCardView({ card, priceSize = 'inline', className }: { card: V2PlanCard; priceSize?: 'inline' | 'large'; className?: string }) {
+  const catalog = usePublicPricing();
+  if (catalog) card = v2PlanCards(catalog).find(plan => plan.id === card.id) ?? { ...card, checkout: 'not_yet_available', checkoutAvailable: false };
+  const action = v2CardAction(card, siteConfig.links.signUp);
+  const price = cardPrice(card);
+  const headingId = `plan-${card.id}`;
   return (
-    <Surface material='glass' radius='card' padding='lg' className={cn('flex flex-1 flex-col gap-5', className)}>
+    <Surface material='glass' radius='card' padding='lg' className={cn('flex flex-1 flex-col gap-5', className)} role='group' aria-labelledby={headingId}>
       <div className='flex flex-col gap-1.5'>
-        <p className='text-muted-foreground text-sm'>{plan.tagline}</p>
+        <p className='text-muted-foreground text-sm'>{card.tagline}</p>
         {priceSize === 'large' ? (
           <>
-            <h3 className='text-foreground text-2xl font-medium tracking-[-0.01em]'>{plan.name}</h3>
+            <h3 id={headingId} className='text-foreground text-2xl font-medium tracking-[-0.01em]'>
+              {card.name}
+            </h3>
             <p className='text-foreground text-[2rem] leading-none font-medium tracking-[-0.02em] tabular-nums'>
-              {formatPrice(plan)} <span className='text-muted-foreground text-base font-normal tracking-normal'>/ {plan.interval}</span>
+              {formatPrice(card)}
+              {card.interval && <span className='text-muted-foreground text-base font-normal tracking-normal'> / {card.interval}</span>}
             </p>
           </>
         ) : (
-          <h3 className='text-foreground flex flex-wrap items-baseline gap-x-2 text-2xl font-medium tracking-[-0.01em]'>
-            {plan.name}
-            <span className='text-muted-foreground text-base font-normal tabular-nums'>
-              {formatPrice(plan)} / {plan.interval}
-            </span>
+          <h3 id={headingId} className='text-foreground flex flex-wrap items-baseline gap-x-2 text-2xl font-medium tracking-[-0.01em]'>
+            {card.name}
+            <span className='text-muted-foreground text-base font-normal tabular-nums'>{price}</span>
           </h3>
         )}
       </div>
       <ul className='flex flex-1 flex-col gap-2 text-sm'>
-        {plan.highlights.map((item) => (
+        {card.highlights.map((item) => (
           <li key={item} className='text-foreground flex items-start gap-2'>
             <Icons.check className='mt-0.5 size-4 shrink-0' aria-hidden />
             {item}
@@ -40,10 +57,16 @@ export function PlanCard({ plan, priceSize = 'inline', className }: { plan: Plan
         ))}
       </ul>
       <div className='flex flex-col items-start gap-2'>
-        <Link href={`${siteConfig.links.signUp}?plan=${plan.id}`} className={buttonVariants({ variant: 'action', size: 'control' })}>
-          Start {TRIAL.days}-day trial
-        </Link>
-        {plan.status === 'proposed' && <p className='text-muted-foreground text-xs'>Introductory pricing — subject to change before general availability.</p>}
+        {action.href ? (
+          <Link href={action.href} className={buttonVariants({ variant: card.plan === 'free' ? 'glass' : 'action', size: 'control' })}>
+            {action.label}
+          </Link>
+        ) : (
+          <button type='button' disabled className={buttonVariants({ variant: 'glass', size: 'control' })}>
+            {action.label}
+          </button>
+        )}
+        {action.note && <p className='text-muted-foreground text-xs text-pretty'>{action.note}</p>}
       </div>
     </Surface>
   );

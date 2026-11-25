@@ -2,6 +2,7 @@
 voice it was confirmed with, whatever words the campaign data contains, and still runs in a workspace on
 credit terms when its route is free. Synthetic in-process writer only; nothing is published.
 """
+from local_pg_target import selected_target
 import json
 import os
 import sys
@@ -16,7 +17,7 @@ from postriff_phase2.credit_meter import POLICY_VERSION
 from postriff_phase2.hosted import HostedWorkspaceService
 from consumer_fixtures import approve_budgets
 
-DSN = os.environ.get('POSTRIFF_TEST_DSN', 'host=127.0.0.1 port=55438 dbname=postgres')
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 clock = [1_800_000_000.0]
 

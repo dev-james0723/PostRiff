@@ -1,3 +1,9 @@
+> **Pricing v2 supersession — 2026-10-02:** This is a historical design or
+> validation record. Its legacy prices, new-sale setup and proposed pack
+> expiry are not current launch authority. Existing $19/$39 customers
+> remain grandfathered; new prospects use Free + Creator $59/3,500.
+> Original evidence below is preserved.
+
 # Billing (Stripe) and transactional email (Resend)
 
 **Date:** 2026-09-16 · **Code:** `src/postriff_phase2/billing_stripe.py`, `src/postriff_phase2/email.py`, wiring in `hosted.py` / `hosted_app.py`, migration `008_billing_provider_notifications.sql`.

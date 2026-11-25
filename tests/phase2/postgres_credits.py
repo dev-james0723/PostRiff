@@ -1,4 +1,5 @@
 """Opt-in credit ledger on disposable PostgreSQL only; all funding is synthetic."""
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -13,7 +14,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.credit_meter import POLICY_VERSION
 from consumer_fixtures import approve_budgets
 
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
+DSN=selected_target().dsn()
 ONE='00000000-0000-0000-0000-000000000001'
 clock=[time.time()]
 def connection(): return psycopg.connect(DSN,client_encoding='utf8')
@@ -95,7 +96,7 @@ from postriff_phase2.model_runtime import ServerModelRuntime
 calls=[]
 def transport(method,url,headers=None,body=None):
     calls.append(body['model'])
-    return {'status':200,'body':{'choices':[{'message':{'content':json.dumps({'variants':[{'platform':'LinkedIn','language':'en-US','text':'A small creative habit.','sourceIds':[]}]})}}],'usage':{'cost':0.01,'prompt_tokens':10,'completion_tokens':20}}}
+    return {'status':200,'body':{'choices':[{'message':{'content':json.dumps({'variants':[{'platform':'LinkedIn','language':'en-US','text':'A small creative habit.','sourceIds':[]}]})}}],'usage':{'cost':0.01,'prompt_tokens':10,'completion_tokens':20},'providerMetadata':{'gateway':{'cost':0.01,'routing':{'finalProvider':'test'}}}}}
 runtime=ServerModelRuntime('synthetic-test-key',model='test/cloud',models=['test/cloud'],prices={'test/cloud':(1,1)},transport=transport)
 service=HostedWorkspaceService(connection,verify,clock=lambda:clock[0],ideas_runtime=runtime,credits_enabled=True)
 with connection() as db:
@@ -191,10 +192,11 @@ with connection() as db:
     state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(wid,)).fetchone()[0]; shape(state)
     db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(state),wid))
 cid=service.ideas.create_conversation(wid,'one','chips in credit mode')['conversationId']
-sent=[]
+sent=[]; runtime_guards=[]
 original_start=runtime.start_turn
 def capturing(request, emit):
-    sent.append(json.loads(json.dumps(request,default=str)))
+    runtime_guards.append(request.get('_creditGuard'))
+    sent.append(json.loads(json.dumps({k:v for k,v in request.items() if k!='_creditGuard'},default=str)))
     return original_start(request, emit)
 runtime.start_turn=capturing
 body={'text':'Ideas from this draft for our page.','model':'test/cloud','reasoning':'quick','research':False,'timeZone':'UTC',
@@ -207,8 +209,9 @@ with connection() as db:
 _,_,estimated=service.ideas.estimate_request(state,body,'turn',ONE)
 run=service.ideas.turn(wid,'one',cid,{**body,'creditQuoteId':approval['quoteId'],'expectedRevision':latest['revision']})
 assert run['status']=='completed',run
-# `deadline` is the run's own monotonic clock, never priced or digested (ideas.turn); everything else must match.
-assert json.loads(json.dumps(estimated,default=str))=={k:v for k,v in sent[-1].items() if k!='deadline'},'the estimate must price exactly the request the run sends'
+# `deadline` and the server-only callable credit guard are execution fences, never priced or digested.
+assert callable(runtime_guards[-1]),'managed credit execution must carry the server-only attempt guard'
+assert json.loads(json.dumps(estimated,default=str))=={k:v for k,v in sent[-1].items() if k!='deadline'},'the estimate must price exactly the billable request the run sends'
 assert [d.get('channelId') for d in sent[-1]['destinations']]==['ch-li'],sent[-1]['destinations']
 assert sent[-1]['material'][0]['role']=='inspire',sent[-1].get('material')
 print('PASS: a quote at the ceiling covers a turn with a post and an account chip; the estimate request equals the run request')

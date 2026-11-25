@@ -3,6 +3,7 @@ reach the writing pipeline through the Manager's `draft_create` (the run records
 are never counted as reads, malformed chips are refused before anything is stored, and with the runtime off the site agent
 answers the same message and reports the chips unused. Deterministic stand-ins only for the model (ScriptedModel).
 """
+from local_pg_target import selected_target
 import json
 import os
 import sys
@@ -25,7 +26,7 @@ from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService  # noqa
 from postriff_phase2.hosted import HostedWorkspaceService  # noqa: E402
 from consumer_fixtures import approve_budgets  # noqa: E402
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 OWNER = "one-token-000000000000000000"
 clock = [1_790_128_800.0]

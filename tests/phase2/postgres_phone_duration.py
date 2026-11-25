@@ -1,4 +1,5 @@
 """Clock-advanced one-hour phone funding and signed handoff. Real DB, zero external calls."""
+from local_pg_target import selected_target
 import json
 import os
 import time
@@ -19,7 +20,7 @@ import sys
 sys.path.insert(0,'scripts')
 from launch_credit_fixture import configure
 
-DSN=os.environ['POSTRIFF_TEST_DSN']
+DSN=selected_target(require_dsn=True).dsn()
 # PostgreSQL timestamps have microsecond precision. Use exact whole seconds so
 # the 50/60/3600s boundary assertions cannot drift just below a threshold after
 # a float timestamp is rounded by the database.

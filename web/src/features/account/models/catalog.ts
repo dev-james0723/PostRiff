@@ -107,7 +107,7 @@ export function costCopy(costClass: string | undefined): CostCopy {
     case 'subscription':
       return { badge: 'Your CLI subscription', line: 'Paid by the CLI’s own subscription. $0 here.' };
     case 'paid':
-      return { badge: 'Writing batches', line: 'Uses one writing batch from your plan per finished run. Failed runs don’t count.' };
+      return { badge: 'Task allowance', line: 'Managed writing uses the workspace’s approved task allowance. Review Usage & plan before paid work.' };
     case undefined:
     case '':
       return { badge: 'Not reported', line: 'Cost not reported.' };
@@ -119,7 +119,7 @@ export function costCopy(costClass: string | undefined): CostCopy {
 /**
  * Distinct cost classes of the writers someone can actually pick, in catalog order. Unavailable
  * options are left out: the preview runtime always lists a "PostRiff managed model" placeholder
- * marked not qualified, which would otherwise add "Writing batches" to every deployment.
+ * marked not qualified, which would otherwise add a paid-task badge to every deployment.
  */
 export function distinctCostClasses(options: ModelOption[]) {
   return Array.from(new Set(options.filter((option) => option.qualified).map((option) => option.costClass ?? '')));

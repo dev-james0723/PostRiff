@@ -377,7 +377,7 @@ def start_postgres(port=PORT_PG):
             print(f"Socket diagnostics unavailable: {type(error).__name__}", file=sys.stderr)
         raise
     dsn = f"host=127.0.0.1 port={port} dbname=postgres"
-    subprocess.run([str(PG / "psql"), dsn, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(ROOT / "tests/phase2/rls.sql")], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([str(PG / "psql"), dsn, "-X", "-v", "ON_ERROR_STOP=1", "-q", "-f", str(ROOT / "tests/phase2/rls.sql")], check=True, stdout=subprocess.DEVNULL)
     return dsn, data
 
 
@@ -385,6 +385,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=4331)
     parser.add_argument("--credit-fixture", action="store_true", help="synthetic credit funding and model, disposable database only")
+    parser.add_argument("--pricing-v2-fixture", action="store_true", help="opt-in local-synthetic Pricing v2; existing parent PG only")
+    parser.add_argument("--pricing-v2-fixture-database", help="isolated pricing_v2_local_synthetic_* database")
+    parser.add_argument("--external-pg-dsn", help="Pricing v2 only: parent-owned loopback PG 55439; no start/migrate/stop")
     parser.add_argument("--phone-fixture", action="store_true", help="local fake phone identity/calls; no SMS or PSTN egress")
     parser.add_argument("--inbound-phone-fixture", action="store_true", help="local one-time inbound codes with a synthetic Dial transport; no network calls")
     parser.add_argument("--notification-fixture", action="store_true", help="unified notifications with fake SMS/Push/Email only")
@@ -399,7 +402,32 @@ def main():
     args = parser.parse_args()
     if args.growth_phase2_fixture or args.radar_fixture or args.postdoctor_v2_fixture:args.growth_fixture=True
     import psycopg
-    dsn, data = start_postgres(args.pg_port)
+    if args.pricing_v2_fixture:
+        if any((args.credit_fixture, args.growth_fixture, args.phone_fixture,
+                args.inbound_phone_fixture, args.notification_fixture)):
+            parser.error("Pricing v2 uses its own isolated fixture, not legacy fixture modes")
+        if not args.external_pg_dsn or not args.pricing_v2_fixture_database:
+            parser.error("Pricing v2 requires the parent's migrated named database")
+        # Admission uses the shared local policy before any connection or PG binary.
+        sys.path.insert(0, str(ROOT / "tests/phase2"))
+        from local_pg_target import selected_target
+        target_env = dict(os.environ)
+        target_env.setdefault("POSTRIFF_TEST_PG_PORT", "55439")
+        try:
+            target = selected_target(target_env)
+        except ValueError:
+            parser.error("Conflicting local PG connection or startup configuration")
+        import re
+        if target.port != 55439 or not re.fullmatch(r"pricing_v2_local_synthetic_[a-z0-9_]{1,32}", args.pricing_v2_fixture_database):
+            parser.error("Only the parent's isolated Pricing v2 PG55439 namespace is allowed")
+        expected_dsn = f"host=127.0.0.1 port=55439 dbname={args.pricing_v2_fixture_database}"
+        if args.external_pg_dsn != expected_dsn:
+            parser.error("Only exact credential-free parent PG55439 host/port/database fields are allowed")
+        dsn, data = args.external_pg_dsn, None
+    else:
+        if args.external_pg_dsn or args.pricing_v2_fixture_database:
+            parser.error("The external PG options require --pricing-v2-fixture")
+        dsn, data = start_postgres(args.pg_port)
     connection = lambda: psycopg.connect(dsn, client_encoding="utf8", autocommit=False)
     # POSTRIFF_DEV_WEB_ORIGIN lets the Next.js dev server (which proxies /api and /dev here) own the consent + callback flow.
     base = os.environ.get("POSTRIFF_DEV_WEB_ORIGIN", "").rstrip("/") or f"http://127.0.0.1:{args.port}"
@@ -425,10 +453,16 @@ def main():
         if args.postdoctor_v2_fixture:
             from growth_postdoctor_v2_fixtures import Models, ENV
         growth_writer=Writer()
-    service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid", chat_media=chat_media,ideas_runtime=growth_writer)
+    service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=(None if args.pricing_v2_fixture else lambda principal: f"dev-{principal[:8]}@postriff.invalid"), chat_media=chat_media,ideas_runtime=growth_writer, credits_enabled=args.pricing_v2_fixture, pricing_v2_enabled=args.pricing_v2_fixture)
+    pricing_v2 = None
+    if args.pricing_v2_fixture:
+        from pricing_v2_browser_fixture import configure
+        pricing_v2 = configure(service, connection, enabled=True,
+            expected_database=args.pricing_v2_fixture_database, origin=base,
+            token=os.environ.get("PRICING_V2_FIXTURE_TOKEN"))
     if args.history_import_fixture:
         from postriff_phase2.growth.history_import import HistoryImporter
-        service.history_import = HistoryImporter(connection, service.oauth, transport=transport)
+        service.history_import = HistoryImporter(connection, service.oauth, transport=transport, hosted=service)
     if args.growth_fixture:
         from postriff_phase2.growth.service import GrowthService
         service.growth=GrowthService(service,env=ENV,router_factory=Models().router)
@@ -485,10 +519,13 @@ def main():
         origins = [item.strip() for item in os.environ.get("RAFII_FOUNDER_WEB_ORIGINS", base).split(",") if item.strip()]
         ops = attach_founder(app, service, dsn, PG, origins)
         print(f"Founder Control embedded (local, synthetic identities) | origins {','.join(origins)} | ops workspace {ops}", flush=True)
+    pricing_v2_app = pricing_v2.wrap(app) if pricing_v2 else app
     static = args.static.resolve()
 
     def application(environ, start_response):
         path = environ.get("PATH_INFO", "/")
+        if pricing_v2 and path.startswith("/dev/pricing-v2-local-synthetic/"):
+            return pricing_v2_app(environ, start_response)
         if path == '/dev/library/tick' and environ['REQUEST_METHOD']=='POST':
             q=parse_qs(environ.get('QUERY_STRING',''))
             result=service.library.process(service.repository.connection_factory,q['workspace'][0],q['assetId'][0]) if q.get('assetId') and q.get('workspace') else service.library.sweep(service.repository.connection_factory)
@@ -548,7 +585,7 @@ def main():
             start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(raw)))])
             return [raw]
         if path.startswith("/api/"):
-            return app(environ, start_response)
+            return pricing_v2_app(environ, start_response)
         candidate = (static / path.lstrip("/")).resolve()
         if not candidate.is_relative_to(static) or not candidate.is_file():
             candidate = static / "index.html"  # SPA fallback (e.g. /channels/connect)
@@ -589,9 +626,10 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-m", "fast", "-w", "stop"], stdout=subprocess.DEVNULL)
-        import shutil
-        shutil.rmtree(data.parent, ignore_errors=True)
+        if data is not None:  # Never stop or remove parent-owned external PG.
+            subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-m", "fast", "-w", "stop"], stdout=subprocess.DEVNULL)
+            import shutil
+            shutil.rmtree(data.parent, ignore_errors=True)
 
 
 if __name__ == "__main__":

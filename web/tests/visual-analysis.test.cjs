@@ -105,7 +105,7 @@ module.exports = { analysisFixtures, freshAnalysisEnvelope };
 if (require.main === module && process.argv.includes('--fixtures')) {
   process.stdout.write(JSON.stringify(analysisFixtures(), null, 2) + '\n');
 } else if (require.main === module) {
-  const { test } = require('node:test');
+  const { test, mock, after } = require('node:test');
   class ApiError extends Error { constructor(message, status, code) { super(message); this.status=status; this.code=code; } }
   let context, queryResult, requested = false;
   const queryCalls = [];
@@ -131,6 +131,10 @@ if (require.main === module && process.argv.includes('--fixtures')) {
   const { createTrendApi } = load('web/src/features/trends/api.ts');
   const f = analysisFixtures();
   const now = Date.parse(f.forecast.as_of) + 3000;
+  // Synthetic stored-read tests use one clock; CPU/load must not age a fresh fixture past the 30s gate.
+  // Explicit stale/expiry cases still advance their own timestamps and preserve production guards.
+  mock.method(Date, 'now', () => now);
+  after(() => mock.restoreAll());
   const reset = (data, flags=f.flags) => { context={w:f.workspace,flags,enabled:true};queryResult={data,isFetching:false,isError:false};requested=false;queryCalls.length=0; };
   const render = (Component, platform='') => renderToStaticMarkup(React.createElement(Component,{trend:f.trend,platform}));
   test('actual Python projections: reviewed whitespace, proposed whitespace and synthetic qualified forecast parse', () => {

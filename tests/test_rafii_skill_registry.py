@@ -206,7 +206,7 @@ class PrivateMaterialTest(unittest.TestCase):
 
     def test_private_skills_are_excluded_from_the_hosted_build(self):
         self.assertIn("skills/james-au-*/", (REPO / ".vercelignore").read_text())
-        artifact = (REPO / "scripts" / "consumer_ready_artifact.cjs").read_text()
+        artifact = (REPO / "scripts" / "consumer_ready_artifact_inputs.cjs").read_text()
         self.assertIn("james-au-[^/]*", artifact)
 
     def test_leak_scanner_catches_identity_paths_and_voice_anchors(self):

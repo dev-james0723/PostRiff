@@ -2,6 +2,7 @@
 
 Run through scripts/postriff_disposable_postgres.py (loads rls.sql with migrations 004+005).
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -13,7 +14,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.source_policy import facts_digest
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 FOUR = "00000000-0000-0000-0000-000000000005"  # distinct from isolation.py's second owner
 clock = [time.time()]

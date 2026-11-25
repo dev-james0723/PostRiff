@@ -3,6 +3,7 @@
 The publish worker has no session token. Right before committing an approved post it re-verifies the channel on
 its own authority so the channel is "Ready for posting" for the next hour. Zero network: fake provider adapters.
 """
+from local_pg_target import selected_target
 import copy
 import json
 import sys
@@ -17,7 +18,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.oauth import CredentialVault
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 KIND = "channel.reverified_by_worker"
 clock = [time.time()]

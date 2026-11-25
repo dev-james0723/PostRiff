@@ -1,4 +1,5 @@
 """Actual Phase 1 services on disposable PostgreSQL, deterministic models, no real credentials/network."""
+from local_pg_target import selected_target
 import copy
 import io
 import json
@@ -25,7 +26,7 @@ clock=[time.time()]
 checks=[]
 
 
-def connection():return psycopg.connect('host=127.0.0.1 port=55438 dbname=postgres')
+def connection():return psycopg.connect(selected_target().dsn())
 def verify(token):
     if token in (TOKEN,'fixture-two'):return ONE if token==TOKEN else TWO
     raise AlphaError('Verified session required.',401)

@@ -27,6 +27,7 @@ import { NextUp } from './next-up';
 import { RecentActivity } from './recent-activity';
 import { RetryButton, type Refetchable } from './retry';
 import { whoCanAct } from './who-can-act';
+import { workAttention } from './work-attention';
 
 import { WAITING as PRE_FLIGHT, IN_FLIGHT, DONE } from '@/lib/jobs';
 
@@ -214,6 +215,7 @@ export function OverviewView() {
   const entitlement = usage.data?.entitlement;
 
   const attention = deriveAttention({ snapshot, channels, usage, now });
+  attention.items = workAttention(attention.items, usage.data?.billingMode);
   const failedQueries = [snapshot.isError ? snapshot : null, channels.isError ? channels : null, usage.isError ? usage : null].filter(
     (query): query is NonNullable<typeof query> => query !== null
   );

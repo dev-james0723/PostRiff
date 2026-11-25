@@ -1,5 +1,6 @@
 """Real service + disposable PostgreSQL. No real credentials, AI or publishing."""
-import sys,json,time,uuid,os
+from local_pg_target import selected_target
+import sys,json,time,uuid
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 sys.path[:0]=[str(ROOT/'src'),str(ROOT/'tests')]
@@ -10,7 +11,7 @@ from postriff_phase2.growth.service import GrowthService,ROUTES,current_genome
 from postriff_phase2.growth.closed_loop import SUMMARY_ROUTE
 from growth_phase2_fixtures import Models,Writer,ENV,seed
 ONE='00000000-0000-0000-0000-000000000001';TWO='00000000-0000-0000-0000-000000000002'
-def connection():return psycopg.connect(os.environ.get('POSTRIFF_TEST_DSN','host=127.0.0.1 port=55438 dbname=postgres'))
+def connection():return psycopg.connect(selected_target().dsn())
 def verify(token):
     if token in ('one','two'):return ONE if token=='one' else TWO
     raise AlphaError('Verified session required.',401)

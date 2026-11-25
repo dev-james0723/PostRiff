@@ -22,10 +22,12 @@ END = '2026-09-28T00:00:00Z'
 def dedicated_test_dsn(dsn=None):
     """Reject libpq redirects before the wrapper or fixture opens a connection."""
     from psycopg.conninfo import conninfo_to_dict
+    from local_pg_target import selected_target
+    target = selected_target(validate_fixture_dsns=False)
     dsn = os.environ.get('TREND_WHITESPACE_TEST_DSN', '') if dsn is None else dsn
     p = conninfo_to_dict(dsn)
     if (set(p)-{'host','port','dbname','user'}
-            or (p.get('host'),p.get('port'),p.get('dbname')) != ('127.0.0.1','55438','postgres')
+            or (p.get('host'),p.get('port'),p.get('dbname')) != ('127.0.0.1',str(target.port),'postgres')
             or any(k in os.environ for k in ('PGSERVICE','PGSERVICEFILE','PGHOSTADDR','PGOPTIONS'))):
         raise ValueError('exact allocated portable whitespace target required')
     return dsn

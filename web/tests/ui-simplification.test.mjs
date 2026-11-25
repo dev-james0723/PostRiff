@@ -116,6 +116,18 @@ test('Usage & plan: allowances only mention a reset when one will happen', () =>
   assert.match(copy.resetText({ kind: 'renews', at: NOW + DAY }, NOW + DAY), /^Resets /);
 });
 
+test('Usage & plan: explicit Free mode overrides ended paid history without portal reactivation claims', () => {
+  const summary = copy.planSummary({ timeline: { kind: 'ended', at: NOW - DAY }, billingMode: 'free_preview', planLabel: 'Creator', trial: false, status: 'expired', isOwner: true, portalAvailable: true, checkoutAvailable: false });
+  assert.equal(visible(summary), 'Free | Free preview');
+  assert.equal(summary.action, null);
+});
+
+test('Usage & plan: v2 help keeps preview and held credits distinct from legacy batches', () => {
+  const help = copy.billingInfoContent('managed_credits');
+  assert.doesNotMatch(JSON.stringify(help), /Writing batches|Trial|\$0/);
+  assert.match(JSON.stringify(help), /No silent overage|Held credits|Free preview/);
+});
+
 test('Usage & plan: the page sources carry no deployment language or defensive billing copy', () => {
   const dir = join(SRC, 'features/billing');
   const text = readdirSync(dir)
@@ -156,4 +168,3 @@ test('The product is called Rafii wherever a person can read it (no PostRiff or 
     []
   );
 });
-

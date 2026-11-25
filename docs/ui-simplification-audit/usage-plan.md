@@ -1,3 +1,9 @@
+> **Pricing v2 supersession — 2026-10-02:** This is a historical design or
+> validation record. Its legacy prices, new-sale setup and proposed pack
+> expiry are not current launch authority. Existing $19/$39 customers
+> remain grandfathered; new prospects use Free + Creator $59/3,500.
+> Original evidence below is preserved.
+
 # Usage & plan — copy and information-density audit
 
 Route: `/app/account/billing` · Source: `web/src/features/billing/*`

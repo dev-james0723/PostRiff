@@ -3,6 +3,7 @@
 Regression for the POST /api/auth/verify 500 (ROOT-CAUSE.md): two first-visit requests both reached
 Ledger.ensure_entitlement, both saw no row, and the second INSERT raised pr_entitlements_pkey.
 """
+from local_pg_target import selected_target
 import sys
 import threading
 from pathlib import Path
@@ -11,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 import psycopg
 from postriff_phase2.billing import Ledger
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ROUNDS = 12
 WORKERS = 6
 

@@ -62,6 +62,8 @@ class SessionObserved(Mode):
         svc = base.service(cursor, base.verifier(), email_lookup=lambda principal: "me@example.invalid")
         svc.public_base_url = "https://app.example"
         svc.mailer = base.FakeMailer()
+        # Plan lifecycle (pricing v2) reads billing rows on the same cursor; these tests script only the session rows.
+        svc.billing.lifecycle = lambda *args, **kwargs: None
         return svc
 
     def test_first_sighting_is_recorded_with_the_session_even_when_alerts_are_off(self):
@@ -136,7 +138,9 @@ class SessionObserved(Mode):
             responses += [((True,), 1), (None, 1), ((True, ""), 1), (None, 1)]
         cursor = base.FakeCursor(responses)
         svc = self.alerting(cursor)
-        return cursor, svc, svc.accept_my_invitation("t", "inv-1", client_label="Safari on iPhone")
+        # The seat check derives the plan lifecycle first (pricing v2); this scripted cursor carries only the seat rows.
+        with mock.patch("postriff_phase2.free_lifecycle.lifecycle"):
+            return cursor, svc, svc.accept_my_invitation("t", "inv-1", client_label="Safari on iPhone")
 
     def test_invitation_acceptance_on_a_new_session_alerts_after_commit(self):
         self.observe()

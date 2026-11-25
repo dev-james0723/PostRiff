@@ -1,4 +1,5 @@
 """Durable managed run, unknown cost, replay and late-cancel settlement. No external I/O."""
+from local_pg_target import selected_target
 import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'src'))
@@ -7,7 +8,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.model_runtime import ServerModelRuntime
 
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
+DSN=selected_target().dsn()
 ONE='00000000-0000-0000-0000-000000000001'
 def connection(): return psycopg.connect(DSN)
 def verify(token): return ONE

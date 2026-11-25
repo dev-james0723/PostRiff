@@ -1,4 +1,5 @@
 """Portable forecast acceptance: fresh baseline+040, no003, no skipped cases."""
+from local_pg_target import selected_target
 from pathlib import Path
 import datetime
 import hashlib
@@ -12,12 +13,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def main():
+    selected_target(require_dsn=True)  # Before any nested validator/connection.
     sys.path[:0] = [str(ROOT / 'src'), str(ROOT / 'tests')]
     paths = list((ROOT / 'src/postriff_phase2/growth/trends').rglob('*.py'))
     paths += [ROOT / p for p in ('tests/test_trend_forecast_postgres.py', 'tests/phase2/postgres_trend_forecast.py',
         'tests/test_trend_advanced_pipeline.py', 'tests/test_trend_forecast.py', 'tests/test_trend_metrics.py',
         'tests/test_trend_receipts.py', 'tests/phase2/rls.sql', 'migrations/postriff/040_social_trend_intelligence.sql',
-        'scripts/postriff_pg_suite.py')]
+        'scripts/postriff_pg_suite.py', 'scripts/postriff_disposable_postgres.py', 'tests/phase2/local_pg_target.py')]
     paths += list((ROOT / 'tests/fixtures/trends').rglob('*.json'))
     def hashes():
         return {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(paths)}
@@ -37,7 +39,7 @@ def main():
     after = hashes()
     receipt = {'captured_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'execution_state': 'actual_disposable_postgresql_with_explicit_synthetic_reviewed_sql_fixtures',
-        'postgres_version': version, 'python_version': sys.version, 'target': '127.0.0.1:55438/postgres',
+        'postgres_version': version, 'python_version': sys.version, 'target': selected_target(require_dsn=True).label(),
         'command': [sys.executable, 'scripts/postriff_pg_suite.py', 'postgres_trend_forecast'],
         'tests': result.testsRun, 'failures': len(result.failures), 'errors': len(result.errors), 'skips': len(result.skipped),
         'seconds': round(time.monotonic()-started, 3), 'source_guard_before': before, 'source_guard_after': after,

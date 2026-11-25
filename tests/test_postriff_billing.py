@@ -134,6 +134,13 @@ class LiveBillingRoutes(unittest.TestCase):
         status, _, _ = invoke(self.app, "POST", "/api/workspaces/w/billing/unknown", {}, self.auth)
         self.assertEqual(status, 404)
 
+    def test_checkout_rejects_client_pricing_authority_before_service(self):
+        for field in ("amount", "amountCents", "priceId", "price_id", "priceVariantId", "price_variant_id"):
+            with self.subTest(field=field):
+                status, _, _ = invoke(self.app, "POST", "/api/workspaces/w/billing/checkout",
+                    {"planTermsId": "assist-v1", field: "attacker-value"}, self.auth)
+                self.assertEqual(status, 400, "client pricing authority must be refused")
+
     def test_webhook_prefers_stripe_signature_header(self):
         seen = {}
         self.service.billing_webhook = lambda sig, raw: seen.setdefault("sig", sig) or {"outcome": "ignored"}
@@ -182,6 +189,21 @@ class DisabledProvider(unittest.TestCase):
         provider, _ = billing_from_environment({"STRIPE_SECRET_KEY": test_mode_key, "STRIPE_WEBHOOK_SECRET": hook})
         self.assertEqual((provider.id, provider.live), ("stripe", False))
 
+
+
+class PricingConfiguration(unittest.TestCase):
+    def test_environment_cohort_is_server_only_and_default_off(self):
+        from postriff_phase2.plan_pricing import pricing_from_environment
+        from postriff_phase2.billing import Billing
+        config = pricing_from_environment({})
+        self.assertFalse(Billing(**config).pricing_v2_enabled)
+        wid = "00000000-0000-0000-0000-000000000003"
+        billing = Billing(**pricing_from_environment({"POSTRIFF_PRICING_V2_ENABLED": "1",
+            "POSTRIFF_CREATOR_PRICE_EXPERIMENT_ENABLED": "1", "POSTRIFF_CREATOR_PRICE_EXPERIMENT_COHORT": wid}))
+        self.assertTrue(billing.pricing_v2_enabled)
+        self.assertEqual(billing.pricing.cohort, frozenset((wid,)))
+        with self.assertRaises(ValueError):
+            Billing(**pricing_from_environment({"POSTRIFF_CREATOR_PRICE_EXPERIMENT_COHORT": "client-cookie"}))
 
 if __name__ == "__main__":
     unittest.main()

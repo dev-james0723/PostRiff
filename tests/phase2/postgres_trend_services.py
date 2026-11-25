@@ -3,6 +3,7 @@
 Only the existing disposable runner's exact target is accepted. No production
 credentials,003 runtime installation, provider calls or skipped DB tests.
 """
+from local_pg_target import selected_target
 import os
 from pathlib import Path
 import sys
@@ -17,7 +18,7 @@ def main():
     dsn = os.environ.get('POSTRIFF_TEST_DSN', '')
     params = conninfo_to_dict(dsn)
     if (set(params) - {'host','port','dbname','user'} or params.get('host') != '127.0.0.1'
-            or params.get('port') != '55438' or params.get('dbname') != 'postgres'
+            or params.get('port') != str(selected_target(require_dsn=True).port) or params.get('dbname') != 'postgres'
             or any(os.environ.get(k) for k in ('PGSERVICE','PGSERVICEFILE','PGHOSTADDR','PGOPTIONS'))):
         raise ValueError('use scripts/postriff_pg_suite.py with its exact disposable local DSN')
     original_path = list(sys.path)

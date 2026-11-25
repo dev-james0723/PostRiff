@@ -97,7 +97,18 @@ def _json_object(content):
     return data if isinstance(data, dict) else None
 
 
-def chat_from_runtime(runtime):
+def _failed_usage(error):
+    """Only normalized Gateway metadata survives a failed response; overlapping cost fields are ignored."""
+    usage = getattr(error, 'usage', None)
+    usage = usage if isinstance(usage, dict) else {}
+    cost = usage.get('gatewayCost')
+    cost = float(cost) if type(cost) in (int, float) and math.isfinite(cost) and cost >= 0 else None
+    return {'cost_usd': cost, 'cost_source': 'gateway' if cost is not None else 'unknown',
+            'provider': usage.get('executionProvider'), 'input_tokens': usage.get('prompt_tokens'),
+            'output_tokens': usage.get('completion_tokens')}
+
+
+def chat_from_runtime(runtime, *, preserve_output_cap=False):
     """Adapter: ServerModelRuntime -> chat(messages, model, max_tokens, timeout_s) -> (content, usage).
 
     The runtime signals 429 and unexpected response shapes with private non-AlphaError exceptions meant for its
@@ -108,14 +119,16 @@ def chat_from_runtime(runtime):
     from postriff_phase2.model_runtime import _RateLimited, _Rejected, _Retry, _takes_timeout, output_cap, thinking
 
     def chat(messages, model, max_tokens, timeout_s=None):
-        if thinking(model):   # reasoning tokens count inside max_tokens; keep the runtime's headroom or the JSON is cut off
+        if thinking(model) and not preserve_output_cap:   # reasoning tokens count inside max_tokens; keep the runtime's headroom or the JSON is cut off
             max_tokens = max(max_tokens, output_cap(model))
         try:
             return runtime._call(messages, model, max_tokens=max_tokens, timeout=timeout_s)
         except _RateLimited as error:
             raise AlphaError(str(error), 429) from error
         except _Retry as error:
-            raise AlphaError(str(error), 502) from error
+            failed = AlphaError(str(error), 502)
+            failed.usage = getattr(error, "usage", None)
+            raise failed from error
         except _Rejected as error:
             status = getattr(error, "http_status", None)
             code = REJECTED_CODES.get(status)
@@ -151,6 +164,10 @@ class AIModelRouter:
             self.usage.record(event)
         return event
 
+    def _invoke(self, task, model, route, fn, args, kwargs, ids):
+        funding = getattr(self, 'funding_call', None)
+        return funding(task, model, route, fn, args, kwargs, ids) if funding else fn(*args, **kwargs)
+
     def evaluator(self, task):
         """A callable for JudgmentService(evaluate=...)."""
         def evaluate(question_set, state, *, workspace_id=None, subject=None):
@@ -183,15 +200,15 @@ class AIModelRouter:
                     break
                 started = self.clock()
                 try:
-                    raw = self.jev.evaluate(state, questions, timeout_s=remaining)
+                    raw = self._invoke(task, primary, 'primary', self.jev.evaluate, (state, questions), {'timeout_s':remaining}, ids)
                 except (J.JevAuthError, J.JevBudgetExceeded, J.JevBadRequest) as error:
                     self._record(ledger, task=task, model=primary, route="primary", status=error.code,
-                                 latency_ms=self._ms(started), **ids)
+                                 latency_ms=self._ms(started), **_failed_usage(error), **ids)
                     raise RouterError(str(error), error.code, ledger) from error
                 except J.JevError as error:
                     last_error = error
                     self._record(ledger, task=task, model=primary, route="primary", status=error.code,
-                                 latency_ms=self._ms(started), **ids)
+                                 latency_ms=self._ms(started), **_failed_usage(error), **ids)
                     if getattr(self, "reconcile_unknown", False) and not isinstance(error, J.JevRateLimited):
                         raise RouterError("The dispatched evaluation must be reconciled before retry", "dispatch_unknown", ledger) from error
                     if attempt == 0 and isinstance(error, RETRYABLE):
@@ -237,12 +254,14 @@ class AIModelRouter:
             ids = {'workspace_id': workspace_id, 'subject': subject, 'task': task, 'model': model,
                    'route': 'primary' if index == 0 else 'fallback'}
             try:
-                content, usage = self.chat(messages, model, max_tokens, remaining)
+                content, usage = self._invoke(task, model, ids['route'], self.chat, (messages, model, max_tokens, remaining), {}, ids)
             except AlphaError as error:
                 code = getattr(error, 'code', None) or REJECTED_CODES.get(error.status) or {429:'rate_limited',504:'timeout'}.get(error.status, 'upstream')
-                self._record(ledger, status=code, latency_ms=self._ms(started), **ids)
+                failed = _failed_usage(error)
+                self._record(ledger, status=code, latency_ms=self._ms(started), **failed, **ids)
                 if getattr(self, 'reconcile_unknown', False) and code not in FINAL_CODES and error.status != 429:
-                    raise RouterError('The dispatched writer must be reconciled before retry', 'dispatch_unknown', ledger) from error
+                    raise RouterError('The dispatched writer failed; no further attempt was sent',
+                                      'dispatch_unknown' if failed['cost_usd'] is None else 'dispatch_failed', ledger) from error
                 if code in FINAL_CODES:
                     raise RouterError('The writer rejected this request', code, ledger) from error
                 continue
@@ -273,17 +292,19 @@ class AIModelRouter:
                     {"role": "user", "content": json.dumps({"state": state, "questions": questions}, ensure_ascii=False)}]
         started = self.clock()
         try:
-            content, usage = self.chat(messages, model, max_tokens, remaining)
+            content, usage = self._invoke(task, model, 'fallback', self.chat, (messages, model, max_tokens, remaining), {}, ids)
         except AlphaError as error:
             code = getattr(error, "code", None)
+            failed = _failed_usage(error)
             if code in FINAL_CODES:   # same contract as Jev: never retried and never routed elsewhere
-                self._record(ledger, task=task, model=model, route="fallback", status=code, latency_ms=self._ms(started), **ids)
+                self._record(ledger, task=task, model=model, route="fallback", status=code, latency_ms=self._ms(started), **failed, **ids)
                 raise RouterError(str(error), code, ledger) from error
             status = {429: "rate_limited", 504: "timeout"}.get(getattr(error, "status", None), "upstream")
             self._record(ledger, task=task, model=model, route="fallback", status=status,
-                         latency_ms=self._ms(started), **ids)
+                         latency_ms=self._ms(started), **failed, **ids)
             if getattr(self, "reconcile_unknown", False) and error.status != 429:
-                raise RouterError("The dispatched fallback must be reconciled before retry", "dispatch_unknown", ledger) from error
+                raise RouterError("The dispatched fallback failed; no further attempt was sent",
+                                  "dispatch_unknown" if failed['cost_usd'] is None else "dispatch_failed", ledger) from error
             return None
         latency = self._ms(started)
         usage = usage if isinstance(usage, dict) else {}

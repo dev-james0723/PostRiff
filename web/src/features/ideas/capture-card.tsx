@@ -10,13 +10,14 @@ import { SegmentedControl, Surface } from '@/components/rafii';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { keys, useAct, useSnapshot, useUsage } from '@/lib/api/hooks';
+import { keys, useAct, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { Snapshot } from '@/lib/api/types';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useDraftHandoff } from './use-draft';
+import { DraftCreditApproval } from './draft-credit-approval';
 import { hostOf, ideaSources, LINK_PATTERN, plural, useActError } from './use-sources';
 
 type Kind = 'idea' | 'text' | 'link' | 'file';
@@ -69,7 +70,6 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
   const client = useQueryClient();
   const { workspaceId } = useWorkspaceApi();
   const snapshot = useSnapshot();
-  const usage = useUsage();
   const act = useAct();
   const onError = useActError();
   const draft = useDraftHandoff();
@@ -230,7 +230,6 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
     }
   }
 
-  const batches = usage.isLoading ? '…' : usage.isError || !usage.data ? 'Unavailable' : String(usage.data.entitlement.writingBatchesRemaining);
 
   return (
     // The page's work surface (DNA §5.2, §21.10): one glass panel, its WHAT control, the entry field and one commitment.
@@ -353,11 +352,11 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
 
         <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
           {/* Which model writes and for where; secondary, so it stays off phones. The allowance is in the page's info. */}
-          <p className='text-muted-foreground hidden min-w-0 text-xs leading-relaxed sm:block sm:max-w-sm' title={batches === 'Unavailable' ? undefined : `${batches} writing batches left`}>
+          <p className='text-muted-foreground hidden min-w-0 text-xs leading-relaxed sm:block sm:max-w-sm' title={draft.costDescription}>
             {draft.modelLabel} · {draft.destinationLabel}
           </p>
           <div className='flex flex-wrap items-center gap-2 sm:shrink-0'>
-            <StatefulButton variant='ghost' className={GLASS} state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={!ready || !body || saveState === 'loading'} onClick={() => void draftNow()}>
+            <StatefulButton variant='ghost' className={GLASS} state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={!ready || !body || saveState === 'loading' || Boolean(draft.blocked)} onClick={() => void draftNow()}>
               Draft now
             </StatefulButton>
             <StatefulButton className={ACTION} state={saveState} loadingText='Saving…' successText='Saved' disabled={!ready || (!body && saveState === 'idle') || draft.busy} onClick={() => void save()}>
@@ -366,6 +365,8 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
           </div>
         </div>
         <p className='text-muted-foreground -mt-1 hidden text-xs sm:block'>⌘↵ saves</p>
+        {draft.blocked && <p role='status' className='text-muted-foreground text-sm'>{draft.blocked}</p>}
+        <DraftCreditApproval draft={draft} />
       </div>
     </Surface>
   );

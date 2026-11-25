@@ -1,6 +1,7 @@
 """Rehearse the pinned migration 045 runner in a disposable PostgreSQL cluster."""
 
 from __future__ import annotations
+from local_pg_target import selected_target
 
 import importlib.util
 import os
@@ -19,7 +20,7 @@ SPEC.loader.exec_module(runner)
 
 
 def main() -> None:
-    dsn = os.environ["POSTRIFF_TEST_DSN"]
+    dsn = selected_target(require_dsn=True).dsn()
     sql = runner.SQL_PATH.read_text()
     with psycopg.connect(dsn, autocommit=True, prepare_threshold=None) as db:
         runner.verify(db)

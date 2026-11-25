@@ -1,5 +1,5 @@
 """Signed synthetic payment events on disposable PostgreSQL; no network access."""
-import hashlib,hmac,json,time,uuid
+import hashlib,hmac,json,os,time,uuid
 from pathlib import Path
 import psycopg
 from postriff_alpha.domain import AlphaError
@@ -8,7 +8,10 @@ from postriff_phase2.billing_stripe import StripePaymentProvider
 from postriff_phase2.credit_meter import POLICY_VERSION
 
 ROOT=Path(__file__).resolve().parents[2]
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
+TEST_PG_PORT = int(os.environ.get('POSTRIFF_TEST_PG_PORT', '55438'))
+if not 1024 <= TEST_PG_PORT <= 65535:
+    raise ValueError('Disposable PostgreSQL port must be between 1024 and 65535.')
+DSN = f'host=127.0.0.1 port={TEST_PG_PORT} dbname=postgres'
 NOW=int(time.time());ACTOR=str(uuid.uuid4());SECRET='synthetic-webhook-only'
 def connection(): return psycopg.connect(DSN,client_encoding='utf8')
 def verify(token):
@@ -22,7 +25,7 @@ def transport(method,url,headers=None,form=None):
     return {'status':200,'body':{'id':sid,'url':'https://checkout.stripe.com/c/pay/'+sid}}
 provider=StripePaymentProvider('sk_test_fixture',SECRET,transport=transport,clock=lambda:NOW)
 with connection() as db:
-    assert db.info.host == '127.0.0.1' and db.info.port == 55438, 'Synthetic fixture must remain in disposable PostgreSQL'
+    assert db.info.host == '127.0.0.1' and db.info.port == TEST_PG_PORT, 'Synthetic fixture must remain in disposable PostgreSQL'
     db.execute('INSERT INTO auth.users(id) VALUES(%s)', (ACTOR,))
     for file in ('020_credit_quotes.sql','021_credit_purchases.sql'):
         db.execute((ROOT/'migrations/postriff'/file).read_text())
@@ -82,3 +85,30 @@ with connection() as db:
     except psycopg.errors.InsufficientPrivilege: pass
     else: raise AssertionError('Private orders exposed')
 print('PASS: server-bound checkout, no pre-payment credits, replay safety, refund-before-funding, failed/stale refunds, signature, amounts, pause and RLS')
+
+
+# Task2 review fix: a delayed candidate order keeps its immutable source policy.
+with connection() as db:
+    original = db.execute("SELECT id::text,meta FROM pr_usage_ledger WHERE workspace_id=%s AND meta->'credits'->>'op'='grant'", (wid,)).fetchall()
+service.credit_purchases_enabled = True  # Synthetic disposable fixture only.
+delayed_order = service.billing_credit_checkout(wid, 'fixture', 'test-pack', 'delayed-policy-order')
+with connection() as db:
+    v2_ent = {**ent, 'creditPolicy': 'credits-v2-2026-09-28'}
+    db.execute("INSERT INTO pr_plan_terms(id,plan,version,label,price_cents,status,entitlements) VALUES('purchase-transition-v2','studio',998,'Synthetic v2 transition',0,'active',%s::jsonb)", (json.dumps(v2_ent),))
+    db.execute("UPDATE pr_entitlements SET plan_terms_id='purchase-transition-v2' WHERE workspace_id=%s", (wid,))
+delayed_payment = {'id': delayed_order['sessionId'], 'mode': 'payment', 'payment_status': 'paid', 'payment_intent': 'pi_delayed_policy',
+                   'amount_total': 1000, 'currency': 'usd', 'metadata': {'credit_order_id': delayed_order['orderId']}}
+service.billing_webhook(*event('checkout.session.completed', delayed_payment, 'evt_delayed_policy_paid', NOW + 3))
+assert service.billing_webhook(*event('checkout.session.completed', delayed_payment, 'evt_delayed_policy_paid', NOW + 3))['outcome'] == 'duplicate'
+service.billing_webhook(*event('checkout.session.async_payment_succeeded', delayed_payment, 'evt_delayed_policy_again', NOW + 4))
+with connection() as db:
+    grants = db.execute("SELECT id::text,meta FROM pr_usage_ledger WHERE workspace_id=%s AND meta->'credits'->>'op'='grant'", (wid,)).fetchall()
+    funded = db.execute("SELECT o.policy_id,u.meta->'credits' FROM pr_credit_orders o JOIN pr_usage_ledger u ON u.id=o.grant_id WHERE o.id=%s", (delayed_order['orderId'],)).fetchone()
+    assert len(grants) == len(original) + 1 and all(row in grants for row in original), grants
+    assert funded[0] == POLICY_VERSION and funded[1]['policy'] == POLICY_VERSION, funded
+    assert funded[1]['source'] == 'verified-stripe-checkout' and funded[1]['expiresAt'] is None, funded
+    assert service.ledger.credits.view(db.cursor(), wid)['availableMilliCredits'] == 150000
+service.billing_webhook(*event('refund.created', {'id': 're_delayed_policy', 'payment_intent': 'pi_delayed_policy', 'amount': 500, 'currency': 'usd', 'status': 'succeeded'}, 'evt_delayed_policy_refund', NOW + 5))
+with connection() as db:
+    assert service.ledger.credits.view(db.cursor(), wid)['availableMilliCredits'] == 100000
+print('PASS: delayed candidate purchase after v2 transition preserves order/grant policy, history, replay, expiry and refund')

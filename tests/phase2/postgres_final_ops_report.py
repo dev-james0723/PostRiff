@@ -1,6 +1,7 @@
 """FINAL-10 on disposable PostgreSQL: the read-only operator report finds every state that needs a person
 (unknown usage, payment events waiting for review, uncertain/held/stuck/overdue publishing jobs, budgets
 past their stop line or not approved) and prints identifiers only. Nothing is changed by the report."""
+from local_pg_target import selected_target
 import hashlib
 import json
 import sys
@@ -22,7 +23,7 @@ _module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_module)
 health = _module.health
 
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 now = time.time()
 

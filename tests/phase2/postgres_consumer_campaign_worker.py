@@ -1,4 +1,5 @@
 """Real DB worker calls the existing synthetic runtime, reconciles restarts and loses authority safely."""
+from local_pg_target import selected_target
 import json
 import os
 import sys
@@ -9,7 +10,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.campaign_worker import CampaignWorker
 from postriff_phase2.agent_runtime import FixtureAgentRuntime
 
-DSN = os.environ.get('POSTRIFF_TEST_DSN', 'host=127.0.0.1 port=55438 dbname=postgres')
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 clock = [1_800_000_000.0]
 def connection(): return psycopg.connect(DSN)

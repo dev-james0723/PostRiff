@@ -17,6 +17,7 @@ from .jev import JevService
 from .router import AIModelRouter
 from .usage import MemoryUsageSink, PostgresUsageSink
 from .scout_evidence import enrich
+from .credit_admission import funding_mode, require_qualified_entry
 
 
 def fingerprint(state, watchlist):
@@ -89,6 +90,8 @@ def run_workspace(service, workspace_id, deadline, *, broker=None, judge=None):
     token = uuid.uuid4().hex
     with service.hosted.connection_factory() as db, db.cursor() as cur:
         cur.execute("SET LOCAL lock_timeout = '1s'")
+        if funding_mode(cur,workspace_id,hosted=service.hosted)!='legacy':
+            return {"workspaceId":workspace_id,"status":"unavailable","reason":"growth_credit_bridge_unavailable"}
         cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
         row = cur.fetchone()
         state = row[0] if row else {}
@@ -103,10 +106,33 @@ def run_workspace(service, workspace_id, deadline, *, broker=None, judge=None):
                          AND left(dimension,6)='scout_' AND experiment->'planningAccepted'='true'::jsonb AND expires_at>to_timestamp(%s) LIMIT 20""", (workspace_id, now))
         state["_scoutPlanningPreferences"] = [{"id": r[0], "statement": r[1], "cohort": r[2], "evidenceIds": r[3], "counterEvidenceIds": r[4], "expiresAt": float(r[5])} for r in cur.fetchall()]
     sink = MemoryUsageSink()
+    def guard():
+        with service.hosted.connection_factory() as db,db.cursor() as cur:
+            require_qualified_entry(cur,workspace_id,hosted=service.hosted)
+    class GuardedJev:
+        def __init__(self,delegate): self.delegate=delegate
+        def evaluate(self,*args,**kwargs):
+            guard()
+            return self.delegate.evaluate(*args,**kwargs)
     if judge is None and flags.enabled("RAFII_JEV_SCOUT_ENABLED") and service.values.get("AI_GATEWAY_API_KEY"):
-        judge = scout.ScoutJudge(AIModelRouter(jev=JevService(service.values["AI_GATEWAY_API_KEY"]), usage=sink))
+        judge = scout.ScoutJudge(AIModelRouter(jev=GuardedJev(JevService(service.values["AI_GATEWAY_API_KEY"])), usage=sink))
+    if judge is not None:
+        delegate=judge
+        class GuardedJudge:
+            def judge(self,*args,**kwargs):
+                guard()
+                return delegate.judge(*args,**kwargs)
+        judge=GuardedJudge()
     try:
-        outcome = (broker or service._broker(state)).search_items(watchlist["query"], {"limit": 6})
+        guard()
+        selected_broker=broker or service._broker(state)
+        from ..coworker.research_broker import ResearchBroker
+        if isinstance(selected_broker,ResearchBroker):
+            selected_broker.before_call=guard
+            for provider in selected_broker.providers:
+                backend=getattr(provider,'backend',None)
+                if isinstance(backend,research.ExaSearch): backend.before_call=guard
+        outcome = selected_broker.search_items(watchlist["query"], {"limit": 6})
         if outcome["status"] != "ok":
             raise RuntimeError("retrieval_unavailable")
         root = listening.root(state)
@@ -116,6 +142,7 @@ def run_workspace(service, workspace_id, deadline, *, broker=None, judge=None):
         if adapter and adapter.capabilities().get("localOnly") and (research.hosted() or not flags.enabled("RAFII_WATCH_IT_LOCAL_ADAPTER_ENABLED")):
             adapter = None
         def enrich_one(signal):
+            guard()
             return enrich(signal, workspace_id=workspace_id, adapter=adapter, ledger=media_ledger, cache=media_cache,
                           now=now, deadline=min(deadline - 2, time.monotonic() + 5), relevant=True, useful=True,
                           enabled=bool(root["scoutLease"].get("mediaReserved")))

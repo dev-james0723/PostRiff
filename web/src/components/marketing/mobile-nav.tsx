@@ -11,7 +11,7 @@ import { siteConfig } from '@/config/site';
  * Hamburger menu for the marketing header at phone width: an elevated glass sheet with 44px rows
  * (DNA §12, §23.1). The primitive keeps its focus trap and Escape handling.
  */
-export function MobileNav() {
+export function MobileNav({ signUpLabel }: { signUpLabel: string }) {
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -41,7 +41,7 @@ export function MobileNav() {
             Sign in
           </Link>
           <Link href={siteConfig.links.signUp} onClick={() => setOpen(false)} className={buttonVariants({ variant: 'action', size: 'control' })}>
-            Start free trial
+            {signUpLabel}
           </Link>
         </div>
       </SheetContent>
