@@ -1091,7 +1091,7 @@ class IdeasService:
         read = {item.get("id") for item in (outcome.get("voiceContext") or {}).get("examples") or []}
         if read:
             # The writer was told examples are style only. Whether it kept to that is checked on the draft, not assumed.
-            example_texts = [source.get("text") or "" for source in current_state.get("sources", []) if source.get("id") in read]
+            example_texts = [(source.get("text") or "")[:voice_sources.MAX_EXAMPLE_CHARS] for source in current_state.get("sources", []) if source.get("id") in read]
             for variant in artifact["variants"]:
                 for note in voice_sources.copied_from_examples(variant.get("text"), example_texts, outcome.get("supplied") or ""):
                     if note not in variant.setdefault("warnings", []):

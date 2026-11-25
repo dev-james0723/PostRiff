@@ -158,6 +158,15 @@ class RecurringFormTests(unittest.TestCase):
             self.assertNotIn(fragment, observations)
         self.assertIn("English", observations)
 
+    def test_a_tag_shaped_label_names_only_the_language_the_catalogue_knows(self):
+        """Third review: `en-91234567` printed as "English (91234567)" and `ja-chandr12` was printed raw."""
+        for label, expected in (("en-91234567", "English"), ("en-GB-bookmehk", "English (UK)"), ("ja-chandr12", "an unrecognised label"), ("yue-Hant-HK", "廣東話（香港）")):
+            self.assertEqual(voice_analysis._language_name(label), expected, label)
+        state = initial_state("workspace-one")
+        ids = [add_sample(state, f"Note {index}. A short post.", f"t{index}", language="en-91234567") for index in range(3)]
+        observations = " ".join(voice_analysis.build_proposal(state, ids, "owner-one", 200)["observations"])
+        self.assertNotIn("91234567", observations)
+
     def test_a_question_to_the_reader_is_counted(self):
         proposal, _ = self.proposal(SERIES)
         self.assertIn("3 of 4 have a line that ends with a question", self.observation(proposal, "punctuation")["observation"])

@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import re
+import unicodedata
 from typing import Any
 
 from postriff_alpha.domain import AlphaError, uid
@@ -324,24 +325,29 @@ def retrieve(
 
 
 _ZERO_WIDTH = re.compile("[\u200b-\u200f\u2060\ufeff]")
-# Only text that plainly addresses a model: an order to drop earlier instructions, a request for the system prompt,
-# or markup posing as a section of the request. "Forget the rules, just play" is a sentence, not an attack.
-_INSTRUCTION = re.compile(
-    r"(?:ignore|disregard|forget|override)\s+(?:all\s+|any\s+)?(?:of\s+)?(?:the\s+|your\s+)?(?:previous|prior|above|earlier|system)\s+(?:instructions?|rules?|prompts?)"
-    r"|<\s*/?\s*(?:system|assistant|voicesamples)\b|\[INST\]|(?:reveal|show|print)\s+(?:the\s+|your\s+)?system\s+prompt"
-    r"|(?:忽略|無視|无视|不要理會|不要理会)[^。\n]{0,12}(?:指示|指令|規則|规则|提示)", re.I)
+# Only text that plainly addresses a model: an order to drop its instructions (all of them, "your", the previous or
+# above ones), a request for the system prompt, or markup posing as a section of the request. "Forget the rules,
+# just play" is a sentence, not an attack.
+_OVERRIDE = re.compile(r"(?:ignore|disregard|forget|override)\s+(?P<all>(?:all|any)\s+)?(?:of\s+)?(?:(?P<whose>your)\s+|the\s+)?(?P<before>(?:previous|prior|above|earlier|system)\s+)?"
+                       r"(?:instructions?|rules?|prompts?)(?P<after>\s+(?:above|before|earlier|so far))?", re.I)
+_POSING = re.compile(r"<\s*/?\s*(?:system|assistant|voicesamples)\b|\[INST\]|(?:reveal|show|print|output)\s+(?:the\s+|your\s+)?(?:system\s+)?prompt"
+                     r"|(?:忽略|無視|无视|不要理會|不要理会|唔好理)[^。\n]{0,12}(?:指示|指令|規則|规则|提示)", re.I)
 _CJK_CHAR = "\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af"
 _COPY_TOKEN = re.compile(f"[{_CJK_CHAR}]|[^\\W_{_CJK_CHAR}]+")
-# What can carry a fact out of a sample: a link or bare domain, a handle, a price or percentage, a number of three
-# or more digits. Compared as whole tokens, never as substrings.
-_FACT_TOKEN = re.compile(r"https?://[^\s]+|www\.[^\s]+|[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:/[^\s]*)?|(?<![\w.])@[\w.]{2,}|[$€£¥]\s?\d[\d,.]*|\d[\d,.]*\s?%|\d{3,}", re.I)
+_TAG = re.compile(r"(?<![\w#])#[\w\u3400-\u9fff]+")
+# What can carry a fact out of a sample: a link or bare domain, a handle, a price or percentage, a longer number.
+# ASCII classes and bounded repeats, so neighbouring Chinese text is not swallowed and long input stays linear.
+_LINK = re.compile(r"(?:https?://)?(?:www\.)?(?P<host>[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63}){0,8}\.[a-z]{2,24})(?P<path>/[A-Za-z0-9._~%&=+/-]{0,200})?", re.I)
+_HANDLE = re.compile(r"(?<![A-Za-z0-9_.])@[A-Za-z0-9_](?:[A-Za-z0-9_.]{0,28}[A-Za-z0-9_])?")
+_NUMBER = re.compile(r"(?<![A-Za-z0-9#_])(?P<sign>(?:HK|US)?[$€£¥]\s?)?(?P<digits>\d{1,12}(?:[ ,.\-]\d{1,12}){0,6})(?P<percent>\s?%)?(?![A-Za-z0-9_])")
 COPIED_WORDS = 8
 
 
 def reads_like_instruction(text: str) -> bool:
     """A sample that addresses a model rather than a reader is never sent as an example. A pattern list cannot catch
     every phrasing; the structured data field, the writer's rule and the check on the finished draft are the rest."""
-    return bool(_INSTRUCTION.search(_ZERO_WIDTH.sub("", text or "")))
+    text = unicodedata.normalize("NFKC", _ZERO_WIDTH.sub("", text or ""))
+    return bool(_POSING.search(text)) or any(found["all"] or found["whose"] or found["before"] or found["after"] for found in _OVERRIDE.finditer(text))
 
 
 def example_granted(source: dict, route: str) -> bool:
@@ -352,37 +358,56 @@ def example_granted(source: dict, route: str) -> bool:
 
 
 def _fact_tokens(text: str) -> set[str]:
-    return {token.casefold().rstrip(".,;:!?)") for token in _FACT_TOKEN.findall(text or "")}
+    """Links (with and without their path), handles, prices, percentages and numbers of three or more digits, each
+    in one normal form so `https://www.site.com/a/`, `site.com/a` and `９１２３ ４５６７`, `91234567` compare equal.
+    A bare year is not a fact worth a warning."""
+    text = unicodedata.normalize("NFKC", text or "")
+    tokens = set()
+    for found in _LINK.finditer(text):
+        host = found["host"].casefold()
+        tokens.add(host)
+        if found["path"] and found["path"].strip("/"):
+            tokens.add(host + "/" + found["path"].strip("/").rstrip(".,;:!?)").casefold())
+    text = _LINK.sub(" ", text)
+    tokens.update(found.group().casefold() for found in _HANDLE.finditer(text))
+    for found in _NUMBER.finditer(_HANDLE.sub(" ", text)):
+        digits = re.sub(r"\D", "", found["digits"])
+        priced = bool(found["sign"] or found["percent"])
+        if (priced and len(digits) >= 2) or (len(digits) >= 3 and not (len(digits) == 4 and digits[:2] in ("19", "20") and not priced)):
+            tokens.add(("%" if found["percent"] else "$" if found["sign"] else "#") + digits)
+    return tokens
 
 
 def copied_from_examples(text: str, samples: list[str], supplied: str) -> list[str]:
     """Reminders for a draft that took wording or a fact from a style example instead of only its form.
 
-    Flags a run of wording shared with a sample (eight words, or twelve characters where the text has no spaces,
+    Flags a run of wording shared with one sample (eight words, or twelve characters where the text has no spaces,
     as in Chinese and Japanese) and a link, handle, price, percentage or longer number that is in a sample and in
-    the draft but not in what the person supplied for this post. Short sign-offs and tags are form."""
-    def tokens(value):
-        return _COPY_TOKEN.findall((value or "").casefold())
-
-    def runs(sequence):
+    the draft but not in what the person supplied for this post. Tags, and wording that recurs across two or more
+    of the examples (a sign-off), are the person's house form and are never flagged."""
+    def runs(value):
+        """Runs of wording within one line: a sign-off is its own line, and a run never joins it to its neighbours."""
         found = set()
-        for size, least in ((COPIED_WORDS, 24), (12, 0)):   # eight tokens that are real words, or any twelve tokens
-            for index in range(len(sequence) - size + 1):
-                window = sequence[index:index + size]
-                if sum(len(token) for token in window) >= least:
-                    found.add(" ".join(window))
+        for line in _TAG.sub(" ", (value or "").casefold()).splitlines():
+            sequence = _COPY_TOKEN.findall(line)
+            for size, least in ((COPIED_WORDS, 24), (12, 0)):   # eight tokens that are real words, or any twelve tokens
+                for index in range(len(sequence) - size + 1):
+                    window = sequence[index:index + size]
+                    if sum(len(token) for token in window) >= least:
+                        found.add(" ".join(window))
         return found
 
-    draft, given = runs(tokens(text)), runs(tokens(supplied))
+    samples = [sample[:MAX_EXAMPLE_CHARS] for sample in samples]   # only what was sent can have been copied
+    per_sample = [runs(sample) for sample in samples]
+    house = {run for index, found in enumerate(per_sample) for run in found if any(run in other for other in per_sample[:index] + per_sample[index + 1:])}
+    draft, given = runs(text), runs(supplied)
+    shared = sorted((draft & set().union(*per_sample)) - given - house, key=len, reverse=True) if per_sample else []
     notes = []
-    for sample in samples:
-        shared = sorted((draft & runs(tokens(sample))) - given, key=len, reverse=True)
-        if shared:
-            notes.append(f"This draft repeats wording from one of your style examples (“{shared[0][:80]}…”). Examples are for style only: rewrite it, or keep it if the words are yours to reuse.")
-            break
+    if shared:
+        notes.append(f"This draft repeats wording from one of your style examples (“{shared[0][:80]}…”). Examples are for style only: rewrite it, or keep it if the words are yours to reuse.")
     lifted = sorted((_fact_tokens(text) & set().union(*[_fact_tokens(sample) for sample in samples])) - _fact_tokens(supplied)) if samples else []
     if lifted:
-        notes.append(f"This draft contains {', '.join(lifted[:3])}, which appears in a style example but not in what you supplied for this post. Check it before publishing.")
+        notes.append(f"This draft contains {', '.join(token.lstrip('#$%') for token in lifted[:3])}, which appears in a style example but not in what you supplied for this post. Check it before publishing.")
     return notes
 
 

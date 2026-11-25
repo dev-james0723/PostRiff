@@ -95,6 +95,17 @@ _INJECTION = re.compile(r'ignore\s+(?:all\s+)?(?:previous|prior|system)\s+instru
 _IDENTITY_CLAIM = re.compile(r'\b(?:author|writer|speaker|person|they|she|he)\s+(?:is|are|has|have|believes?|suffers?|works?)\b|\b(?:diagnosis|diagnosed|ethnicity|religion|sexual orientation|political belief|qualifications?|credentials?|demographic|profession|nationality)\b|作者是|作者患有|宗教信仰|政治立場|政治立场|性取向', re.I)
 
 
+def _language_name(label) -> str:
+    """The catalogue's own name for a label, never the label's text: a tag the catalogue does not list is named by
+    its nearest listed ancestor (`en-GB-anything` is "English (UK)"), and anything else is unrecognised."""
+    tag = locales.canonical(label, family_ok=True)
+    listed = locales._index()["by_tag"]
+    for candidate in ([tag] + list(locales._truncations(tag)[1:])) if tag else []:
+        if candidate in listed:
+            return locales.display(candidate)
+    return "Chinese" if tag in ("zh", "yue") else "an unrecognised label"
+
+
 def check_untrusted_samples(samples):
     if any(_INJECTION.search(sample.get('text', '')) for sample in samples):
         raise AlphaError('A selected sample contains instruction-like text. Exclude or edit it before analysis; nothing was sent.', 422)
@@ -170,8 +181,7 @@ def build_proposal(state: dict, source_ids: list[str], actor: str, now: float, r
 
     labelled = [sample for sample in samples if sample.get('language')]
     # A label is typed by the person and may hold anything; only a language PostRiff knows is named in VOICE.md.
-    languages = sorted({locales.display(locales.canonical(sample['language'], family_ok=True)) if locales.canonical(sample['language'], family_ok=True) else 'an unrecognised label'
-                        for sample in labelled})
+    languages = sorted({_language_name(sample['language']) for sample in labelled})
     dimensions = [_dimension('language', 'Sample language labels: ' + ', '.join(languages)[:140] + '. Labels are user-provided, not automatic language identification.', [sample['id'] for sample in labelled])
                   if labelled else _insufficient('language', 'Primary language is unconfirmed. Script detection alone does not identify a language; review it or request consented AI analysis.', ids)]
     for identifier, pattern, yes, no in (
