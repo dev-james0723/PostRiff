@@ -15,10 +15,10 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = '26.2.6'
+VERSION = '26.2.7'
 BUNDLE_REVISION = VERSION + '-elf-closure-2'
 DYNAMIC_PROVIDERS = ('libseccomp.so.2','libsoftokn3.so','libfreebl3.so','libfreeblpriv3.so','libnssckbi.so')
-SHA256 = '9833c61bfbec0905c6da54f82ef56123818661c9fec99706d9afece3ad7e9988'
+SHA256 = 'c22c6175d620afd89789d6cacebca90345aad75a24cee21cff882feec19fdee7'
 
 
 def download_locked_archive(archive):

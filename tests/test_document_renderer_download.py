@@ -22,7 +22,7 @@ class ArchiveDownloadTests(unittest.TestCase):
             renderer.download_locked_archive(destination)
             self.assertEqual(destination.read_bytes(), content)
             self.assertEqual(get.call_count, 2)
-            self.assertIn('ftp.osuosl.org/pub/tdf/libreoffice/stable/26.2.6/', get.call_args.args[0])
+            self.assertIn('ftp.osuosl.org/pub/tdf/libreoffice/stable/26.2.7/', get.call_args.args[0])
             self.assertEqual(get.call_args.kwargs['timeout'], 30)
 
     def test_checksum_mismatch_stops_without_retry_or_leaving_corrupt_bytes(self):
