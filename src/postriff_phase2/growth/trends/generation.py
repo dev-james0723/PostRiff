@@ -211,6 +211,11 @@ class TrendGeneration(TrendEnrichment):
         return request
 
     def execute(self, model, loaded, task, workspace_id, usage):
+        physical=False
+        def dispatched_call():
+            nonlocal physical
+            physical=True
+        model = self._funded_model(model, workspace_id, dispatched_call)
         cfg=loaded["config"];pack=loaded["pack"]
         request=self.prepare_model(model,loaded)
         # Capture usage before the runtime parses choices; malformed HTTP200 output
@@ -251,10 +256,11 @@ class TrendGeneration(TrendEnrichment):
                 cost=runtime._cost(cfg["model"],raw["prompt_tokens"],raw["completion_tokens"]);basis="table:"+runtime.price_basis(cfg["model"])["version"]
             # HTTP status alone cannot establish that no paid work occurred.
             if answer.get("status")==429:status="rate_limited"
-            usage.record(UsageEvent(task="trend."+task,model=cfg["model"],route="primary",status=status,
-                latency_ms=int((time.monotonic()-started)*1000),provider=provider if isinstance(provider,str) else None,
-                input_tokens=raw.get("prompt_tokens") if type(raw.get("prompt_tokens")) is int and 0<=raw["prompt_tokens"]<=2_000_000 else None,
-                output_tokens=raw.get("completion_tokens") if type(raw.get("completion_tokens")) is int and 0<=raw["completion_tokens"]<=2_000_000 else None,cost_usd=cost,cost_source=basis,workspace_id=workspace_id))
+            if physical:
+                usage.record(UsageEvent(task="trend."+task,model=cfg["model"],route="primary",status=status,
+                    latency_ms=int((time.monotonic()-started)*1000),provider=provider if isinstance(provider,str) else None,
+                    input_tokens=raw.get("prompt_tokens") if type(raw.get("prompt_tokens")) is int and 0<=raw["prompt_tokens"]<=2_000_000 else None,
+                    output_tokens=raw.get("completion_tokens") if type(raw.get("completion_tokens")) is int and 0<=raw["completion_tokens"]<=2_000_000 else None,cost_usd=cost,cost_source=basis,workspace_id=workspace_id))
 
     def attach(self, cursor, workspace_id, actor_id, state, loaded, result, projection):
         if loaded["task"]!="angle_generate":return

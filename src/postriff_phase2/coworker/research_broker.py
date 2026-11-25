@@ -336,11 +336,12 @@ class FixtureProvider(ResearchProvider):
 class ResearchBroker:
     """Routes search/fetch to ready providers and records what happened, failures included."""
 
-    def __init__(self, providers=None, state=None):
+    def __init__(self, providers=None, state=None, *, before_call=None):
         self.providers = list(providers) if providers is not None else [WebSearchProvider(), WebReaderProvider(), OfficialPlatformApiProvider(),
                                                                          MCPResearchProvider(), LocalAgentReachProvider()]
         self.state = state
         self.log = []
+        self.before_call = before_call
 
     def diagnostics(self):
         return [{"id": p.id, "kind": p.kind, "hostedOk": p.hosted_ok, "capabilities": p.capabilities(), "readiness": p.readiness(self.state)}
@@ -354,6 +355,8 @@ class ResearchBroker:
     def search_items(self, query, scope=None):
         errors = []
         for provider in self._ready("search"):
+            if self.before_call is not None:
+                self.before_call()
             try:
                 items = provider.search(query, scope)
                 self.log.append({"op": "search", "provider": provider.id, "query": query, "status": "ok", "count": len(items)})
@@ -369,6 +372,8 @@ class ResearchBroker:
         for provider in self._ready("fetch"):
             if provider.kind == "official_api":
                 continue
+            if self.before_call is not None:
+                self.before_call()
             try:
                 page = provider.fetch(ref)
                 self.log.append({"op": "fetch", "provider": provider.id, "url": page.get("url"), "status": "ok"})

@@ -9,7 +9,7 @@ events only; no network and no Stripe account.
 - Disputes: withdrawn funds reverse the order's credits; won/reinstated restores them; lost stays reversed.
 - Debt left by a refund after the credits were spent is repaid by the next grant, and spending resumes.
 """
-import hashlib, hmac, json, subprocess, sys, time, uuid
+import hashlib, hmac, json, os, subprocess, sys, time, uuid
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -17,16 +17,23 @@ import psycopg
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.billing_stripe import StripePaymentProvider
-from postriff_phase2.credit_meter import POLICY_VERSION
+from postriff_phase2.credit_meter import POLICY_VERSION, V2_POLICY_VERSION
 from consumer_fixtures import approve_budgets
 
 ROOT = Path(__file__).resolve().parents[2]
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+TEST_PG_PORT = int(os.environ.get('POSTRIFF_TEST_PG_PORT', '55438'))
+if not 1024 <= TEST_PG_PORT <= 65535:
+    raise ValueError('Disposable PostgreSQL port must be between 1024 and 65535.')
+DSN = f'host=127.0.0.1 port={TEST_PG_PORT} dbname=postgres'
 NOW = int(time.time()); ACTOR = str(uuid.uuid4()); SECRET = 'synthetic-webhook-only'
+# Same historical lifecycle under either supported policy; never activates seeded packs.
+PURCHASE_POLICY = V2_POLICY_VERSION if '--policy-v2' in sys.argv[1:] else POLICY_VERSION
 
 
 def connection():
-    return psycopg.connect(DSN, client_encoding='utf8')
+    db = psycopg.connect(DSN, client_encoding='utf8')
+    assert db.info.host == '127.0.0.1' and db.info.port == TEST_PG_PORT, 'Synthetic fixture must remain in disposable PostgreSQL'
+    return db
 
 
 def verify(token):
@@ -56,10 +63,10 @@ service.credit_purchases_enabled = True
 wid = service.bootstrap('fixture', 'studio')['workspaceId']
 with connection() as db:
     cur = db.cursor(); service.ledger.ensure_entitlement(cur, wid, None)
-    ent = {'writingBatches': 10, 'mediaCredits': 1, 'members': 2, 'connectedAccounts': 3, 'storageMb': 200, 'creditPolicy': POLICY_VERSION}
+    ent = {'writingBatches': 10, 'mediaCredits': 1, 'members': 2, 'connectedAccounts': 3, 'storageMb': 200, 'creditPolicy': PURCHASE_POLICY}
     db.execute("INSERT INTO pr_plan_terms(id,plan,version,label,price_cents,status,entitlements) VALUES('lifecycle-terms','studio',994,'Synthetic',0,'active',%s::jsonb)", (json.dumps(ent),))
     db.execute("UPDATE pr_entitlements SET plan_terms_id='lifecycle-terms' WHERE workspace_id=%s", (wid,))
-    db.execute("INSERT INTO pr_credit_packs VALUES('test-pack','Synthetic credits',%s,'price_fixture',1000,'usd',100000,false,true)", (POLICY_VERSION,))
+    db.execute("INSERT INTO pr_credit_packs VALUES('test-pack','Synthetic credits',%s,'price_fixture',1000,'usd',100000,false,true)", (PURCHASE_POLICY,))
 counter = [0]
 
 
@@ -215,6 +222,13 @@ assert resolved.returncode == 0, resolved.stderr
 listed = json.loads(subprocess.run([*tool, 'list'], capture_output=True, text=True, check=True).stdout)
 assert len(listed['needsReview']) == 4 and wallet() == (100000, 0)
 checks.append('operator lists 5 review items and resolves one with a note; balances unchanged by resolving')
+
+with connection() as db:
+    grants = db.execute("SELECT u.meta->'credits' FROM pr_credit_orders o JOIN pr_usage_ledger u ON u.id=o.grant_id "
+                        "WHERE o.workspace_id=%s", (wid,)).fetchall()
+assert len(grants) == 7 and all(row[0]['policy'] == PURCHASE_POLICY and row[0]['expiresAt'] is None
+                                and row[0]['source'] == 'verified-stripe-checkout' for row in grants), grants
+checks.append('all seven paid orders keep their locked supported policy and purchased expiry remains unset')
 
 for line in checks:
     print('PASS:', line)

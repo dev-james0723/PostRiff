@@ -3,6 +3,7 @@ recording transport, Stripe-signed webhooks (activation, payment failure, replay
 block, owner notifications, invitation email with the accept link, and reminder dedupe in pr_notifications.
 No network: Stripe and Resend are replaced by in-memory doubles; the service, ledger and SQL are real.
 """
+from local_pg_target import selected_target
 import hashlib
 import hmac
 import json
@@ -17,7 +18,7 @@ from postriff_phase2.billing_stripe import StripePaymentProvider
 from postriff_phase2.email import Mailer, NullTransport
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 clock = [time.time() + 3600]  # ahead of any synthetic event timestamps left by earlier scripts on the shared cluster
 checks = []
@@ -106,12 +107,21 @@ view = service.usage(wid, "one")
 assert view["billing"] == {"provider": "stripe", "checkoutAvailable": False, "portalAvailable": False}, view["billing"]
 checks.append("proposed plan terms refuse checkout (D3); usage shows no purchasable plan")
 
-# 2. Activating terms with a provider price opens checkout; client paths must be relative.
+# 2. Active legacy terms remain hidden from new checkout; connector serialization and URL guards remain covered.
 with connection() as db:
     db.execute("UPDATE public.pr_plan_terms SET status='active', provider_price_id='price_studio' WHERE id='studio-v1'")
 denied(lambda: service.billing_checkout(wid, "one", "studio-v1", "https://evil.example/x"), 400)
 denied(lambda: service.billing_checkout(wid, "one", "studio-v1", "//evil.example"), 400)
-session = service.billing_checkout(wid, "one", "studio-v1", "/app/account/billing?ok=1")
+before = len(transport.calls)
+denied(lambda: service.billing_checkout(wid, "one", "studio-v1", "/app/account/billing?ok=1"), 409)
+assert len(transport.calls) == before, "active legacy terms must not dispatch new checkout before048/OFF"
+# Exercise the connector's serialization separately with an in-memory transport.
+# This represents a historical legacy checkout, not permitted new hosted acquisition.
+session = provider.create_checkout_session(
+    workspace_id=wid, plan_terms_id="studio-v1", price_id="price_studio",
+    success_url="https://app.postriff.test/app/account/billing?ok=1",
+    cancel_url="https://app.postriff.test/app/account/billing?cancelled=1",
+    customer_email="owner@example.com", idempotency_key="fixture-historical-studio")
 assert session["url"].startswith("https://checkout.stripe.com/") and session["sessionId"] == "cs_test_1", session
 call = transport.calls[-1]
 form = call["form"]
@@ -119,22 +129,22 @@ assert form["mode"] == "subscription" and form["line_items[0][price]"] == "price
 assert form["subscription_data[metadata][workspace_id]"] == wid and form["subscription_data[metadata][plan_terms_id]"] == "studio-v1"
 assert form["success_url"] == "https://app.postriff.test/app/account/billing?ok=1" and form["cancel_url"].startswith("https://app.postriff.test/app/account/billing")
 assert form["customer_email"] == "owner@example.com" and call["headers"].get("Idempotency-Key") and call["headers"]["Authorization"] == "Bearer sk_test_x"
-assert service.usage(wid, "one")["billing"]["checkoutAvailable"] is True
+assert service.usage(wid, "one")["billing"]["checkoutAvailable"] is False
 denied(lambda: service.billing_portal(wid, "one"), 409)
-checks.append("active terms + price open checkout with workspace metadata and idempotency; absolute return URLs refused; portal needs a customer")
+checks.append("active legacy terms refuse new checkout with zero IO; historical connector serialization preserves metadata/idempotency; absolute returns refused; portal needs a customer")
 
-# 3. Stripe-signed checkout completion activates the subscription, reconciles entitlement, notifies the owner once.
+# 3. A previously created legacy checkout still fulfills: entitlement and one owner notification.
 sig, body = signed("checkout.session.completed", {"mode": "subscription", "client_reference_id": wid, "customer": "cus_1", "subscription": "sub_1", "metadata": {"workspace_id": wid, "plan_terms_id": "studio-v1"}}, "evt_1")
 result = service.billing_webhook(sig, body)
-assert result["outcome"] == "applied" and result["status"] == "active" and result["notification"]["sent"] is True, result
-assert any(m["subject"] == "Your Rafii plan is active" for m in mail.sent)
+assert result["outcome"] == "applied" and result["status"] == "active" and result["notification"]["sent"] is False and result["notification"]["reason"] == "notifications_disabled", result
+assert not any(m["subject"] == "Your Rafii plan is active" for m in mail.sent)
 dup = service.billing_webhook(sig, body)
 assert dup["outcome"] == "duplicate" and "notification" not in dup, dup
 denied(lambda: service.billing_webhook("t=1,v1=bad", body), 401)
 view = service.usage(wid, "one")
 assert view["subscription"]["status"] == "active" and view["subscription"]["live"] is True and view["entitlement"]["source"] == "subscription", view["subscription"]
 assert view["billing"]["portalAvailable"] is True
-checks.append("signed checkout.session.completed → active subscription, entitlement from terms, one activation email; replay is duplicate; bad signature 401")
+checks.append("signed checkout.session.completed → active subscription, entitlement from terms, no synchronous activation email while notifications disabled; replay is duplicate; bad signature 401")
 
 # 4. Portal works once a customer exists; a second checkout while active is refused.
 portal = service.billing_portal(wid, "one", "/app/account/billing")
@@ -146,11 +156,11 @@ checks.append("portal opens for the Stripe customer; active workspaces cannot st
 clock[0] += 5
 sig, body = signed("invoice.payment_failed", {"customer": "cus_1", "subscription": "sub_1", "subscription_details": {"metadata": {"workspace_id": wid}}}, "evt_2")
 result = service.billing_webhook(sig, body)
-assert result["status"] == "past_due" and result["notification"]["sent"] is True, result
-assert any(m["subject"] == "Action needed: payment failed" for m in mail.sent)
+assert result["status"] == "past_due" and result["notification"]["sent"] is False and result["notification"]["reason"] == "notifications_disabled", result
+assert not any(m["subject"] == "Action needed: payment failed" for m in mail.sent)
 sig, body = signed("invoice.payment_failed", {"customer": "cus_zzz"}, "evt_3")
 assert service.billing_webhook(sig, body)["outcome"] == "ignored"
-checks.append("payment failure → past_due + grace + email; events without a PostRiff workspace are recorded as ignored")
+checks.append("payment failure → past_due + grace without synchronous email; events without a PostRiff workspace are recorded as ignored")
 
 # 6. A plan change arrives as subscription.updated with only the price id: resolved against active terms.
 with connection() as db:
@@ -180,7 +190,60 @@ assert first == {"sent": 1, "skipped": 0} and second == {"sent": 0, "skipped": 1
 assert any(m["subject"].startswith("Your Rafii trial ends in") for m in mail.sent)
 with connection() as db:
     rows = db.execute("SELECT kind,sent FROM public.pr_notifications WHERE workspace_id=%s ORDER BY created_at", (wid,)).fetchall()
-assert [r[0] for r in rows] == ["subscription_activated", "payment_failed", "subscription_activated", "trial_ending"] and all(r[1] for r in rows), rows
+assert [r[0] for r in rows] == ["trial_ending"] and all(r[1] for r in rows), rows
 checks.append("reminder sweep sends once and dedupes; every notification is recorded with sent=true")
+
+
+# Review F3: the legacy runtime before048 also recovers an addon-first invoice's known plan.
+clock[0] += 5
+obj = {"id": "in_review_addon_first", "status": "paid", "amount_paid": 4900, "currency": "usd",
+       "billing_reason": "subscription_cycle", "customer": "cus_1", "subscription": "sub_1",
+       "subscription_details": {"metadata": {"workspace_id": wid}},
+       "lines": {"data": [{"type": "invoiceitem", "price": "price_unknown_addon", "period": {"start": 1, "end": 2}},
+                           {"type": "subscription", "price": "price_assist", "period": {"start": int(clock[0]), "end": int(clock[0]) + 30 * 86400}}]}}
+sig, body = signed("invoice.paid", obj, "evt_review_addon_first")
+assert service.billing_webhook(sig, body)["outcome"] == "applied"
+with connection() as db:
+    plan = db.execute("SELECT plan_terms_id FROM pr_subscriptions WHERE workspace_id=%s", (wid,)).fetchone()[0]
+assert plan == "assist-v1", ("leading addon must not choose the subscription plan", plan)
+assert service.billing_webhook(sig, body)["outcome"] == "duplicate"
+checks.append("without048 addon-first legacy invoice recovers known subscription plan independent of line order and replays safely")
+
+
+# Review F4: signed plan metadata before048 must not bypass line/invoice identity checks.
+for parent_kind in ("subscription_item_details", "invoice_item_details"):
+    for old, nested in ((None, "sub_foreign"), ("sub_1", "sub_foreign"), ("sub_foreign", "sub_1")):
+        clock[0] += 5
+        invoice = {**obj, "id": "in_review_carriers_" + str(int(clock[0])),
+                   "subscription_details": {"metadata": {"workspace_id": wid, "plan_terms_id": "assist-v1"}},
+                   "lines": {"data": [{"pricing": {"price_details": {"price": "price_assist"}},
+                        "parent": {"type": parent_kind, parent_kind: {"subscription": nested}},
+                        "period": {"start": int(clock[0]), "end": int(clock[0]) + 900}}]}}
+        if old is not None:
+            invoice["lines"]["data"][0]["subscription"] = old
+        with connection() as db:
+            prior = db.execute("SELECT provider_subscription_id,current_period_end,last_event_at FROM pr_subscriptions WHERE workspace_id=%s", (wid,)).fetchone()
+        sig, body = signed("invoice.paid", invoice, "evt_review_carriers_" + str(int(clock[0])))
+        assert service.billing_webhook(sig, body)["outcome"] == "rejected", "foreign/conflicting carriers must reject before048 even with signed plan metadata"
+        assert service.billing_webhook(sig, body)["outcome"] == "duplicate"
+        with connection() as db:
+            assert db.execute("SELECT provider_subscription_id,current_period_end,last_event_at FROM pr_subscriptions WHERE workspace_id=%s", (wid,)).fetchone() == prior
+checks.append("without048 modern foreign and conflicting line subscriptions reject before status/period mutation with signed plan metadata")
+for shape in ("modern", "old", "both", "absent"):
+    clock[0] += 5
+    line = {"price": "price_assist", "period": {"start": int(clock[0]), "end": int(clock[0]) + 900}}
+    if shape in ("modern", "both"):
+        line["parent"] = {"type": "subscription_item_details", "subscription_item_details": {"subscription": "sub_1"}}
+    if shape in ("old", "both"):
+        line["subscription"] = "sub_1"
+    addon = {"price": "price_unknown_addon", "parent": {"type": "invoice_item_details"}, "period": {"start": 1, "end": 2}}
+    if shape in ("modern", "both"):
+        addon["parent"]["invoice_item_details"] = {"subscription": "sub_1"}
+    if shape in ("old", "both"):
+        addon["subscription"] = "sub_1"
+    invoice = {**obj, "id": "in_review_compatible_" + shape, "lines": {"data": [addon, line]}}
+    sig, body = signed("invoice.paid", invoice, "evt_review_compatible_" + shape)
+    assert service.billing_webhook(sig, body)["outcome"] == "applied"
+checks.append("without048 matching modern/old/both and absent line carrier fixtures retain legacy known-plan compatibility")
 
 print(json.dumps({"status": "pass", "checks": checks}, ensure_ascii=False))

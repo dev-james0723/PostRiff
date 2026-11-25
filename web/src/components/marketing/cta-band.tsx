@@ -1,8 +1,13 @@
 import Link from 'next/link';
 import { Surface } from '@/components/rafii';
 import { buttonVariants } from '@/components/ui/button';
+import { PRICING_CATALOG } from '@/config/plans';
+import { marketingCopy } from '@/config/pricing-copy';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
+
+/** The public entry promise stays Free during launch and rollback. */
+const CTA = marketingCopy(PRICING_CATALOG).ctaBand;
 
 interface CtaLink {
   label: string;
@@ -21,10 +26,10 @@ interface CtaBandProps {
 /** Closing call to action: one glass work surface with the dominant entry action and a quiet secondary (DNA §9.2). */
 export function CtaBand({
   title = 'Write once. Approve each version. Publish where your readers are.',
-  description = 'Start a 14-day trial with two connected accounts and ten writing batches. Export everything, any time.',
-  primary = { label: 'Start free trial', href: siteConfig.links.signUp },
+  description = CTA.description,
+  primary = { label: CTA.primaryLabel, href: siteConfig.links.signUp },
   secondary = { label: 'See all channels', href: siteConfig.links.channels },
-  note = 'No credit card required during the trial.',
+  note = CTA.note,
   className
 }: CtaBandProps) {
   return (

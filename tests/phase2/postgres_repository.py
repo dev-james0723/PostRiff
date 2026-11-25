@@ -1,4 +1,5 @@
 """Run after rls.sql against the disposable database. No hosted credentials."""
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -11,7 +12,7 @@ from postriff_phase2.hosted import HostedWorkspaceService, PostgresWorkspaceRepo
 from postriff_phase2.hosted_worker import PostgresWorker
 from postriff_alpha.domain import Store, initial_state, AlphaError
 
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
+DSN=selected_target().dsn()
 one='00000000-0000-0000-0000-000000000001'
 two='00000000-0000-0000-0000-000000000002'
 

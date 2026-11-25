@@ -1,4 +1,5 @@
 """Five CLI effort values survive API selection and PostgreSQL persistence; no CLI is spawned."""
+from local_pg_target import selected_target
 import os
 import sys
 from pathlib import Path
@@ -8,7 +9,7 @@ from postriff_phase2.cli_runtime import ClaudeCliRuntime
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_alpha.domain import AlphaError
 
-DSN = os.environ.get('POSTRIFF_TEST_DSN', 'host=127.0.0.1 port=55438 dbname=postgres')
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 def connection(): return psycopg.connect(DSN)
 def verify(token): return ONE

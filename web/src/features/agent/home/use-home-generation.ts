@@ -29,6 +29,8 @@ import { useRun } from '../use-run';
 
 export interface GenerationRequest {
   maxMilliCredits?: number | null;
+  /** Credit mode with no typed limit: the server's automatic per-request limit approves it (creditLimitReady checked it). */
+  automaticCredits?: boolean;
   text: string;
   ownContent: boolean;
   destinations: Destination[];
@@ -62,7 +64,7 @@ export interface GeneratedItem {
 }
 
 /** The quick-start body the server receives (and a credit estimate describes), minus the request key. */
-export function quickStartPayload(request: Omit<GenerationRequest, 'maxMilliCredits'>) {
+export function quickStartPayload(request: Omit<GenerationRequest, 'maxMilliCredits' | 'automaticCredits'>) {
   return {
     text: request.text,
     ownContent: request.ownContent,
@@ -120,7 +122,7 @@ export function useHomeGeneration(restoreRunId: string | null = null) {
       setRequested(request.destinations);
       try {
         const payload = { ...quickStartPayload(request), idempotencyKey: crypto.randomUUID() };
-        const result = await submitQuickStart({ api, workspaceId, expectedRevision, request: payload, maxMilliCredits: request.maxMilliCredits ?? null, isCurrent: gate.alive });
+        const result = await submitQuickStart({ api, workspaceId, expectedRevision, request: payload, maxMilliCredits: request.maxMilliCredits ?? null, automatic: request.automaticCredits ?? false, isCurrent: gate.alive });
         if (!result || !gate.alive()) return null;
         if (mine !== ticket.current) return null; // a newer request superseded this one
         // A request for recurring drafts opens no run: Home shows Rafii's reply and the automation instead.

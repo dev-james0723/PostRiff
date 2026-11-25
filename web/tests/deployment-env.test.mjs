@@ -7,3 +7,10 @@ test('preview build refuses production identity or cross-deployment API',()=>{
  assert.doesNotThrow(()=>assertPreviewEnvironment({VERCEL_ENV:'production'}));
  for(const [key,value] of [['POSTRIFF_ENVIRONMENT','production'],['POSTRIFF_PRODUCTION_PROJECT_REF','s'.repeat(20)],['NEXT_PUBLIC_SUPABASE_URL','https://production.example'],['POSTRIFF_API_ORIGIN','https://production.example'],['NEXT_PUBLIC_APP_URL','https://production.example']]) assert.throws(()=>assertPreviewEnvironment({...good,[key]:value}));
 });
+
+test('staging primary deployment keeps identity and origin isolation',()=>{
+ const stage={...good,VERCEL_ENV:'production'};
+ assert.doesNotThrow(()=>assertPreviewEnvironment(stage));
+ assert.throws(()=>assertPreviewEnvironment({...stage,NEXT_PUBLIC_SUPABASE_URL:'https://production.example'}));
+ assert.throws(()=>assertPreviewEnvironment({...stage,POSTRIFF_API_ORIGIN:'https://production.example'}));
+});

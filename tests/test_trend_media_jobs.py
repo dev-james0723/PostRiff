@@ -28,13 +28,15 @@ PERMISSIONS = {k:{'state':'allow','policy_ref':'synthetic-media-grant-v1','audie
 
 def dedicated_test_dsn(environ=None):
     from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    from local_pg_target import selected_target
     env=os.environ if environ is None else environ
+    target=selected_target(env, validate_fixture_dsns=False)
     if any(env.get(k) for k in ('PGSERVICE','PGHOSTADDR')): raise ValueError('libpq overrides forbidden')
     raw=env.get('POSTRIFF_TEST_DSN')
     if not raw: raise ValueError('explicit portable local media DSN required')
     p=conninfo_to_dict(raw)
-    if set(p)-{'host','port','dbname','user'} or (p.get('host'),p.get('port'),p.get('dbname'))!=('127.0.0.1','55438','postgres'):
-        raise ValueError('only the allocated disposable runner55438 database is allowed')
+    if set(p)-{'host','port','dbname','user'} or (p.get('host'),p.get('port'),p.get('dbname'))!=('127.0.0.1',str(target.port),'postgres'):
+        raise ValueError('only the selected disposable runner database is allowed')
     return make_conninfo(**p,connect_timeout='5')
 
 
@@ -147,7 +149,9 @@ class MediaPostgres(Offline):
         self.flags={'RAFII_TREND_WORKSPACE_ALLOWLIST':self.workspace,**{'RAFII_TREND_'+n+'_ENABLED':'true'
             for n in ('INTELLIGENCE','RADAR','TRUST_RECEIPTS','MULTIMODAL')}}
         self.storage=SimpleNamespace(object_info=self.info,read_range=self.range)
-        self.hosted=SimpleNamespace(assets=SimpleNamespace(storage=self.storage))
+        self.hosted=SimpleNamespace(assets=SimpleNamespace(storage=self.storage),
+            billing=SimpleNamespace(pricing_v2_enabled=False),
+            clock=lambda:datetime.now(timezone.utc).timestamp())
         self.worker=M.MediaJobs(self.hosted,store=self.store,values=self.flags,runtime_factory=self.make_runtime,
                                storage_factory=self.fixture_storage)
         self.request=[{'asset_id':self.asset_id,'source_id':self.sid,'language':'yue','modalities':['visual','audio'],'frame_count':3}]

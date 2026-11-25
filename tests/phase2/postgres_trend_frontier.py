@@ -1,4 +1,5 @@
 """Frontier acceptance on the suite's fresh local cluster; no second fixed port."""
+from local_pg_target import selected_target
 import hashlib
 import json
 import os
@@ -10,13 +11,15 @@ from psycopg.conninfo import conninfo_to_dict
 ROOT = Path(__file__).resolve().parents[2]
 PATHS = ['src/postriff_phase2/growth/trends/'+name+'.py' for name in
          ('frontier','frontier_runtime','analytics_runtime','store','jobs')]
+PATHS += ['scripts/postriff_pg_suite.py', 'scripts/postriff_disposable_postgres.py',
+          'tests/phase2/local_pg_target.py', 'tests/phase2/postgres_trend_frontier.py']
 
 
 def main():
     dsn = os.environ.get('POSTRIFF_TEST_DSN', '')
     params = conninfo_to_dict(dsn)
     if (set(params)-{'host','port','dbname','user'}
-            or (params.get('host'), params.get('port'), params.get('dbname')) != ('127.0.0.1','55438','postgres')
+            or (params.get('host'), params.get('port'), params.get('dbname')) != ('127.0.0.1',str(selected_target(require_dsn=True).port),'postgres')
             or any(k in os.environ for k in ('PGSERVICE','PGSERVICEFILE','PGHOSTADDR','PGOPTIONS'))):
         raise ValueError('exact disposable script runner target required')
     before = {p: hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in PATHS}

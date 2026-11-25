@@ -1,4 +1,5 @@
 """Opt-in credit ledger on disposable PostgreSQL only; all funding is synthetic."""
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -13,7 +14,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.credit_meter import POLICY_VERSION
 from consumer_fixtures import approve_budgets
 
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
+DSN=selected_target().dsn()
 ONE='00000000-0000-0000-0000-000000000001'
 clock=[time.time()]
 def connection(): return psycopg.connect(DSN,client_encoding='utf8')
@@ -95,7 +96,7 @@ from postriff_phase2.model_runtime import ServerModelRuntime
 calls=[]
 def transport(method,url,headers=None,body=None):
     calls.append(body['model'])
-    return {'status':200,'body':{'choices':[{'message':{'content':json.dumps({'variants':[{'platform':'LinkedIn','language':'en-US','text':'A small creative habit.','sourceIds':[]}]})}}],'usage':{'cost':0.01,'prompt_tokens':10,'completion_tokens':20}}}
+    return {'status':200,'body':{'choices':[{'message':{'content':json.dumps({'variants':[{'platform':'LinkedIn','language':'en-US','text':'A small creative habit.','sourceIds':[]}]})}}],'usage':{'cost':0.01,'prompt_tokens':10,'completion_tokens':20},'providerMetadata':{'gateway':{'cost':0.01,'routing':{'finalProvider':'test'}}}}}
 runtime=ServerModelRuntime('synthetic-test-key',model='test/cloud',models=['test/cloud'],prices={'test/cloud':(1,1)},transport=transport)
 service=HostedWorkspaceService(connection,verify,clock=lambda:clock[0],ideas_runtime=runtime,credits_enabled=True)
 with connection() as db:
@@ -191,10 +192,11 @@ with connection() as db:
     state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(wid,)).fetchone()[0]; shape(state)
     db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(state),wid))
 cid=service.ideas.create_conversation(wid,'one','chips in credit mode')['conversationId']
-sent=[]
+sent=[]; runtime_guards=[]
 original_start=runtime.start_turn
 def capturing(request, emit):
-    sent.append(json.loads(json.dumps(request,default=str)))
+    runtime_guards.append(request.get('_creditGuard'))
+    sent.append(json.loads(json.dumps({k:v for k,v in request.items() if k!='_creditGuard'},default=str)))
     return original_start(request, emit)
 runtime.start_turn=capturing
 body={'text':'Ideas from this draft for our page.','model':'test/cloud','reasoning':'quick','research':False,'timeZone':'UTC',
@@ -207,8 +209,9 @@ with connection() as db:
 _,_,estimated=service.ideas.estimate_request(state,body,'turn',ONE)
 run=service.ideas.turn(wid,'one',cid,{**body,'creditQuoteId':approval['quoteId'],'expectedRevision':latest['revision']})
 assert run['status']=='completed',run
-# `deadline` is the run's own monotonic clock, never priced or digested (ideas.turn); everything else must match.
-assert json.loads(json.dumps(estimated,default=str))=={k:v for k,v in sent[-1].items() if k!='deadline'},'the estimate must price exactly the request the run sends'
+# `deadline` and the server-only callable credit guard are execution fences, never priced or digested.
+assert callable(runtime_guards[-1]),'managed credit execution must carry the server-only attempt guard'
+assert json.loads(json.dumps(estimated,default=str))=={k:v for k,v in sent[-1].items() if k!='deadline'},'the estimate must price exactly the billable request the run sends'
 assert [d.get('channelId') for d in sent[-1]['destinations']]==['ch-li'],sent[-1]['destinations']
 assert sent[-1]['material'][0]['role']=='inspire',sent[-1].get('material')
 print('PASS: a quote at the ceiling covers a turn with a post and an account chip; the estimate request equals the run request')
@@ -233,3 +236,40 @@ assert run['status']=='completed',run
 assert not sent[-1].get('referenceNotes'),'no reader here: the run sends no note, the estimate priced a full one'
 print('PASS: a reference photo priced as a full note keeps the ceiling above the run (no 402)')
 
+
+# Automatic per-request limit (POSTRIFF_CREDIT_AUTO_LIMIT_CREDITS): a signed-in person's draft and turn opt in with
+# creditApproval and need no typed limit; each hold is approved for its own request and recorded as automatic. Without
+# opting in (automations, scripts) a request is refused as before, and a quote id that is sent is still checked.
+import os
+from unittest import mock
+from postriff_phase2.credit_wallet import AUTO_LIMIT_ENV
+def automatic_holds(prefix='run:'):
+    with connection() as db:
+        return db.execute("SELECT count(*) FROM pr_usage_ledger WHERE workspace_id=%s AND kind='reserve' AND idempotency_key LIKE %s "
+                          "AND (meta->'credits'->>'automatic')::boolean",(wid,prefix+'%')).fetchone()[0]
+def open_writer_holds():
+    with connection() as db:
+        return db.execute("SELECT count(*) FROM pr_usage_ledger r WHERE r.workspace_id=%s AND r.kind='reserve' AND r.idempotency_key LIKE 'run:%%' "
+                          "AND (r.meta->'credits'->>'automatic')::boolean AND NOT EXISTS (SELECT 1 FROM pr_usage_ledger s "
+                          "WHERE s.workspace_id=r.workspace_id AND s.reservation_id=r.id AND s.kind IN ('settle','release'))",(wid,)).fetchone()[0]
+def refused(call, status):
+    try: call()
+    except AlphaError as error: assert error.status==status,error
+    else: raise AssertionError('expected a refusal')
+with mock.patch.dict(os.environ,{AUTO_LIMIT_ENV:'100'}):
+    revision=lambda: service.get(wid,'one')['revision']
+    refused(lambda: service.ideas.quick_start(wid,'one',revision(),{**payload,'text':'No approval was asked for.'}),402)
+    drafted=service.ideas.quick_start(wid,'one',revision(),{**payload,'text':'A small creative habit, once more.','creditApproval':'automatic'})
+    assert drafted['status']=='completed',drafted
+    assert automatic_holds()==1
+    assert automatic_holds('understanding:')==0, 'side calls are not approved by the request\'s automatic limit'
+    answered=service.ideas.turn(wid,'one',cid,{'text':'Shorter, please.','model':'test/cloud','reasoning':'quick','research':False,'timeZone':'UTC',
+                                               'destinations':[{'platform':'LinkedIn','language':'en-US'}],'creditApproval':'automatic'})
+    assert answered['status']=='completed',answered
+    assert automatic_holds()==2
+    refused(lambda: service.ideas.quick_start(wid,'one',revision(),{**payload,'text':'A forged approval.','creditQuoteId':'not-a-quote'}),402)
+    refused(lambda: service.ideas.quick_start(wid,'one',revision(),{**payload,'text':'Both.','creditQuoteId':'not-a-quote','creditApproval':'automatic'}),400)
+with mock.patch.dict(os.environ,{AUTO_LIMIT_ENV:''}):
+    refused(lambda: service.ideas.quick_start(wid,'one',service.get(wid,'one')['revision'],{**payload,'text':'Automatic is off.','creditApproval':'automatic'}),402)
+assert open_writer_holds()==0
+print('PASS: a signed-in draft and turn opt in to the automatic limit; requests that do not opt in, forged quotes and the off switch are refused')

@@ -1,4 +1,5 @@
 """Portable040-only interpretation acceptance; every SQL case must run."""
+from local_pg_target import selected_target
 from pathlib import Path
 import os
 import sys
@@ -19,8 +20,8 @@ def main():
             raise ValueError('explicit isolated CI DSN required; libpq overrides forbidden')
         params = conninfo_to_dict(raw)
         if (set(params) - {'host', 'port', 'dbname', 'user'}
-                or (params.get('host'), params.get('port'), params.get('dbname')) != ('127.0.0.1', '55438', 'postgres')):
-            raise ValueError('only canonical fresh runner127.0.0.1:55438/postgres allowed')
+                or (params.get('host'), params.get('port'), params.get('dbname')) != ('127.0.0.1', str(selected_target(require_dsn=True).port), 'postgres')):
+            raise ValueError('only canonical selected loopback runner target allowed')
         with psycopg.connect(raw) as db:
             if not db.execute("SELECT to_regclass('public.pr_workspaces')").fetchone()[0]:
                 raise RuntimeError('canonical rls.sql baseline required; use scripts/postriff_pg_suite.py')

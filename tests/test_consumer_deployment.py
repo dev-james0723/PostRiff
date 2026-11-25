@@ -34,3 +34,11 @@ class PreviewIsolation(unittest.TestCase):
         for name in ('DIAL_API_KEY','DIAL_AUDIO_SIGNING_SECRET','DIAL_WEBHOOK_SIGNING_SECRET','DIAL_VERIFICATION_SECRET'):
             with self.subTest(name=name),self.assertRaises(ValueError):
                 isolated_environment({**self.env(),name:'unreviewed-production-secret'})
+
+    def test_staging_project_primary_target_preserves_secret_and_isolation_policy(self):
+        values={**self.env(),'VERCEL_ENV':'production'}
+        self.assertEqual(isolated_environment(values)['POSTRIFF_RESEARCH'],'0')
+        for mutation in ({'AI_GATEWAY_API_KEY':'unpinned'},{'STRIPE_SECRET_KEY':'sk_live_synthetic'},
+                         {'POSTRIFF_PRODUCTION_PROJECT_REF':'s'*20}):
+            with self.subTest(mutation=mutation),self.assertRaises(ValueError):
+                isolated_environment({**values,**mutation})

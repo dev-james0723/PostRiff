@@ -1,5 +1,6 @@
 """Stripe-shaped credit funding contracts; synthetic payloads, no network or payments."""
 import unittest
+from unittest.mock import Mock
 try:
     from postriff_phase2.credit_purchases import credit_event, refund_credit_amount
 except ImportError:
@@ -60,3 +61,93 @@ class CreditPurchaseContractTests(unittest.TestCase):
         self.assertEqual(calls[0]['mode'],'payment')
         self.assertEqual(calls[0]['metadata[credit_order_id]'],'order-fixture')
         self.assertEqual(calls[0]['payment_intent_data[metadata][credit_order_id]'],'order-fixture')
+
+
+class CreditPurchasePolicyContractTests(unittest.TestCase):
+    """Recording cursors only; PG fixtures separately verify persistence and SQL."""
+    def purchases(self, current='credits-v2-2026-09-28'):
+        from postriff_phase2.credit_purchases import CreditPurchases
+        from postriff_phase2.credit_wallet import CreditBook
+        book = CreditBook()
+        book.policy = Mock(return_value=current)
+        book._adjust = Mock(return_value={'entryId': 'grant-fixture'})
+        return CreditPurchases(book, Mock(live=False)), book
+
+    def test_catalog_binds_current_server_policy(self):
+        for policy in ('credits-candidate-2026-09-23-v1', 'credits-v2-2026-09-28'):
+            with self.subTest(policy=policy):
+                purchases, book = self.purchases(policy)
+                cur = Mock()
+                cur.fetchall.return_value = [('same-policy-pack', 'Synthetic', 1500, 'usd', 1000000)]
+                self.assertEqual(purchases.packs(cur, 'workspace')[0]['id'], 'same-policy-pack')
+                self.assertEqual(cur.execute.call_args.args[1], (policy, False))
+                book._adjust.assert_not_called()
+
+    def test_new_order_locks_current_server_policy_and_pack_fields(self):
+        for policy in ('credits-candidate-2026-09-23-v1', 'credits-v2-2026-09-28'):
+            with self.subTest(policy=policy):
+                purchases, book = self.purchases(policy)
+                cur = Mock()
+                cur.fetchone.side_effect = [None, ('price_fixture', 1500, 'usd', 1000000), ('order-fixture',)]
+                purchases.prepare_order(cur, 'workspace', 'actor', 'same-policy-pack', 'unique-request-001')
+                lookup, insert = cur.execute.call_args_list[-2:]
+                self.assertEqual(lookup.args[1], ('same-policy-pack', policy, False))
+                self.assertEqual(insert.args[1], ('workspace', 'actor', 'same-policy-pack', 'unique-request-001',
+                                                policy, 'price_fixture', 1500, 'usd', 1000000, False))
+                book._adjust.assert_not_called()
+
+    def fund(self, purchases, policy, grant=None, **extra):
+        cur = Mock()
+        cur.fetchone.side_effect = [('workspace',), ('actor', 'cs_fixture', 'pi_fixture', 1500, 'usd',
+                                                     1000000, False, grant, policy)]
+        event = {'orderId': 'order-fixture', 'workspaceId': 'workspace', 'sessionId': 'cs_fixture',
+                 'paymentIntentId': 'pi_fixture', 'amount': 1500, 'currency': 'usd', 'live': False, **extra}
+        purchases._fund(cur, event)
+        return cur
+
+    def test_verified_funding_preserves_each_locked_policy_and_has_no_expiry(self):
+        from postriff_alpha.domain import AlphaError
+        policies = ('credits-candidate-2026-09-23-v1', 'credits-v2-2026-09-28')
+        for current in policies:
+            for locked in policies:
+                with self.subTest(current=current, locked=locked):
+                    purchases, book = self.purchases(current)
+                    try:
+                        cur = self.fund(purchases, locked, policyId='client-policy', expiresAt=1, milliCredits=1)
+                    except AlphaError as error:
+                        self.fail('Supported locked order funding refused: ' + str(error))
+                    self.assertEqual(book._adjust.call_args.args,
+                                     (cur, 'workspace', 'actor', 'credit-order:order-fixture',
+                                      {'op': 'grant', 'milli': 1000000, 'expiresAt': None,
+                                       'policy': locked, 'source': 'verified-stripe-checkout'}))
+
+    def test_current_no_credit_policy_blocks_funded_replay_before_locked_order_read(self):
+        from postriff_alpha.domain import AlphaError
+        purchases, book = self.purchases(None)
+        cur = Mock()
+        cur.fetchone.side_effect = [('workspace',), ('actor', 'cs_fixture', 'pi_fixture', 1500, 'usd',
+                                                     1000000, False, 'existing-grant', 'credits-candidate-2026-09-23-v1')]
+        with self.assertRaises(AlphaError) as caught:
+            purchases._fund(cur, {'orderId': 'order-fixture', 'sessionId': 'cs_fixture',
+                                 'paymentIntentId': 'pi_fixture', 'amount': 1500, 'currency': 'usd', 'live': False})
+        self.assertEqual(caught.exception.status, 409)
+        self.assertEqual(cur.fetchone.call_count, 1)
+        book._adjust.assert_not_called()
+
+    def test_unsupported_locked_policy_never_grants(self):
+        from postriff_alpha.domain import AlphaError
+        purchases, book = self.purchases()
+        with self.assertRaises(AlphaError) as caught:
+            self.fund(purchases, 'future-policy')
+        self.assertEqual(caught.exception.status, 409)
+        book._adjust.assert_not_called()
+
+    def test_locked_payment_fields_are_checked_even_on_grant_replay(self):
+        from postriff_alpha.domain import AlphaError
+        for change in ({'sessionId': 'cs_other'}, {'paymentIntentId': 'pi_other'}, {'amount': 1},
+                       {'currency': 'eur'}, {'live': True}, {'workspaceId': 'other-workspace'}):
+            with self.subTest(change=change):
+                purchases, book = self.purchases()
+                with self.assertRaises(AlphaError):
+                    self.fund(purchases, 'credits-v2-2026-09-28', 'existing-grant', **change)
+                book._adjust.assert_not_called()

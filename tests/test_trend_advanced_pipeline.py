@@ -97,7 +97,9 @@ class NoProviderIO(unittest.TestCase):
 
 def dedicated_test_dsn(environ=None):
     from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    from local_pg_target import selected_target
     env = os.environ if environ is None else environ
+    target = selected_target(env, validate_fixture_dsns=False)
     if any(env.get(k) for k in ('PGSERVICE', 'PGHOSTADDR')):
         raise ValueError('libpq address/service overrides forbidden')
     dedicated = env.get('TREND_ADVANCED_TEST_DSN')
@@ -111,7 +113,7 @@ def dedicated_test_dsn(environ=None):
         valid = (p.get('host') == '127.0.0.1' and p.get('port') == '56451'
                  and p.get('dbname', '').startswith('trend_advanced_'))
     else:
-        valid = (p.get('host') == '127.0.0.1' and p.get('port') == '55438' and p.get('dbname') == 'postgres')
+        valid = (p.get('host') == '127.0.0.1' and p.get('port') == str(target.port) and p.get('dbname') == 'postgres')
     if not valid:
         raise ValueError('allocated advanced DB or exact disposable CI runner required')
     return make_conninfo(**p, connect_timeout='5')

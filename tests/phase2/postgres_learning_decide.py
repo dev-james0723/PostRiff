@@ -5,6 +5,7 @@ migrates on its next command.
 
 Run through scripts/postriff_disposable_postgres.py (loads rls.sql with migrations 004+).
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -19,7 +20,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.hosted_worker import PostgresWorker
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 PROPOSAL = "0f3b2c1d5e6a4b7c8d9e0f1a2b3c4d5e"
 clock = [time.time()]

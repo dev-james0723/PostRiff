@@ -5,9 +5,11 @@ loopback TREND_TEST_DSN or the existing disposable runner's POSTRIFF_TEST_DSN,
 never POSTRIFF_DATABASE_URL. A distinct non-bypass role proves non-owner RLS.
 """
 from __future__ import annotations
+from local_pg_target import selected_target
 import copy
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime,timedelta,timezone
+from types import SimpleNamespace
 import json
 import os
 from pathlib import Path
@@ -26,7 +28,8 @@ from postriff_phase2.growth.trends.jobs import TrendJobs,partition_key
 from postriff_phase2.growth.trends.outbox import TrendOutbox
 from postriff_phase2.growth.trends import revocation,retention,source_health,operations
 
-DSN=os.environ.get('TREND_TEST_DSN') or os.environ.get('POSTRIFF_TEST_DSN','')
+TARGET=selected_target(require_dsn=True)
+DSN=TARGET.validate_dsn(os.environ.get('TREND_TEST_DSN', TARGET.dsn()))
 params=conninfo_to_dict(DSN)
 if (params.get('host') not in ('127.0.0.1','localhost','::1') or not params.get('port','').isdigit()
     or not (params.get('dbname','').startswith('trend_') or (os.environ.get('POSTRIFF_TEST_DSN')==DSN and params.get('dbname')=='postgres'))):
@@ -71,11 +74,15 @@ with psycopg.connect(DSN) as db:
 
 
 def connect(dsn=DSN):
+    TARGET.validate_dsn(dsn, dbnames=('postgres', 'trend_restore'))
     db=psycopg.connect(dsn)
     db.execute('SET ROLE '+TEST_ROLE)
     return db
 
-store=TrendStore(connect,offline_replay=True); jobs=TrendJobs(store); outbox=TrendOutbox(store)
+store=TrendStore(connect,offline_replay=True,hosted=SimpleNamespace(
+    billing=SimpleNamespace(pricing_v2_enabled=False),
+    clock=lambda:datetime.now(timezone.utc).timestamp()))
+jobs=TrendJobs(store); outbox=TrendOutbox(store)
 for s in (S,WS,VS):store.ensure_scope(s)
 store.grant_entitlement(W,S,['retrieve','derive_metrics','share_across_workspaces'],END)
 store.register_contract(PROVIDER,'v1',list(PERMISSIONS),START,END,{})
@@ -409,13 +416,13 @@ store.grant_entitlement(W,S,['retrieve','derive_metrics','share_across_workspace
 # Real dump/restore of a pre-deletion snapshot, then authoritative tombstones before serving.
 restore_obs=obs(400,author='did:fixture:restore');store.put_observation(restore_obs)
 evidence=ROOT/'.trend-storage-test';evidence.mkdir(exist_ok=True)
-restore_db='trend_restore_'+uuid.uuid4().hex[:8];dump=evidence/(restore_db+'.dump')
+restore_db='trend_restore';dump=evidence/(restore_db+'_'+uuid.uuid4().hex[:8]+'.dump')
 subprocess.run([str(PG/'pg_dump'),*PGARGS,'-Fc','-f',str(dump),params['dbname']],check=True)
 revocation.revoke_source(store,S,PROVIDER,'source-400',purge_deadline=FUTURE)
 bundle=revocation.export_tombstones(store)
 subprocess.run([str(PG/'createdb'),*PGARGS,restore_db],check=True)
 subprocess.run([str(PG/'pg_restore'),*PGARGS,'--exit-on-error','-d',restore_db,str(dump)],check=True,stdout=subprocess.DEVNULL)
-restored_dsn=psycopg.conninfo.make_conninfo(DSN,dbname=restore_db)
+restored_dsn=TARGET.dsn(restore_db)
 restored=TrendStore(lambda:connect(restored_dsn),offline_replay=True)
 gen=revocation.begin_restore(restored)
 check('restore read gate defers purge rather than destroying retained data',retention.sweep(restored)['deferred']=='restore_in_progress')

@@ -7,11 +7,12 @@ from types import SimpleNamespace
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
 import psycopg
+from local_pg_target import selected_target
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.growth import history_import as H, metric_schedule as M
 
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 TWO = '00000000-0000-0000-0000-000000000002'
 CONN = 'stage3b-threads'
@@ -26,7 +27,7 @@ responses, urls = [], []
 def transport(method, url, **kw):
     urls.append(url)
     return responses.pop(0)
-importer = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id='stage3b')
+importer = H.HistoryImporter(connection, service.oauth, transport=transport, worker_id='stage3b', hosted=service)
 with connection() as db:
     wid = str(db.execute('SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s', (ONE,)).fetchone()[0])
     foreign = str(db.execute('SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s', (TWO,)).fetchone()[0])

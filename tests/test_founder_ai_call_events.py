@@ -90,6 +90,13 @@ class FakeCursor:
     def __exit__(self, *_):
         return False
 
+    def fetchone(self):
+        # Returned usage-row identity; optional product-event table is absent in this fixture.
+        sql = self.db.log[-1][0]
+        if sql.startswith("SELECT to_regclass"):
+            return (False,)
+        return (RUN,) if sql.startswith("INSERT INTO public.pr_model_usage_events") else None
+
     def execute(self, sql, params=None):
         self.db.log.append((sql, params))
         if self.db.fail_on and self.db.fail_on in sql:

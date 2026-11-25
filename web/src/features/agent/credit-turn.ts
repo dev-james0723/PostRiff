@@ -28,12 +28,13 @@ async function withResend<T>(call: () => Promise<T>, keyed: boolean, isCurrent: 
   }
 }
 
-/** The request body a credit quote (and its estimate) binds: writing only, web research off. */
+/** Preserve task intent for the server's estimate/quote; never downgrade unsupported research. */
 export function creditRequestFor(request: Record<string, unknown>): Record<string, unknown> {
   const payload = structuredClone(request);
-  payload.research = false;
+  if (payload.research === undefined) payload.research = false;
   delete payload.idempotencyKey;
   delete payload.creditQuoteId;
+  delete payload.creditApproval;
   return payload;
 }
 
@@ -43,17 +44,27 @@ interface Submission {
   conversationId: string;
   request: Record<string, unknown>;
   maxMilliCredits: number | null;
+  /** No typed limit: ask the server to approve this request within its automatic per-request limit. */
+  automatic?: boolean;
   isCurrent?: () => boolean;
 }
 
+/** The same request shape a typed limit approves, marked for the server's automatic limit instead of a quote. */
+function markAutomatic(payload: Record<string, unknown>) {
+  if (payload.research === true) throw new Error('Research credit approval is unavailable for this route. Your research request has not been changed.');
+  if (payload.research === undefined) payload.research = false;
+  delete payload.creditQuoteId;
+  payload.creditApproval = 'automatic';
+}
+
 /** Approve and submit one immutable follow-up; a lost response is resent with the same key, never re-approved or re-routed. */
-export async function submitConversationTurn({ api, workspaceId, conversationId, request, maxMilliCredits, isCurrent = () => true }: Submission): Promise<Run | null> {
+export async function submitConversationTurn({ api, workspaceId, conversationId, request, maxMilliCredits, automatic = false, isCurrent = () => true }: Submission): Promise<Run | null> {
   const payload = structuredClone(request);
+  if (maxMilliCredits === null && automatic) markAutomatic(payload);
   if (maxMilliCredits !== null) {
     if (!Number.isSafeInteger(maxMilliCredits) || maxMilliCredits <= 0 || maxMilliCredits > 100_000_000) throw new Error('Choose a valid maximum credit limit.');
-    const image = payload.imageGeneration as { enabled?: boolean } | undefined;
-    if (payload.research === true || image?.enabled) throw new Error('This credit approval covers writing only.');
-    payload.research = false;
+    if (payload.research === true) throw new Error('Research credit approval is unavailable for this route. Your research request has not been changed.');
+    if (payload.research === undefined) payload.research = false;
     if (!isCurrent()) return null;
     const current = await api.snapshot(workspaceId);
     if (!isCurrent()) return null;
@@ -71,17 +82,18 @@ interface QuickSubmission {
   expectedRevision: number;
   request: Record<string, unknown>;
   maxMilliCredits: number | null;
+  automatic?: boolean;
   isCurrent?: () => boolean;
 }
 
 /** Home uses the same server-bound limit while keeping the existing quick-start service. */
-export async function submitQuickStart({ api, workspaceId, expectedRevision, request, maxMilliCredits, isCurrent = () => true }: QuickSubmission): Promise<Run | null> {
+export async function submitQuickStart({ api, workspaceId, expectedRevision, request, maxMilliCredits, automatic = false, isCurrent = () => true }: QuickSubmission): Promise<Run | null> {
   const payload = structuredClone(request);
+  if (maxMilliCredits === null && automatic) markAutomatic(payload);
   if (maxMilliCredits !== null) {
     if (!Number.isSafeInteger(maxMilliCredits) || maxMilliCredits <= 0 || maxMilliCredits > 100_000_000) throw new Error('Choose a valid maximum credit limit.');
-    const image = payload.imageGeneration as { enabled?: boolean } | undefined;
-    if (payload.research === true || image?.enabled) throw new Error('This credit approval covers writing only.');
-    payload.research = false;
+    if (payload.research === true) throw new Error('Research credit approval is unavailable for this route. Your research request has not been changed.');
+    if (payload.research === undefined) payload.research = false;
     if (!isCurrent()) return null;
     const quote = await api.creditQuote(workspaceId, { operation: 'quick-start', request: payload, expectedRevision, maxMilliCredits });
     if (!isCurrent()) return null;

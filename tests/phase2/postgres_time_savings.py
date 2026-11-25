@@ -8,6 +8,7 @@ person's rows to themselves; ledger rows are immutable and leave with the accoun
 
 Run through scripts/postriff_pg_suite.py (rls.sql loads migration 023).
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -22,7 +23,7 @@ from postriff_phase2 import time_savings as tb
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.hosted_worker import PostgresWorker
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TWO = "00000000-0000-0000-0000-000000000002"
 THREE = "00000000-0000-0000-0000-000000000003"

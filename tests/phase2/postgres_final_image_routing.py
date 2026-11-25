@@ -3,6 +3,7 @@ member's media credit is given back, and the known provider cost is booked (not 
 image whose cost is reported only in gateway metadata settles as actual instead of waiting for
 reconciliation. Synthetic transport only; no provider is called.
 """
+from local_pg_target import selected_target
 import base64
 import sys
 from pathlib import Path
@@ -15,7 +16,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.image_runtime import GatewayImageRuntime, ImageGenerationError
 from consumer_fixtures import approve_budgets
 
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 PNG = b'\x89PNG\r\n\x1a\n' + b'synthetic-image'
 clock = [1_800_000_000.0]

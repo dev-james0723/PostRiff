@@ -26,7 +26,7 @@ const infoContent = {
   sections: [
     {
       title: 'Three kinds of writer',
-      description: 'A coding CLI you sign in to, paid by its own subscription. The managed model, which uses writing batches. The free preview, which uses no AI model.'
+      description: 'A coding CLI you sign in to, paid by its own subscription. The managed model, which uses the workspace’s approved task allowance. The free preview, which uses no AI model.'
     },
     {
       title: 'Your pick',

@@ -1,0 +1,100 @@
+{
+  "catalogVersion": "pricing-v2-2026-09-28",
+  "pricing": "v2",
+  "creditsPerUsd": 300,
+  "plans": [
+    {
+      "id": "free-v1",
+      "plan": "free",
+      "label": "Free",
+      "priceCents": 0,
+      "currency": "USD",
+      "interval": null,
+      "entitlements": {
+        "members": 1,
+        "connectedAccounts": 1,
+        "brands": 1,
+        "storageMb": 200,
+        "writingBatches": 0,
+        "mediaCredits": 0,
+        "overage": "stop"
+      },
+      "monthlyCredits": 0,
+      "firstValue": {
+        "postDoctorRuns": 1,
+        "genomeAnalyses": 1,
+        "genomeMaxPosts": 20
+      },
+      "checkout": "not_applicable"
+    },
+    {
+      "id": "starter-v1",
+      "plan": "starter",
+      "label": "Starter",
+      "priceCents": 2900,
+      "currency": "USD",
+      "interval": "month",
+      "entitlements": {
+        "members": 1,
+        "connectedAccounts": 3,
+        "brands": 1,
+        "storageMb": 1000,
+        "monthlyCredits": 1000,
+        "writingBatches": 0,
+        "mediaCredits": 0,
+        "overage": "stop"
+      },
+      "monthlyCredits": 1000,
+      "checkout": "not_yet_available"
+    },
+    {
+      "id": "creator-v1",
+      "plan": "creator",
+      "label": "Creator",
+      "priceCents": 5900,
+      "currency": "USD",
+      "interval": "month",
+      "entitlements": {
+        "members": 1,
+        "connectedAccounts": 6,
+        "brands": 2,
+        "storageMb": 1000,
+        "monthlyCredits": 3500,
+        "writingBatches": 0,
+        "mediaCredits": 0,
+        "overage": "stop"
+      },
+      "monthlyCredits": 3500,
+      "checkout": "not_yet_available",
+      "priceVariantId": "creator-59-v1"
+    },
+    {
+      "id": "studio-v2",
+      "plan": "studio",
+      "label": "Studio",
+      "priceCents": 14900,
+      "currency": "USD",
+      "interval": "month",
+      "entitlements": {
+        "members": 3,
+        "connectedAccounts": 10,
+        "brands": 3,
+        "storageMb": 1000,
+        "monthlyCredits": 8000,
+        "writingBatches": 0,
+        "mediaCredits": 0,
+        "overage": "stop"
+      },
+      "monthlyCredits": 8000,
+      "checkout": "not_yet_available"
+    }
+  ],
+  "topUps": {
+    "available": false,
+    "reason": "not_activated"
+  },
+  "notes": [
+    "Free has no monthly credits; it includes one Post Doctor check and one recent-20 Genome analysis.",
+    "Paid plan credits reset each billing period and do not roll over. Paid work stops at the limit; nothing is charged silently."
+  ]
+}

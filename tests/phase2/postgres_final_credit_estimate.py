@@ -7,6 +7,7 @@
 - Quick-start sends the newly typed thought as the idea (not the workspace's older saved brief).
 Synthetic in-process transport only.
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -21,7 +22,7 @@ from postriff_phase2.credit_meter import POLICY_VERSION
 from postriff_phase2.model_runtime import ServerModelRuntime
 from consumer_fixtures import approve_budgets
 
-DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
+DSN = selected_target().dsn()
 ONE = '00000000-0000-0000-0000-000000000001'
 clock = [time.time()]
 
@@ -46,7 +47,7 @@ sent = []
 
 def transport(method, url, headers=None, body=None):
     sent.append(json.loads(body['messages'][-1]['content'].split('\n\n')[0]) if body['messages'][-1]['content'].startswith('{') else body['messages'][-1]['content'])
-    return {'status': 200, 'body': {'choices': [{'message': {'content': json.dumps({'variants': [{'platform': 'LinkedIn', 'language': 'en-US', 'text': 'A small creative habit.', 'sourceIds': []}]})}}], 'usage': {'cost': 0.01, 'prompt_tokens': 10, 'completion_tokens': 20}}}
+    return {'status': 200, 'body': {'choices': [{'message': {'content': json.dumps({'variants': [{'platform': 'LinkedIn', 'language': 'en-US', 'text': 'A small creative habit.', 'sourceIds': []}]})}}], 'usage': {'cost': 0.01, 'prompt_tokens': 10, 'completion_tokens': 20}, 'providerMetadata': {'gateway': {'cost': 0.01, 'routing': {'finalProvider': 'test'}}}}}
 
 
 runtime = ServerModelRuntime('synthetic-test-key', model='test/cloud', models=['test/cloud'], prices={'test/cloud': (3, 15)}, transport=transport)

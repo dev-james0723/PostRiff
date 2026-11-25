@@ -59,6 +59,7 @@ export interface AttachmentBarProps {
   owner: string | null | undefined;
   catalog: AttachmentsCatalog | null | undefined;
   creditMode: boolean;
+  freePreview?: boolean;
   fixtureWriter: boolean;
   isOwner: boolean;
   /** "More…" in the `@` list opens this view. */
@@ -77,6 +78,7 @@ export function AttachmentBar({
   owner,
   catalog,
   creditMode,
+  freePreview,
   fixtureWriter,
   isOwner,
   requestedView,
@@ -158,11 +160,12 @@ export function AttachmentBar({
         asset={snapshot?.state.phase2?.assets.find((asset) => asset.id === openChip.id) ?? null}
         catalog={catalog}
         creditMode={creditMode}
+        freePreview={freePreview}
         fixtureWriter={fixtureWriter}
         isOwner={isOwner}
         onRole={(role) => attachments.setRole(openChip.key, role)}
-        onRead={() => void attachments.read(openChip.key)}
-        onRetry={() => attachments.retry(openChip.key)}
+        onRead={(maximum) => void attachments.read(openChip.key, maximum)}
+        onRetry={(maximum) => attachments.retry(openChip.key, maximum)}
         onRemove={() => remove(openChip)}
       />
     ) : (

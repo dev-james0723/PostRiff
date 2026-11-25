@@ -5,6 +5,7 @@ accept_update, `usage.references` on the free preview route, and an estimate tha
 
 Run through scripts/postriff_pg_suite.py (loads rls.sql).
 """
+from local_pg_target import selected_target
 import io
 import json
 import sys
@@ -18,7 +19,7 @@ from postriff_phase2.agent_runtime import AgentRuntime  # noqa: E402
 from postriff_phase2.agent_runtime_v2.config import RuntimeConfig  # noqa: E402
 from postriff_phase2.hosted import HostedWorkspaceService  # noqa: E402
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 PHOTO = "0f3c0e3a9d5b4c1e8f7a6b5c4d3e2f10"
 OTHER = "9ab1c2d3e4f5061728394a5b6c7d8e9f"

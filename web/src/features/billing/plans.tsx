@@ -9,7 +9,7 @@ import { SuccessCheck } from '@/components/ui/success-check';
 import { cents } from '@/lib/api/client';
 import type { PlanTerms, Usage } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
-import { CONFIRM, PLAN_ALLOWANCES, PRICE_STATUS, checkoutNote } from './billing-copy';
+import { CAPACITY_PLAN_ALLOWANCES, CONFIRM, MANAGED_PLAN_ALLOWANCES, PLAN_ALLOWANCES, PRICE_STATUS, checkoutNote } from './billing-copy';
 import { allowanceTotal, humanize, latestTermsPerPlan, planOffer, type PlanOffer } from './billing-model';
 import { ACTION_STATEFUL } from './lifecycle-alert';
 import type { BillingRedirect } from './use-billing-redirect';
@@ -67,13 +67,16 @@ export function CheckoutConfirmation({ phase }: { phase: ConfirmPhase }) {
   );
 }
 
-export function Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boolean; redirect: BillingRedirect }) {
+export function Plans({ usage, usageReadSucceeded, isOwner, redirect }: { usage: Usage; usageReadSucceeded: boolean; isOwner: boolean; redirect: BillingRedirect }) {
   const currentId = usage.entitlement.planTermsId;
   const plans = latestTermsPerPlan(usage.planTerms, currentId);
   // A plan list with nothing to buy yet is still worth seeing (what comes after the trial), but an
   // empty one is not: the section is left out rather than explained.
   if (plans.length === 0) return null;
-  const note = usage.billing?.checkoutAvailable && isOwner ? checkoutNote(usage.billing.provider) : null;
+  const offerFor = (terms: PlanTerms) => planOffer({ terms, currentTermsId: currentId,
+    lifecycleStatus: usage.billingMode === 'free_preview' ? 'free' : usage.lifecycle?.status,
+    checkoutAvailable: usageReadSucceeded && usage.billing?.checkoutAvailable, isOwner });
+  const note = plans.some(terms => offerFor(terms) === 'checkout') ? checkoutNote(usage.billing?.provider) : null;
 
   return (
     <section id='plans' className='flex scroll-mt-4 flex-col gap-3' aria-labelledby='plans-heading' data-tour='billing-plans'>
@@ -86,14 +89,10 @@ export function Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boo
       </div>
       <div className='grid gap-4 md:grid-cols-2'>
         {plans.map((terms) => {
-          const offer = planOffer({
-            terms,
-            currentTermsId: currentId,
-            lifecycleStatus: usage.lifecycle?.status,
-            checkoutAvailable: usage.billing?.checkoutAvailable,
-            isOwner
-          });
+          const offer = offerFor(terms);
           const current = terms.id === currentId;
+          const receipt = current && usage.billingMode !== 'free_preview' && usage.subscription?.planTermsId === terms.id ? usage.subscription : null;
+          const allowances = current && usage.billingMode === 'legacy_allowances' ? PLAN_ALLOWANCES : ['starter', 'creator', 'studio'].includes(terms.plan) && terms.catalogState === 'public' ? MANAGED_PLAN_ALLOWANCES : CAPACITY_PLAN_ALLOWANCES;
           const error = redirect.errorFor(terms.id);
           return (
             <Surface key={terms.id} material={current ? 'selected' : 'quiet'} radius='card' padding='md' className='flex flex-col gap-4'>
@@ -101,16 +100,16 @@ export function Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boo
                 {(current || terms.status !== 'active') && (
                   <div className='flex flex-wrap items-center gap-2'>
                     {current && <Badge>Current</Badge>}
-                    {terms.status !== 'active' && <Badge variant='secondary'>{PRICE_STATUS[terms.status] ?? humanize(terms.status)}</Badge>}
+                    {!receipt && terms.status !== 'active' && <Badge variant='secondary'>{PRICE_STATUS[terms.status] ?? humanize(terms.status)}</Badge>}
                   </div>
                 )}
                 <h3 className='flex flex-wrap items-baseline gap-x-2 text-xl font-medium tracking-tight'>
                   <span className='text-foreground'>{terms.label}</span>
-                  <span className='text-muted-foreground text-base font-normal'>{cents(terms.priceCents, terms.currency)} / month</span>
+                  <span className='text-muted-foreground text-base font-normal'>{cents(receipt?.priceCents ?? terms.priceCents, receipt?.currency ?? terms.currency)}{terms.plan !== 'free' && ' / month'}</span>
                 </h3>
               </div>
               <dl className='grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm'>
-                {PLAN_ALLOWANCES.map((item) => (
+                {allowances.map((item) => (
                   <div key={item.key} className='contents'>
                     <dt className='text-muted-foreground'>{item.label}</dt>
                     <dd className='text-foreground text-right tabular-nums'>{allowanceValue(terms, item.key, item.unit)}</dd>
@@ -127,7 +126,7 @@ export function Plans({ usage, isOwner, redirect }: { usage: Usage; isOwner: boo
                         disabled={redirect.busy}
                         loadingText='Opening checkout…'
                         errorText='Try again'
-                        onClick={() => redirect.startCheckout(terms.id)}
+                        onClick={() => { if (usageReadSucceeded && offerFor(terms) === 'checkout') redirect.startCheckout(terms.id); }}
                       >
                         {`Choose ${terms.label}`}
                       </StatefulButton>

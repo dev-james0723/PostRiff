@@ -4,10 +4,29 @@ Disabled unless explicitly enabled AND the workspace has active versioned credit
 terms. This module does not contact payment providers or activate plan terms.
 """
 import json
+import os
+import re
 import time
+import uuid
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
-from .credit_meter import POLICY_VERSION, millicredits
+from .credit_meter import SUPPORTED_POLICY_VERSIONS, millicredits, actual_millicredits
+
+
+AUTO_LIMIT_ENV = 'POSTRIFF_CREDIT_AUTO_LIMIT_CREDITS'
+AUTO_LIMIT_MAX_CREDITS = 1000
+
+
+def automatic_limit(environ=None):
+    """The deployment's automatic per-request credit limit in millicredits, or None when it is off.
+
+    Whole credits, 1 to 1,000. Unset, zero or anything malformed is off: every paid request then needs its own
+    approved limit, as before. Within the limit, one request is approved for that request only (CreditBook.automatic_quote).
+    """
+    raw = str((os.environ if environ is None else environ).get(AUTO_LIMIT_ENV, '')).strip()
+    if not re.fullmatch(r'[1-9][0-9]{0,3}', raw) or int(raw) > AUTO_LIMIT_MAX_CREDITS:
+        return None
+    return int(raw) * 1000
 
 
 def amount(value):
@@ -70,7 +89,7 @@ class CreditBook:
         cur.execute("SELECT p.entitlements->>'creditPolicy',p.status FROM public.pr_entitlements e JOIN public.pr_plan_terms p ON p.id=e.plan_terms_id WHERE e.workspace_id=%s", (workspace_id,))
         row = cur.fetchone()
         if not row or not row[0]: return None
-        if row[0] != POLICY_VERSION or row[1] != 'active':
+        if row[0] not in SUPPORTED_POLICY_VERSIONS or row[1] != 'active':
             raise AlphaError('This credit policy is not active. No charge was made.',409)
         return row[0]
 
@@ -81,7 +100,39 @@ class CreditBook:
         return [{'id':r[0],'reservationId':r[1],'credits':r[2]} for r in rows]
 
     def view(self, cur, workspace_id):
-        return project_credit_wallet(self.rows(cur,workspace_id),self.clock())
+        rows, now = self.rows(cur, workspace_id), self.clock()
+        wallet = project_credit_wallet(rows, now)
+        from . import pricing_events
+        pricing_events.observe_expiry(cur, workspace_id, rows, now)
+        # These are gross, actually granted period credits, not the advertised plan
+        # allowance or lifetime usage. Refunds/debt remain in the wallet projection.
+        wallet.update(currentPeriodGrantMilliCredits=None, currentPeriodExpiresAt=None)
+        cur.execute("SELECT to_regclass('public.pr_credit_subscription_grants') IS NOT NULL")
+        if not cur.fetchone()[0]:
+            return wallet
+        cur.execute(
+            "SELECT g.grant_id::text,g.millicredits,g.period_end,p.entitlements->>'creditPolicy' "
+            "FROM public.pr_credit_subscription_grants g "
+            "JOIN public.pr_subscriptions s ON s.workspace_id=g.workspace_id "
+            "AND s.plan_terms_id=g.plan_terms_id AND s.provider_subscription_id=g.subscription_id "
+            "JOIN public.pr_plan_terms p ON p.id=g.plan_terms_id "
+            "WHERE g.workspace_id=%s AND g.grant_id IS NOT NULL AND g.millicredits>0 "
+            "AND g.billing_reason IN ('subscription_create','subscription_cycle') "
+            "AND g.period_start<=%s AND g.period_end>%s "
+            "AND g.period_end=extract(epoch from s.current_period_end) "
+            "AND p.status='active' AND p.entitlements->>'creditPolicy'=ANY(%s)",
+            (workspace_id, now, now, sorted(SUPPORTED_POLICY_VERSIONS)))
+        ledger_grants = {row['id']: row['credits'] for row in rows if row['credits']['op'] == 'grant'}
+        seen = set()
+        for grant_id, milli, end, policy in cur.fetchall():
+            credit = ledger_grants.get(grant_id)
+            if (grant_id in seen or not credit or credit.get('source') != 'verified-stripe-invoice'
+                    or credit.get('policy') != policy or credit['milli'] != milli or credit.get('expiresAt') != end):
+                continue
+            seen.add(grant_id)
+            wallet['currentPeriodGrantMilliCredits'] = (wallet['currentPeriodGrantMilliCredits'] or 0) + milli
+            wallet['currentPeriodExpiresAt'] = end
+        return wallet
 
     def _adjust(self, cur, workspace_id, actor, key, credit):
         fingerprint=digest(credit)
@@ -91,12 +142,30 @@ class CreditBook:
             if prior[1].get('creditFingerprint')!=fingerprint: raise AlphaError('Credit event conflicts with its earlier version.',409)
             return {'entryId':prior[0],'duplicate':True}
         cur.execute("INSERT INTO public.pr_usage_ledger(workspace_id,member_id,kind,dimension,unit,cost_state,idempotency_key,meta) VALUES(%s,%s,'adjust','action','credit','actual',%s,%s::jsonb) RETURNING id::text",(workspace_id,actor,key,json.dumps({'credits':credit,'creditFingerprint':fingerprint})))
-        return {'entryId':cur.fetchone()[0],'duplicate':False}
+        entry_id = cur.fetchone()[0]
+        if credit.get('op') == 'grant':
+            from . import pricing_events
+            source = credit.get('source')
+            pricing_events.emit(cur, workspace_id, 'credits.granted', 'usage_ledger', entry_id,
+                                {'grantedMilliCredits': credit['milli'], 'policy': credit.get('policy'),
+                                 'grantSource': 'subscription' if source == 'verified-stripe-invoice' else
+                                                'purchased' if source == 'verified-stripe-checkout' else 'other',
+                                 'effectiveExpiresAt': credit.get('expiresAt')})
+        return {'entryId':entry_id,'duplicate':False}
 
-    def grant(self, cur, workspace_id, actor, key, milli, expires_at=None, source='test'):
+    def grant(self, cur, workspace_id, actor, key, milli, expires_at=None, source='test', *, policy_version=None):
+        """Append funding under the workspace lock. Verified server funding consumers
+        may bind policy_version from stored invoice terms/order, never client input.
+        The current active credit-plan gate still applies, including on replay.
+        """
         import math
         policy=self.policy(cur,workspace_id)
         if policy is None: raise AlphaError('This workspace uses its existing allowance plan.',409)
+        if policy_version is not None:
+            if (not isinstance(policy_version, str) or policy_version not in SUPPORTED_POLICY_VERSIONS
+                    or source not in ('verified-stripe-invoice', 'verified-stripe-checkout')):
+                raise AlphaError('Credit policy binding requires supported verified funding.',409)
+            policy = policy_version
         amount(milli)
         if not isinstance(key,str) or not key or len(key)>100: raise AlphaError('Invalid credit event key.',400)
         if expires_at is not None and (type(expires_at) not in (float,int) or not math.isfinite(expires_at)):
@@ -140,10 +209,36 @@ class CreditBook:
         # The approved model travels with the authority: a turn under Auto writes with the model the limit was set for.
         return {'quoteId':str(quote_id),'requestDigest':request_digest,'model':quote['model']}
 
+    def automatic_quote(self, cur, workspace_id, actor, revision, binding, model, provider, maximum, *, committed=0):
+        """Approve one person's own request under the automatic limit: a quote for exactly its maximum, bound and claimed
+        like an explicit one, so every later check (prepare, the per-attempt credit guard, settlement) is unchanged.
+
+        Only request boundaries that know a signed-in person is asking call this. `committed` is what the same request has
+        already held or spent (a Rafii turn's earlier holds), so the request as a whole stays within the limit. Refused
+        when the limit is off, the request would exceed it, or the balance cannot cover it; nothing is written then.
+        """
+        limit = automatic_limit()
+        if limit is None:
+            raise AlphaError('Set a credit limit for this request.', 402, code='credit_limit_required')
+        amount(maximum); amount(committed)
+        if committed + maximum > limit:
+            raise AlphaError(f'This request could use up to {(committed + maximum) / 1000:,.1f} credits, more than the automatic limit of '
+                             f'{limit / 1000:,.1f} per request. Nothing was sent or charged. Set a credit limit for this request, '
+                             'or choose a lighter model.', 402, code='credit_auto_limit')
+        try:
+            quote = self.issue(cur, workspace_id, actor, revision, binding, model, provider, maximum)
+        except AlphaError as error:
+            if error.status != 402:
+                raise
+            raise AlphaError('Not enough credits left for this request. Nothing was sent or charged.', 402, code='credit_balance') from error
+        return {**self.authorize(cur, workspace_id, actor, revision, binding, quote['quoteId']), 'automatic': True}
+
     def prepare(self, cur, workspace_id, actor, estimate, model, provider, authority):
         policy=self.policy(cur,workspace_id)
         if not policy: return None
         if not isinstance(authority,dict): raise AlphaError('Confirm this task credit limit before generating.',402)
+        # Server-made only (automatic_quote); a client never supplies an authority dict, only a quote id.
+        automatic = authority.get('automatic') is True
         quote=self.quote(cur,workspace_id,actor,authority.get('quoteId'))
         if quote['policy']!=policy or quote['digest']!=authority.get('requestDigest') or quote['model']!=model or quote['provider']!=provider:
             raise AlphaError('The model or credit policy changed. Review again.',409)
@@ -157,35 +252,46 @@ class CreditBook:
             if take: allocations.append({'grantId':lot['grantId'],'milli':take});remaining-=take
             if not remaining: break
         if remaining: raise AlphaError('Credit allocation is incomplete.',409)
-        return {'op':'reserve','quoteId':authority['quoteId'],'policy':policy,'maximum':quote['maximum'],'allocations':allocations}
+        # 'automatic' records that the automatic limit, not a typed per-request limit, approved this hold.
+        return {'op':'reserve','quoteId':authority['quoteId'],'policy':policy,'maximum':quote['maximum'],'allocations':allocations,
+                **({'automatic':True} if automatic else {})}
 
     def claim(self, cur, workspace_id, reservation_id, credit):
         cur.execute('UPDATE public.pr_credit_quotes SET reservation_id=%s WHERE workspace_id=%s AND id::text=%s AND reservation_id IS NULL RETURNING id',(reservation_id,workspace_id,credit['quoteId']))
         if not cur.fetchone(): raise AlphaError('This credit approval was already claimed.',409)
+        from . import pricing_events
+        pricing_events.emit(cur, workspace_id, 'credits.held', 'usage_ledger', reservation_id,
+                            {'heldMilliCredits': credit['maximum'], 'policy': credit['policy']})
 
-    def settlement(self, cur, workspace_id, reservation_id, outcome, actual):
+    def settlement(self, cur, workspace_id, reservation_id, outcome, actual, *, actual_usd_exact=None):
         cur.execute("SELECT meta->'credits' FROM public.pr_usage_ledger WHERE workspace_id=%s AND id::text=%s AND kind='reserve'",(workspace_id,reservation_id))
         row=cur.fetchone();credit=row[0] if row else None
         if not credit or outcome=='unknown': return None
-        used=min(credit['maximum'],millicredits(actual)) if outcome=='completed' else 0
+        actual_milli=actual_millicredits(actual, actual_usd_exact=actual_usd_exact) if outcome=='completed' else 0
+        used=min(credit['maximum'],actual_milli)
         remaining=used;allocations=[]
         for lot in credit['allocations']:
             take=min(remaining,lot['milli'])
             if take: allocations.append({'grantId':lot['grantId'],'milli':take});remaining-=take
         if remaining: raise AlphaError('Settlement exceeds its reserved credits.',409)
         return {'op':'settle','policy':credit['policy'],'used':used,'allocations':allocations,
-                'released':credit['maximum']-used,'absorbed':max(0,millicredits(actual)-used) if outcome=='completed' else 0}
+                'released':credit['maximum']-used,'absorbed':max(0,actual_milli-used) if outcome=='completed' else 0}
 
 
 NOTES_KEYS=frozenset({'assetId'})
 
 
 def request_digest(operation, payload, conversation_id=None):
-    if operation not in ('quick-start','turn','media-notes') or not isinstance(payload,dict):
+    if operation not in ('quick-start','turn','media-notes','post-doctor-rewrite') or not isinstance(payload,dict):
         raise ValueError('Unknown credit operation.')
     if any(not isinstance(key,str) or key.startswith('_') for key in payload):
         raise ValueError('Private execution fields are not accepted.')
-    binding={key:value for key,value in payload.items() if key not in ('creditQuoteId','expectedRevision','idempotencyKey')}
+    binding={key:value for key,value in payload.items() if key not in ('creditQuoteId','creditApproval','expectedRevision','idempotencyKey')}
+    if operation=='post-doctor-rewrite':
+        from .growth.credit_policy import request
+        if conversation_id is not None: raise ValueError('A rewrite cannot name a conversation.')
+        try: binding=request(payload)
+        except AlphaError as error: raise ValueError('Invalid rewrite credit request.') from error
     if operation=='media-notes':
         # A photo or video read is bound to its asset only (chat-context SPEC §5.5); nothing else can ride on the quote.
         if set(binding)!=NOTES_KEYS or not isinstance(binding['assetId'],str) or conversation_id is not None:

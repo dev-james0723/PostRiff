@@ -18,6 +18,7 @@ import { SourceInspector } from './source-inspector';
 import { SourceList } from './source-list';
 import { ideaSources, useMedia, useUseApprovals } from './use-sources';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
+import { writingCostDescription } from '@/features/agent/work-surface-policy';
 
 interface Reminder {
   id: string;
@@ -76,7 +77,6 @@ export function IdeasView() {
 
   const research = memory.data?.research;
   const entitlement = usage.data?.entitlement;
-  const batches = usage.isLoading ? '…' : usage.isError || !entitlement ? 'Unavailable' : String(entitlement.writingBatchesRemaining);
   const resets = entitlement?.resetsAt ? formatDate(entitlement.resetsAt) : null;
 
   // Reminders only for what someone can act on. Research that is unavailable everywhere is not offered, so it is not mentioned.
@@ -87,7 +87,7 @@ export function IdeasView() {
   if (memory.isSuccess && research && research.enabled !== false && research.hosted && !research.web) {
     reminders.push({ id: 'research', kind: 'unsupported', title: 'Web research is off', description: 'Drafts use only the sources you add.', href: '/app/workspace/memory', action: 'Open Memory' });
   }
-  if (usage.isSuccess && entitlement && entitlement.writingBatchesRemaining === 0) {
+  if (usage.isSuccess && usage.data?.billingMode === 'legacy_allowances' && entitlement && entitlement.writingBatchesRemaining === 0) {
     reminders.push({ id: 'allowance', kind: 'partial', title: 'No writing batches left', description: resets ? `Resets ${resets}.` : undefined, href: '/app/account/billing', action: 'Usage & plan' });
   }
 
@@ -125,9 +125,7 @@ export function IdeasView() {
       {
         title: 'Cost',
         description:
-          batches === '…' || batches === 'Unavailable'
-            ? `Writing batches left: ${batches}. Saving sources is free.`
-            : `${batches} writing batch${batches === '1' ? '' : 'es'} left${resets ? `, resets ${resets}` : ''}. Only cloud drafts use one; saving sources is free.`
+          usage.isLoading ? 'Loading writing availability…' : writingCostDescription(usage.isError ? null : usage.data)
       }
     ]
   };

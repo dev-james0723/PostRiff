@@ -73,7 +73,7 @@ export const COMMANDS: SlashCommand[] = [
   { name: 'stats', aliases: ['analytics', 'performance', '數據', '表現', '数据', '表现'], group: 'look_up', kind: 'agent', takes: 'none', argsHint: '', description: 'See how your recent posts performed.' },
   { name: 'review', aliases: ['todo', 'attention', '待辦', '要處理', '待办', '要处理'], group: 'look_up', kind: 'agent', takes: 'none', argsHint: '', description: 'See what needs your attention, such as posts waiting for approval.' },
   // Images
-  { name: 'image', aliases: ['picture', 'photo', '整圖', '圖片', '生成圖片', '图片', '生成图片', '畫圖', '画图'], group: 'images', kind: 'agent', takes: 'required', argsHint: 'description', description: 'Create an image from a description; it uses 1 media credit.' },
+  { name: 'image', aliases: ['picture', 'photo', '整圖', '圖片', '生成圖片', '图片', '生成图片', '畫圖', '画图'], group: 'images', kind: 'agent', takes: 'required', argsHint: 'description', description: 'Create an image from a description within the approved task allowance.' },
   // Plan
   { name: 'schedule', aliases: ['排程', '預約', '预约', '定時', '定时'], group: 'plan', kind: 'agent', takes: 'required', argsHint: 'when', description: 'Prepare a posting plan for you to approve; nothing is published.' },
   { name: 'automation', aliases: ['auto', 'recurring', '自動化', '自動', '自动化', '自动', '定期'], group: 'plan', kind: 'agent', takes: 'required', argsHint: 'what should happen', description: 'Set up an automation from a description.' },

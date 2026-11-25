@@ -1,4 +1,5 @@
 """Real disposable PostgreSQL; synthetic provider measurements, no external calls."""
+from local_pg_target import selected_target
 import copy
 import datetime as dt
 import json
@@ -14,7 +15,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.coworker import flags, runtime, growth_loop
 
-DSN = os.environ.get("POSTRIFF_TEST_DSN", "host=127.0.0.1 port=55438 dbname=postgres")
+DSN = selected_target().dsn()
 USERS = {name: str(uuid.uuid4()) for name in ("owner", "other", "editor", "history")}
 clock = [dt.datetime(2026, 10, 5, tzinfo=dt.timezone.utc).timestamp()]
 

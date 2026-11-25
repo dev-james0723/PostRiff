@@ -7,6 +7,9 @@ import { IconArrowUpRight, IconRadar, IconArrowRight } from '@tabler/icons-react
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useWorkspaceAccess } from '@/lib/auth/access';
 import { Button } from '@/components/ui/button';
+import { useUsage } from '@/lib/api/hooks';
+import { growthAvailability } from './availability';
+import { radarAvailability, radarScanAvailable } from './radar-availability';
 import { GrowthConsent, useGrowthCatalog } from './shared';
 import { useGrowthAction } from './studio-parts';
 import type { RadarCatalog, RadarEvidence, RadarOpportunity, RadarScan } from '@/lib/growth/radar-types';
@@ -61,7 +64,11 @@ function Opportunity({ op, scanId, index }: { op: RadarOpportunity; scanId: stri
   </article>;
 }
 
-function Permissions({ catalog, refresh }: { catalog: RadarCatalog; refresh: () => void }) {
+function Permissions({ catalog, refresh, catalogReady = false }: { catalog: RadarCatalog; refresh: () => void; catalogReady?: boolean }) {
+  const usage = useUsage();
+  const availability = growthAvailability(usage.data, 'radar');
+  const legacy = usage.data?.billingMode === 'legacy_allowances';
+  const aiAvailable = catalogReady && (legacy ? catalog.aiAnalysisAvailable !== false : catalog.aiAnalysisAvailable === true);
   const growth = useGrowthCatalog();
   const access = useWorkspaceAccess();
   const action = useGrowthAction();
@@ -73,14 +80,15 @@ function Permissions({ catalog, refresh }: { catalog: RadarCatalog; refresh: () 
   return <details className='radar-permissions'><summary>Sources, AI permissions & monitoring</summary>
     <div className='radar-permission-grid'><section><h3>Your public sources</h3><p>Only the selected public sources are used. Short evidence excerpts expire after 30 days.</p>
       {catalog.sources.map((s) => <label key={s.id} className='radar-source-option'><input aria-label={s.name} type='checkbox' checked={sources.includes(s.id)} disabled={access.role !== 'owner' || s.status !== 'ready'} onChange={(e) => setSources(e.target.checked ? [...sources, s.id] : sources.filter((v) => v !== s.id))} /><span>{s.name}<small>{s.status === 'ready' ? s.note : words(s.status)}</small></span></label>)}
-      <label className='radar-source-option'><input aria-label='Allow Radar AI' type='checkbox' checked={ai} disabled={access.role !== 'owner'} onChange={(e) => setAi(e.target.checked)} /><span>Allow AI to review public evidence with my approved Genome lessons.</span></label>
-      <Button variant='glass' disabled={access.role !== 'owner' || action.busy} onClick={() => void save('radar_consent', { sources, ai, confirmed: true })}>Save Radar permissions</Button>
+      <label className='radar-source-option'><input aria-label='Allow Radar AI' type='checkbox' checked={ai} disabled={!catalogReady || access.role !== 'owner' || (!aiAvailable && !ai)} onChange={(e) => setAi(e.target.checked)} /><span>Allow AI to review public evidence with my approved Genome lessons. {!aiAvailable && 'AI review is unavailable here.'}</span></label>
+      <Button variant='glass' disabled={!catalogReady || access.role !== 'owner' || action.busy} onClick={() => void save('radar_consent', { sources, ai, confirmed: true })}>Save Radar permissions</Button>
     </section><section><h3>Your AI choices</h3>{growth.data && <GrowthConsent catalog={{ ...growth.data, audienceMiner: false }} onChange={() => { void growth.refetch(); refresh(); }} />}
-      <div className='radar-monitor'><h3>A light daily watch</h3><p>Optional on paid plans. One Quick scan daily, between 8am and 10pm in your time zone. Results appear here. Allowance: up to {money(catalog.monitorMaximumUsdMicro)} per scan.</p>
+      <div className='radar-monitor'><h3>A light daily watch</h3><p>{availability.available ? <>One Quick scan daily, between 8am and 10pm in your time zone. Results appear here. Allowance: up to {money(catalog.monitorMaximumUsdMicro)} per scan.</> : availability.detail}</p>
         {catalog.monitor.enabled ? <><p>Watching “{catalog.monitor.query}” · {catalog.monitor.timezone}</p><Button variant='glass' disabled={access.role !== 'owner' || action.busy} onClick={() => void save('radar_watch', { enabled: false })}>Pause daily watch</Button></> : <>
           <label>Watch topic<input aria-label='Watch topic' className='radar-input' value={topic} maxLength={200} onChange={(e) => setTopic(e.target.value)} /></label>
           <label>Time zone<input aria-label='Time zone' className='radar-input' value={timezone} onChange={(e) => setTimezone(e.target.value)} /></label>
-          <Button variant='glass' disabled={access.role !== 'owner' || !catalog.monitoringAvailable || !catalog.paidMonitoring || topic.trim().length < 3 || action.busy} onClick={() => void save('radar_watch', { enabled: true, query: topic, timezone, maximumUsdMicro: catalog.monitorMaximumUsdMicro, confirmed: true })}>Enable daily watch</Button>
+          <Button variant='glass' disabled={!catalogReady || !availability.available || access.role !== 'owner' || !catalog.monitoringAvailable || !catalog.paidMonitoring || topic.trim().length < 3 || action.busy} onClick={() => void save('radar_watch', { enabled: true, query: topic, timezone, maximumUsdMicro: catalog.monitorMaximumUsdMicro, confirmed: true })}>Enable daily watch</Button>
+          {!availability.available && <p role='status'>{availability.detail}</p>}
           {!catalog.monitoringAvailable ? <p>Daily monitoring is not enabled yet.</p> : !catalog.paidMonitoring && <p>Available with an active paid plan.</p>}
         </>}
       </div>
@@ -91,13 +99,15 @@ function Permissions({ catalog, refresh }: { catalog: RadarCatalog; refresh: () 
 export function RadarPage() {
   const { api, workspaceId } = useWorkspaceApi();
   const growth = useGrowthCatalog();
+  const usage = useUsage();
+  const legacy = usage.data?.billingMode === 'legacy_allowances';
   const enabled = Boolean(growth.data?.radar);
   const catalog = useQuery({ queryKey: ['radar-catalog', workspaceId], queryFn: () => api.radarCatalog(workspaceId), enabled, retry: false });
   const scans = useRadarScans(enabled);
   const action = useGrowthAction();
   const [topic, setTopic] = useState('');
   const [mode, setMode] = useState<'quick' | 'deep'>('quick');
-  const [useAi, setUseAi] = useState(true);
+  const [useAi, setUseAi] = useState(false);
   const [quote, setQuote] = useState<RadarScan | null>(null);
   const [progress, setProgress] = useState<RadarScan | null>(null);
   const [selectedId, setSelectedId] = useState('');
@@ -107,25 +117,40 @@ export function RadarPage() {
   const requestKey = useRef('');
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const catalogReady = catalog.isSuccess && !catalog.isError && growth.isSuccess && !growth.isError && !usage.isError;
+  const sources = (catalog.data?.consent.sources ?? []).filter(id => catalog.data?.sources.some(source => source.id === id && source.status === 'ready'));
+  const aiAvailable = catalogReady && (legacy ? catalog.data?.aiAnalysisAvailable !== false : catalog.data?.aiAnalysisAvailable === true);
+  const effectiveAi = useAi && Boolean(catalog.data?.consent.ai);
+  const availability = radarAvailability(usage.data, catalog.data, { sources, useAi: effectiveAi }, catalogReady);
   const selected = busy && progress ? progress : scans.data?.scans.find((s) => s.id === selectedId) ?? scans.data?.scans[0];
   function changed() { setQuote(null); requestKey.current = ''; }
+  useEffect(() => { setUseAi(usage.data?.billingMode === 'legacy_allowances'); setQuote(null); requestKey.current = ''; }, [usage.data?.billingMode]);
   async function review() {
-    if (!catalog.data) return;
+    if (!catalog.data || !availability.available) return;
     setBusy(true); setError('');
     try {
       requestKey.current ||= crypto.randomUUID();
-      const q = await api.radarQuote(workspaceId, { query: topic, mode, sources: (catalog.data.consent.sources ?? []).filter((id) => catalog.data.sources.some((s) => s.id === id && s.status === 'ready')), useAi: useAi && Boolean(catalog.data.consent.ai), requestKey: requestKey.current });
+      const freshCatalog = await api.radarCatalog(workspaceId);
+      const spec = { sources, useAi: effectiveAi };
+      if (!radarAvailability(usage.data, freshCatalog, spec, true).available) throw new Error('Radar source readiness changed. Review the current sources.');
+      const q = await api.radarQuote(workspaceId, { query: topic, mode, ...spec, requestKey: requestKey.current });
+      if (!radarScanAvailable(usage.data, freshCatalog, q, true)) throw new Error('This scan does not match an available zero-cost source route. Review again.');
       setQuote(q);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not prepare this scan.'); }
     finally { setBusy(false); }
   }
   async function scan(q: RadarScan) {
+    if (!radarScanAvailable(usage.data, catalog.data, q, catalogReady)) return;
     setBusy(true); setError(''); setSelectedId(q.id); setQuote(null);
     try {
+      const freshCatalog = await api.radarCatalog(workspaceId);
+      if (!radarScanAvailable(usage.data, freshCatalog, q, true)) throw new Error('Radar readiness changed. Review this scan before continuing.');
       let result = await api.radarStart(workspaceId, q.id); setProgress(result);
       for (let i = 0; i < 32 && result.status === 'running' && alive.current; i++) {
         if (result.retryAfter) await new Promise((resolve) => setTimeout(resolve, result.retryAfter! * 1000));
         if (!alive.current) break;
+        const currentCatalog = await api.radarCatalog(workspaceId);
+        if (!radarScanAvailable(usage.data, currentCatalog, result, true)) throw new Error('Radar readiness changed. This scan is paused.');
         result = await api.radarAdvance(workspaceId, q.id); setProgress(result);
       }
       await scans.refetch(); requestKey.current = '';
@@ -139,19 +164,22 @@ export function RadarPage() {
       {catalog.isError && <p role='alert'>Source settings could not load. <Button variant='quiet' onClick={() => void catalog.refetch()}>Try again</Button></p>}
       {catalog.data && <>
         <section className='radar-scan-form' aria-label='Start a Radar scan'><div className='radar-form-heading'><span className='growth-kicker'>Start with a curiosity</span><div className='radar-mode' aria-label='Scan depth'>{(['quick', 'deep'] as const).map((v) => <button key={v} disabled={busy} aria-pressed={mode === v} onClick={() => { setMode(v); changed(); }}>{v === 'quick' ? 'Quick' : 'Deep'}</button>)}</div></div>
-          <label htmlFor='radar-topic'>What is your audience thinking about?</label><div className='radar-search'><input aria-label='What is your audience thinking about?' id='radar-topic' value={topic} maxLength={200} placeholder='e.g. a more thoughtful way to practise piano' disabled={busy} onChange={(e) => { setTopic(e.target.value); changed(); }} /><Button disabled={busy || topic.trim().length < 3 || !catalog.data.consent.sources?.length} onClick={() => void review()}>Review scan <IconArrowRight size={16} aria-hidden /></Button></div>
-          <div className='radar-form-note'><span>{mode === 'quick' ? 'A focused first look · up to 12 items per source' : 'A wider look · up to 40 items per source'}</span><label><input aria-label='Include AI review' type='checkbox' checked={useAi && Boolean(catalog.data.consent.ai)} disabled={busy || !catalog.data.consent.ai} onChange={(e) => { setUseAi(e.target.checked); changed(); }} />Include AI review</label></div>
+          <label htmlFor='radar-topic'>What is your audience thinking about?</label><div className='radar-search'><input aria-label='What is your audience thinking about?' id='radar-topic' value={topic} maxLength={200} placeholder='e.g. a more thoughtful way to practise piano' disabled={busy} onChange={(e) => { setTopic(e.target.value); changed(); }} /><Button disabled={!availability.available || busy || topic.trim().length < 3 || !catalog.data.consent.sources?.length} onClick={() => void review()}>Review scan <IconArrowRight size={16} aria-hidden /></Button></div>
+          <div className='radar-form-note'><span>{mode === 'quick' ? 'A focused first look · up to 12 items per source' : 'A wider look · up to 40 items per source'}</span><label><input aria-label='Include AI review' type='checkbox' checked={effectiveAi} disabled={busy || !aiAvailable || !catalog.data.consent.ai} onChange={(e) => { setUseAi(e.target.checked); changed(); }} />Include AI review</label></div>
+          {availability.available && !legacy && <p role='status'>{availability.detail}</p>}
+          {!aiAvailable && <p>AI review is unavailable. Source permissions do not fund paid analysis.</p>}
+          {!availability.available && <p role='status'>{availability.detail}</p>}
           {!catalog.data.consent.sources?.length && <p>Open source permissions below to choose where Radar can look.</p>}
-          {quote && <div className='radar-quote'><h2>Review your {quote.mode} scan</h2><p>“{quote.query}” · {quote.sources.join(', ')} · {quote.useAi ? 'AI review included' : 'Source collection only'}</p><p>{quote.maximumCredits !== undefined ? `Up to ${quote.maximumCredits} credits.` : `Uses your included allowance, up to ${money(quote.maximumUsdMicro)} in provider costs.`} Fewer than three usable opportunities refunds any reserved scan credits.</p><div className='radar-buttons'><Button disabled={busy} onClick={() => void scan(quote)}>Confirm & scan</Button><Button variant='quiet' onClick={changed}>Edit scan</Button></div></div>}
+          {quote && <div className='radar-quote'><h2>Review your {quote.mode} scan</h2><p>“{quote.query}” · {quote.sources.join(', ')} · {quote.useAi ? 'AI review included' : 'Source collection only'}</p><p>{!legacy ? quote.maximumUsdMicro === 0 && quote.customerCharge === 'none' ? 'No customer credits charged. Zero-cost source collection; AI review is off.' : 'This stored scan cannot run until its credit route is qualified.' : <>{quote.maximumCredits !== undefined ? `Up to ${quote.maximumCredits} credits.` : `Uses your included allowance, up to ${money(quote.maximumUsdMicro)} in provider costs.`} Fewer than three usable opportunities refunds any reserved scan credits.</>}</p><div className='radar-buttons'><Button disabled={busy || !radarScanAvailable(usage.data, catalog.data, quote, catalogReady)} onClick={() => void scan(quote)}>Confirm & scan</Button><Button variant='quiet' onClick={changed}>Edit scan</Button></div></div>}
           {busy && <p role='status'>Scanning selected sources… {progress ? `${progress.steps.filter((s) => s.status === 'completed').length} steps complete.` : 'Preparing your review.'}</p>}
           {error && <p role='alert'>{error}</p>}
         </section>
-        <Permissions key={JSON.stringify(catalog.data.consent)} catalog={catalog.data} refresh={() => { changed(); void catalog.refetch(); void scans.refetch(); }} />
+        <Permissions key={JSON.stringify(catalog.data.consent)} catalog={catalog.data} catalogReady={catalogReady} refresh={() => { changed(); void catalog.refetch(); void scans.refetch(); }} />
       </>}
       {scans.isError && <p role='alert'>Scans could not load. <Button variant='quiet' onClick={() => void scans.refetch()}>Try again</Button></p>}
       <section className='radar-results' aria-labelledby='radar-results-title'><div className='radar-results-heading'><div><p className='growth-kicker'>The signal desk</p><h2 id='radar-results-title'>{selected?.query ?? 'Your next idea starts here.'}</h2></div><div className='radar-mode'><button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All signals</button><button aria-pressed={filter === 'you'} onClick={() => setFilter('you')}>For you</button></div></div>
         {selected && <p className='radar-note'>{words(selected.status)} · {selected.mode} scan · {selected.stale ? 'Permissions or creator context changed. Start a fresh scan.' : selected.notice}</p>}
-        {!busy && selected && ['running', 'unknown', 'quoted'].includes(selected.status) && <div className='radar-quote'><p>{selected.status === 'unknown' ? 'An earlier attempt has an unknown outcome. Stop this scan before starting another; the attempt will not be repeated.' : 'This scan is waiting for you.'}</p><div className='radar-buttons'>{selected.status !== 'unknown' && <Button onClick={() => selected.status === 'quoted' ? setQuote(selected) : void scan(selected)}>{selected.status === 'quoted' ? 'Review quote' : 'Continue scan'}</Button>}<Button variant='quiet' disabled={action.busy} onClick={() => void action.run('radar_stop', { scanId: selected.id })}>Stop scan</Button></div></div>}
+        {!busy && selected && ['running', 'unknown', 'quoted'].includes(selected.status) && <div className='radar-quote'><p>{selected.status === 'unknown' ? 'An earlier attempt has an unknown outcome. Stop this scan before starting another; the attempt will not be repeated.' : 'This scan is waiting for you.'}</p><div className='radar-buttons'>{selected.status !== 'unknown' && <Button disabled={!radarScanAvailable(usage.data, catalog.data, selected, catalogReady)} onClick={() => selected.status === 'quoted' ? setQuote(selected) : void scan(selected)}>{selected.status === 'quoted' ? 'Review quote' : 'Continue scan'}</Button>}<Button variant='quiet' disabled={action.busy} onClick={() => void action.run('radar_stop', { scanId: selected.id })}>Stop scan</Button></div></div>}
         {opportunities.length ? <div className='radar-grid'>{opportunities.map((op, i) => <Opportunity key={op.id} op={op} index={i} scanId={selected!.id} />)}</div> : <div className='radar-empty'><IconRadar size={32} aria-hidden /><h3>{filter === 'you' ? 'Your fit will get clearer.' : 'A little curiosity goes a long way.'}</h3><p>{filter === 'you' ? 'For you uses only matching, approved, supported Genome lessons. Explore all signals while your evidence grows.' : 'Choose a topic and your sources. Radar will bring back references you can inspect, with room for your own perspective.'}</p></div>}
         {!!selected?.nativeReferences?.length && <details className='radar-native'><summary>YouTube · native references only</summary><p>These raw counts are displayed separately. They do not enter Radar’s rankings or AI review.</p><Evidence items={selected.nativeReferences} /></details>}
         {!!selected?.sourceResults?.length && <details className='radar-receipt'><summary>Scan receipt</summary><ul>{selected.sourceResults.map((s) => <li key={s.source}>{s.source}: {s.status} · {s.items} items</li>)}</ul><p>{selected.usage.costsVisible === false ? 'Provider cost details are available to the workspace owner.' : selected.usage.actualUsdMicro === null ? `Actual provider cost is not fully known (${selected.usage.unknownAttempts} unknown attempts).` : `Recorded provider cost: ${money(selected.usage.actualUsdMicro)}.`}</p>{selected.refundReason && <p>{selected.refundReason} {selected.chargedCredits === 0 ? 'Reserved credits refunded.' : 'No scan-credit charge is due.'}</p>}<Button variant='quiet' disabled={action.busy} onClick={() => void action.run('radar_forget', { scanId: selected.id })}>Forget this scan</Button></details>}

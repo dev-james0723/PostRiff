@@ -89,7 +89,7 @@ interface ComposerProps {
   /** Chat attachments (chat-context SPEC §11.2): chips, uploads and the `@` list; the bar sits between the text and Delivery Summary. */
   attachments?: ComposerAttachments;
   attachmentBar?: Omit<AttachmentBarProps, 'attachments' | 'requestedView' | 'onRequestedViewHandled'>;
-  slash?: { onPick: (command: SlashCommand, args: string, pick: SlashPick) => void; onDismiss?: () => void };
+  slash?: { commands?: SlashCommand[]; onPick: (command: SlashCommand, args: string, pick: SlashPick) => void; onDismiss?: () => void };
   /** Native format per selected destination (creation facet); absent = platform defaults only. */
   nativeFormats?: { rows: NativeFormatRow[]; value: Record<string, string>; onChange: (key: string, format: string) => void };
 }
@@ -108,7 +108,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
   ref
 ) {
   // An unavailable model is never swapped for another paid one: the person chooses again. Send also waits for uploads (SPEC §4.7).
-  const canSend = !submitDisabled && models.some((m) => m.id === model && m.qualified && m.priced !== false) && !busy && !disabled && value.trim().length > 0 && languages.selection.length > 0 && (!consent || consent.use) && (!imageGeneration?.enabled || imageGeneration.available) && !attachments?.blockers.length;
+  const canSend = !submitDisabled && (imageGeneration?.enabled || models.some((m) => m.id === model && m.qualified && m.priced !== false)) && !busy && !disabled && value.trim().length > 0 && languages.selection.length > 0 && (!consent || consent.use) && (!imageGeneration?.enabled || imageGeneration.available) && !attachments?.blockers.length;
   const textareaRef = attachments?.textareaRef;
   // The forwarded ref and the attachments' own ref point at the same textarea.
   const setTextarea = useCallback(
@@ -158,7 +158,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
   return (
     <>
       <div ref={composerBox} className='rafii-composer @container/composer relative flex flex-col rounded-[var(--rafii-radius-card)]' data-tour='composer'>
-      {slash ? <SlashCommandMenu value={value} caret={caret} anchorRef={composerBox} onPick={(command, args, pick) => { setCaret(pick.caret); slash.onPick(command, args, pick); }} onDismiss={slash.onDismiss ?? (() => undefined)} /> : null}
+      {slash ? <SlashCommandMenu commands={slash.commands} value={value} caret={caret} anchorRef={composerBox} onPick={(command, args, pick) => { setCaret(pick.caret); slash.onPick(command, args, pick); }} onDismiss={slash.onDismiss ?? (() => undefined)} /> : null}
       <Textarea
         ref={setTextarea}
         value={value}

@@ -5,6 +5,7 @@ deciding the proposal follows the same path as a chat one.
 
 Run through scripts/postriff_disposable_postgres.py (rls.sql loads migrations 004+, including 010).
 """
+from local_pg_target import selected_target
 import json
 import re
 import sys
@@ -17,7 +18,7 @@ from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 ONE = "00000000-0000-0000-0000-000000000001"
 TWO = "00000000-0000-0000-0000-000000000002"
 clock = [time.time()]

@@ -63,8 +63,10 @@ def pkce_pair():
 
 
 class OAuthService:
-    def __init__(self, repository, commands, vault, providers, public_base_url, clock=time.time, youtube_public_base_url=None):
+    def __init__(self, repository, commands, vault, providers, public_base_url, clock=time.time, youtube_public_base_url=None, *, ledger=None):
         self.repository, self.commands, self.vault, self.clock = repository, commands, vault, clock
+        from .billing import Ledger
+        self.ledger = ledger if ledger is not None else Ledger(clock=clock)
         self.providers = providers if providers is not None else {}
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.youtube_public_base_url = youtube_public_base_url or None
@@ -554,7 +556,7 @@ class OAuthService:
             if youtube_context.get('connectionId') and youtube_context['connectionId'] != connection_id:
                 raise AlphaError('You selected a different YouTube channel. Connect it separately; the existing channel was not replaced.', 409, code='youtube_channel_changed')
             from .billing import require_plan_capacity
-            require_plan_capacity(cur, workspace_id, "connected_accounts", connection_id)
+            require_plan_capacity(cur, workspace_id, "connected_accounts", connection_id, ledger=self.ledger)
             access_ct, key_id = self.vault.encrypt(grant["accessToken"])
             refresh_ct = self.vault.encrypt(grant["refreshToken"])[0] if grant.get("refreshToken") else None
             if provider_id == 'youtube' and refresh_ct is None:

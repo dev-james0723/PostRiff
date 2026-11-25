@@ -3,6 +3,7 @@ channels, second-factor enforcement, revoke-others, leaving a workspace.
 
 Run through scripts/postriff_disposable_postgres.py (loads rls.sql with migrations 001-009).
 """
+from local_pg_target import selected_target
 import json
 import sys
 import time
@@ -14,7 +15,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.agent_runtime_v2 import style
 from postriff_phase2.hosted import HostedWorkspaceService
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 DEFAULT_STYLE = style.normalize({})  # Rafii's style: its own script is postgres_agent_style.py
 ONE = "00000000-0000-0000-0000-000000000001"
 SIX = "00000000-0000-0000-0000-000000000006"

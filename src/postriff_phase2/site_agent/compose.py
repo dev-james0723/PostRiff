@@ -109,6 +109,29 @@ def citation_objects(passages: list[dict], retrieved_at: str, used=None) -> list
     return out
 
 
+def _plan_allowance_lines(data):
+    if data.get("billingMode") == "legacy_allowances":
+        return [f"Writing batches left: {data.get('writingBatchesRemaining') if data.get('writingBatchesRemaining') is not None else 'unknown'}",
+                f"Media credits left: {data.get('mediaCreditsRemaining') if data.get('mediaCreditsRemaining') is not None else 'unknown'}"]
+    if data.get("billingMode") == "free_preview":
+        return ["Free has no monthly managed credits. Check preview availability on Usage & plan."]
+    if data.get("billingMode") != "managed_credits":
+        return ["Plan allowance details are unavailable."]
+    if data.get("aiUsageExempt") is True:
+        return ["Your server-assigned application quota applies to managed writing. Separately paid tools need their own approval."]
+    credits = data.get("credits") or {}
+    lines = []
+    for label, key in (("Available managed credits", "availableMilliCredits"), ("Held credits", "heldMilliCredits"), ("Used credits", "usedMilliCredits")):
+        value = credits.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            whole, fraction = divmod(value, 1000)
+            text = str(whole) + (("." + str(fraction).zfill(3)).rstrip("0") if fraction else "")
+        else:
+            text = "unavailable"
+        lines.append(f"{label}: {text}")
+    return lines
+
+
 def facts(results: dict) -> list[dict]:
     """Short, labelled workspace facts (W1…) from tool results, for the model and for 'what Rafii used'."""
     out = []
@@ -167,7 +190,7 @@ def facts(results: dict) -> list[dict]:
         elif tool_id == "privacy.egress_state":
             add(tool_id, f"Cloud memory: {'on' if data['cloudMemory'] else 'off'}; web research: {'on' if data['webResearch'] else 'off'} for this workspace; chosen writer class: {(data['writer'] or {}).get('class') or 'unknown'}.")
         elif tool_id == "entitlements.summary":
-            add(tool_id, f"Plan: {data.get('plan') or 'unknown'}; writing batches left: {data.get('writingBatchesRemaining')}; media credits left: {data.get('mediaCreditsRemaining')}; publishing included: {data.get('canPublish')}; budget status: {data.get('budgetStatus')}.")
+            add(tool_id, f"Plan: {data.get('plan') or 'unknown'}; " + "; ".join(_plan_allowance_lines(data)) + f"; publishing included: {data.get('canPublish')}; budget status: {data.get('budgetStatus')}.")
         elif tool_id == "models.summary":
             for m in data["models"]:
                 add(tool_id, f"Writer {m['label']}: {'available' if m['qualified'] else 'unavailable'} ({m['costClass']})" + (f" — {m['detail']}" if not m["qualified"] and m.get("detail") else ""))
@@ -321,8 +344,7 @@ def compose(classification: dict, page: dict, plan: dict, results: dict, *, lang
         plan_data = get("entitlements.summary")
         if plan_data:
             lines.append(t(language, "billing"))
-            lines.append(f"- Writing batches left: {plan_data.get('writingBatchesRemaining') if plan_data.get('writingBatchesRemaining') is not None else 'unknown'}")
-            lines.append(f"- Media credits left: {plan_data.get('mediaCreditsRemaining') if plan_data.get('mediaCreditsRemaining') is not None else 'unknown'}")
+            lines.extend("- " + line for line in _plan_allowance_lines(plan_data))
             if plan_data.get("canPublish") is not None:
                 lines.append(f"- Publishing included right now: {'yes' if plan_data['canPublish'] else 'no'}")
         extra, refs = _help_blocks(help_result, language, lead=not plan_data)

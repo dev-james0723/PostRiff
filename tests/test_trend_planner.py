@@ -239,7 +239,9 @@ PG_DSN = os.environ.get('TREND_PLANNER_TEST_DSN') or os.environ.get('POSTRIFF_TE
 
 def dedicated_test_dsn(environ=None):
     from psycopg.conninfo import conninfo_to_dict, make_conninfo
+    from local_pg_target import selected_target
     env = os.environ if environ is None else environ
+    target = selected_target(env, validate_fixture_dsns=False)
     if any(env.get(k) for k in ('PGSERVICE', 'PGHOSTADDR')):
         raise ValueError('libpq service/address overrides are forbidden')
     dedicated = env.get('TREND_PLANNER_TEST_DSN')
@@ -251,7 +253,7 @@ def dedicated_test_dsn(environ=None):
         raise ValueError('Only explicit host/port/dbname/user test DSN fields permitted')
     valid = (params.get('host') == '127.0.0.1' and
         ((params.get('port') == '56447' and params.get('dbname', '').startswith('trend_planner_retry_'))
-         if dedicated else (params.get('port') == '55438' and params.get('dbname') == 'postgres')))
+         if dedicated else (params.get('port') == str(target.port) and params.get('dbname') == 'postgres')))
     if not valid:
         raise ValueError('Assigned planner database or exact disposable runner required')
     return make_conninfo(**params, connect_timeout='5')

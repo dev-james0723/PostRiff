@@ -1,4 +1,5 @@
 """Disposable PostgreSQL: audit API and RLS agree on owner/admin access; no live data."""
+from local_pg_target import selected_target
 import json
 import sys
 from pathlib import Path
@@ -8,7 +9,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 ONE = '00000000-0000-0000-0000-000000000001'
 TWO = '00000000-0000-0000-0000-000000000002'
-def connection(): return psycopg.connect('host=127.0.0.1 port=55438 dbname=postgres', client_encoding='utf8')
+def connection(): return psycopg.connect(selected_target().dsn(), client_encoding='utf8')
 service = HostedWorkspaceService(connection, lambda token: ONE if token == 'one' else TWO)
 with connection() as db:
     wid = str(db.execute('SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s', (ONE,)).fetchone()[0])

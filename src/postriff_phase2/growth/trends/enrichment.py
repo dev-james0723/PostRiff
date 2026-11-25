@@ -25,6 +25,7 @@ from . import config, contracts, evidence_pack, judge, judgment_cache, relevance
 from .jobs import TrendJobs
 from .policy import SourcePolicy
 from .store import TrendStore, row, rows, utcnow
+from . import credit_admission
 
 KIND = "trend.model_enrichment"
 REQUIRED_FLAGS = ("INTELLIGENCE", "RADAR", "TRUST_RECEIPTS", "MODEL_ENRICHMENT")
@@ -79,9 +80,25 @@ class TrendEnrichment:
         return load(Path(__file__).parents[1]/"question_sets"/("trend_"+task+".v1.json")).digest
 
     def execute(self, model, loaded, task, workspace_id, usage):
+        model = self._funded_model(model, workspace_id)
         router=AIModelRouter(jev=model,usage=usage,tasks={"trend."+task:("evaluate",loaded["config"]["model"],(),3.0,1000)})
         return judge.evaluate(router,task,loaded["pack"],workspace_id=workspace_id,authorized=True,
                               reserved_microusd=loaded["config"]["approved_attempt_cap_microusd"])
+
+    def _funded_model(self, model, workspace_id, on_dispatch=None):
+        """Copy the runtime, guarding every physical attempt without mutating it."""
+        credit_admission.require_dispatch(self.store, workspace_id)
+        runtime = copy.copy(model)
+        def transport(method, url, *, headers, body, timeout):
+            credit_admission.require_model_dispatch(self.store, workspace_id)
+            if on_dispatch is not None:
+                on_dispatch()
+            tracked = getattr(model, '_trend_on_dispatch', None)
+            if tracked is not None:
+                tracked()
+            return model.transport(method, url, headers=headers, body=body, timeout=timeout)
+        runtime.transport = transport
+        return runtime
 
     def prepare_model(self, model, loaded):
         """Pure preflight before claim/reservation; no external attempt."""
@@ -91,7 +108,9 @@ class TrendEnrichment:
 
     def __init__(self, hosted, *, store=None, values=None, jev_factory=None, monotonic=time.monotonic):
         self.hosted = hosted
-        self.store = store or TrendStore(hosted.repository.connection_factory)
+        self.store = store or TrendStore(hosted.repository.connection_factory, hosted=hosted)
+        if getattr(self.store, 'hosted', None) is None:
+            self.store.hosted = hosted
         self.jobs = TrendJobs(self.store)
         self.values = values
         self.jev_factory = jev_factory
@@ -219,6 +238,7 @@ class TrendEnrichment:
             return self._enqueue_loaded(cur,workspace_id,actor,receipt_id,task,loaded,idempotency_key)
 
     def _enqueue_loaded(self, cur, workspace_id, actor, receipt_id, task, loaded, idempotency_key):
+        credit_admission.require_qualified_entry(cur, workspace_id, store=self.store)
         scope = "workspace:"+workspace_id
         # The authenticated workspace row serializes this bound with other
         # producers, including explicit enqueue requests and cron retries.
@@ -344,6 +364,7 @@ class TrendEnrichment:
                         claim=self.jobs.claim(self.worker_id,job_id=pending_job["job_id"],kind=self.kind,cursor=cur)
                         if claim: self.jobs.finish_local(claim,cursor=cur)
                         output["cached"] += 1; continue
+                    credit_admission.require_qualified_entry(cur, wid, store=self.store)
                     cur.execute("""SELECT 1 FROM pr_trend_jobs WHERE scope_key=%s AND kind=%s
                         AND state IN ('leased','running') AND lease_until>clock_timestamp() AND payload->>'cache_key'=%s LIMIT 1""",
                                 (pending_job["scope_key"],self.kind,loaded["key"]))
@@ -362,13 +383,23 @@ class TrendEnrichment:
                     fresh=self._load(cur,wid,principal,rid,controls["task"],state)
                     if fresh["key"]!=loaded["key"]:raise contracts.ContractError("model_job_snapshot_changed")
                     loaded=fresh
+                    credit_admission.require_qualified_entry(cur, wid, store=self.store)
                 if not self.enabled(wid) or self.monotonic()-started+3 > max_seconds:
                     self._discard(claim,"model_dispatch_gate_or_deadline",dispatched=False)
                     output["blocked"]+=1;continue
-                usage=MemoryUsageSink(); result=None; failure=None; dispatched=True
-                output["provider_attempts"] += 1
+                usage=MemoryUsageSink(); result=None; failure=None
+                def dispatched_call():
+                    nonlocal dispatched
+                    dispatched = True
+                    output["provider_attempts"] += 1
+                model = copy.copy(model)
+                model._trend_on_dispatch = dispatched_call
                 try:
                     result=self.execute(model,loaded,controls["task"],wid,usage)
+                except (AlphaError, contracts.ContractError) as exc:
+                    if not dispatched and exc.code == credit_admission.UNAVAILABLE:
+                        raise
+                    failure="model_evaluation_failed"
                 except Exception:
                     failure="model_evaluation_failed"
                 if not usage.events:
@@ -406,6 +437,8 @@ class TrendEnrichment:
                     self.jobs.finish_external(claim,actual_micro_usd=accounting["actual_micro_usd"],usage_event_id=accounting["usage_event_id"],cursor=cur)
                 output["attached"] += 1
             except (contracts.ContractError,AlphaError,KeyError,TypeError,ValueError) as exc:
+                if getattr(exc, 'code', None) == credit_admission.UNAVAILABLE:
+                    output.update(status='funding_unavailable', reason_code=exc.code)
                 if claim: self._discard(claim,"model_admission_or_attachment_failed",dispatched=dispatched)
                 elif getattr(exc,"code",None) not in {"budget_exhausted","budget_period_inactive","budget_dimensions_required","workspace_budget_required"}:
                     # Retire invalid queued controls without racing a different

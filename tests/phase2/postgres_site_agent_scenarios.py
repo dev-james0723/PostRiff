@@ -10,6 +10,7 @@ data, no claimed action) and reported as PARTIAL. Set SITE_AGENT_EVIDENCE=<path.
 
 Run through scripts/postriff_pg_suite.py postgres_site_agent_scenarios (PYTHONPATH=src:tests).
 """
+from local_pg_target import selected_target
 import copy
 import datetime as dt
 import hashlib
@@ -35,7 +36,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.site_agent import routes
 from consumer_fixtures import approve_budgets
 
-DSN = "host=127.0.0.1 port=55438 dbname=postgres"
+DSN = selected_target().dsn()
 HK = "Asia/Hong_Kong"
 ZONE = ZoneInfo(HK)
 USERS = {"owner-token-0000000000000000": "00000000-0000-0000-0000-000000000001", "other-token-0000000000000000": "00000000-0000-0000-0000-000000000004",

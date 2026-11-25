@@ -1,10 +1,11 @@
 """Run after postgres_repository.py, against its disposable loopback fixtures only."""
+from local_pg_target import selected_target
 import copy,json,sys,time
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'src'))
 import psycopg
 from postriff_phase2.hosted_worker import PostgresWorker
-DSN='host=127.0.0.1 port=55438 dbname=postgres'
+DSN=selected_target().dsn()
 def connection(): return psycopg.connect(DSN)
 with connection() as db:
  wid,base=db.execute("SELECT id::text,state FROM public.pr_workspaces WHERE state ? 'phase2'").fetchone()
