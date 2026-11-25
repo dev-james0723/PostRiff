@@ -132,5 +132,138 @@ class DerivedEvents(unittest.TestCase):
         self.assertIn(event["kind"], signals.EVENT_KINDS)
 
 
+class LengthReminder(unittest.TestCase):
+    """A remembered length is measured after drafting: a writer's own note that it complied is not evidence."""
+
+    def test_words_over_an_exclusive_limit_get_a_measured_reminder(self):
+        text = " ".join(["word"] * 86)
+        note = signals.length_reminder("Remember: keep LinkedIn posts under 80 words", text)
+        self.assertIn("86 words", note)
+        self.assertIn("under 80", note)
+        self.assertIsNone(signals.length_reminder("Remember: keep LinkedIn posts under 80 words", " ".join(["word"] * 79)))
+        self.assertIsNotNone(signals.length_reminder("Keep posts under 80 words", " ".join(["word"] * 80)))
+
+    def test_inclusive_limits(self):
+        self.assertIsNone(signals.length_reminder("At most 80 words on X", " ".join(["word"] * 80)))
+        self.assertIn("81 words", signals.length_reminder("No more than 80 words", " ".join(["word"] * 81)))
+        self.assertIn("81 words", signals.length_reminder("80 words or fewer", " ".join(["word"] * 81)))
+
+    def test_chinese_counts_characters_as_words(self):
+        self.assertIn("12", signals.length_reminder("以後 Threads 帖文 10 字以內", "今日練完琴記低一件事情呀"))
+        self.assertIsNone(signals.length_reminder("唔好超過 20 字", "今日練完琴，記低一件事。"))
+
+    def test_statements_without_an_explicit_whole_post_maximum_are_never_measured(self):
+        long_text = " ".join(["word"] * 2000)
+        for statement in ("Keep posts short", "Write shorter openings", "Use 3 short paragraphs", "Posts of about 80 words read best", "",
+                          # a minimum, however it is phrased, is not a maximum
+                          "Never go below 100 words", "Don't write fewer than 100 words", "not less than 150 words", "不少於 100 字", "At least 80 words",
+                          "每篇至少 80 字內容", "Write a minimum of 50 words",
+                          # a limit on part of a post is not a limit on the post
+                          "Keep sentences under 20 words", "Keep titles under 10 words", "First line under 8 words", "Paragraphs of at most 40 words",
+                          # numbers that are not lengths, and units this check does not measure
+                          "Use up to 3 hashtags", "Reply within 2 days", "Keep clips under 18s", "Mention at most 2 characters per post",
+                          "Keep posts under 120 characters.", "climax 5 words"):
+            self.assertIsNone(signals.length_limit(statement), statement)
+            self.assertIsNone(signals.length_reminder(statement, long_text), statement)
+        self.assertIsNone(signals.length_reminder("under 80 words", None))
+
+    def test_thousands_are_read_whole(self):
+        self.assertEqual(signals.length_limit("1,000 words or fewer")["max"], 1000)
+        self.assertEqual(signals.length_limit("Keep essays under 1,500 words")["max"], 1499)
+        self.assertIsNone(signals.length_limit("under 0 words"))
+
+    def test_bullets_and_links_do_not_inflate_the_count(self):
+        text = "Three things I checked:\n- the oven\n- the flour\n- the door\nMore at https://example.com/a-long/path-with-many-parts?x=1 today"
+        self.assertEqual(signals.word_count(text), 14)
+        self.assertEqual(signals.word_count("今日練琴 well-known piece"), 6)
+
+
+class RememberedLengthOnARun(unittest.TestCase):
+    """Only a preference the run was given is measured, and only on the destinations its scope covers."""
+
+    def setUp(self):
+        from postriff_phase2 import ideas
+        self.ideas = ideas
+        self.item = {"id": "pref-1", "status": "active", "ruleKey": "length.target", "statement": "Remember: keep LinkedIn posts under 80 words",
+                     "scope": {"platform": "LinkedIn", "language": None, "contentTypeId": None}}
+        self.state = {"learning": {"active": [self.item, {"id": "pref-2", "status": "active", "ruleKey": "hashtags.use", "statement": "No hashtags.", "scope": {}}]}}
+        self.long = " ".join(["word"] * 86)
+
+    def variants(self):
+        return [{"platform": "LinkedIn", "language": "en", "text": self.long, "warnings": ["Kept under 80 words per the saved LinkedIn preference."]},
+                {"platform": "Instagram", "language": "en", "text": self.long, "warnings": []}]
+
+    def test_bound_preference_is_measured_on_its_own_platform_only(self):
+        variants = self.variants()
+        self.ideas.remembered_length_reminders(self.state, ["pref-1", "pref-2"], variants)
+        self.assertTrue(any("86 words" in note and "under 80" in note for note in variants[0]["warnings"]))
+        self.assertEqual(variants[0]["text"], self.long)
+        self.assertEqual(variants[1]["warnings"], [])
+
+    def test_unbound_paused_or_short_enough_adds_nothing(self):
+        variants = self.variants()
+        self.ideas.remembered_length_reminders(self.state, [], variants)
+        self.ideas.remembered_length_reminders(self.state, None, variants)
+        self.item["status"] = "paused"
+        self.ideas.remembered_length_reminders(self.state, ["pref-1"], variants)
+        self.item["status"] = "active"
+        short = [{"platform": "LinkedIn", "language": "en", "text": "A short post.", "warnings": []}]
+        self.ideas.remembered_length_reminders(self.state, ["pref-1"], short)
+        self.assertEqual(len(variants[0]["warnings"]), 1)
+        self.assertEqual(short[0]["warnings"], [])
+
+    def test_reminder_is_added_once(self):
+        variants = self.variants()
+        for _ in range(2):
+            self.ideas.remembered_length_reminders(self.state, ["pref-1"], variants)
+        self.assertEqual(sum("86 words" in note for note in variants[0]["warnings"]), 1)
+
+    def test_narrower_scope_decides_and_the_reminder_agrees_with_the_writer_limit(self):
+        items = [{"id": "g", "status": "active", "ruleKey": "length.target", "statement": "Keep posts under 50 words", "scope": {}},
+                 {"id": "l", "status": "active", "ruleKey": "length.target", "statement": "Up to 300 words on LinkedIn", "scope": {"platform": "LinkedIn"}}]
+        state = {"learning": {"active": items}}
+        text = " ".join(["word"] * 200)
+        variants = [{"platform": "LinkedIn", "language": "en", "text": text, "warnings": []}, {"platform": "Threads", "language": "en", "text": text, "warnings": []}]
+        self.assertEqual(self.ideas.remembered_length_limits(state, ["g", "l"], variants),
+                         [{"platform": "LinkedIn", "language": "en", "words": 300}, {"platform": "Threads", "language": "en", "words": 49}])
+        self.ideas.remembered_length_reminders(state, ["g", "l"], variants)
+        self.assertEqual(variants[0]["warnings"], [])
+        self.assertTrue(any("200 words" in note and "under 50" in note for note in variants[1]["warnings"]))
+
+
+class RememberedLengthReachesTheWriter(unittest.TestCase):
+    """A stated limit travels to the writer as a number on the destination, not only as a sentence in VOICE.md
+    (a real writer met "under 80 words" 2 times in 5 from the sentence alone, 5 in 5 with the number)."""
+
+    def test_stated_limit_is_parsed_as_an_inclusive_maximum(self):
+        self.assertEqual(signals.length_limit("Remember: keep LinkedIn posts under 80 words"), {"max": 79, "stated": 80, "exclusive": True})
+        self.assertEqual(signals.length_limit("At most 80 words"), {"max": 80, "stated": 80, "exclusive": False})
+        self.assertEqual(signals.length_limit("最多 200 字")["max"], 200)
+        self.assertEqual(signals.length_limit("帖文 100 字內。")["max"], 100)
+
+    def test_only_bound_preferences_on_covered_destinations_set_a_limit(self):
+        from postriff_phase2 import ideas
+        items = [{"id": "a", "status": "active", "ruleKey": "length.target", "statement": "Keep LinkedIn posts under 80 words", "scope": {"platform": "LinkedIn"}},
+                 {"id": "b", "status": "active", "ruleKey": "length.target", "statement": "At most 60 words", "scope": {}},
+                 {"id": "c", "status": "active", "ruleKey": "length.target", "statement": "Under 20 words", "scope": {"platform": "X"}},
+                 {"id": "d", "status": "active", "ruleKey": "other", "statement": "Mention 5 words of thanks", "scope": {}},
+                 {"id": "e", "status": "active", "ruleKey": "length.target", "statement": "At most 70 words on LinkedIn", "scope": {"platform": "LinkedIn"}}]
+        state = {"learning": {"active": items}}
+        destinations = [{"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "en"}]
+        self.assertEqual(ideas.remembered_length_limits(state, ["a", "d"], destinations), [{"platform": "LinkedIn", "language": "en", "words": 79}])
+        self.assertEqual(ideas.remembered_length_limits(state, ["a", "b", "c"], destinations),
+                         [{"platform": "LinkedIn", "language": "en", "words": 79}, {"platform": "Instagram", "language": "en", "words": 60}])
+        self.assertEqual(ideas.remembered_length_limits(state, ["a", "e"], destinations), [{"platform": "LinkedIn", "language": "en", "words": 70}])
+        self.assertEqual(ideas.remembered_length_limits(state, [], destinations), [])
+
+    def test_only_a_matching_destination_carries_the_word_limit(self):
+        request = {"lengthLimits": [{"platform": "LinkedIn", "language": "en", "words": 79}]}
+        self.assertEqual(signals.word_limit_field(request, {"platform": "LinkedIn", "language": "en"}), {"wordLimit": 79})
+        self.assertEqual(signals.word_limit_field(request, {"platform": "Threads", "language": "en"}), {})
+        self.assertEqual(signals.word_limit_field({}, {"platform": "LinkedIn", "language": "en"}), {})
+        self.assertTrue(signals.has_word_limit(request))
+        self.assertFalse(signals.has_word_limit({"lengthLimits": [{"platform": "X", "words": "79"}]}))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -57,7 +57,7 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
       </div>
       <p className='text-foreground text-sm whitespace-pre-wrap'>{source.text}</p>
       <p className='text-muted-foreground text-xs' title={allowed ? (source.routeGrants ?? []).map((route) => (route.endsWith('*') ? 'any Rafii AI writer model' : route)).join(', ') : undefined}>
-        {allowed ? `Allowed for ${(source.purposeGrants ?? []).join(' and ')}.` : 'Not allowed for analysis or writing yet.'}
+        {allowed ? `Allowed for ${(source.purposeGrants ?? []).map((purpose) => ({ analysis: 'analysis', generation: 'writing style', examples: 'style examples (sample text)' })[purpose]).join(', ')}.` : 'Not allowed for analysis or writing yet.'}
       </p>
       <div className='flex flex-wrap gap-2'>
         {isOwner && source.active && (
@@ -109,8 +109,8 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
           </SelectField>
           <p className='text-muted-foreground text-xs'>
             {writerRoute && writerRoute === managedClass
-              ? 'Covers every model Rafii’s AI writer offers through Vercel AI Gateway, including models added later; each draft records the model it used. Only style signals reach the writer, never the sample’s facts.'
-              : 'Only style signals reach this writer, never the sample’s facts. Cloud writers include Claude Code and Codex CLI.'}
+              ? 'Covers every model Rafii’s AI writer offers through Vercel AI Gateway, including models added later; each draft records the model it used. With this permission only style signals reach the writer, never the sample’s text or facts.'
+              : 'With this permission only style signals reach this writer, never the sample’s text or facts. Cloud writers include Claude Code and Codex CLI.'}
           </p>
           <Button
             size='default'
@@ -121,6 +121,31 @@ function VoiceSampleRow({ source, revision, isOwner, analysisRoute }: { source: 
           >
             Allow this writer to use style
           </Button>
+          <p className='text-muted-foreground text-xs'>
+            Optional and separate: let this one writer also read this sample’s own text as a style example. Up to 3 samples, about 1,500 characters each, are sent with a draft; the writer is told to learn rhythm and layout and never reuse the sample’s sentences or facts, except a short sign-off or tags that repeat across your samples. Needs the style permission above for the same writer and, for a cloud writer, cloud memory allowed; removing that style permission removes this one too. Not offered for “Any Rafii AI writer model”.
+          </p>
+          <Button
+            size='default'
+            variant='glass'
+            className='w-fit'
+            disabled={!writerRoute || writerRoute === managedClass || act.isPending || !source.useGrants?.some((grant) => grant.purpose === 'generation' && grant.route === writerRoute)}
+            onClick={() => void update('voice_sample_grant', { grants: [...(source.useGrants ?? []).filter((grant) => !(grant.purpose === 'examples' && grant.route === writerRoute)), { purpose: 'examples', route: writerRoute }], confirmed: true })}
+          >
+            Also send this sample’s text as a style example
+          </Button>
+          {(source.useGrants ?? []).filter((grant) => grant.purpose === 'examples').map((grant) => (
+            <div key={grant.route} className='flex flex-wrap items-center gap-2'>
+              <span className='text-muted-foreground min-w-0 text-xs break-all'>Sample text is sent as a style example to {grant.route}</span>
+              <Button
+                size='default'
+                variant='quiet'
+                disabled={act.isPending}
+                onClick={() => void update('voice_sample_grant', { grants: (source.useGrants ?? []).filter((item) => !(item.purpose === 'examples' && item.route === grant.route)), confirmed: true })}
+              >
+                Stop sending the text
+              </Button>
+            </div>
+          ))}
         </div>
       )}
     </Band>

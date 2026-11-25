@@ -11,8 +11,8 @@ import re
 
 from . import intent, locales
 
-NEGATION = re.compile(r"\b(?:no|not|don'?t|do not|never|stop|without|avoid|skip|drop|fewer|less)\b|唔好|不要|唔要|唔使|不用|唔加|不加|唔用|別|冇|無|去掉|刪走|删掉|少啲|少一點", re.I)
-LANGUAGE_WORDS = (("yue-Hant-HK", re.compile(r"廣東話|粤語|粵語|\bcantonese\b", re.I)), ("zh", re.compile(r"\bchinese\b|中文", re.I)), ("zh-Hant", re.compile(r"繁體|繁体|traditional chinese", re.I)), ("en", re.compile(r"英文|\benglish\b", re.I)))
+NEGATION = re.compile(r"\b(?:no|not|don['’]?t|do not|never|stop|without|avoid|skip|drop|fewer|less)\b|唔好|不要|唔要|唔使|不用|唔加|不加|唔用|別|冇|無|去掉|刪走|删掉|少啲|少一點", re.I)
+LANGUAGE_WORDS = (("yue-Hant-HK", re.compile(r"廣東話|粤語|粵語|\bcantonese\b", re.I)), ("zh-Hant", re.compile(r"繁體|繁体|traditional chinese", re.I)), ("zh-Hans", re.compile(r"簡體|简体|simplified chinese", re.I)), ("zh", re.compile(r"\bchinese\b|中文", re.I)), ("en", re.compile(r"英文|\benglish\b", re.I)))
 RULES = (
     ("hashtags.use", re.compile(r"hashtags?|標籤|标签|#", re.I), {"avoid": "No hashtags.", "do": "Use hashtags."}),
     ("emoji.use", re.compile(r"emojis?|表情|emoticons?", re.I), {"avoid": "No emoji.", "do": "Use emoji."}),
@@ -20,7 +20,7 @@ RULES = (
     ("closing.cta", re.compile(r"call to action|\bcta\b|comment below|留言|follow|追蹤|关注|link in bio|dm me|私訊|私信", re.I), {"avoid": "Don't end with a call to action.", "do": "End with a call to action."}),
     ("lists.use", re.compile(r"bullets?|bullet points?|lists?|列點|列点|條列|条列", re.I), {"avoid": "No bullet lists.", "do": "Use bullet lists."}),
     ("paragraphs.density", re.compile(r"paragraphs?|段落|分段|一段", re.I), {"avoid": "Keep paragraphs short.", "do": "Keep paragraphs short."}),
-    ("opening.style", re.compile(r"opening|first (?:line|sentence)|開頭|开头|第一句|起首|hook", re.I), {"avoid": "Don't open with a question.", "do": "Put the point in the first sentence."}),
+    ("opening.style", re.compile(r"opening|first (?:line|sentence)|開頭|开头|第一句|起首|hook", re.I), None),
     ("length.target", re.compile(r"\bshorter\b|\blonger\b|\bshort\b|\blong\b|\bwords?\b|\bcharacters?\b|字數|字数|長度|长度|短啲|短一點|長啲|长一点|簡短|简短", re.I), None),
     ("language.mix", re.compile(r"mix|夾雜|夹杂|中英|bilingual|translate|翻譯|翻译|術語|术语", re.I), None),
     ("punctuation.style", re.compile(r"punctuation|標點|标点|全形|半形|full-?width|half-?width", re.I), None),
@@ -29,15 +29,15 @@ WORKING_STYLE = re.compile(r"\bask(?:ing)?\b|questions?|問我|问我|清單|che
 
 
 def platform_mentioned(text):
-    lowered = text.lower()
-    for platform, aliases in intent.PLATFORM_ALIASES:
-        for alias in aliases:
-            if alias.isascii():
-                if re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", lowered):
-                    return platform
-            elif alias in text:
-                return platform
-    return None
+    """Use the writer's platform parser, including contextual X without matching X-ray.
+
+    The preference schema has one platform per item. A multi-platform instruction
+    must not silently become a global rule or choose whichever alias is listed first.
+    """
+    platforms = intent._platform_mentions(text)
+    if len(platforms) > 1:
+        raise ValueError("Choose one platform for each remembered preference, so it only changes the drafts you intend.")
+    return platforms[0] if platforms else None
 
 
 def language_mentioned(text):
@@ -72,5 +72,11 @@ def instruction_to_proposal(text, language=None):
     if rule_key == "opening.style" and polarity == "do" and re.search(r"short|簡短|简短|短", sentence, re.I):
         params = {"shortOpenings": True}
         statement = "Use shorter openings."
+    elif rule_key == "opening.style" and polarity == "avoid" and re.search(r"\bquestions?\b|問句|问句|問題|问题", sentence, re.I):
+        statement = "Don't open with a question."
+    elif rule_key == "opening.style" and polarity == "do" and re.search(r"\bpoint\b.*\bfirst (?:line|sentence)\b", sentence, re.I):
+        statement = "Put the point in the first sentence."
+    # Other opening instructions retain their exact meaning, e.g. promotional is
+    # not synonymous with a question. The owner still reviews the proposal.
     return {"type": kind, "ruleKey": rule_key, "polarity": polarity, "scope": scope, "statement": statement, "params": params,
             "source": "chat", "why": "You said so in chat.", "evidence": []}

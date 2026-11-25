@@ -37,6 +37,85 @@ _REDACT = (
 )
 
 
+# A whole-post maximum the person stated outright in words ("under 80 words", "80 字以內"). Anything else names no
+# limit here and is left to the sentence in VOICE.md: "about 80 words", a minimum however it is phrased ("never below
+# 100 words"), a limit on part of a post ("sentences under 20 words"), and lengths in characters, whose meaning
+# differs between what a person types and what edit-learning writes for Chinese, Japanese and Thai.
+_NUMBER = r"(?<![\d,.])(?P<n>\d{1,3}(?:,\d{3})+|\d{1,5})(?![\d.])"
+_UNIT = r"(?:words?\b|個字|个字|字(?![元符數数]))"
+_LIMIT_BEFORE = re.compile(r"(?P<op>\b(?:under|below|fewer than|less than|shorter than|at most|no more than|not more than|up to|within|maximum of|max(?:imum)?)\b|少於|少于|不超過|不超过|唔好超過|唔超過|最多)\s*" + _NUMBER + r"\s*" + _UNIT, re.I)
+_LIMIT_AFTER = re.compile(_NUMBER + r"\s*" + _UNIT + r"\s*(?P<op>\bor fewer\b|\bor less\b|\bmax(?:imum)?\b|以內|以内|之內|之内|[內内](?![㐀-鿿]))", re.I)
+_EXCLUSIVE = ("under", "below", "fewer than", "less than", "shorter than", "少於", "少于")
+_NEGATED = re.compile(r"(?:\b(?:not|never|no|don['’]?t|do not|cannot|can['’]?t)\b(?:\s+\w+){0,2}\s*|[不唔勿]\s*)$", re.I)
+_MINIMUM = re.compile(r"\b(?:at least|min(?:imum)?|no fewer than|no less than)\b|至少|最少|起碼|起码", re.I)
+_PART_OF_POST = re.compile(r"\b(?:sentences?|titles?|headlines?|hooks?|lines?|paragraphs?|openings?|bullets?|subjects?|bios?|comments?|repl(?:y|ies))\b|句|標題|标题|段|開頭|开头", re.I)
+_URL = re.compile(r"https?://\S+|www\.\S+", re.I)
+_COUNTED_WORD = re.compile(r"[A-Za-z0-9À-ɏ]+(?:['’-][A-Za-z0-9À-ɏ]+)*")
+# The sentence in VOICE.md alone is not enough: a real writer met "under 80 words" 2 times in 5 from the sentence
+# and 5 in 5 once the number sat on the destination. Added to a writer's rules only when a destination carries one.
+# The last sentence exists because the writer then over-corrected: with "a shorter post is always acceptable" it
+# returned 31 to 36 words against a limit of 79, and the owner preferred the draft written without the rule.
+WORD_LIMIT_RULE = ("- A destination with `wordLimit` carries a length the person asked you to remember. Treat it like "
+                   "`characterLimit`: count the words of that destination's text before returning (each Chinese, Japanese "
+                   "or Korean character counts as one) and stay at or under it. The person asked for a ceiling, not a much "
+                   "shorter post: land in the upper half of that room (between half the limit and the limit) whenever the "
+                   "idea and their usual form give you that much to say.")
+
+
+def word_count(text):
+    """Words as a person counts them: Latin words (a hyphenated word or a link is one), CJK characters one each.
+    A bullet's dash is not a word."""
+    text = text if isinstance(text, str) else ""
+    links = len(_URL.findall(text))
+    rest = _URL.sub(" ", text)
+    return links + len(_CJK.findall(rest)) + len(_COUNTED_WORD.findall(rest))
+
+
+def length_limit(statement):
+    """The whole-post word maximum a remembered length states outright ({"max" inclusive, "stated", "exclusive"}),
+    or None. When in doubt it is None: a missed limit leaves the sentence in VOICE.md, a wrong one misleads."""
+    if not isinstance(statement, str) or _MINIMUM.search(statement) or _PART_OF_POST.search(statement):
+        return None
+    found = _LIMIT_BEFORE.search(statement) or _LIMIT_AFTER.search(statement)
+    if not found:
+        return None
+    stated, exclusive = int(found["n"].replace(",", "")), found["op"].lower() in _EXCLUSIVE
+    if exclusive and _NEGATED.search(statement[:found.start("op")]):
+        return None   # "never below 100 words" asks for more, not less
+    limit = stated - 1 if exclusive else stated
+    return {"max": limit, "stated": stated, "exclusive": exclusive} if limit >= 1 else None
+
+
+def over_limit_reminder(limit, text):
+    """A measured reminder when a draft runs past a remembered word maximum, else None.
+
+    The writer's own note that it "kept under 80 words" is not evidence, so the draft is counted here. It reminds;
+    it never shortens a draft or stops one being made. (An automation's unattended publishing holds any draft that
+    carries a warning it does not recognise, this one included: a post that breaks the person's own rule waits
+    for the person.)"""
+    if not limit or not isinstance(text, str) or not text.strip():
+        return None
+    used = word_count(text)
+    if used <= limit["max"]:
+        return None
+    return f"This draft has {used} words; your remembered preference asks for {'under' if limit['exclusive'] else 'at most'} {limit['stated']}. Shorten it, or keep it if this one should run long."
+
+
+def length_reminder(statement, text):
+    return over_limit_reminder(length_limit(statement), text)
+
+
+def word_limit_field(request, destination):
+    """`wordLimit` for one destination of a writer request, when the run bound a remembered length for it."""
+    row = next((r for r in request.get("lengthLimits") or [] if isinstance(r, dict) and r.get("platform") == destination.get("platform")
+                and r.get("language") == destination.get("language") and type(r.get("words")) is int), None)
+    return {"wordLimit": row["words"]} if row else {}
+
+
+def has_word_limit(request):
+    return any(isinstance(r, dict) and type(r.get("words")) is int for r in request.get("lengthLimits") or [])
+
+
 def tokens(text):
     """CJK characters one by one, Latin words as words, punctuation as its own token."""
     return _TOKEN.findall(text if isinstance(text, str) else "")

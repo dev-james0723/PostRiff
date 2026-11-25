@@ -16,6 +16,20 @@ class CloudAccountTests(unittest.TestCase):
         data = ServerModelRuntime._user_payload({"context": {"sources": []}, "destinations": DESTINATIONS})
         self.assertEqual([d.get("channelId") for d in data["destinations"]], ["account-a", "account-b"])
 
+    def test_remembered_word_limit_reaches_the_managed_writer(self):
+        request = {"context": {"sources": []}, "destinations": DESTINATIONS[:1], "lengthLimits": [{"platform": "Instagram", "language": "en-US", "words": 79}]}
+        self.assertEqual(ServerModelRuntime._user_payload(request)["destinations"][0]["wordLimit"], 79)
+        self.assertIn('"wordLimit"', ServerModelRuntime._system_prompt(request))
+        plain = {"context": {"sources": []}, "destinations": DESTINATIONS[:1]}
+        self.assertNotIn("wordLimit", json.dumps(ServerModelRuntime._user_payload(plain)) + ServerModelRuntime._system_prompt(plain))
+
+    def test_style_examples_reach_the_managed_writer_only_when_the_request_carries_them(self):
+        request = {"context": {"sources": []}, "destinations": DESTINATIONS[:1], "voiceSamples": [{"platform": "Instagram", "language": "en", "text": "A post in my own words."}]}
+        self.assertEqual(ServerModelRuntime._user_payload(request)["voiceSamples"][0]["text"], "A post in my own words.")
+        self.assertIn('"voiceSamples"', ServerModelRuntime._system_prompt(request))
+        plain = {"context": {"sources": []}, "destinations": DESTINATIONS[:1]}
+        self.assertNotIn("voiceSamples", json.dumps(ServerModelRuntime._user_payload(plain)) + ServerModelRuntime._system_prompt(plain))
+
     def test_reordered_response_is_matched_to_account(self):
         raw = json.dumps({"variants": [item("account-b", "Second account."), item("account-a", "First account.")]})
         result = ServerModelRuntime._parse(raw, DESTINATIONS)

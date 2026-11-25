@@ -70,6 +70,8 @@ class IntentAliases(unittest.TestCase):
             "Publish it to Xiaohongshu, LinkedIn, and X": ["Xiaohongshu", "LinkedIn", "X"],
             "Publish it to Xiaohongshu, LinkedIn and X tomorrow at 9am": ["Xiaohongshu", "LinkedIn", "X"],
             "Post this on X": ["X"],
+            "Post this on x": ["X"],
+            "以後喺 x 寫文": ["X"],
             "Draft one for X": ["X"],
             "Share it to X": ["X"],
             "Threads & X please": ["Threads", "X"],
@@ -100,7 +102,9 @@ class IntentAliases(unittest.TestCase):
             "Xbox review": [],
             "X marks the spot on LinkedIn": ["LinkedIn"],
             "去照X光": [],
-            "Post this on x": [],
+            "Solve for x": [],
+            "A value depending on x": [],
+            "Write about x + y on LinkedIn": ["LinkedIn"],
         }
         for text, expected in cases.items():
             with self.subTest(text=text):

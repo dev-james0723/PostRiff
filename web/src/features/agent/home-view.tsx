@@ -47,6 +47,7 @@ import { AUTO_LEVEL } from './reasoning-map';
 import { SettingButtons } from './setting-buttons';
 import { selectionKey, useChannelLanguages, type ChannelTarget } from './use-channel-languages';
 import { useDestinations } from './use-destinations';
+import { canLoadSuggestion, suggestionDraft } from './suggestion-draft';
 import { modelName, useModelChoice } from './use-model';
 import { effectiveVoiceMode, eligibleVoiceSources, manualVoiceAvailable } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
@@ -332,6 +333,46 @@ function HomeWorkspace() {
   // Time back: once a writing run has a conversation, active time here counts toward its first approved draft.
   useActiveWorkTimer({ workflowKey: workflowKey('conversation', generation.conversationId), taskKind: 'draft' });
   const chosenContent = contentChoice(library);
+  const suggestionId = params.get('suggestion');
+  const suggestedDraft = suggestionDraft(state, workspaceId, suggestionId, draftPlatforms);
+  const canUseSuggestion = Boolean(suggestedDraft && canLoadSuggestion(text, suggestedDraft, attachments.chips.length));
+  // A menu/dialog may change context while the server is checking this suggestion.
+  // Keep that newer input instead of replacing it when the older response arrives.
+  const suggestionInputRef = useRef('');
+  suggestionInputRef.current = JSON.stringify({ suggestionId, text, own, included, nativeFormats, template, library,
+    selected: destinations.selected, platformOnly: destinations.platformOnly,
+    chips: attachments.chips.map((chip) => chip.key) });
+
+  async function loadSuggestedDraft() {
+    if (!suggestionId || !suggestedDraft || !canUseSuggestion || !canEdit || preparing || generation.busy) return;
+    if (!submission.enter()) return;
+    const inputAtStart = suggestionInputRef.current;
+    setPreparing(true);
+    try {
+      // Revalidate on the authenticated server: an old URL never authorizes a draft.
+      const current = client.getQueryData<{ revision: number }>(keys.snapshot(workspaceId))?.revision ?? revision;
+      const next = await api.act(workspaceId, current, 'raffi_suggestion_accept', { suggestionId });
+      if (!submission.alive()) return;
+      if (suggestionInputRef.current !== inputAtStart) throw new Error('Your idea changed while this suggestion was loading. It has been kept.');
+      client.setQueryData(keys.snapshot(workspaceId), next);
+      const handoff = suggestionDraft(next.state, workspaceId, suggestionId, draftPlatforms);
+      if (!handoff) throw new Error('This suggestion changed. Refresh Suggestions to review it again.');
+      setText(handoff.text);
+      setIncluded(handoff.sourceIds);
+      setOwn(false);
+      setNativeFormats({});
+      destinations.commit({ accountIds: [handoff.channelId], platformOnly: [], context: null });
+      const nextParams = new URLSearchParams(params.toString());
+      nextParams.delete('suggestion');
+      router.replace(`/app?${nextParams.toString()}`);
+      composer.current?.focus();
+    } catch (error) {
+      if (submission.alive()) toast.error(error instanceof Error ? error.message : 'Couldn’t load this suggestion. Refresh Suggestions to try again.');
+    } finally {
+      submission.leave();
+      if (submission.alive()) setPreparing(false);
+    }
+  }
 
   useEffect(() => {
     if (params.get('new') === '1') composer.current?.focus();
@@ -597,6 +638,14 @@ function HomeWorkspace() {
 
           <GrowthEntry audience />
           <RadarHome />
+          {canEdit && suggestionId && state && models.data && <Surface material='glass' padding='md' className='flex flex-col gap-2' aria-label='Suggested draft'>
+            {suggestedDraft ? <>
+              <p className='text-sm font-medium'>Draft for {suggestedDraft.platform} · {suggestedDraft.account}</p>
+              <p className='text-muted-foreground whitespace-pre-wrap text-sm'>{suggestedDraft.text}</p>
+              {!canUseSuggestion && <p role='status' className='text-muted-foreground text-sm'>Your unfinished idea is kept. Save or copy it, then clear the composer and attachments to use this suggestion.</p>}
+              <Button variant='glass' size='sm' disabled={!canUseSuggestion || preparing || generation.busy || generation.running} onClick={() => void loadSuggestedDraft()}>Use suggested brief and account</Button>
+            </> : <p role='status' className='text-muted-foreground text-sm'>This suggestion is no longer available here. Refresh Suggestions to review current ideas.</p>}
+          </Surface>}
           {canEdit && <div className='flex flex-wrap items-center gap-2 text-xs'>
             <Button variant='quiet' size='sm' onClick={saveBrief} disabled={preparing || generation.busy || !text.trim() || savedBrief === text}>Save brief</Button>
             {savedBrief !== null && <Button variant='quiet' size='sm' onClick={clearBrief}>Clear saved brief</Button>}
@@ -698,7 +747,7 @@ function HomeWorkspace() {
             <StateMessage kind='permission' layout='inline' title='Viewing only.' description='Ask an owner for edit access.' />
           )}
 
-          {canEdit && <StartingPoints onPick={(sample) => { setText(sample); composer.current?.focus(); }} disabled={generation.busy || generation.running} />}
+          {canEdit && <StartingPoints onPick={(sample) => { setText(sample); composer.current?.focus(); }} disabled={preparing || generation.busy || generation.running} />}
           {generation.busy && imageRequested && <ImageGenerationCard running className='mx-auto' />}
           {learning?.workspaceId === workspaceId && <VoiceLearningPanel key={learning.id} request={learning} onClose={() => setLearning(null)} />}
           {automationReply?.workspaceId === workspaceId &&
@@ -746,7 +795,7 @@ function HomeWorkspace() {
             {canEdit && !voiceActive && <StartVoiceInterview key={workspaceId} />}
           </div>
 
-          {canEdit && <QuickStartsDisclosure selected={template} onPick={pickTemplate} disabled={generation.busy || generation.running} />}
+          {canEdit && <QuickStartsDisclosure selected={template} onPick={pickTemplate} disabled={preparing || generation.busy || generation.running} />}
         </div>
 
         {/* Preview column */}

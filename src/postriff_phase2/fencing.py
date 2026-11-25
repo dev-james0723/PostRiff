@@ -28,6 +28,8 @@ NOTES_MAX = 4
 NOTE_MAX = 1200
 SECTION_ROLES = ("rework", "handed_in", "inspire")
 NOTE_KINDS = ("photo", "video_frames")
+VOICE_SAMPLES_MAX = 3
+VOICE_SAMPLE_MAX = 1500
 
 
 def _clip(value, limit):
@@ -36,8 +38,8 @@ def _clip(value, limit):
 
 def writer_fields(request):
     """The writer contract's data fields (chat-context SPEC §6.8): `material` sections (rework | handed_in first, then
-    inspire; ≤ 6,000 characters in total) and `referenceNotes` (≤ 4 × 1,200). Each text is neutralised again here so a
-    route never depends on the caller having done it. Keys are omitted when empty."""
+    inspire; ≤ 6,000 characters in total), `referenceNotes` (≤ 4 × 1,200) and `voiceSamples` (≤ 3 × 1,500). Each text
+    is neutralised again here so a route never depends on the caller having done it. Keys are omitted when empty."""
     out = {}
     sections = [s for s in request.get("material") or [] if isinstance(s, dict) and s.get("role") in SECTION_ROLES] if isinstance(request.get("material"), list) else []
     sections.sort(key=lambda s: 0 if s["role"] != "inspire" else 1)
@@ -59,6 +61,12 @@ def writer_fields(request):
             for n in notes[:NOTES_MAX] if isinstance(n.get("text"), str) and n["text"].strip()]
     if kept:
         out["referenceNotes"] = kept
+    # Style examples: the person's own posts, sent only under a per-sample permission for this exact writer
+    # (voice_sources.style_examples). Bounded again here so a route never depends on the caller having done it.
+    samples = [s for s in request.get("voiceSamples") or [] if isinstance(s, dict) and isinstance(s.get("text"), str) and s["text"].strip()] if isinstance(request.get("voiceSamples"), list) else []
+    examples = [{**{k: s[k] for k in ("platform", "language") if isinstance(s.get(k), str) and s[k]}, "text": neutralize(_clip(s["text"], VOICE_SAMPLE_MAX))} for s in samples[:VOICE_SAMPLES_MAX]]
+    if examples:
+        out["voiceSamples"] = examples
     return out
 
 
