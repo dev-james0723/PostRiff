@@ -324,30 +324,41 @@ def retrieve(
     return {**projection, "samples": selected, "bindings": bindings, "digest": digest(bindings), "retrievedChars": used}
 
 
-_ZERO_WIDTH = re.compile("[\u200b-\u200f\u2060\ufeff]")
-# Only text that plainly addresses a model: an order to drop its instructions (all of them, "your", the previous or
-# above ones), a request for the system prompt, or markup posing as a section of the request. "Forget the rules,
-# just play" is a sentence, not an attack.
-_OVERRIDE = re.compile(r"(?:ignore|disregard|forget|override)\s+(?P<all>(?:all|any)\s+)?(?:of\s+)?(?:(?P<whose>your)\s+|the\s+)?(?P<before>(?:previous|prior|above|earlier|system)\s+)?"
-                       r"(?:instructions?|rules?|prompts?)(?P<after>\s+(?:above|before|earlier|so far))?", re.I)
-_POSING = re.compile(r"<\s*/?\s*(?:system|assistant|voicesamples)\b|\[INST\]|(?:reveal|show|print|output)\s+(?:the\s+|your\s+)?(?:system\s+)?prompt"
-                     r"|(?:忽略|無視|无视|不要理會|不要理会|唔好理)[^。\n]{0,12}(?:指示|指令|規則|规则|提示)", re.I)
+_ZERO_WIDTH = re.compile("[\u00ad\u200b-\u200f\u2060\ufeff]")
+# Only text that plainly addresses a model: an order to drop its instructions, a request for the system prompt, or
+# markup posing as a section of the request. "Forget the rules, just play" is a sentence, not an attack, so "rules"
+# needs an explicit previous/above/system; "instructions" and "prompts" are suspect with all, your, my or these too.
+_OVERRIDE = re.compile(r"(?:ignore|disregard|forget|override)\s+(?P<all>(?:all|any)\s+)?(?:of\s+)?(?:(?P<whose>your|my|these)\s+|the\s+)?(?P<before>(?:previous|prior|above|earlier|system)\s+)?"
+                       r"(?P<noun>instructions?|rules?|prompts?)\b(?P<after>\s+(?:above|before|earlier|so far))?", re.I)
+_POSING = re.compile(r"<\s*/?\s*(?:system|assistant|voicesamples)\b|\[INST\]|(?:reveal|show|print|output)\s+(?:the\s+|your\s+)?system\s+prompt\b|(?:reveal|print|output)\s+(?:the|your)\s+prompt\b"
+                     r"|(?:ignore|disregard)\s+everything\s+(?:above|before)\b"
+                     r"|(?:忽略|無視|无视|不要理會|不要理会|唔好理|忘記|忘记)[^。\n]{0,12}(?:指示|指令|提示)|(?:指示|命令)を無視", re.I)
 _CJK_CHAR = "\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af"
 _COPY_TOKEN = re.compile(f"[{_CJK_CHAR}]|[^\\W_{_CJK_CHAR}]+")
 _TAG = re.compile(r"(?<![\w#])#[\w\u3400-\u9fff]+")
-# What can carry a fact out of a sample: a link or bare domain, a handle, a price or percentage, a longer number.
-# ASCII classes and bounded repeats, so neighbouring Chinese text is not swallowed and long input stays linear.
-_LINK = re.compile(r"(?:https?://)?(?:www\.)?(?P<host>[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63}){0,8}\.[a-z]{2,24})(?P<path>/[A-Za-z0-9._~%&=+/-]{0,200})?", re.I)
+# What can carry a fact out of a sample: an address, a link or bare domain, a handle, a price or percentage, a
+# longer number. ASCII classes and bounded repeats, so neighbouring Chinese text is not swallowed and long input
+# stays linear. A bare `word.word` is a link only with a scheme, `www.` or a common ending ("Node.js" is not one).
+_EMAIL = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){1,8}")
+_LINK = re.compile(r"(?P<lead>https?://|www\.)?(?P<host>[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63}){0,8}\.(?P<tld>[a-z]{2,24}))(?P<path>/[A-Za-z0-9._~%&=+/-]{0,200})?", re.I)
+_COMMON_ENDINGS = frozenset("com org net io co dev app me hk uk us cn jp tw sg kr ca au de fr edu gov info biz tv ai studio shop xyz page site online store blog art music link bio".split())
 _HANDLE = re.compile(r"(?<![A-Za-z0-9_.])@[A-Za-z0-9_](?:[A-Za-z0-9_.]{0,28}[A-Za-z0-9_])?")
-_NUMBER = re.compile(r"(?<![A-Za-z0-9#_])(?P<sign>(?:HK|US)?[$€£¥]\s?)?(?P<digits>\d{1,12}(?:[ ,.\-]\d{1,12}){0,6})(?P<percent>\s?%)?(?![A-Za-z0-9_])")
+_NUMBER = re.compile(r"(?<![A-Za-z0-9#_.])(?P<sign>(?:HK|US)?[$€£¥]\s?)?(?P<digits>\d{1,12}(?:[ ,\-]\d{1,12}){0,6}(?:\.\d{1,4})?)(?P<percent>\s?%)?(?![A-Za-z0-9_])")
 COPIED_WORDS = 8
+HOUSE_LINE_TOKENS = 16   # a sign-off is one short line; a paragraph that recurs is not house form
 
 
 def reads_like_instruction(text: str) -> bool:
     """A sample that addresses a model rather than a reader is never sent as an example. A pattern list cannot catch
     every phrasing; the structured data field, the writer's rule and the check on the finished draft are the rest."""
     text = unicodedata.normalize("NFKC", _ZERO_WIDTH.sub("", text or ""))
-    return bool(_POSING.search(text)) or any(found["all"] or found["whose"] or found["before"] or found["after"] for found in _OVERRIDE.finditer(text))
+    if _POSING.search(text):
+        return True
+    for found in _OVERRIDE.finditer(text):
+        explicit = bool(found["before"] or found["after"])
+        if explicit or (not found["noun"].casefold().startswith("rule") and (found["all"] or found["whose"])):
+            return True
+    return False
 
 
 def example_granted(source: dict, route: str) -> bool:
@@ -358,50 +369,64 @@ def example_granted(source: dict, route: str) -> bool:
 
 
 def _fact_tokens(text: str) -> set[str]:
-    """Links (with and without their path), handles, prices, percentages and numbers of three or more digits, each
-    in one normal form so `https://www.site.com/a/`, `site.com/a` and `９１２３ ４５６７`, `91234567` compare equal.
-    A bare year is not a fact worth a warning."""
+    """Addresses, links (with and without their path), handles, prices, percentages and numbers of three or more
+    digits, each in one normal form: `https://www.site.com/a/` and `site.com/a`; `+852 9123 4567`, `9123-4567` and
+    `91234567`; `¥1,000` and `1,000 yen`. A year written without separators is not a fact worth a warning."""
     text = unicodedata.normalize("NFKC", text or "")
-    tokens = set()
+    tokens = {found.group().casefold() for found in _EMAIL.finditer(text)}
+    text = _EMAIL.sub(" ", text)
     for found in _LINK.finditer(text):
+        if not found["lead"] and found["tld"].casefold() not in _COMMON_ENDINGS:
+            continue
         host = found["host"].casefold()
         tokens.add(host)
         if found["path"] and found["path"].strip("/"):
             tokens.add(host + "/" + found["path"].strip("/").rstrip(".,;:!?)").casefold())
-    text = _LINK.sub(" ", text)
+    text = _LINK.sub(lambda found: " " if found["lead"] or found["tld"].casefold() in _COMMON_ENDINGS else found.group(), text)
     tokens.update(found.group().casefold() for found in _HANDLE.finditer(text))
     for found in _NUMBER.finditer(_HANDLE.sub(" ", text)):
-        digits = re.sub(r"\D", "", found["digits"])
-        priced = bool(found["sign"] or found["percent"])
-        if (priced and len(digits) >= 2) or (len(digits) >= 3 and not (len(digits) == 4 and digits[:2] in ("19", "20") and not priced)):
-            tokens.add(("%" if found["percent"] else "$" if found["sign"] else "#") + digits)
+        whole, _, decimal = found["digits"].partition(".")
+        groups = re.split(r"[ ,\-]", whole)
+        digits = "".join(groups) + ("." + decimal if decimal else "")
+        if found["percent"]:
+            tokens.add("%" + digits)
+            continue
+        if found["sign"] and len(digits) >= 2:
+            tokens.add("$" + digits)   # a price also counts as its number, so "¥1,000" meets "1,000 yen"
+        bare_year = len(groups) == 1 and not decimal and len(digits) == 4 and digits[:2] in ("19", "20")
+        if len("".join(groups)) >= 3 and not bare_year and not decimal:
+            tokens.add("#" + digits)
+        # A long run of groups is often a phone number with a prefix or a suffix ("+852 9123 4567", "9123 4567 24").
+        tokens.update("#" + "".join(groups[i:j]) for i in range(len(groups)) for j in range(i + 1, len(groups) + 1)
+                      if (i, j) != (0, len(groups)) and len("".join(groups[i:j])) >= 8)
     return tokens
 
 
 def copied_from_examples(text: str, samples: list[str], supplied: str) -> list[str]:
     """Reminders for a draft that took wording or a fact from a style example instead of only its form.
 
-    Flags a run of wording shared with one sample (eight words, or twelve characters where the text has no spaces,
-    as in Chinese and Japanese) and a link, handle, price, percentage or longer number that is in a sample and in
-    the draft but not in what the person supplied for this post. Tags, and wording that recurs across two or more
-    of the examples (a sign-off), are the person's house form and are never flagged."""
-    def runs(value):
-        """Runs of wording within one line: a sign-off is its own line, and a run never joins it to its neighbours."""
+    Flags a run of wording shared with a sample (eight words, or twelve characters where the text has no spaces,
+    as in Chinese and Japanese), across line breaks, and an address, link, handle, price, percentage or longer
+    number that is in a sample and in the draft but not in what the person supplied for this post. Tags are form.
+    So is a whole short line that recurs in another, different example: a sign-off. A paragraph that recurs, or the
+    same post kept twice, is not."""
+    def lines(value):
+        return [" ".join(_COPY_TOKEN.findall(line)) for line in _TAG.sub(" ", (value or "").casefold()).splitlines()]
+
+    def runs(value, house=frozenset()):
+        sequence = [token for line in lines(value) if line not in house for token in line.split()]
         found = set()
-        for line in _TAG.sub(" ", (value or "").casefold()).splitlines():
-            sequence = _COPY_TOKEN.findall(line)
-            for size, least in ((COPIED_WORDS, 24), (12, 0)):   # eight tokens that are real words, or any twelve tokens
-                for index in range(len(sequence) - size + 1):
-                    window = sequence[index:index + size]
-                    if sum(len(token) for token in window) >= least:
-                        found.add(" ".join(window))
+        for size, least in ((COPIED_WORDS, 24), (12, 0)):   # eight tokens that are real words, or any twelve tokens
+            for index in range(len(sequence) - size + 1):
+                window = sequence[index:index + size]
+                if sum(len(token) for token in window) >= least:
+                    found.add(" ".join(window))
         return found
 
-    samples = [sample[:MAX_EXAMPLE_CHARS] for sample in samples]   # only what was sent can have been copied
-    per_sample = [runs(sample) for sample in samples]
-    house = {run for index, found in enumerate(per_sample) for run in found if any(run in other for other in per_sample[:index] + per_sample[index + 1:])}
-    draft, given = runs(text), runs(supplied)
-    shared = sorted((draft & set().union(*per_sample)) - given - house, key=len, reverse=True) if per_sample else []
+    samples = list(dict.fromkeys(sample[:MAX_EXAMPLE_CHARS] for sample in samples))   # only what was sent, each post once
+    per_sample = [{line for line in lines(sample) if line and len(line.split()) <= HOUSE_LINE_TOKENS} for sample in samples]
+    house = frozenset(line for index, found in enumerate(per_sample) for line in found if any(line in other for other in per_sample[:index] + per_sample[index + 1:]))
+    shared = sorted((runs(text, house) & set().union(*[runs(sample, house) for sample in samples])) - runs(supplied), key=len, reverse=True) if samples else []
     notes = []
     if shared:
         notes.append(f"This draft repeats wording from one of your style examples (“{shared[0][:80]}…”). Examples are for style only: rewrite it, or keep it if the words are yours to reuse.")

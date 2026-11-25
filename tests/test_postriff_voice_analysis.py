@@ -160,8 +160,12 @@ class RecurringFormTests(unittest.TestCase):
 
     def test_a_tag_shaped_label_names_only_the_language_the_catalogue_knows(self):
         """Third review: `en-91234567` printed as "English (91234567)" and `ja-chandr12` was printed raw."""
-        for label, expected in (("en-91234567", "English"), ("en-GB-bookmehk", "English (UK)"), ("ja-chandr12", "an unrecognised label"), ("yue-Hant-HK", "廣東話（香港）")):
+        for label, expected in (("en-91234567", "English"), ("en-GB-bookmehk", "English (UK)"), ("ja-chandr12", "an unrecognised label"), ("yue-Hant-HK", "廣東話（香港）"),
+                                ("en-x-call91234567", "an unrecognised label"), (None, "an unrecognised label"), (12, "an unrecognised label")):
             self.assertEqual(voice_analysis._language_name(label), expected, label)
+        for bare in ("hi", "it", "nl"):
+            self.assertNotEqual(voice_analysis._language_name(bare), "an unrecognised label", bare)
+            self.assertNotIn(bare + "-", voice_analysis._language_name(bare))
         state = initial_state("workspace-one")
         ids = [add_sample(state, f"Note {index}. A short post.", f"t{index}", language="en-91234567") for index in range(3)]
         observations = " ".join(voice_analysis.build_proposal(state, ids, "owner-one", 200)["observations"])

@@ -98,12 +98,16 @@ _IDENTITY_CLAIM = re.compile(r'\b(?:author|writer|speaker|person|they|she|he)\s+
 def _language_name(label) -> str:
     """The catalogue's own name for a label, never the label's text: a tag the catalogue does not list is named by
     its nearest listed ancestor (`en-GB-anything` is "English (UK)"), and anything else is unrecognised."""
-    tag = locales.canonical(label, family_ok=True)
+    tag = locales.canonical(label, family_ok=True) if isinstance(label, str) else None
     listed = locales._index()["by_tag"]
     for candidate in ([tag] + list(locales._truncations(tag)[1:])) if tag else []:
         if candidate in listed:
             return locales.display(candidate)
-    return "Chinese" if tag in ("zh", "yue") else "an unrecognised label"
+    if tag in ("zh", "yue"):
+        return "Chinese"
+    # A bare language the catalogue lists only by region (`hi` for `hi-IN`) takes that entry's own name.
+    regional = next((listed[item] for item in sorted(listed) if tag and "-" not in tag and item.split("-")[0] == tag), None)
+    return regional["native"].split("（")[0].split(" (")[0] if regional else "an unrecognised label"
 
 
 def check_untrusted_samples(samples):
