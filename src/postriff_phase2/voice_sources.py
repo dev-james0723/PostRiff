@@ -20,7 +20,12 @@ MAX_TEXT_CHARS = 8_000
 MAX_IMPORT_BYTES = 512 * 1024
 MAX_RETRIEVAL_SAMPLES = 6
 MAX_RETRIEVAL_CHARS = 12_000
-PURPOSES = ("analysis", "generation")
+# "generation" lets a writer use a sample's style signals only (counts, form, what repeats): no prose leaves.
+# "examples" is a separate, narrower permission: this exact writer may also read the sample's own text as a style
+# example. It is never implied by "generation", never covered by a class grant, and bounded below.
+PURPOSES = ("analysis", "generation", "examples")
+MAX_EXAMPLE_SAMPLES = 3
+MAX_EXAMPLE_CHARS = 1_500
 LABELS = ("representative", "outdated", "sponsored", "guest", "ai_generated")
 # A writing (generation) grant names one exact writer route, or this class: every model Rafii's managed writer offers
 # through the Vercel AI Gateway, now or later. Each draft still records the exact route it used (voiceContext.route) and
@@ -198,11 +203,17 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
             route = grant.get("route")
             if not isinstance(route, str) or not route.strip() or len(route) > 120:
                 raise AlphaError("Choose the exact writer route for every voice-use grant.")
+            if route.strip() in _CLASS_PREFIXES and grant["purpose"] == "examples":
+                raise AlphaError("A style example needs one exact writer; only the style permission may cover every Rafii AI writer model.")
             if route.strip() in _CLASS_PREFIXES and grant["purpose"] != "generation":
                 raise AlphaError("AI analysis needs one exact model; only writing may be allowed for every Rafii AI writer model.")
             normalized.append({"purpose": grant["purpose"], "route": route.strip()})
         if not source.get("active"):
             raise AlphaError("A revoked sample cannot receive new grants. Retain a new sample with explicit consent.", 409)
+        # An example permission exists only beside the style permission for that same exact writer. One left behind
+        # when that style permission goes is dropped here, so a wider style permission can never revive it.
+        styled = {item["route"] for item in normalized if item["purpose"] == "generation"}
+        normalized = [item for item in normalized if item["purpose"] != "examples" or item["route"] in styled]
         source["useGrants"] = sorted({(item["purpose"], item["route"]) for item in normalized})
         source["useGrants"] = [{"purpose": purpose, "route": route} for purpose, route in source["useGrants"]]
         source["purposeGrants"] = sorted({item["purpose"] for item in source["useGrants"]})
@@ -312,6 +323,89 @@ def retrieve(
     return {**projection, "samples": selected, "bindings": bindings, "digest": digest(bindings), "retrievedChars": used}
 
 
+_ZERO_WIDTH = re.compile("[\u200b-\u200f\u2060\ufeff]")
+# Only text that plainly addresses a model: an order to drop earlier instructions, a request for the system prompt,
+# or markup posing as a section of the request. "Forget the rules, just play" is a sentence, not an attack.
+_INSTRUCTION = re.compile(
+    r"(?:ignore|disregard|forget|override)\s+(?:all\s+|any\s+)?(?:of\s+)?(?:the\s+|your\s+)?(?:previous|prior|above|earlier|system)\s+(?:instructions?|rules?|prompts?)"
+    r"|<\s*/?\s*(?:system|assistant|voicesamples)\b|\[INST\]|(?:reveal|show|print)\s+(?:the\s+|your\s+)?system\s+prompt"
+    r"|(?:忽略|無視|无视|不要理會|不要理会)[^。\n]{0,12}(?:指示|指令|規則|规则|提示)", re.I)
+_CJK_CHAR = "\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af"
+_COPY_TOKEN = re.compile(f"[{_CJK_CHAR}]|[^\\W_{_CJK_CHAR}]+")
+# What can carry a fact out of a sample: a link or bare domain, a handle, a price or percentage, a number of three
+# or more digits. Compared as whole tokens, never as substrings.
+_FACT_TOKEN = re.compile(r"https?://[^\s]+|www\.[^\s]+|[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:/[^\s]*)?|(?<![\w.])@[\w.]{2,}|[$€£¥]\s?\d[\d,.]*|\d[\d,.]*\s?%|\d{3,}", re.I)
+COPIED_WORDS = 8
+
+
+def reads_like_instruction(text: str) -> bool:
+    """A sample that addresses a model rather than a reader is never sent as an example. A pattern list cannot catch
+    every phrasing; the structured data field, the writer's rule and the check on the finished draft are the rest."""
+    return bool(_INSTRUCTION.search(_ZERO_WIDTH.sub("", text or "")))
+
+
+def example_granted(source: dict, route: str) -> bool:
+    """This exact writer holds both the style permission and the example permission for the sample. A class grant
+    ("any Rafii AI writer model") never counts for examples, in either half."""
+    grants = {(grant.get("purpose"), grant.get("route")) for grant in source.get("useGrants", []) if isinstance(grant, dict)}
+    return bool(route) and ("examples", route) in grants and ("generation", route) in grants
+
+
+def _fact_tokens(text: str) -> set[str]:
+    return {token.casefold().rstrip(".,;:!?)") for token in _FACT_TOKEN.findall(text or "")}
+
+
+def copied_from_examples(text: str, samples: list[str], supplied: str) -> list[str]:
+    """Reminders for a draft that took wording or a fact from a style example instead of only its form.
+
+    Flags a run of wording shared with a sample (eight words, or twelve characters where the text has no spaces,
+    as in Chinese and Japanese) and a link, handle, price, percentage or longer number that is in a sample and in
+    the draft but not in what the person supplied for this post. Short sign-offs and tags are form."""
+    def tokens(value):
+        return _COPY_TOKEN.findall((value or "").casefold())
+
+    def runs(sequence):
+        found = set()
+        for size, least in ((COPIED_WORDS, 24), (12, 0)):   # eight tokens that are real words, or any twelve tokens
+            for index in range(len(sequence) - size + 1):
+                window = sequence[index:index + size]
+                if sum(len(token) for token in window) >= least:
+                    found.add(" ".join(window))
+        return found
+
+    draft, given = runs(tokens(text)), runs(tokens(supplied))
+    notes = []
+    for sample in samples:
+        shared = sorted((draft & runs(tokens(sample))) - given, key=len, reverse=True)
+        if shared:
+            notes.append(f"This draft repeats wording from one of your style examples (“{shared[0][:80]}…”). Examples are for style only: rewrite it, or keep it if the words are yours to reuse.")
+            break
+    lifted = sorted((_fact_tokens(text) & set().union(*[_fact_tokens(sample) for sample in samples])) - _fact_tokens(supplied)) if samples else []
+    if lifted:
+        notes.append(f"This draft contains {', '.join(lifted[:3])}, which appears in a style example but not in what you supplied for this post. Check it before publishing.")
+    return notes
+
+
+def style_examples(state: dict, projection: dict) -> list[dict]:
+    """The retrieved samples this exact writer may also read as style examples, most relevant first.
+
+    A sample qualifies only with its own "examples" permission for the projection's route, on top of the writing
+    permission that put it in the projection. At most three, each cut to a fixed length; a sample that reads like an
+    instruction to a model is left out. Callers record the returned bindings on the run."""
+    route = projection.get("route")
+    examples = []
+    for sample in projection.get("samples", []):
+        source = _source(state, sample["id"])
+        if not example_granted(source, route) or reads_like_instruction(sample.get("text") or ""):
+            continue
+        text = sample["text"][:MAX_EXAMPLE_CHARS]
+        examples.append({"id": sample["id"], "revision": sample["revision"], "contentHash": sample["contentHash"], "platform": sample.get("platform"),
+                         "language": sample.get("language"), "text": text, "truncated": len(text) < len(source.get("text") or "")})
+        if len(examples) >= MAX_EXAMPLE_SAMPLES:
+            break
+    return examples
+
+
 def bounded_style_directives(value) -> dict:
     """Only formatting booleans may cross the writer boundary; never sample prose."""
     if not isinstance(value, dict):
@@ -346,3 +440,9 @@ def validate_bindings(state: dict, voice_context: dict) -> None:
     current_bindings = [{"id": item["id"], "revision": item["revision"], "contentHash": item["contentHash"]} for item in current["samples"]]
     if current["excluded"] or current_bindings != voice_context.get("bindings"):
         raise AlphaError("Voice samples or their consent changed. Preserve the candidate and draft again with current evidence.", 409)
+    # A draft that read a sample's own text is only kept while that exact permission and that exact text still stand.
+    for example in voice_context.get("examples") or []:
+        source = next((item for item in state.get("sources", []) if item.get("id") == example.get("id") and item.get("kind") == "voice_sample"), None)
+        if (source is None or not source.get("active") or not source.get("selected") or source.get("revision") != example.get("revision")
+                or source.get("contentHash") != example.get("contentHash") or not example_granted(source, voice_context.get("route", ""))):
+            raise AlphaError("Voice samples or their consent changed. Preserve the candidate and draft again with current evidence.", 409)

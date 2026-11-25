@@ -4,12 +4,11 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from postriff_alpha.domain import AlphaError, uid
-from . import asset_kinds
+from . import asset_kinds, creation_capabilities
 from .contracts import digest
 
 UPCOMING_DAYS = 14
 DISMISS_COOLDOWN = 7 * 86400
-DRAFTABLE = ("LinkedIn", "Instagram", "Threads")
 
 
 def _root(state: dict) -> list[dict]:
@@ -48,9 +47,12 @@ def _evidence(state: dict, now: float) -> list[dict]:
     brief_revision = (state.get("brief") or {}).get("revision")
     drafted = [v for v in state.get("variants", []) if brief_revision is not None and v.get("briefRevision") == brief_revision]
     if drafted:
-        covered = {v.get("channelId") for v in drafted}
+        covered = {v.get("channelId") for v in drafted if not v.get("rejected")}
+        # Use the same installed skills and rollout projection as the writer. A connection
+        # alone is not evidence that this deployment can draft for its platform.
+        draftable = set(creation_capabilities.projection().draftable())
         for channel in (state.get("phase2") or {}).get("channels", []):
-            if channel.get("platform") in DRAFTABLE and _ready(channel, now) and channel.get("id") not in covered:
+            if channel.get("platform") in draftable and _ready(channel, now) and channel.get("id") not in covered:
                 candidates.append({"kind": "missing_variant", "reason": f"This brief has drafts, but none for {channel['platform']} {channel.get('account', '')} yet.".replace("  ", " "), "evidence": [{"type": "channel", "id": channel["id"], "revision": brief_revision}], "action": "draft"})
     for job in state.get("phase2", {}).get("jobs", []):
         if job.get("state") == "held":
@@ -72,6 +74,11 @@ def refresh(state: dict, now: float) -> list[dict]:
         existing = next((item for item in items if item["identity"] == identity), None)
         if existing:
             existing["lastSeenAt"] = now
+            if existing["status"] == "stale":
+                # Re-enabling a capability or restoring current evidence revives the same
+                # suggestion, while an earlier snooze still lasts until the chosen time.
+                existing["status"] = "snoozed" if existing.get("snoozedUntil", 0) > now else "open"
+                existing.pop("staleAt", None)
             continue
         if _recently_dismissed(items, candidate, now):
             continue

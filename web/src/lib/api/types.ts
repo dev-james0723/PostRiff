@@ -362,9 +362,9 @@ export interface SnapshotSource {
   publishedAt?: string;
   label?: 'representative' | 'outdated' | 'sponsored' | 'guest' | 'ai_generated' | null;
   partialCoverage?: boolean;
-  purposeGrants?: ('analysis' | 'generation')[];
+  purposeGrants?: ('analysis' | 'generation' | 'examples')[];
   routeGrants?: string[];
-  useGrants?: { purpose: 'analysis' | 'generation'; route: string }[];
+  useGrants?: { purpose: 'analysis' | 'generation' | 'examples'; route: string }[];
   cleanupStatus?: string;
   authorshipConfirmed?: boolean;
   retentionConfirmed?: boolean;

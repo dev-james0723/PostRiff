@@ -530,6 +530,14 @@ class Phase2Store(Store):
             if (not source.get("active") or source.get("revision") != binding.get("revision")
                     or source.get("contentHash") != binding.get("contentHash")):
                 return False
+        # A saved draft that read a sample's own text is held to the same test as one that used its style: the sample
+        # still exists unchanged. Withdrawing the example permission stops later drafts; it does not pull back a draft
+        # the person already saved, approved or scheduled, exactly as withdrawing the style permission does not.
+        for binding in (variant.get("voiceExamples") or {}).get("samples") or []:
+            source = self._source(state, binding["id"])
+            if (not source.get("active") or source.get("revision") != binding.get("revision")
+                    or source.get("contentHash") != binding.get("contentHash")):
+                return False
         return True
 
     def current(self, s, m):

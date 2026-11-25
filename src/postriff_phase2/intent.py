@@ -64,13 +64,14 @@ PLATFORM_ALIASES = (
     ("WhatsApp Channels", ("whatsapp channel", "whatsapp channels")),
 )
 
-# A bare capital "X" names the platform only where it reads as one: after a preposition or list joiner
+# A bare "X" or "x" names the platform only where it reads as one: after a preposition or list joiner
 # ("on X", "to X", "for X", "LinkedIn, and X", "Threads & X", "LinkedIn同X"), paired with Twitter ("X/Twitter",
 # "X (Twitter)", "Twitter/X"), or opening a sentence as the first item of a platform list ("X and LinkedIn at 9").
 # Inside a word or a name it stays a letter: "X-ray", "10x", "SpaceX", "Series X", "Malcolm X", "X光". The aliases
 # above never include the bare letter, so every other reader of PLATFORM_ALIASES is unaffected.
-_BARE_X = re.compile(r"(?<![A-Za-z0-9_\-])X(?![A-Za-z0-9_\-]|光|射|線|线)")
+_BARE_X = re.compile(r"(?<![A-Za-z0-9_\-])[Xx](?![A-Za-z0-9_\-]|光|射|線|线)")
 _X_BEFORE = re.compile(r"(?:(?<![A-Za-z0-9_])(?:on|to|for|and|or|via)|[,&、，同和及與与跟去到喺在]|(?:twitter|推特)\s*[/(（])\s*$", re.I)
+_X_VARIABLE_BEFORE = re.compile(r"\b(?:solv(?:e|ing)\s+for|depend(?:s|ing)?\s+on|based\s+on)\s*$", re.I)
 _X_AFTER = re.compile(r"^\s*[/(（]\s*(?:twitter|推特)", re.I)
 _X_OPENS = re.compile(r"(?:^|[.!?:;。！？：；\n])\s*$")
 _X_LIST_JOIN = re.compile(r"^\s*(?:[,，、&/]|(?:and|or)(?![A-Za-z0-9_])|同|和|及)\s*", re.I)
@@ -91,12 +92,14 @@ def _opens_with_platform(text):
 
 def mark_platform_x(text):
     """`text` with each bare "X" that reads as the platform replaced by X_MARK (same length, same clauses)."""
-    if not isinstance(text, str) or "X" not in text:
+    if not isinstance(text, str) or "x" not in text.lower():
         return text
     chars = list(text)
     for match in _BARE_X.finditer(text):
         index = match.start()
         before, after = text[:index], text[index + 1:]
+        if _X_VARIABLE_BEFORE.search(before) or re.match(r"\s*[=+*/^<>]", after):
+            continue
         joined = _X_LIST_JOIN.match(after)
         if (_X_BEFORE.search(before) or _X_AFTER.match(after)
                 or (_X_OPENS.search(before) and joined and _opens_with_platform(after[joined.end():]))):

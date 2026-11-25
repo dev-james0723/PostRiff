@@ -57,7 +57,7 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
     if (!ref?.targetId || ref.workspaceId !== workspaceId) return;
     if (ref.targetType === 'job') router.push(`/app/queue?job=${encodeURIComponent(ref.targetId)}`);
     else if (ref.targetType === 'asset') router.push(`/app/queue?asset=${encodeURIComponent(ref.targetId)}`);
-    else if (ref.targetType === 'channel') router.push('/app?new=1');
+    else if (ref.targetType === 'channel') router.push(`/app?new=1&suggestion=${encodeURIComponent(suggestionId)}`);
     else if (ref.targetType === 'campaign') router.push(`/app/automations?campaign=${encodeURIComponent(ref.targetId)}`);
   }
 

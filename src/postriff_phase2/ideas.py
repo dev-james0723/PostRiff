@@ -25,7 +25,7 @@ from .cli_runtime import ClaudeCliRuntime
 from .model_runtime import REQUEST_SECONDS, ProviderFailure, ServerModelRuntime, check_level_ceiling
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
-from . import ai_call_events, attachment_rows, content_types, intent, locales, memory, research, turn_references, voice_sources, writer_defaults
+from . import ai_call_events, attachment_rows, content_types, intent, learning_signals, locales, memory, research, turn_references, voice_sources, writer_defaults
 
 VOICE_FALLBACK_NOTE = "Your writing samples were not available to this writer, so this draft is in a neutral voice. Allow a sample for it on the Brand page to write like you again."
 
@@ -108,6 +108,36 @@ def requested_level(payload):
     accepted everywhere they were."""
     value = (payload or {}).get("reasoning")
     return value if isinstance(value, str) and value else AUTO
+
+
+def _remembered_lengths(state, used_ids, destinations, content_type_id=None):
+    """(destination, limit) for each destination a bound length preference covers. The narrowest scope decides
+    (a LinkedIn rule over a general one), as in learning.select; among equally narrow rules the tighter one."""
+    remembered = [(item, learning_signals.length_limit(item.get("statement"))) for item in learning.active_items(state)
+                  if item.get("id") in set(used_ids or ()) and item.get("ruleKey") == "length.target"]
+    for destination in destinations or []:
+        covering = [(sum(1 for value in (item.get("scope") or {}).values() if value is not None), limit) for item, limit in remembered
+                    if limit and learning.applies(item, destination.get("platform"), destination.get("language"), content_type_id)]
+        if covering:
+            narrowest = max(specificity for specificity, _ in covering)
+            yield destination, min((limit for specificity, limit in covering if specificity == narrowest), key=lambda limit: limit["max"])
+
+
+def remembered_length_limits(state, used_ids, destinations, content_type_id=None):
+    """What the writer is told: one {"platform", "language", "words"} row per destination with a remembered maximum."""
+    return [{"platform": destination.get("platform"), "language": destination.get("language"), "words": limit["max"]}
+            for destination, limit in _remembered_lengths(state, used_ids, destinations, content_type_id)]
+
+
+def remembered_length_reminders(state, used_ids, variants, content_type_id=None):
+    """Add a measured reminder to each variant that runs past the remembered length this run was given for it.
+
+    The same limit the writer was told, so the two never disagree. A model's note that it complied is not a
+    measurement; the count here is. Reminds only: no draft is refused or changed."""
+    for variant, limit in _remembered_lengths(state, used_ids, variants, content_type_id):
+        note = learning_signals.over_limit_reminder(limit, variant.get("text"))
+        if note and note not in variant.setdefault("warnings", []):
+            variant["warnings"].append(note)
 
 
 def per_model_reasoning(runtime):
@@ -696,12 +726,12 @@ class IdeasService:
             self._conversation(cur, workspace_id, conversation_id)
             state = self._state(row)
             self._append_message(cur, workspace_id, conversation_id, "user", {"text": text, "sourceIds": [], "intent": "memory"})
-            proposal = instruction_to_proposal(text, parsed.get("language"))
             created, refusal = None, None
             if hosted is None:
                 refusal = "Preference learning isn't available yet, so nothing was kept."
             else:
                 try:
+                    proposal = instruction_to_proposal(text, parsed.get("language"))
                     created = hosted.propose_from_chat(cur, workspace_id, state, proposal, principal, self.clock())
                 except ValueError as error:
                     refusal = str(error)
@@ -1052,10 +1082,22 @@ class IdeasService:
                 if outcome.get("contentType"):
                     variant.update({k: outcome["contentType"].get(k) for k in ("contentTypeId", "contentTypeVersion", "formatId")})
         artifact["voiceContext"] = {key: (outcome.get("voiceContext") or {}).get(key) for key in ("mode", "bindings", "digest", "route")}
+        if (outcome.get("voiceContext") or {}).get("examples"):
+            artifact["voiceContext"]["examples"] = outcome["voiceContext"]["examples"]   # which samples' own text this draft read
         if outcome.get("memoryReceipt"):
             artifact["memoryReceipt"] = {**outcome["memoryReceipt"], "workspaceId": workspace_id, "runId": run_id,
                                          "generatedAt": datetime.fromtimestamp(self.clock(), timezone.utc).isoformat(),
                                          "execution": "fixture" if outcome.get("memoryExecution") == "fixture" or usage.get("provenance") in ("fixture", "fake") else "completed"}
+        read = {item.get("id") for item in (outcome.get("voiceContext") or {}).get("examples") or []}
+        if read:
+            # The writer was told examples are style only. Whether it kept to that is checked on the draft, not assumed.
+            example_texts = [source.get("text") or "" for source in current_state.get("sources", []) if source.get("id") in read]
+            for variant in artifact["variants"]:
+                for note in voice_sources.copied_from_examples(variant.get("text"), example_texts, outcome.get("supplied") or ""):
+                    if note not in variant.setdefault("warnings", []):
+                        variant["warnings"].append(note)
+        remembered_length_reminders(current_state, (outcome.get("memoryBindings") or {}).get("used"), artifact["variants"],
+                                    (outcome.get("memoryReceipt") or {}).get("contentTypeId"))
         # Structured native drafts (creation projection): public fields in their own slots, bindings and private notes
         # apart, media and constraint states explicit. `text` is untouched, so every existing reader sees the same copy.
         from .creation_capabilities import attach_native
@@ -1500,7 +1542,9 @@ class IdeasService:
                 raise AlphaError(f"This run could cost up to US${estimate / 1_000_000:.2f}, over this automation's US${recurring['maxCostUsdMicro'] / 1_000_000:.2f} limit per run. "
                                  f"Raise the limit to at least US${estimate / 1_000_000:.2f} to let it write.", 402, code="automation_cost_limit")
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id, credit_authority=credit_authority)
-            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "memoryReceipt": projected.get("memoryReceipt"), "memoryExecution": "fixture" if isinstance(runtime, FixtureAgentRuntime) else "completed", "voiceContext": voice_context, "paid": paid, "actor": principal}
+            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "memoryReceipt": projected.get("memoryReceipt"), "memoryExecution": "fixture" if isinstance(runtime, FixtureAgentRuntime) else "completed", "voiceContext": voice_context, "paid": paid, "actor": principal,
+                       "supplied": " ".join([str(request.get("idea") or "")] + [str(fact.get("text") or "") for source in context.get("sources", []) for fact in source.get("facts", []) if isinstance(fact, dict)]
+                                            + [str(section.get("text") or "") for section in request.get("material") or [] if isinstance(section, dict)])}
             if "references" in projected:
                 # What the chips did, the post media and the per-message content type (chat-context SPEC §5.10).
                 outcome.update({"references": projected["references"], "media": projected["media"], "contentType": projected["contentType"], "derivedSourceIds": projected["derivedSourceIds"]})
@@ -1721,9 +1765,16 @@ class IdeasService:
                 # neutral voice that says so, never a refusal.
                 voice_mode, voice_projection = "neutral", None
                 reminders.append(VOICE_FALLBACK_NOTE)
+        style_examples = []
         if voice_projection:
             voice_context = {"mode": "personalized", "route": voice_route, "bindings": voice_projection["bindings"], "digest": voice_projection["digest"]}
             style_directives = voice_sources.style_directives(voice_projection)
+            # Sample prose reaches a writer only under its own per-sample, exact-route permission; the run records which.
+            # A workspace that keeps its memory files from cloud models keeps its own posts from them too.
+            cloud_refused = provider_class == "cloud" and memory.egress(state).get("cloud") is not True
+            style_examples = [] if cloud_refused else voice_sources.style_examples(state, voice_projection)
+            if style_examples:
+                voice_context["examples"] = [{key: item[key] for key in ("id", "revision", "contentHash")} for item in style_examples]
         else:
             voice_context = {"mode": voice_mode, "route": voice_route if voice_mode == "personalized" else None, "bindings": [], "digest": None}
             style_directives = {}
@@ -1732,6 +1783,11 @@ class IdeasService:
             content_type_id=content_type_id if content_type_id != "unclassified" else None, voice_mode=voice_mode,
             max_bytes=MAX_MEMORY_BYTES if provider_class == "cloud" else None, voice_context=voice_context)
         request = {"context": context, "idea": idea, "tone": self._tone(state) if memory_receipt["effectiveVoiceMode"] == "approved" else "neutral", "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
+        if style_examples:
+            request["voiceSamples"] = [{key: item[key] for key in ("platform", "language", "text")} for item in style_examples]
+        length_limits = remembered_length_limits(state, shared["learned"]["used"], destinations, content_type_id if content_type_id != "unclassified" else None)
+        if length_limits:
+            request["lengthLimits"] = length_limits   # a remembered length travels as a number, not only as a VOICE.md sentence
         if level is not None:
             request["level"] = level   # the managed writer's reasoning level (translate_reasoning); `reasoning` keeps the pass
         report = None
@@ -2003,7 +2059,7 @@ class IdeasService:
                 media = [m for m in candidate.get("media") or artifact.get("media") or [] if m.get("assetId") in live_assets]
                 media_lost = len(candidate.get("media") or artifact.get("media") or []) > len(media)
                 content = {k: candidate[k] for k in ("contentTypeId", "contentTypeVersion", "formatId", "format", "native", "nativeFields") if candidate.get(k) is not None}
-                values = {"text": candidate["text"], "sourceIds": list(dict.fromkeys(list(candidate["sourceIds"]) + list(artifact.get("derivedSourceIds") or []))), "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id, "memoryReceipt": copy.deepcopy(artifact.get("memoryReceipt"))}
+                values = {"text": candidate["text"], "sourceIds": list(dict.fromkeys(list(candidate["sourceIds"]) + list(artifact.get("derivedSourceIds") or []))), "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "voiceExamples": {"route": (artifact.get("voiceContext") or {}).get("route"), "samples": (artifact.get("voiceContext") or {}).get("examples") or []}, "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id, "memoryReceipt": copy.deepcopy(artifact.get("memoryReceipt"))}
                 if media or media_lost or "media" in candidate:
                     values["media"] = media
                 if media_lost:

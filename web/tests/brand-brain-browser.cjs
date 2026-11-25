@@ -1,28 +1,34 @@
-/** Cloud-only real Next -> hosted Python -> disposable PostgreSQL. Identity/providers are synthetic. */
+/** Real Next -> hosted Python -> disposable PostgreSQL. Explicit local/cloud modes; identity/providers are synthetic. */
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { mkdirSync, writeFileSync, readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
+const { brandBrainExecution } = require('./brand-brain-browser-mode.cjs');
+const execution = brandBrainExecution();
 const { chromium, webkit } = require('playwright');
-assert.equal(process.platform, 'linux');
-assert.match(process.env.CI || '', /^(1|true)$/i);
 const base = process.env.BRAND_BRAIN_WEB_URL || 'http://127.0.0.1:4448';
 assert.equal(new URL(base).hostname, '127.0.0.1');
+assert.equal(new URL(base).protocol, 'http:');
+assert.equal(new URL(base).origin, base, 'Use only a plain loopback origin');
+if (execution.mode === 'local') assert.ok(process.env.BRAND_BRAIN_BROWSER_EVIDENCE_DIR, 'Local mode requires an explicit task evidence directory');
 const out = resolve(process.env.BRAND_BRAIN_BROWSER_EVIDENCE_DIR || '.jcb-artifacts/brand-brain-browser');
 mkdirSync(out, { recursive: true });
 const results = [];
 const record = item => { results.push(item); console.log('Brand Brain browser checkpoint: ' + JSON.stringify(item)); };
 const dismissedTours = Object.fromEntries([...readFileSync(resolve(__dirname, '../src/features/onboarding/tours.ts'), 'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map(m => [m[1], 1]));
 let activePage;
-const proof = (status, error) => ({ status, error, execution: 'Cloud real application and disposable PostgreSQL; synthetic identities/providers',
+const proof = (status, error) => ({ status, error, execution: execution.description, executionMode: execution.mode, platform: process.platform,
+  realProviderE2E: false, personalVoiceAcceptance: false,
   paidModelCalls: 0, productionChanges: false, physicalIPhone: false, humanScreenReader: false, capturedAt: new Date().toISOString(), results });
 const hydrated = async locator => {
   await locator.waitFor();
-  await locator.evaluate(el => new Promise((resolve, reject) => {
-    const end = Date.now() + 30000;
-    const check = () => Object.keys(el).some(k => k.startsWith('__reactProps')) ? resolve() : Date.now() > end ? reject(Error('Hydration timeout')) : setTimeout(check, 50);
-    check();
-  }));
+  const end = Date.now() + 30000;
+  // React may replace the SSR element: re-resolve this locator, never poll a detached old node.
+  while (Date.now() < end) {
+    if (await locator.evaluate(el => Object.keys(el).some(k => k.startsWith('__reactProps')), undefined, { timeout: Math.max(1, end - Date.now()) }).catch(() => false)) return;
+    await new Promise(done => setTimeout(done, 50));
+  }
+  throw Error('Hydration timeout');
 };
 (async () => {
   for (const [engineName, engine, width] of [['chromium', chromium, 1440], ['chromium', chromium, 375], ['webkit', webkit, 375]]) {
@@ -68,7 +74,8 @@ const hydrated = async locator => {
       const reviewLink = await page.getByRole('link', { name: 'Review content', exact: true }).boundingBox();
       const createLink = await page.getByRole('link', { name: 'Open in Create', exact: true }).boundingBox();
       assert.ok(createLink.x >= reviewLink.x + reviewLink.width + 8 || createLink.y >= reviewLink.y + reviewLink.height, 'Content links have visible separation');
-      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-overview-${engineName}-${width}.png`), fullPage: true });
+      await page.screenshot({ path: resolve(out, `${execution.prefix}-brand-overview-${engineName}-${width}.png`), fullPage: true });
+      if (engineName === 'chromium' && width === 1440) await page.screenshot({ path: resolve(out, `${execution.prefix}-brand-overview-review.jpg`), type: 'jpeg', quality: 45 });
       await teach.focus(); await page.keyboard.press('Enter');
       const sample = 'Hello friends. I love the quiet work behind creative practice.\nSmall changes add up. Thank you for listening. 🎵';
       const oversized = '文'.repeat(initial.state.brandBrain.limits.maxTextChars + 1);
@@ -99,6 +106,20 @@ const hydrated = async locator => {
       await page.getByTestId(`bb-writer-grant-${source.id}`).click();
       await grantCard.getByText('Writer · local-cli', { exact: true }).waitFor();
       assert.deepEqual((await snapshot()).state.sources.find(s => s.id === source.id).useGrants, [{ purpose: 'generation', route: 'local-cli' }]);
+      // The separate style-example permission: offered only beside the writer permission, shown in the ledger, and
+      // removed together with that writer permission (it can never be left behind).
+      const grantsNow = async () => (await snapshot()).state.sources.find(s => s.id === source.id).useGrants;
+      await page.getByTestId(`bb-writer-examples-${source.id}`).click();
+      await grantCard.getByText('Style example (sample text) · local-cli', { exact: true }).waitFor();
+      assert.deepEqual(await grantsNow(), [{ purpose: 'examples', route: 'local-cli' }, { purpose: 'generation', route: 'local-cli' }]);
+      await grantCard.getByText('Writer · local-cli', { exact: true }).locator('xpath=..').getByRole('button', { name: 'Remove this permission', exact: true }).click();
+      await grantCard.getByText('Writer · local-cli', { exact: true }).waitFor({ state: 'detached' });
+      assert.deepEqual(await grantsNow(), [], 'Removing the writer permission removes the style-example permission with it');
+      assert.equal(await grantCard.getByText('Style example (sample text) · local-cli', { exact: true }).count(), 0);
+      assert.equal(await page.getByTestId(`bb-writer-examples-${source.id}`).isDisabled(), true, 'No style examples without the writer permission');
+      await page.getByTestId(`bb-writer-grant-${source.id}`).click();
+      await grantCard.getByText('Writer · local-cli', { exact: true }).waitFor();
+      assert.deepEqual(await grantsNow(), [{ purpose: 'generation', route: 'local-cli' }]);
       await page.getByRole('tab', { name: 'Teach', exact: true }).click();
       // The entire basic journey uses visible controls; API readback independently verifies persistence.
       await page.getByTestId(`bb-source-${source.id}`).getByRole('checkbox').click();
@@ -116,7 +137,7 @@ const hydrated = async locator => {
       const afterAnalysisMemory = await api('GET', ws + '/memory');
       assert.deepEqual(afterAnalysisMemory.files, beforeMemory.files, 'Analysis cannot mutate active derived files');
       assert.ok(current.state.speaker.provisional.dimensions.length > 0);
-      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-review-${engineName}-${width}.png`), fullPage: true });
+      await page.screenshot({ path: resolve(out, `${execution.prefix}-brand-review-${engineName}-${width}.png`), fullPage: true });
       record({ engine: engineName, width, check: 'First-fold CTA, keyboard entry, separate authorship/retention and real stored sample; local analysis remains pending with unchanged active memory' });
       await page.getByTestId('bb-save-proposal').click();
       await page.getByTestId('bb-step-preview').waitFor();
@@ -138,7 +159,7 @@ const hydrated = async locator => {
       assert.equal(current.state.speaker.activeRevision, initial.state.speaker.activeRevision);
       await page.getByText('Preview details', { exact: true }).click();
       await page.getByRole('heading', { name: 'Proposed request', exact: true }).waitFor();
-      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-paired-${engineName}-${width}.png`), fullPage: true });
+      await page.screenshot({ path: resolve(out, `${execution.prefix}-brand-paired-${engineName}-${width}.png`), fullPage: true });
       record({ engine: engineName, width, check: 'Separate writer grant, real paired template execution and actual neutral/candidate Memory receipts; no model or activation' });
       await page.getByTestId('bb-approve').click();
       const approval = page.getByRole('alertdialog'); await approval.waitFor();
@@ -151,7 +172,7 @@ const hydrated = async locator => {
       current = await snapshot();
       assert.ok(current.state.speaker.activeRevision > (initial.state.speaker.activeRevision || 0));
       await page.reload(); await page.getByTestId('brand-brain').waitFor();
-      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-approved-${engineName}-${width}.png`), fullPage: true });
+      await page.screenshot({ path: resolve(out, `${execution.prefix}-brand-approved-${engineName}-${width}.png`), fullPage: true });
       await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
       const axe = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } })).violations.map(v => ({ id: v.id, impact: v.impact, targets: v.nodes.map(n => n.target) })));
       record({ engine: engineName, width, check: 'Pending review, explicitly labeled guideline fallback, owner activation and persistent readback', accessibilityViolations: axe });
@@ -173,7 +194,7 @@ const hydrated = async locator => {
       const restored = (await snapshot()).state;
       assert.equal(restored.speaker.activeRevision, 3);
       assert.equal(restored.speaker.revisions.at(-1).restoredFrom, 1);
-      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-restored-${engineName}-${width}.png`), fullPage: true });
+      await page.screenshot({ path: resolve(out, `${execution.prefix}-brand-restored-${engineName}-${width}.png`), fullPage: true });
       await page.getByRole('tab', { name: 'Sources & permissions', exact: true }).click();
       const sourceCard = page.getByTestId(`bb-ledger-source-${source.id}`);
       await sourceCard.locator('summary').click();
@@ -234,7 +255,7 @@ const hydrated = async locator => {
       await page.getByRole('combobox', { name: /^Route projection/ }).selectOption('cloud');
       await page.getByText('No memory files eligible for this route.', { exact: true }).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-memory-${engineName}-${width}.png`), fullPage: true });
+      await page.screenshot({ path: resolve(out, `${execution.prefix}-brand-memory-${engineName}-${width}.png`), fullPage: true });
       record({ engine: engineName, width, check: 'Canonical identity and private boundary editor read back through the same five Memory files; Advanced cloud-denied projection is empty' });
       await page.goto(base + '/app/workspace/memory');
       await page.getByRole('heading', { name: /Memory/, exact: false }).first().waitFor();
@@ -248,11 +269,14 @@ const hydrated = async locator => {
       const download = await downloadEvent; assert.equal(await download.failure(), null);
       const bytes = readFileSync(await download.path()); assert.equal(bytes.subarray(0, 2).toString(), 'PK');
       record({ engine: engineName, width, check: 'Legacy Memory voice package export downloads an actual ZIP' });
+      await require('./personal-writing-browser-journeys.cjs').personalWritingJourneys({
+        page, api, action, snapshot, base, ws, engineName, width, record, out, prefix: execution.prefix, hydrated
+      });
       assert.deepEqual(pageErrors, []);
       record({ engine: engineName, width, check: 'Revocation removes retained text; legacy Memory route works; no browser errors', physicalIPhone: false });
     } catch (error) {
-      await activePage?.screenshot({ path: resolve(out, 'CLOUD-SYNTHETIC-failure.png'), fullPage: true }).catch(() => {});
-      writeFileSync(resolve(out, 'CLOUD-SYNTHETIC-browser.json'), JSON.stringify(proof('FAIL', String(error)), null, 2));
+      await activePage?.screenshot({ path: resolve(out, `${execution.prefix}-failure.png`), fullPage: true }).catch(() => {});
+      writeFileSync(resolve(out, `${execution.prefix}-browser.json`), JSON.stringify(proof('FAIL', String(error)), null, 2));
       throw error;
     } finally { await browser.close(); }
   }
@@ -282,7 +306,7 @@ const hydrated = async locator => {
       await page.getByRole('checkbox', { name: retain, exact: true }).check();
       assert.equal(await page.getByTestId('bb-save-sample').isEnabled(), true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-locale-${locale}.png`), fullPage: true });
+      await page.screenshot({ path: resolve(out, `${execution.prefix}-brand-locale-${locale}.png`), fullPage: true });
       const hant = locale === 'zh-Hant-HK';
       const workspaceId = (await boot.json()).workspaceId;
       const headers = { Authorization: 'Bearer dev:' + principal, Origin: base, 'X-PostRiff-Request': 'founder-alpha' };
@@ -311,11 +335,15 @@ const hydrated = async locator => {
       await page.getByRole('alertdialog').waitFor({ state: 'hidden' });
       assert.ok((await snapshot()).state.speaker.activeRevision > (originalRevision || 0));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-locale-approved-${locale}.png`), fullPage: true });
+      await page.screenshot({ path: resolve(out, `${execution.prefix}-brand-locale-approved-${locale}.png`), fullPage: true });
+      if (hant) await page.screenshot({ path: resolve(out, `${execution.prefix}-brand-chinese-review.jpg`), type: 'jpeg', quality: 45 });
       record({ locale, check: '375px translated intake, separate storage/analysis consent, exact original Chinese, pending review and guideline preview, owner activation and readback; no horizontal overflow' });
       await context.close();
     }
   } finally { await localeBrowser.close(); }
-  writeFileSync(resolve(out, 'CLOUD-SYNTHETIC-browser.json'), JSON.stringify(proof('PASS'), null, 2));
+  writeFileSync(resolve(out, `${execution.prefix}-browser.json`), JSON.stringify(proof('PASS'), null, 2));
   console.log(JSON.stringify(proof('PASS')));
-})().catch(error => { console.error(error); process.exitCode = 1; });
+})().catch(error => {
+  writeFileSync(resolve(out, `${execution.prefix}-browser.json`), JSON.stringify(proof('FAIL', String(error)), null, 2));
+  console.error(error); process.exitCode = 1;
+});
