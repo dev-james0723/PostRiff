@@ -68,6 +68,15 @@ FALLBACK_ORDER = (
     (ENGINE_SKILL, None),
 )
 RESEARCH_INTENTS = {"research"}
+# A tone or polish edit of a draft that already exists (draft_edits) plans nothing, so it binds none of the ideation
+# or craft references: the editing contract with its two references, the editing pack for each language the draft is
+# written in, then the adapter contract and the destination's adapter. Small enough for the paid route in Chinese.
+# Over budget, the references go first (the request already carries the chosen tone's guide), then the language
+# packs; the contract itself and the adapters never drop.
+EDIT_INTENT = "draft_edit"
+EDITORIAL_SKILL = "rafii-editorial-core"
+EDITORIAL_REFERENCES = ("references/fidelity-check.md", "references/tone-guide.md")
+EDIT_LANGUAGE_PACKS = {"en": "rafii-humanizer-en", "zh": "rafii-humanizer-zh", "yue": "rafii-humanizer-zh"}
 # Local names of content types whose preflight asks for evidence or citation. Catalog ids are namespaced
 # (pack.creator:article_news_commentary, postriff:promote, workspace_x:...), so matching uses the part after ":".
 CITED_CONTENT_TYPES = {"article_news_commentary", "deep_point_of_view", "product_feature_launch", "promote"}
@@ -242,19 +251,30 @@ class SkillLibrary:
                     references.append(reference)
         return tuple(references)
 
-    def bind(self, destinations, format_id=None, intent=None, content_type=None, max_chars=None, explicit=()):
+    def bind(self, destinations, format_id=None, intent=None, content_type=None, max_chars=None, explicit=(), languages=()):
         """Skills for a turn: the voice contract, the editorial core with write-time discovery, a visual
         handoff for visual formats, the claim rules when the turn cites sources, and the adapter
         contract plus one adapter per destination platform. `max_chars` is the route's budget
         (see `budget_for`). Returns bindings (metadata only), composed text, warnings, the files
-        left out to fit (`omitted`) and the budget applied."""
+        left out to fit (`omitted`) and the budget applied.
+
+        An edit of an existing draft (intent EDIT_INTENT) binds its own small set instead: see EDIT_INTENT.
+        `languages` names languages the draft's own text is written in beyond its destination's tag (a Chinese
+        post with English mixed in), so each gets its editing pack; no other turn reads it."""
         budget = int(max_chars) if max_chars else MAX_TEXT_CHARS
         if not self.available():
             return {"bindings": [], "text": "", "warnings": ["No skill library is installed on this host, so the run received the editorial policy only."], "omitted": [], "budget": budget}
-        wanted = [(ENGINE_SKILL, self._engine_references(destinations, format_id, intent, content_type)),
-                  (CORE_SKILL, CORE_REFERENCES + ((VISUAL_REFERENCE,) if format_id in VISUAL_FORMATS else ()) + (DISCOVERY_REFERENCE,))]
-        if cites_sources(intent, content_type):
-            wanted.append((RESEARCH_SKILL, RESEARCH_REFERENCES))
+        editing = intent == EDIT_INTENT
+        if editing:
+            bases = [str(locales.canonical(d.get("language")) or d.get("language") or "").split("-")[0].lower() for d in destinations]
+            bases += [str(tag or "").split("-")[0].lower() for tag in languages or ()]
+            packs = list(dict.fromkeys(EDIT_LANGUAGE_PACKS[base] for base in bases if base in EDIT_LANGUAGE_PACKS))
+            wanted = [(EDITORIAL_SKILL, EDITORIAL_REFERENCES)] + [(pack, ()) for pack in packs]
+        else:
+            wanted = [(ENGINE_SKILL, self._engine_references(destinations, format_id, intent, content_type)),
+                      (CORE_SKILL, CORE_REFERENCES + ((VISUAL_REFERENCE,) if format_id in VISUAL_FORMATS else ()) + (DISCOVERY_REFERENCE,))]
+            if cites_sources(intent, content_type):
+                wanted.append((RESEARCH_SKILL, RESEARCH_REFERENCES))
         adapters, unmapped = [], []
         for destination in destinations:
             platform = destination.get("platform")
@@ -268,17 +288,19 @@ class SkillLibrary:
         if any((self.root / skill_id / "SKILL.md").is_file() for skill_id in adapters):
             wanted.append((ADAPTER_CONTRACT, ()))
         wanted.extend((skill_id, ()) for skill_id in adapters)
-        # Explicit chips are turn-scoped.  They use the same reviewed registry and loader as
-        # automatic routing; an unavailable id is never accepted merely because the client sent it.
-        eligible = self.eligible_ids()
-        for skill_id in explicit or ():
-            if skill_id in eligible and all(skill_id != selected[0] for selected in wanted):
-                wanted.append((skill_id, ()))
-        # Registry v2 (RAFII_SKILL_REGISTRY_V2_ENABLED): the Humanizer pack for each destination language and the
-        # active coworker workflow's own skill ride after the core. They are the first to go on a tight budget.
-        from .skill_compiler import writer_extras
-        extras = [(skill_id, refs) for skill_id, refs in writer_extras(destinations, format_id, intent, content_type) if all(skill_id != w[0] for w in wanted)]
-        wanted.extend(extras)
+        extras = []
+        if not editing:
+            # Explicit chips are turn-scoped.  They use the same reviewed registry and loader as
+            # automatic routing; an unavailable id is never accepted merely because the client sent it.
+            eligible = self.eligible_ids()
+            for skill_id in explicit or ():
+                if skill_id in eligible and all(skill_id != selected[0] for selected in wanted):
+                    wanted.append((skill_id, ()))
+            # Registry v2 (RAFII_SKILL_REGISTRY_V2_ENABLED): the Humanizer pack for each destination language and the
+            # active coworker workflow's own skill ride after the core. They are the first to go on a tight budget.
+            from .skill_compiler import writer_extras
+            extras = [(skill_id, refs) for skill_id, refs in writer_extras(destinations, format_id, intent, content_type) if all(skill_id != w[0] for w in wanted)]
+            wanted.extend(extras)
         warnings = [f"No channel adapter is mapped for {platform}; the run wrote for it without one." for platform in unmapped]
         selected = []  # [skill_id, [references], loaded]
         for skill_id, references in wanted:
@@ -314,14 +336,17 @@ class SkillLibrary:
         # the optional references, then the active workflow's own skill (small, and specific to this run).
         workflow_extras = [(skill_id, None) for skill_id, _ in extras if skill_id.startswith("rafii-") and "humanizer" not in skill_id]
         knowledge_extras = [(skill_id, None) for skill_id, _ in reversed(extras) if (skill_id, None) not in workflow_extras]
-        for skill_id, reference in tuple(knowledge_extras) + DROP_ORDER + tuple(workflow_extras):
+        optional = tuple(knowledge_extras) + DROP_ORDER + tuple(workflow_extras)
+        if editing:
+            optional = tuple((EDITORIAL_SKILL, reference) for reference in reversed(EDITORIAL_REFERENCES)) + tuple((pack, None) for pack in reversed(packs))
+        for skill_id, reference in optional:
             if _size(composed()) <= budget:
                 break
             drop(skill_id, reference)
         guides = sorted((r for entry in selected if entry[0] == ENGINE_SKILL for r in entry[1] if r.startswith(ENGINE_LOCALES)),
                         key=lambda path: 0 if path.endswith("/_generic.md") else (1 if "/_family-" in path else 2))
         fallback = FALLBACK_ORDER[:4] + tuple((ENGINE_SKILL, path) for path in guides) + FALLBACK_ORDER[4:]
-        for skill_id, reference in fallback:
+        for skill_id, reference in () if editing else fallback:
             if _size(composed()) <= budget:
                 break
             if drop(skill_id, reference):

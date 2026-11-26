@@ -1581,10 +1581,11 @@
         "\\b(?:only|some|all|every|most|many|few|at least|at most|up to|over|more than|less than|fewer than|under|about|around|approximately|roughly|nearly|almost|partly|partially|if|unless|except|within|before|after)\\b"
       ],
       "planned": [
-        "\\b(?:plans?|planned|planning|will|shall|scheduled|upcoming|pending|draft|in progress|in review|beta|proposed|expected to|(?:is|are|am) \\w+ing)\\b"
+        "\\b(?:plans?|planned|planning|will|won['’]t|shall|scheduled|upcoming|pending|draft|in progress|in review|beta|proposed|expected to|going to|(?:is|are|am) \\w+ing)\\b",
+        "['’]ll\\b"
       ],
       "done": [
-        "(?<!not )(?<!n't )\\b(?:launched|released|completed|finished|shipped|done|approved|confirmed|published|opened|closed|signed|hired|raised|won|sold out|delivered|achieved|reached|is live|went live|now available|(?:has|have|had) (?:been )?\\w+ed)\\b"
+        "(?<!not )(?<!n't )\\b(?:launched|released|completed|finished|shipped|done|approved|confirmed|published|opened|closed|signed|hired|raised|won(?!['’]t)|sold out|delivered|achieved|reached|is live|went live|now available|(?:has|have|had) (?:been )?\\w+ed)\\b"
       ],
       "causal": [
         "\\b(?:because|caused?|causes|causing|due to|leads? to|led to|results? in|resulted in|drives?|drove|driven by|thanks to|as a result|therefore|so that|which means)\\b"
@@ -1593,7 +1594,7 @@
         "\\b(?:last (?:week|month|year|time|summer|spring|winter|fall)|yesterday|the other day|i remember|we remember|when i was|i once|we once|one of our (?:customers|clients|users|members)|a (?:customer|client|user) (?:told|said|wrote)|in my experience|i'?ve seen|i have seen|years ago)\\b"
       ],
       "feeling": [
-        "\\b(?:thrilled|excited|exciting|delighted|proud|love|loved|happy|glad|can't wait|cannot wait|amazed|grateful|heartbroken|frustrated|nervous|worried|overjoyed|ecstatic|honou?red)\\b"
+        "\\b(?:thrilled|excited|exciting|delighted|proud|love|loved|happy|glad|can't wait|cannot wait|amazed|grateful|heartbroken|frustrated|nervous|worried|overjoyed|ecstatic|honou?red|sorry|regret|regrets|apologi[sz]e|apologies)\\b"
       ]
     },
     "zh": {
@@ -1604,7 +1605,7 @@
         "[无無](?![缝縫论論疑])",
         "非(?![常凡洲])",
         "勿",
-        "唔",
+        "唔(?![該该]|好意思)",
         "冇"
       ],
       "hedge": [
@@ -1637,7 +1638,7 @@
         "尋日"
       ],
       "feeling": [
-        "[兴興][奋奮]|激[动動]|[开開]心|感[动動]|[骄驕]傲|自豪|迫不及待|高[兴興]|欣喜|期待|(?<!麻)[烦煩]|[担擔]心|焦[虑慮]|失望|[难難][过過]|[惊驚]喜|好正"
+        "[兴興][奋奮]|激[动動]|[开開]心|感[动動]|[骄驕]傲|自豪|迫不及待|高[兴興]|欣喜|期待|(?<!麻)[烦煩]|[担擔]心|焦[虑慮]|失望|[难難][过過]|[惊驚]喜|好正|抱歉|[遗遺]憾|[对對]不起|唔好意思"
       ]
     },
     "note": "Extract dates first and remove them before numbers; remove approved brand terms before names. Sentence-initial single capitalised words are not names; a sentence-initial stopword is dropped from a multi-word match. Chinese person/place names are not detected: use brand_terms or quoted terms when they must be protected."

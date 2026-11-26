@@ -148,7 +148,7 @@ def _tokens(text, brand_terms):
     numbers = Counter(n.replace(",", "") for n in lex["number"].findall(rest))
     for term in brand_terms:
         rest = rest.replace(term, " ")
-    names = Counter()
+    names, openers = Counter(), Counter()
     for match in lex["name"].finditer(rest):
         token = match.group(0)
         before = rest[:match.start()].rstrip()
@@ -157,6 +157,7 @@ def _tokens(text, brand_terms):
             if parts[0] in lex["stop"]:
                 parts = parts[1:]
             elif len(parts) == 1:
+                openers[token] += 1   # kept aside: a name that moves here (or away from here) is not a changed name
                 continue  # a single capitalised word opening a sentence is not evidence of a name
             if not parts:
                 continue
@@ -170,15 +171,15 @@ def _tokens(text, brand_terms):
                 found[match.group(0).lower()] += 1
         categories[category] = found
     brands = Counter({term: text.count(term) for term in brand_terms})
-    return dates, numbers, names, categories, brands
+    return dates, numbers, names, categories, brands, openers
 
 
 def meaning_diff(source, candidate, brand_terms=()):
     """What the candidate changed relative to its source: [{code, detail}] in VIOLATIONS order. Empty = preserved.
     Counts, not presence: dropping one of two hedges is a lost hedge."""
     brand_terms = [t for t in brand_terms or () if t]
-    sd, sn, s_names, sc, sb = _tokens(source, brand_terms)
-    od, on, o_names, oc, ob = _tokens(candidate, brand_terms)
+    sd, sn, s_names, sc, sb, s_openers = _tokens(source, brand_terms)
+    od, on, o_names, oc, ob, o_openers = _tokens(candidate, brand_terms)
     total = lambda counter: sum(counter.values())  # noqa: E731
     found = {}
     if sn - on:
@@ -187,10 +188,12 @@ def meaning_diff(source, candidate, brand_terms=()):
         found["number_added"] = f"not in the source: {sorted(on - sn)[:5]}"
     if sd != od:
         found["date_changed"] = f"source {sorted(sd)[:3]} vs candidate {sorted(od)[:3]}"
-    if s_names - o_names:
-        found["name_changed"] = f"missing: {sorted(s_names - o_names)[:4]}"
-    elif o_names - s_names:
-        found["name_added"] = f"not in the source: {sorted(o_names - s_names)[:4]}"
+    # A name that now opens a sentence (or no longer does) is still there: that position is not read as a name.
+    missing, added = s_names - o_names - o_openers, o_names - s_names - s_openers
+    if missing:
+        found["name_changed"] = f"missing: {sorted(missing)[:4]}"
+    elif added:
+        found["name_added"] = f"not in the source: {sorted(added)[:4]}"
     get = lambda cats, key: cats.get(key) or __import__("collections").Counter()  # noqa: E731
     if total(get(oc, "negation")) < total(get(sc, "negation")):
         found["negation_lost"] = "the candidate has fewer negations than the source"
@@ -214,6 +217,191 @@ def meaning_diff(source, candidate, brand_terms=()):
         if ob[term] < sb[term]:
             found["brand_term_changed"] = f"approved term “{term}” was changed or removed"
     return [{"code": code, "detail": found[code]} for code in VIOLATIONS if code in found]
+
+
+# --- checks for an edit of text the author already has (draft_edits.fidelity) -------------------------------------------
+# A tone or polish edit must also keep what `meaning_diff` does not look at: links, quoted words and the language the
+# text is written in. Reported with these three codes beside VIOLATIONS; like every finding here they annotate and
+# never block. Mixed-language text is read per run of one script, so an English phrase inside a Chinese post is
+# scanned with the English patterns and the Chinese around it with the Chinese ones.
+EDIT_VIOLATIONS = ("url_changed", "quote_changed", "language_changed")
+
+_LINK = re.compile(r"https?://[^\s<>\"'「」『』（）()，。！？、；]+|www\.[^\s<>\"'「」『』（）()，。！？、；]+"
+                   r"|[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"
+                   r"|(?<![A-Za-z0-9_@/.])@[A-Za-z0-9_](?:[A-Za-z0-9_.]*[A-Za-z0-9_])?"
+                   r"|(?<![\w#&/])#(?=\w*[^\W\d_])\w+", re.I)
+_QUOTED = re.compile("“([^“”\n]{2,400})”|「([^「」\n]{2,400})」|『([^『』\n]{2,400})』|\"([^\"\n]{2,400})\"|‘([^‘’\n]{6,400})’")
+_HAN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+_LATIN_WORD = re.compile(r"[A-Za-z\u00c0-\u024f][A-Za-z\u00c0-\u024f'\u2019-]*")
+_RUN = re.compile(r"(?P<zh>[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+)|(?P<en>[A-Za-z\u00c0-\u024f][A-Za-z\u00c0-\u024f'\u2019-]*)")
+# Other scripts, counted per character at a weight that makes a word of each worth about the same.
+_SCRIPTS = (("kana", re.compile(r"[\u3040-\u30ff]"), 0.4), ("hangul", re.compile(r"[\uac00-\ud7a3\u1100-\u11ff]"), 0.5),
+            ("cyrillic", re.compile(r"[\u0400-\u04ff]"), 0.2), ("greek", re.compile(r"[\u0370-\u03ff]"), 0.2),
+            ("arabic", re.compile(r"[\u0600-\u06ff]"), 0.2), ("hebrew", re.compile(r"[\u0590-\u05ff]"), 0.2),
+            ("thai", re.compile(r"[\u0e00-\u0e7f]"), 0.2), ("devanagari", re.compile(r"[\u0900-\u097f]"), 0.2))
+# Function words: a text made of these is English, whatever its nouns are.
+_ENGLISH = frozenset("the a an and or but to of in on at for with from by is are was were be been it this that these those we you i they he she our your my "
+                     "their will can not have has had do does as if so about more what when how all there here us me just than then out up no".split())
+SCRIPT_LABELS = {"latin": "Latin-script", "han": "Chinese", "kana": "Japanese", "hangul": "Korean"}
+
+
+def links(text):
+    """Every URL, email address, @handle and #hashtag in the text, exactly as written (a multiset)."""
+    from collections import Counter
+    return Counter(match.group(0).rstrip(".,;:!?…") for match in _LINK.finditer(text or ""))
+
+
+def quotations(text):
+    """The words inside each pair of quotation marks (“ ”, " ", 「 」, 『 』, ‘ ’), whatever the marks are."""
+    from collections import Counter
+    return Counter(" ".join(next(group for group in match.groups() if group is not None).split()) for match in _QUOTED.finditer(text or ""))
+
+
+def link_diff(source, candidate):
+    """What changed among links, handles, hashtags and email addresses, or None. They are compared character for character."""
+    before, after = links(source), links(candidate)
+    if before - after:
+        return f"missing or changed: {sorted(before - after)[:4]}"
+    if after - before:
+        return f"not in the original: {sorted(after - before)[:4]}"
+    return None
+
+
+def quote_diff(source, candidate):
+    """Quoted words that are no longer word for word the same, or quoted words the original does not have; or None."""
+    before, after = quotations(source), quotations(candidate)
+    if before - after:
+        return f"quoted words changed or removed: {sorted(before - after)[:3]}"
+    if after - before:
+        return f"quoted words not in the original: {sorted(after - before)[:3]}"
+    return None
+
+
+def language_profile(text):
+    """Counts that describe which language a text is written in, never the text: weighted units per script, characters
+    found only in Simplified or only in Traditional writing, distinct written-Cantonese markers, and the share of
+    Latin-script words that are English function words. Links, handles and hashtags are left out."""
+    text = _LINK.sub(" ", text or "")
+    words = [word.lower() for word in _LATIN_WORD.findall(text)]
+    han = len(_HAN.findall(text))
+    units = {"latin": float(len(words)), "han": round(han * 0.6, 2)}
+    for name, pattern, weight in _SCRIPTS:
+        found = len(pattern.findall(text))
+        if found:
+            units[name] = round(found * weight, 2)
+    data = patterns()
+    markers = (data.get("zh") or {}).get("script_markers") or {}
+    yue = data.get("yue") or {}
+    plain = text
+    for compound in yue.get("exclude_compounds") or []:
+        plain = plain.replace(compound, " ")
+    return {"units": {name: value for name, value in units.items() if value}, "words": len(words), "han": han,
+            "hans": sum(1 for ch in text if ch in markers.get("hans_only", "")), "hant": sum(1 for ch in text if ch in markers.get("hant_only", "")),
+            "cantonese": sum(1 for marker in yue.get("colloquial_markers") or [] if marker in plain),
+            "english": round(sum(1 for word in words if word in _ENGLISH) / len(words), 3) if words else 0.0}
+
+
+def _share(profile, script):
+    total = sum(profile["units"].values())
+    return profile["units"].get(script, 0.0) / total if total else 0.0
+
+
+def languages(text):
+    """Which editing packs a text needs, by what it is written in: "zh" for a real share of Chinese, "en" for a real
+    share of English phrases (function words, not a lone product name). Either, both or neither; main language first."""
+    profile = language_profile(text)
+    found = []
+    if profile["han"] >= 4 and _share(profile, "han") >= 0.15:
+        found.append(("zh", profile["units"].get("han", 0.0)))
+    if profile["words"] >= 3 and _share(profile, "latin") >= 0.15 and profile["english"] >= 0.06:
+        found.append(("en", profile["units"].get("latin", 0.0)))
+    return tuple(name for name, _ in sorted(found, key=lambda item: -item[1]))
+
+
+def language_shift(source, candidate):
+    """How the language of a candidate differs from its source, as one sentence, or None: another main script, script
+    conversion (Traditional and Simplified), written Cantonese against standard written Chinese, a second language
+    removed from or added to the mix, or English replaced by another Latin-script language. Counts decide; a text too
+    short to judge is left alone."""
+    before, after = language_profile(source), language_profile(candidate)
+    if sum(before["units"].values()) < 1.5 or not sum(after["units"].values()):
+        return None
+    main = max(before["units"], key=before["units"].get)
+    if _share(before, main) >= 0.6 and _share(after, main) <= 0.4:
+        now = max(after["units"], key=after["units"].get)
+        return f"the original is mostly {SCRIPT_LABELS.get(main, main)} text and the candidate is mostly {SCRIPT_LABELS.get(now, now)}"
+    if before["hant"] >= 2 and not before["hans"] and after["hans"] >= 2:
+        return "Traditional Chinese characters were converted to Simplified"
+    if before["hans"] >= 2 and not before["hant"] and after["hant"] >= 2:
+        return "Simplified Chinese characters were converted to Traditional"
+    if before["cantonese"] >= 2 and not after["cantonese"] and after["han"] >= 4:
+        return "written Cantonese became standard written Chinese"
+    if not before["cantonese"] and before["han"] >= 12 and after["cantonese"] >= 2:
+        return "standard written Chinese became written Cantonese"
+    for script, amount in before["units"].items():
+        if script == main or amount < 1.5 or _share(before, script) < 0.12:
+            continue
+        if after["units"].get(script, 0.0) < 0.4 * amount:
+            return f"{SCRIPT_LABELS.get(script, script)} wording that was mixed into the original was removed or translated"
+    for script, amount in after["units"].items():
+        if script != main and amount >= 2 and _share(after, script) >= 0.2 and _share(before, script) < 0.04:
+            return f"{SCRIPT_LABELS.get(script, script)} wording was mixed in that the original does not have"
+    if main == "latin" and before["words"] >= 12 and after["words"] >= 6:
+        if before["english"] >= 0.15 and after["english"] <= 0.03:
+            return "the original is in English and the candidate is not"
+        if before["english"] <= 0.03 and after["english"] >= 0.15:
+            return "the candidate is in English and the original is not"
+    return None
+
+
+def segments(text):
+    """The text as runs of one script, in order: [("zh" | "en", run)]. Spaces, digits and punctuation stay with the
+    run before them, so a phrase keeps its shape for the phrase patterns."""
+    runs, last = [], 0
+    for match in _RUN.finditer(text or ""):
+        kind = match.lastgroup
+        between = text[last:match.start()]
+        if runs and runs[-1][0] == kind:
+            runs[-1][1] += between + match.group(0)
+        else:
+            if runs:
+                runs[-1][1] += between
+            runs.append([kind, ("" if runs else between) + match.group(0)])
+        last = match.end()
+    if runs:
+        runs[-1][1] += (text or "")[last:]
+    return [(kind, run) for kind, run in runs]
+
+
+def detect_mixed(text, locale="en", brand_terms=()):
+    """`detect` for text that mixes Chinese and English: each language's runs are scanned with that language's own
+    patterns (Cantonese ones too where the Chinese is written Cantonese), and the findings say which language they are
+    about. Text in one language is scanned as `detect` scans it."""
+    parts = {}
+    for kind, run in segments(text):
+        parts.setdefault(kind, []).append(run)
+    if len(parts) < 2:
+        only = next(iter(parts), _language(locale))
+        return {**detect(text, _part_locale(only, locale, text), brand_terms), "languages": [only]}
+    results = {kind: detect((" " if kind == "en" else "").join(runs), _part_locale(kind, locale, "".join(runs)), brand_terms) for kind, runs in parts.items()}
+    order = sorted(results, key=lambda kind: 0 if kind == _language(locale) else 1)
+    return {"hits": [{**hit, "language": kind} for kind in order for hit in results[kind]["hits"]],
+            "vocabulary": [word for kind in order for word in results[kind]["vocabulary"]],
+            "density": max(results[kind]["density"] for kind in order), "families": sorted({family for kind in order for family in results[kind]["families"]}),
+            "dashes": sum(results[kind]["dashes"] for kind in order),
+            "findings": [{**finding, "language": kind} for kind in order for finding in results[kind]["findings"]],
+            "register": next((results[kind]["register"] for kind in order if results[kind]["register"]), None), "languages": order}
+
+
+def _part_locale(kind, locale, text):
+    """The locale one language's runs are scanned as: the text's own locale when it is that language, else what the runs
+    themselves show (written Cantonese, Simplified or Traditional Chinese; plain English)."""
+    if _language(locale) == kind:
+        return locale
+    if kind == "en":
+        return "en"
+    profile = language_profile(text)
+    return "yue-Hant-HK" if profile["cantonese"] >= 2 else "zh-Hans" if profile["hans"] > profile["hant"] else "zh-Hant"
 
 
 def lint(text, platform=None, locale=None):

@@ -1498,6 +1498,13 @@ class OAuthService:
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             revoked_samples = revoke_connection_samples(state, connection_id, principal, self.clock())
             state_changed = bool(revoked_samples)
+            # Posts read through this account go now, in this transaction (it holds the workspace row first, like the import
+            # step), whether or not POSTRIFF_VOICE_IMPORT mounted the importer: the flag may have been switched off since they
+            # were read. Never raises, and does nothing before migration 140. True when a cited proposal went stale.
+            from . import voice_import
+            voice_importer = getattr(self, 'voice_import', None)   # set by voice_import.mount
+            state_changed = (voice_importer.purge_connection(cur, workspace_id, connection_id, state) if voice_importer is not None
+                             else voice_import.purge_connection(cur, workspace_id, connection_id, state, now=self.clock())) or state_changed
             if stored[0] == 'youtube':
                 from .youtube.agent import revoke_connection_authority
                 state_changed = revoke_connection_authority(state, connection_id, principal, self.clock(),

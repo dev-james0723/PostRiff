@@ -92,6 +92,25 @@ class VoiceSourceImportTests(unittest.TestCase):
         self.assertEqual(wrong_purpose["excluded"][0]["reason"], "purpose_not_granted")
         self.assertEqual(wrong_route["excluded"][0]["reason"], "route_not_granted")
 
+    def test_guest_and_ai_generated_samples_are_excluded_on_the_server_with_reason_label(self):
+        ids = {}
+        for label in ("guest", "ai_generated", "representative", None):
+            record = {"text": f"A sample labelled {label}.", "platform": "LinkedIn", "language": "English", **({"label": label} if label else {})}
+            ids[label] = voice_sources.apply_action(self.state, "voice_samples_import", {"format": "json", "records": [record]}, "owner-one", 100)["imported"][0]
+            voice_sources.apply_action(self.state, "voice_sample_select", {"sourceId": ids[label], "selected": True}, "owner-one", 101)
+            voice_sources.apply_action(self.state, "voice_sample_grant", {"sourceId": ids[label], "grants": [{"purpose": purpose, "route": "local-cli"} for purpose in ("analysis", "generation")],
+                                                                          "confirmed": True}, "owner-one", 102)
+        for purpose in ("analysis", "generation"):
+            with self.subTest(purpose=purpose):
+                projected = voice_sources.project(self.state, list(ids.values()), purpose, "local-cli")
+                self.assertEqual([sample["id"] for sample in projected["samples"]], [ids["representative"], ids[None]])
+                self.assertEqual(projected["excluded"], [{"id": ids["guest"], "revision": 1, "reason": "label"}, {"id": ids["ai_generated"], "revision": 1, "reason": "label"}])
+                self.assertNotIn("A sample labelled guest.", json.dumps(projected))
+        # A label decides before a grant does: a guest sample with no grant at all is still excluded for its label.
+        bare = voice_sources.apply_action(self.state, "voice_samples_import", {"format": "json", "records": [{"text": "Written by a guest.", "label": "guest"}]}, "owner-one", 103)["imported"][0]
+        voice_sources.apply_action(self.state, "voice_sample_select", {"sourceId": bare, "selected": True}, "owner-one", 104)
+        self.assertEqual(voice_sources.project(self.state, [bare], "analysis", "local-cli")["excluded"][0]["reason"], "label")
+
     def test_revocation_removes_content_and_blocks_dependent_drafts_and_profiles(self):
         result = voice_sources.apply_action(
             self.state,

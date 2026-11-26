@@ -1,0 +1,114 @@
+{
+  "@context": "https://www.w3.org/ns/activitystreams",
+  "id": "outbox.json",
+  "type": "OrderedCollection",
+  "totalItems": 6,
+  "orderedItems": [
+    {
+      "id": "https://example.social/users/studio/statuses/111000000000000001/activity",
+      "type": "Create",
+      "actor": "https://example.social/users/studio",
+      "published": "2024-04-01T08:00:00Z",
+      "to": ["https://www.w3.org/ns/activitystreams#Public"],
+      "cc": ["https://example.social/users/studio/followers"],
+      "object": {
+        "id": "https://example.social/users/studio/statuses/111000000000000001",
+        "type": "Note",
+        "summary": null,
+        "inReplyTo": null,
+        "published": "2024-04-01T08:00:00Z",
+        "url": "https://example.social/@studio/111000000000000001",
+        "attributedTo": "https://example.social/users/studio",
+        "to": ["https://www.w3.org/ns/activitystreams#Public"],
+        "cc": ["https://example.social/users/studio/followers"],
+        "sensitive": false,
+        "content": "<p>Recital programme is set.<br />Doors at seven &amp; music at half past.</p><p>See <a href=\"https://example.com/programme\" target=\"_blank\" rel=\"nofollow noopener\"><span class=\"invisible\">https://</span><span class=\"\">example.com/programme</span><span class=\"invisible\"></span></a> <a href=\"https://example.social/tags/recital\" class=\"mention hashtag\" rel=\"tag\">#<span>recital</span></a></p>",
+        "contentMap": {
+          "en": "<p>Recital programme is set.</p>"
+        },
+        "attachment": [],
+        "tag": []
+      }
+    },
+    {
+      "id": "https://example.social/users/studio/statuses/111000000000000002/activity",
+      "type": "Announce",
+      "actor": "https://example.social/users/studio",
+      "published": "2024-04-02T08:00:00Z",
+      "to": ["https://www.w3.org/ns/activitystreams#Public"],
+      "cc": ["https://other.example/users/someone", "https://example.social/users/studio/followers"],
+      "object": "https://other.example/users/someone/statuses/222000000000000001"
+    },
+    {
+      "id": "https://example.social/users/studio/statuses/111000000000000003/activity",
+      "type": "Create",
+      "actor": "https://example.social/users/studio",
+      "published": "2024-04-03T08:00:00Z",
+      "to": ["https://example.social/users/studio/followers"],
+      "cc": [],
+      "object": {
+        "id": "https://example.social/users/studio/statuses/111000000000000003",
+        "type": "Note",
+        "inReplyTo": null,
+        "published": "2024-04-03T08:00:00Z",
+        "url": "https://example.social/@studio/111000000000000003",
+        "to": ["https://example.social/users/studio/followers"],
+        "cc": [],
+        "content": "<p>A note for followers only.</p>"
+      }
+    },
+    {
+      "id": "https://example.social/users/studio/statuses/111000000000000004/activity",
+      "type": "Create",
+      "actor": "https://example.social/users/studio",
+      "published": "2024-04-04T08:00:00Z",
+      "to": ["https://other.example/users/someone"],
+      "cc": [],
+      "object": {
+        "id": "https://example.social/users/studio/statuses/111000000000000004",
+        "type": "Note",
+        "inReplyTo": null,
+        "published": "2024-04-04T08:00:00Z",
+        "url": "https://example.social/@studio/111000000000000004",
+        "to": ["https://other.example/users/someone"],
+        "cc": [],
+        "content": "<p>A direct message.</p>"
+      }
+    },
+    {
+      "id": "https://example.social/users/studio/statuses/111000000000000005/activity",
+      "type": "Create",
+      "actor": "https://example.social/users/studio",
+      "published": "2024-04-05T08:00:00Z",
+      "to": ["https://example.social/users/studio/followers"],
+      "cc": ["https://www.w3.org/ns/activitystreams#Public"],
+      "object": {
+        "id": "https://example.social/users/studio/statuses/111000000000000005",
+        "type": "Note",
+        "inReplyTo": "https://other.example/users/someone/statuses/333000000000000001",
+        "published": "2024-04-05T08:00:00Z",
+        "url": "https://example.social/@studio/111000000000000005",
+        "to": ["https://example.social/users/studio/followers"],
+        "cc": ["https://www.w3.org/ns/activitystreams#Public"],
+        "content": "<p><span class=\"h-card\"><a href=\"https://other.example/@someone\" class=\"u-url mention\">@<span>someone</span></a></span> Thank you, that helps.</p>"
+      }
+    },
+    {
+      "id": "https://example.social/users/studio/statuses/111000000000000006/activity",
+      "type": "Create",
+      "actor": "https://example.social/users/studio",
+      "published": "2024-04-06T08:00:00Z",
+      "to": ["https://www.w3.org/ns/activitystreams#Public"],
+      "cc": [],
+      "object": {
+        "id": "https://example.social/users/studio/statuses/111000000000000006",
+        "type": "Question",
+        "published": "2024-04-06T08:00:00Z",
+        "to": ["https://www.w3.org/ns/activitystreams#Public"],
+        "cc": [],
+        "content": "<p>Which piece next term?</p>",
+        "oneOf": []
+      }
+    }
+  ]
+}

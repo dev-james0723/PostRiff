@@ -18,6 +18,11 @@ import re
 EVENT_KINDS = ("draft.edited", "draft.update_accepted", "draft.rejected", "draft.approved", "job.cancelled", "post.published", "chat.instruction", "proposal.decided")
 EVENT_TTL_DAYS = 180
 EDIT_ORIGINS = ("author-edit", "chosen-opening")
+# Revisions the person chose but did not write: an accepted tone or polish edit, a version brought back by undo or
+# restore, and Post Doctor or Opportunity Lab text they applied. Accepting one says nothing about how the person
+# writes, so none of them is an edit signal (no draft.edited, no draft.update_accepted and no edit distance), and an
+# approval measures the person's own edits from the latest of them instead of from the first model text.
+ASSISTED_ORIGINS = ("accepted-edit", "restored", "assistant-edit")
 DECIDED = ("remembered", "post-only", "rejected", "undone", "deleted")
 
 _CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿豈-﫿]")
@@ -176,6 +181,16 @@ def _first_model_text(variant):
     return (variant.get("revisions") or [{}])[0].get("text") or variant.get("text") or ""
 
 
+def _own_edits(variant):
+    """(text the person's edits are measured from, how many of their edits followed it) at approval. A draft with no
+    assisted revision is measured as it always was: from its first model text, counting every edit."""
+    revisions = [record for record in variant.get("revisions") or [] if isinstance(record, dict)]
+    latest = max((index for index, record in enumerate(revisions) if record.get("origin") in ASSISTED_ORIGINS), default=None)
+    if latest is None:
+        return _first_model_text(variant), sum(1 for record in revisions if record.get("origin") in EDIT_ORIGINS)
+    return revisions[latest].get("text") or "", sum(1 for record in revisions[latest + 1:] if record.get("origin") in EDIT_ORIGINS)
+
+
 def _event(kind, actor, now, subject, scope, features_, voice_revision, style_revision):
     return {"kind": kind, "actor": actor, "at": now, "subject": subject, "scope": scope, "features": features_,
             "voiceRevision": voice_revision, "styleRevision": style_revision}
@@ -204,6 +219,7 @@ def derive_events(before, after, actor, now, action=None, payload=None):
                 events.append(_event("draft.edited", actor, now, subject, _scope(v), {"before": features(old.get("text")), "after": features(v.get("text")), "editDistance": edit_distance(old.get("text"), v.get("text"))}, voice_revision, v.get("styleRevision", style_revision)))
             elif origin == "accepted-fixture-replacement":
                 events.append(_event("draft.update_accepted", actor, now, subject, _scope(v), {"editDistance": edit_distance(old.get("text"), v.get("text"))}, voice_revision, v.get("styleRevision", style_revision)))
+            # ASSISTED_ORIGINS: deliberately no event. Measurement of tone and polish edits lives in product events.
         new_feedback = (v.get("feedback") or [])[len(old.get("feedback") or []):]
         for item in new_feedback:
             events.append(_event("draft.rejected", actor, now, {"variantId": v["id"], "revision": item.get("revision"), "feedbackId": item.get("id"), "runId": v.get("runId")}, _scope(v), {"reasons": list(item.get("reasons") or []), "text": features(v.get("text"))}, voice_revision, v.get("styleRevision", style_revision)))
@@ -216,10 +232,10 @@ def derive_events(before, after, actor, now, action=None, payload=None):
         old = old_jobs.get(job["id"])
         if old is None:
             variant = variants.get(manifest.get("variantId")) or {}
-            edits = sum(1 for r in (variant.get("revisions") or []) if r.get("origin") in EDIT_ORIGINS)
+            baseline, edits = _own_edits(variant)
             approved_text = (manifest.get("payload") or {}).get("text") or variant.get("text") or ""
             subject = {"jobId": job["id"], "variantId": manifest.get("variantId"), "contentRevision": manifest.get("contentRevision"), "scheduleId": job.get("scheduleId"), "channelId": manifest.get("channelId")}
-            features_ = {"editCount": edits, "editDistance": edit_distance(_first_model_text(variant), approved_text) if variant else None, "approved": features(approved_text)}
+            features_ = {"editCount": edits, "editDistance": edit_distance(baseline, approved_text) if variant else None, "approved": features(approved_text)}
             events.append(_event("draft.approved", actor, now, subject, _scope(variant, manifest), features_, manifest.get("voiceRevision", voice_revision), manifest.get("styleRevision", style_revision)))
         elif job.get("state") == "canceled" and old.get("state") != "canceled" or (job.get("cancelRequested") and not old.get("cancelRequested")):
             events.append(_event("job.cancelled", actor, now, {"jobId": job["id"], "variantId": manifest.get("variantId"), "state": job.get("state")}, _scope({}, manifest), {}, manifest.get("voiceRevision", voice_revision), manifest.get("styleRevision", style_revision)))

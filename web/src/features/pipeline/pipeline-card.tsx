@@ -89,7 +89,11 @@ export const REVISION_ORIGIN: Record<string, string> = {
   fixture: 'Written',
   'author-edit': 'Edited',
   'chosen-opening': 'Opening chosen',
-  'accepted-fixture-replacement': 'Update accepted'
+  'accepted-fixture-replacement': 'Update accepted',
+  // Draft edits: an accepted tone or polish candidate, a restored version, and a Post Doctor or trend suggestion the person applied.
+  'accepted-edit': 'Rewording accepted',
+  restored: 'Restored',
+  'assistant-edit': 'Suggestion applied'
 };
 
 export async function copyText(text: string) {

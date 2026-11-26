@@ -46,11 +46,27 @@ def messages(runtime, projection, model, instructions=''):
     return [{'role': 'system', 'content': SYSTEM}, {'role': 'user', 'content': content}]
 
 
-def quote(runtime, projection, model, instructions=''):
+def estimate(runtime, model, request):
+    """The reservation ceiling in micro-USD for one analysis call carrying these messages. Shared by the single-call
+    sample analysis here and the batched corpus analysis (voice_corpus), so both quote the same way."""
     from .model_runtime import output_cap  # The same ceiling _call sends (reasoning headroom for thinking models).
-    request = messages(runtime, projection, model, instructions)
     # Bytes conservatively upper-bound tokens; exact configured model pricing is required.
     return math.ceil(runtime._cost(model, len(json.dumps(request, ensure_ascii=False).encode()) + 256, output_cap(model)) * 1_000_000)
+
+
+def call_cost(runtime, model, usage):
+    """What one finished call cost in USD: the gateway's own figure, else its token counts at the configured price,
+    else None (unknown, which a settlement must never record as zero)."""
+    reported = usage.get('cost')
+    if type(reported) in (int, float) and math.isfinite(reported) and reported >= 0:
+        return reported
+    if all(type(usage.get(key)) is int and 0 <= usage[key] <= 2_000_000 for key in ('prompt_tokens', 'completion_tokens')):
+        return runtime._cost(model, usage['prompt_tokens'], usage['completion_tokens'])
+    return None
+
+
+def quote(runtime, projection, model, instructions=''):
+    return estimate(runtime, model, messages(runtime, projection, model, instructions))
 
 
 def analyze(runtime, projection, model, instructions=''):
@@ -65,13 +81,7 @@ def analyze(runtime, projection, model, instructions=''):
         output = json.loads(content)
     except (ValueError, TypeError) as error:
         raise AlphaError('The voice model returned invalid JSON. No profile was saved.', 502) from error
-    cost = None
-    reported = usage.get('cost')
-    if type(reported) in (int, float) and math.isfinite(reported) and reported >= 0:
-        cost = reported
-    elif all(type(usage.get(key)) is int and 0 <= usage[key] <= 2_000_000 for key in ('prompt_tokens', 'completion_tokens')):
-        cost = runtime._cost(model, usage['prompt_tokens'], usage['completion_tokens'])
-    return {'output': output, 'usage': {'costUsd': cost, 'modelRequests': 1, 'model': model, 'provider': runtime.provider}}
+    return {'output': output, 'usage': {'costUsd': call_cost(runtime, model, usage), 'modelRequests': 1, 'model': model, 'provider': runtime.provider}}
 
 
 def proposal_from_output(output, projection, actor, now, model, provider):
@@ -81,13 +91,20 @@ def proposal_from_output(output, projection, actor, now, model, provider):
     if checked['quarantined'] or not checked['dimensions']:
         raise AlphaError('Voice analysis included unsupported observations. No profile was saved.', 422)
     samples = {sample['id']: sample for sample in projection['samples']}
-    seen = set()
-    for raw, dimension in zip(output['dimensions'], checked['dimensions']):
+    seen, dropped = set(), set()
+    # A fragment is a quotation too: an observation that carries a run of a sample's own words (five words, or eight
+    # CJK characters) is left out of the proposal. The provider has already billed this call, so the other
+    # observations are kept. An observation copied whole still refuses the analysis.
+    fragments = voice_analysis.copied([dimension['observation'] for dimension in checked['dimensions']], [sample['text'] for sample in samples.values()])
+    for index, (raw, dimension) in enumerate(zip(output['dimensions'], checked['dimensions'])):
         if dimension['id'] in seen:
             raise AlphaError('Voice analysis repeated a dimension.', 422)
         seen.add(dimension['id'])
         if any(len(dimension['observation']) >= 24 and dimension['observation'] in sample['text'] for sample in samples.values()):
             raise AlphaError('Style guidance must be abstracted, not copied source prose.', 422)
+        if index in fragments:
+            dropped.add(index)
+            continue
         quotes = raw.get('quotes')
         if not isinstance(quotes, list) or not 1 <= len(quotes) <= 50:
             raise AlphaError('Every style observation needs exact sample evidence.', 422)
@@ -103,6 +120,9 @@ def proposal_from_output(output, projection, actor, now, model, provider):
         if cited - {item['sourceId'] for item in verified}:
             raise AlphaError('A cited sample has no supporting excerpt.', 409)
         dimension['quotes'] = verified
+    checked['dimensions'] = [dimension for index, dimension in enumerate(checked['dimensions']) if index not in dropped]
+    if not checked['dimensions']:
+        raise AlphaError('Every observation repeated wording from the samples, so none could be kept. Style guidance must be abstracted; no profile was saved.', 422)
     return {'schema': 'postriff.voice-profile-proposal.v1', 'status': 'proposed', 'tone': None, 'toneBasis': 'see_evidence_dimensions',
             'analysisMethod': 'ai', 'analysisModel': model, 'analysisProvider': provider, 'analysisRoute': projection['route'],
             'writingExample': '', 'observations': [d['observation'] for d in checked['dimensions'] if d['evidenceLevel'] != 'conflicting'],

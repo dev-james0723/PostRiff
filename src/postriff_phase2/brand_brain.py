@@ -6,18 +6,37 @@ an AI provider; the explicit quoted route delegates to HostedVoiceAnalysis.
 """
 from __future__ import annotations
 
+import contextvars
 import copy
 import json
 import re
+from contextlib import contextmanager
 
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
-from . import voice_analysis, voice_sources
+from . import locales, memory, voice_analysis, voice_sources
 
 ACTIONS = frozenset({'brand_brain_import', 'brand_brain_analyze', 'brand_brain_review',
                      'brand_brain_preview', 'brand_brain_approve', 'brand_brain_restore', 'brand_brain_discard',
-                     'brand_brain_feedback', 'brand_brain_clean_restore', 'brand_brain_manual'})
+                     'brand_brain_feedback', 'brand_brain_clean_restore', 'brand_brain_manual',
+                     'brand_brain_import_propose', 'brand_brain_trait_correct'})
 BOUND = ('scheduled', 'approved', 'claimed')
+# Quick corrections on one trait of the proposal under review (brand_brain_trait_correct).
+CORRECTIONS = ('sounds_like_me', 'not_me', 'only_scope', 'old_style')
+
+# The posts an import proposal is built from are read on the server (voice_corpus.HostedImportProposal) and handed to
+# the state command through this variable. They are never part of the client's payload, so a client cannot supply
+# "evidence" of its own, and the request fingerprint stays small.
+_IMPORT_EVIDENCE = contextvars.ContextVar('brand_brain_import_evidence', default=None)
+
+
+@contextmanager
+def import_evidence(evidence):
+    token = _IMPORT_EVIDENCE.set(evidence)
+    try:
+        yield
+    finally:
+        _IMPORT_EVIDENCE.reset(token)
 
 
 def request_key(payload):
@@ -53,7 +72,9 @@ def validate_profile(state, profile):
         raise AlphaError('Voice evidence or analysis permission changed. Analyse current sources again.', 409)
     samples = {s['id']: s for s in projection['samples']}
     for dimension in profile.get('dimensions', []):
-        if dimension.get('decision') == 'reject' or dimension.get('evidenceLevel') in ('user-defined', 'insufficient'):
+        # A trait built from imported posts (voice_corpus: basis measured or model) cites post ids, not writing samples.
+        # It sits beside sample-backed traits when a separate account's proposal carries the approved voice.
+        if dimension.get('decision') == 'reject' or dimension.get('evidenceLevel') in ('user-defined', 'insufficient') or dimension.get('basis') in ('measured', 'model'):
             continue
         cited = set(dimension.get('support', []) + dimension.get('counterEvidence', []))
         quotes = dimension.get('quotes', [])
@@ -123,6 +144,34 @@ def _preserve_boundaries(state):
             identities.add(identity)
 
 
+def _observations(profile):
+    """What the profile says everywhere: its kept, established, current traits that carry no scope, then the person's
+    own guidance. A scoped trait stays on `dimensions` and is rendered only for its destination (memory.render_files)."""
+    return [item['observation'] for item in profile.get('dimensions', []) if memory.applies_everywhere(item)] + list(profile.get('userGuidance', []))
+
+
+def _correction_scope(value, trait):
+    """Where the person says a trait holds. A trait that belongs to one account keeps that account: a correction can
+    narrow a separate voice, never spread it to other accounts."""
+    if not isinstance(value, dict) or not value or set(value) - set(memory.SCOPE_KEYS):
+        raise AlphaError('Choose where this trait applies: platforms, accounts or languages.')
+    scope = {}
+    for key, items in value.items():
+        if not isinstance(items, list) or len(items) > 8 or any(not isinstance(item, str) or not item.strip() or len(item) > (200 if key == 'accounts' else 80) for item in items):
+            raise AlphaError('Choose up to eight platforms, accounts or languages for this trait.')
+        chosen = list(dict.fromkeys(item.strip() for item in items))
+        if key == 'languages' and any(locales.canonical(item, family_ok=True) is None for item in chosen):
+            raise AlphaError('Choose a language Rafii knows for this trait.')
+        if chosen:
+            scope[key] = chosen
+    own = memory.trait_scope(trait).get('accounts')
+    if own:
+        scope['accounts'] = own
+    if not scope:
+        raise AlphaError('Choose where this trait applies: platforms, accounts or languages.')
+    return scope
+
+
 def apply_action(state, action, payload, actor, now, engine):
     if action not in ACTIONS:
         return False
@@ -175,6 +224,42 @@ def apply_action(state, action, payload, actor, now, engine):
             if source.get('id') in speaker['provisional']['evidenceSourceIds']:
                 source['lastAnalysis'] = {'route': 'local-rules', 'model': None, 'provider': None, 'at': now, 'contentHash': source.get('contentHash')}
         speaker.pop('brandBrainPreview', None)
+    elif action == 'brand_brain_import_propose':
+        group_key = payload.get('groupKey', 'brand')
+        if not isinstance(group_key, str) or not 1 <= len(group_key) <= 200:
+            raise AlphaError('Choose which imported account group to build this proposal from.')
+        evidence = _IMPORT_EVIDENCE.get()
+        if not isinstance(evidence, dict) or (evidence.get('group') or {}).get('key') != group_key:
+            raise AlphaError('The imported posts for this proposal are read on the server. Nothing was changed.', 409)
+        from . import voice_corpus
+        proposal = voice_corpus.propose(state, evidence)
+        proposal.update(workflow='brand_brain', proposedBy=actor, proposedAt=now)
+        # Only the pending proposal is replaced. The approved voice changes when an owner approves, never here.
+        speaker['provisional'] = proposal
+        speaker.pop('brandBrainPreview', None)
+    elif action == 'brand_brain_trait_correct':
+        profile = _candidate(state, payload)
+        trait = next((item for item in profile.get('dimensions', []) if isinstance(item, dict) and item.get('id') == payload.get('traitId')), None)
+        if trait is None:
+            raise AlphaError('Choose a writing trait in this proposal.', 404)
+        correction = payload.get('correction')
+        if correction not in CORRECTIONS:
+            raise AlphaError('Choose one correction: this sounds like me, someone else wrote this, only for a platform or language, or this is my old style.')
+        if correction == 'only_scope':
+            trait['scope'] = _correction_scope(payload.get('scope'), trait)
+        elif correction == 'old_style':
+            # Kept on the proposal so the person can see it and bring it back; never rendered.
+            trait['status'] = 'historical'
+        elif correction == 'not_me':
+            trait['decision'] = 'reject'
+        else:
+            trait['decision'] = 'accept'
+            if trait.get('status') == 'historical':
+                trait['status'] = 'active'
+        trait.update(correction=correction, reviewedBy=actor, reviewedAt=now)
+        profile['observations'] = _observations(profile)
+        profile.update(status='reviewing', reviewedBy=actor, reviewedAt=now)
+        speaker.pop('brandBrainPreview', None)
     elif action == 'brand_brain_clean_restore':
         record = next((r for r in speaker.get('revisions', []) if r['revision'] == payload.get('revision')), None)
         if not record:
@@ -184,8 +269,12 @@ def apply_action(state, action, payload, actor, now, engine):
         for item in old.get('dimensions', []):
             if item.get('userAuthored') or item.get('evidenceLevel') == 'user-defined':
                 if item.get('decision') != 'reject':
+                    # Where the person said a trait holds, and that it is their old style, are their own decisions:
+                    # kept, so a scoped or old-style trait never comes back as a general one.
                     dimensions.append({'id': item['id'], 'observation': item['observation'], 'userAuthored': True,
-                        'evidenceLevel': 'user-defined', 'support': [], 'counterEvidence': [], 'quotes': [], 'decision': 'accept'})
+                        'evidenceLevel': 'user-defined', 'support': [], 'counterEvidence': [], 'quotes': [], 'decision': 'accept',
+                        **({'scope': copy.deepcopy(memory.trait_scope(item))} if memory.trait_scope(item) else {}),
+                        **({'status': 'historical'} if item.get('status') == 'historical' else {})})
         explicit = list(old.get('userGuidance', []))
         if old.get('observationsBasis') == 'owner_edited' or not old.get('analysisMethod'):
             explicit.extend(old.get('observations', []))
@@ -193,7 +282,7 @@ def apply_action(state, action, payload, actor, now, engine):
         speaker['provisional'] = {'schema': 'postriff.voice-profile-proposal.v1', 'workflow': 'brand_brain',
             'status': 'proposed', 'analysisMethod': 'user-authored', 'tone': tone, 'toneBasis': 'user_defined',
             'dimensions': dimensions, 'userGuidance': list(dict.fromkeys(explicit)),
-            'observations': list(dict.fromkeys([d['observation'] for d in dimensions] + explicit)),
+            'observations': list(dict.fromkeys([d['observation'] for d in dimensions if memory.applies_everywhere(d)] + explicit)),
             'unknowns': ['Clean proposal: all inferred evidence, raw quotations and historical permissions were removed. Review the remaining user-authored guidance before approval.'],
             'writingExample': '', 'preferences': [], 'sourceBindings': [], 'evidenceSourceIds': [],
             'cleanedFromRevision': record['revision'], 'proposedBy': actor, 'proposedAt': now}
@@ -212,8 +301,10 @@ def apply_action(state, action, payload, actor, now, engine):
     elif action == 'brand_brain_review':
         profile = _candidate(state, payload)
         decisions = payload.get('decisions')
-        if not isinstance(decisions, list) or len(decisions) > 18:
-            raise AlphaError('Review up to 18 writing traits.')
+        # One review may decide on every trait a proposal can hold; that bound follows the allowed dimension ids.
+        from .voice_corpus import MAX_TRAITS
+        if not isinstance(decisions, list) or len(decisions) > MAX_TRAITS:
+            raise AlphaError(f'Review up to {MAX_TRAITS} writing traits.')
         dimensions = {item['id']: item for item in profile.get('dimensions', [])}
         if not dimensions and 'userGuidance' not in profile and not profile.get('evidenceSourceIds'):
             profile['userGuidance'] = list(profile.get('observations', []))
@@ -235,7 +326,7 @@ def apply_action(state, action, payload, actor, now, engine):
             if not isinstance(tone, str) or len(tone) > 160:
                 raise AlphaError('Keep the core voice under 160 characters.')
             profile.update(tone=tone.strip() or None, toneBasis='user_defined')
-        profile['observations'] = [d['observation'] for d in dimensions.values() if d.get('decision') != 'reject' and d.get('evidenceLevel') not in ('conflicting', 'insufficient')] + list(profile.get('userGuidance', []))
+        profile['observations'] = _observations(profile)
         profile.update(status='reviewing', reviewedBy=actor, reviewedAt=now)
         speaker.pop('brandBrainPreview', None)
     elif action == 'brand_brain_preview':

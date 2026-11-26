@@ -1,0 +1,92 @@
+{
+  "name": "editorial-contract",
+  "version": "1.0.0",
+  "summary": "What an editing pass may change and what it must keep. Shared by the product's draft editing and the public editing skill.",
+  "modes": [
+    {
+      "id": "polish",
+      "label": "Polish wording",
+      "guide": "Make the text clearer, more natural and more specific for its reader. Keep the author's voice and the tone the text already has. Professional writing can be natural writing; do not trade one for the other."
+    },
+    {
+      "id": "tone",
+      "label": "Change tone",
+      "guide": "Change the attitude of this message for its reader and situation: warmth, formality, directness or lightness. Tone is not voice: keep the author's recurring habits when a voice is supplied."
+    }
+  ],
+  "tones": [
+    {
+      "id": "warm",
+      "label": "Warm",
+      "guide": "Sound kind and close to the reader. Use plain, considerate wording and speak to the reader directly where the text already does. Do not add personal stories, feelings, praise or thanks that the text does not contain."
+    },
+    {
+      "id": "professional",
+      "label": "Professional",
+      "guide": "Sound composed and exact. Prefer complete sentences and precise wording. Do not make the text stiff, longer or more formal than its platform needs, and keep a first-person voice that is already there."
+    },
+    {
+      "id": "direct",
+      "label": "Direct",
+      "guide": "Say the main point early and plainly. Cut preamble and qualifiers that carry no information. Keep every hedge, condition and limit that changes what is claimed."
+    },
+    {
+      "id": "playful",
+      "label": "Playful",
+      "guide": "Sound light and good-humoured in a way that fits the subject and the reader. Do not joke about facts, do not mock anyone, and do not add emoji, slang or exclamation marks the author does not already use."
+    },
+    {
+      "id": "custom",
+      "label": "Custom",
+      "guide": "Follow the person's own tone instruction. It can change attitude only; the rules about what must stay still apply."
+    }
+  ],
+  "depths": [
+    {
+      "id": "light",
+      "label": "Light",
+      "guide": "Fix concrete friction only and leave the rest as written. Returning the text unchanged is a valid result."
+    },
+    {
+      "id": "standard",
+      "label": "Standard",
+      "guide": "Recast sentences that read awkwardly or generically. Keep every substantive detail, the order of ideas and the emphasis."
+    },
+    {
+      "id": "deep",
+      "label": "Deep",
+      "guide": "Only when the person asks for a strong rewrite. Rebuild the prose from its meaning. Keep every distinct claim and its logical dependencies, and keep the order unless a change was requested."
+    }
+  ],
+  "protected": [
+    {"id": "names", "rule": "Names of people, organisations, products and places stay exactly as written."},
+    {"id": "dates", "rule": "Dates, times, deadlines and durations stay the same."},
+    {"id": "quantities", "rule": "Numbers, units, prices, percentages and counts stay the same. Add none."},
+    {"id": "links", "rule": "URLs, handles, hashtags, email addresses and codes stay character for character."},
+    {"id": "quotations", "rule": "Quoted words stay verbatim and keep their speaker."},
+    {"id": "attribution", "rule": "Who said, did, made or found something stays the same."},
+    {"id": "negation", "rule": "A negative stays negative and a positive stays positive."},
+    {"id": "conditions", "rule": "If, unless, only when, and other conditions and limits stay attached to their claim."},
+    {"id": "uncertainty", "rule": "Might, may, about, so far, we think, and other hedges keep their strength. Uncertain never becomes certain."},
+    {"id": "commitment", "rule": "A request, a possibility, a plan, an approval and finished work stay what they are. Nothing is promised that was not promised."},
+    {"id": "terminology", "rule": "Specialist and brand terms stay as written; improve the words around them."},
+    {"id": "language", "rule": "The language, script and intended mixing of languages stay the same. Do not translate, convert script, or tidy away deliberate code-switching."},
+    {"id": "experience", "rule": "Add no biography, feeling, anecdote, testimonial, credential, source or result the text does not contain."}
+  ],
+  "separations": [
+    "Changing tone is not translating.",
+    "Changing tone is not summarising or shortening unless that was asked.",
+    "Changing tone is not changing the argument or adding evidence.",
+    "Changing tone for one message is not changing the brand's identity or saved voice."
+  ],
+  "voice": {
+    "personalized": "When an approved voice is supplied, keep its recurring habits (length, structure, openings, closings, tags, emoji use) while applying the requested tone.",
+    "neutral": "In neutral mode add no learned personal voice. A tone the person chose for this message still applies, and so do facts and boundaries."
+  },
+  "noChange": "If the text already works for its reader and already has the requested tone, return it unchanged and say so. More changes are not better.",
+  "scope": {
+    "draft": "Edit the whole text.",
+    "selection": "Edit only the selected passage. Every character outside it stays as it is."
+  },
+  "judging": "Judge an edit by whether meaning was kept, whether it still sounds like the same author, whether it suits the reader, and which version a person prefers. Scores from AI-text detectors and claims about who wrote a text are not measures of quality."
+}

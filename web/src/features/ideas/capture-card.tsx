@@ -16,6 +16,7 @@ import type { Snapshot } from '@/lib/api/types';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { DraftVoiceToggle } from './draft-voice-toggle';
 import { useDraftHandoff } from './use-draft';
 import { hostOf, ideaSources, LINK_PATTERN, plural, useActError } from './use-sources';
 
@@ -357,6 +358,8 @@ export const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(funct
             {draft.modelLabel} · {draft.destinationLabel}
           </p>
           <div className='flex flex-wrap items-center gap-2 sm:shrink-0'>
+            {/* The voice "Draft now" writes in: neutral unless chosen, and offered only when an approved voice can be used. */}
+            <DraftVoiceToggle voice={draft.voice} disabled={draft.busy} />
             <StatefulButton variant='ghost' className={GLASS} state={draft.busy ? 'loading' : 'idle'} loadingText='Starting…' disabled={!ready || !body || saveState === 'loading'} onClick={() => void draftNow()}>
               Draft now
             </StatefulButton>

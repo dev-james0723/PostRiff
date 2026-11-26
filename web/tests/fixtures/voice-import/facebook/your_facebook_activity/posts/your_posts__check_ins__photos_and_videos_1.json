@@ -1,0 +1,53 @@
+[
+  {
+    "timestamp": 1700000000,
+    "data": [
+      {
+        "post": "We open the studio doors at ten on Saturday. Bring your questions."
+      },
+      {
+        "update_timestamp": 1700000100
+      }
+    ],
+    "title": "Example Studio updated their status."
+  },
+  {
+    "timestamp": 1700100000,
+    "attachments": [
+      {
+        "data": [
+          {
+            "media": {
+              "uri": "your_facebook_activity/posts/media/synthetic_0001.jpg",
+              "creation_timestamp": 1700100000,
+              "title": "",
+              "description": ""
+            }
+          }
+        ]
+      }
+    ],
+    "title": "Example Studio added a new photo."
+  },
+  {
+    "timestamp": 1700200000,
+    "data": [
+      {
+        "post": "æ\u0088\u0091å\u0080\u0091å°\u0087æ\u0096¼æ\u0098\u009fæ\u009c\u009fäº\u0094æ\u008e¨å\u0087ºæ\u0096°å\u008a\u009fè\u0083½ã\u0080\u0082"
+      }
+    ],
+    "attachments": [
+      {
+        "data": [
+          {
+            "external_context": {
+              "url": "https://example.com/programme"
+            }
+          }
+        ]
+      }
+    ],
+    "title": "Example Studio shared a link."
+  },
+  42
+]

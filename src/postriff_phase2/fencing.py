@@ -26,10 +26,14 @@ def neutralize(text):
 MATERIAL_MAX = 6000          # all sections together (ideas.MAX_TEXT)
 NOTES_MAX = 4
 NOTE_MAX = 1200
-SECTION_ROLES = ("rework", "handed_in", "inspire")
+# "context" is the rest of a draft around a passage being edited (draft_edits): read only, never rewritten.
+SECTION_ROLES = ("rework", "handed_in", "inspire", "context")
 NOTE_KINDS = ("photo", "video_frames")
 VOICE_SAMPLES_MAX = 3
 VOICE_SAMPLE_MAX = 1500
+# A tone or polish edit of an existing draft (draft_edits): what the writer is told about it, each value bounded.
+EDIT_FIELDS = ("mode", "guide", "tone", "toneGuide", "instruction", "depth", "depthGuide", "scope")
+EDIT_FIELD_MAX = 600
 
 
 def _clip(value, limit):
@@ -38,9 +42,13 @@ def _clip(value, limit):
 
 def writer_fields(request):
     """The writer contract's data fields (chat-context SPEC §6.8): `material` sections (rework | handed_in first, then
-    inspire; ≤ 6,000 characters in total), `referenceNotes` (≤ 4 × 1,200) and `voiceSamples` (≤ 3 × 1,500). Each text
-    is neutralised again here so a route never depends on the caller having done it. Keys are omitted when empty."""
+    inspire; ≤ 6,000 characters in total), `referenceNotes` (≤ 4 × 1,200), `voiceSamples` (≤ 3 × 1,500) and, for an
+    edit of an existing draft, `edit`. Each text is neutralised again here so a route never depends on the caller
+    having done it. Keys are omitted when empty."""
     out = {}
+    edit = request.get("edit") if isinstance(request.get("edit"), dict) else None
+    if edit and isinstance(edit.get("mode"), str) and edit["mode"]:
+        out["edit"] = {key: neutralize(_clip(edit[key], EDIT_FIELD_MAX)) for key in EDIT_FIELDS if isinstance(edit.get(key), str) and edit[key]}
     sections = [s for s in request.get("material") or [] if isinstance(s, dict) and s.get("role") in SECTION_ROLES] if isinstance(request.get("material"), list) else []
     sections.sort(key=lambda s: 0 if s["role"] != "inspire" else 1)
     room, material = MATERIAL_MAX, []

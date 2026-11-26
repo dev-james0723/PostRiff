@@ -28,6 +28,9 @@ PURPOSES = ("analysis", "generation", "examples")
 MAX_EXAMPLE_SAMPLES = 3
 MAX_EXAMPLE_CHARS = 1_500
 LABELS = ("representative", "outdated", "sponsored", "guest", "ai_generated")
+# Samples labelled as someone else's writing or a model's are never evidence of the author's voice: `project` leaves
+# them out for every purpose and route, with reason `label` (brand intelligence CTX-1).
+NOT_OWN_WRITING = ("guest", "ai_generated")
 # A writing (generation) grant names one exact writer route, or this class: every model Rafii's managed writer offers
 # through the Vercel AI Gateway, now or later. Each draft still records the exact route it used (voiceContext.route) and
 # the sample revisions it read (bindings). Analysis always names one exact route.
@@ -274,6 +277,8 @@ def project(state: dict, source_ids: list[str], purpose: str, route: str) -> dic
             reason = "revoked"
         elif not source.get("selected"):
             reason = "not_selected"
+        elif source.get("label") in NOT_OWN_WRITING:
+            reason = "label"
         elif purpose not in source.get("purposeGrants", []):
             reason = "purpose_not_granted"
         elif not route_granted(source, purpose, route):
