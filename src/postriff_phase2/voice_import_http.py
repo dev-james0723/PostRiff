@@ -6,9 +6,13 @@ unless POSTRIFF_VOICE_IMPORT mounted the importer (`service.voice_import`). Role
 the workspace transaction: reading is for members, importing needs manage_connections, correcting a post needs edit.
 
 The analysis route belongs to the corpus analysis service (voice_corpus.VoiceCorpusAnalysis, owner only): it is used
-when one is mounted as `service.<ANALYSIS_ATTRIBUTE>`, with `status`, `quote` and `start`. A quote is answered as
-`{quote}`, a start as the service's `{analysis}` (202), and `GET /voice-imports` carries the service's status fields
-(`analysis`, `analyses`) at its top level, or `analysis: null` when no analysis service is mounted.
+when one is mounted as `service.<ANALYSIS_ATTRIBUTE>`, with `status`, `quote`, `options` and `start`. The body names
+the analysis quality (`quality`: economy, balanced or best; absent means the deployment's default stop):
+`{quote: true, options: true}` answers every stop's quote for the quality slider, `{quote: true, quality}` one quote
+as `{quote}`, and `{quoteId, quality}` starts the analysis that quote described (202, the service's `{analysis}`); the
+quality must be the one the quote was given for. `model` (optional, "Advanced · choose AI provider") names one of the
+stop's models; it is honoured exactly or refused, and a start must name the same model as its quote. `GET /voice-imports` carries the service's status fields (`analysis`,
+`analyses`) at its top level, or `analysis: null` when no analysis service is mounted.
 """
 from __future__ import annotations
 
@@ -16,7 +20,7 @@ from urllib.parse import parse_qs
 
 from postriff_alpha.domain import AlphaError
 
-from . import voice_import
+from . import analysis_quality, voice_import
 
 ANALYSIS_ATTRIBUTE = "voice_corpus_analysis"
 POST_FILTERS = ("provider", "accountKey", "status", "cursor", "ids")
@@ -31,13 +35,18 @@ def _analysis(service, workspace_id, token, body):
     analysis = getattr(service, ANALYSIS_ATTRIBUTE, None)
     if analysis is None:
         raise AlphaError("AI analysis of imported posts is not available here.", 404, code="voice_analysis_unavailable")
-    group, quote, quote_id = (body.get("groupKey"), body.get("quote"), body.get("quoteId")) if isinstance(body, dict) else (5, None, None)
+    body = body if isinstance(body, dict) else {"groupKey": 5}
+    group, quote, quote_id = body.get("groupKey"), body.get("quote"), body.get("quoteId")
     if group is not None and not isinstance(group, str):
         raise AlphaError("Choose the voice to analyse.", 400)
+    quality = analysis_quality.check(body.get("quality"))
+    model = analysis_quality.check_model(body.get("model"))                 # "Advanced · choose AI provider", else None
     if quote is True and quote_id is None:
-        return {"quote": analysis.quote(workspace_id, token, group)}           # the service returns the bare quote
+        if body.get("options") is True:
+            return analysis.options(workspace_id, token, group)              # every stop's quote, for the slider
+        return {"quote": analysis.quote(workspace_id, token, group, quality, model)}  # the service returns the bare quote
     if quote is None and isinstance(quote_id, str) and quote_id:
-        return analysis.start(workspace_id, token, group, quote_id)
+        return analysis.start(workspace_id, token, group, quote_id, quality, model)
     raise AlphaError("Ask for a quote first, then start the analysis with that quote.", 400)
 
 

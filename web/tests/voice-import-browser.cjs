@@ -28,6 +28,9 @@
  *        RAFII_CRON_SECRET                 with cron: the harness's cron secret (default: the value
  *                                          scripts/postriff_dev_hosted.py passes, 24 × "d")
  *        RAFII_VOICE_IMPORT_EVIDENCE_DIR   screenshots and result.json (default .token-pilot/reports/voice-import-browser)
+ *        RAFII_ANALYSIS_FIXTURE            1: also read the posts with AI at a chosen quality (step 2b: three priced stops,
+ *                                          keyboard move to Best, approval, the reading runs to done). The API must run with
+ *                                          --voice-import-fixture --analysis-fixture.
  */
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
@@ -44,6 +47,8 @@ const provider = (process.env.RAFII_VOICE_IMPORT_PROVIDER || 'threads').trim().t
 const tickMode = (process.env.RAFII_VOICE_IMPORT_TICK || 'wait').trim().toLowerCase();
 if (!['wait', 'cron'].includes(tickMode)) throw new Error(`RAFII_VOICE_IMPORT_TICK must be "wait" or "cron" (got ${tickMode}).`);
 const cronSecret = process.env.RAFII_CRON_SECRET || 'd'.repeat(24);
+// With the API's --analysis-fixture: the AI reading of the imported posts at a chosen quality (step 2b).
+const analysisFixture = process.env.RAFII_ANALYSIS_FIXTURE === '1';
 const root = path.resolve(__dirname, '../..');
 const out = path.resolve(process.env.RAFII_VOICE_IMPORT_EVIDENCE_DIR || path.join(root, '.token-pilot/reports/voice-import-browser'));
 const X_FILES = ['tweets.js', 'note-tweet.js'].map((name) => path.join(__dirname, 'fixtures/voice-import/x/data', name));
@@ -344,6 +349,62 @@ async function journey(browser, width) {
     assert.equal((view.imports ?? []).some((item) => item.provider === 'x'), false, 'the X run is gone');
     assert.equal((view.coverage?.accounts ?? []).some((item) => item.provider === 'x'), false, 'no X posts remain');
     record(width, `X export: ${ready} posts read in the browser and sent with real progress (${ready} / ${ready}); the workspace counted ${ready}; deleting the import removed its ${ready} posts`);
+
+    // 2b. With RAFII_ANALYSIS_FIXTURE=1 (API with --analysis-fixture): read the posts with AI at a chosen quality.
+    if (analysisFixture) {
+      const ai = panel.getByTestId('voice-import-ai');
+      await ai.getByTestId('voice-import-ai-open').click();
+      const quality = ai.getByTestId('analysis-quality');
+      await quality.waitFor({ timeout: 30_000 });
+      const slider = quality.getByRole('slider');
+      await slider.waitFor();
+      assert.match((await quality.getByTestId('analysis-quality-selected').textContent()) ?? '', /^Balanced · US\$/, 'the screen starts on Balanced, with its own quote');
+      const costs = await ai.evaluate(async (el) => {
+        const rows = [...el.querySelectorAll('[data-testid="analysis-quality"] ol li')].map((li) => li.innerText.replace(/\s+/g, ' ').trim());
+        return rows;
+      });
+      assert.equal(costs.length, 3, 'three stops: Economy, Balanced, Best');
+      const usd = costs.map((row) => Number((row.match(/US\$([\d.]+)/) ?? [])[1]));
+      assert.ok(usd.every((value) => value > 0) && usd[0] < usd[1] && usd[1] < usd[2], `each stop has its own price, rising with quality: ${costs.join(' | ')}`);
+      await slider.focus();
+      await page.keyboard.press('ArrowRight');
+      await quality.getByTestId('analysis-quality-selected').filter({ hasText: /^Best · / }).waitFor();
+      assert.match((await slider.getAttribute('aria-valuetext')) ?? '', /^Best, US\$/, 'the slider tells a screen reader the stop and its price');
+      const recommendedCost = (await ai.getByTestId('voice-import-ai-cost').textContent()) ?? '';
+      // The main screen speaks quality and price: no model id outside the closed "Advanced" disclosure.
+      const shown = await ai.evaluate((el) => [...el.querySelectorAll(':scope > div > *:not([data-testid="analysis-provider"])')].map((node) => node.textContent).join(' '));
+      assert.doesNotMatch(shown, /claude-|gemini-|deepseek-|anthropic\/|google\//, 'no model id on the main screen');
+      await ai.getByTestId('voice-import-ai-egress').filter({ hasText: 'Anthropic (Claude)' }).waitFor();
+      await noOverflow(page, width, 'analysis quality');
+      await shot(page, `analysis-quality-${width}`);
+      await axePanel(page, panel, width, 'analysis quality open');
+      // "Advanced · choose AI provider": Best on Google instead; its own quote, and exactly that model runs.
+      const advanced = ai.getByTestId('analysis-provider');
+      assert.equal(await advanced.evaluate((el) => el.open), false, 'Advanced is closed by default');
+      await advanced.locator('summary').click();
+      await advanced.getByRole('combobox', { name: 'AI provider', exact: true }).selectOption({ label: 'Google (Gemini)' });
+      await ai.getByTestId('voice-import-ai-egress').filter({ hasText: 'Google (Gemini)' }).waitFor({ timeout: 30_000 });
+      const providerCost = (await ai.getByTestId('voice-import-ai-cost').textContent()) ?? '';
+      assert.notEqual(providerCost, recommendedCost, `the provider's own quote replaces the recommended one (${recommendedCost} → ${providerCost})`);
+      await axePanel(page, panel, width, 'advanced provider open');
+      const startButton = ai.getByTestId('voice-import-ai-start');
+      assert.equal(await startButton.isDisabled(), true, 'nothing starts before the owner approves the quote');
+      await ai.getByTestId('voice-import-ai-approve').click();
+      await startButton.click();
+      await page.locator('[data-sonner-toast]').filter({ hasText: /The AI reading has started\./ }).waitFor();
+      let reading = null;
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        reading = (await voiceImports(api, ws)).analysis;
+        if (reading && !['queued', 'running'].includes(reading.status)) break;
+        await sleep(2_000);
+      }
+      assert.equal(reading?.status, 'done', `the AI reading finished (${JSON.stringify(reading)})`);
+      assert.equal(reading?.quality, 'best');
+      assert.equal(reading?.model, 'google/gemini-4-neon', 'the chosen provider ran, not the recommended one');
+      await panel.getByTestId('voice-import-ai-status').filter({ hasText: /finished · Best/ }).waitFor({ timeout: 30_000 });
+      await panel.getByTestId('voice-import-ai-model').filter({ hasText: 'gemini-4-neon · Google (Gemini)' }).waitFor();
+      record(width, `AI reading: three priced stops (${costs.join(' | ')}); arrow key moved Balanced → Best; no model id on the main screen; Advanced (closed by default) switched Best to Google with its own quote (${recommendedCost} → ${providerCost}); approval required; the reading ran on gemini-4-neon and the receipt names it in small print; axe clean`);
+    }
 
     // 3. Build the proposal, review it in Brand Brain, correct one trait, approve, then mark one post.
     const build = panel.getByTestId('voice-import-build');

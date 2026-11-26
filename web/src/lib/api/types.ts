@@ -1123,6 +1123,18 @@ export interface AgentInfo {
   };
 }
 
+/** The analysis quality slider's stops, cheapest to most thorough (server: analysis_quality.STOPS). */
+export type AnalysisQualityId = 'economy' | 'balanced' | 'best';
+
+/** One stop: its recommended model, whether this deployment offers it, and the makers' models a person may pick under
+ * "Advanced · choose AI provider". A picked model is honoured exactly or refused, never replaced. */
+export interface AnalysisQualityStop {
+  id: AnalysisQualityId;
+  model: string;
+  available: boolean;
+  choices?: { model: string; maker: string; available: boolean }[];
+}
+
 export interface ModelCatalog {
   models: ModelOption[];
   reasoning: ReasoningItem[];
@@ -1130,6 +1142,10 @@ export interface ModelCatalog {
   defaultModel?: string | null;
   /** Featured writer ids in order: the picker lists these first and the rest under "More models". */
   featured?: string[];
+  /** Analysis quality stops for the slider; empty without Rafii's managed route. */
+  analysisQuality?: AnalysisQualityStop[];
+  /** The stop an analysis screen starts on; null when no stop is offered. */
+  defaultAnalysisQuality?: AnalysisQualityId | null;
   agents?: AgentInfo[];
   imageGeneration?: {
     available: boolean;

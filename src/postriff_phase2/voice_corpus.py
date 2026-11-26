@@ -21,7 +21,6 @@ import hashlib
 import json
 import logging
 import math
-import os
 import re
 import time
 import uuid
@@ -30,7 +29,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, timezone
 
 from postriff_alpha.domain import AlphaError
-from . import ai_call_events, locales, memory, voice_ai, voice_analysis, voice_sources
+from . import ai_call_events, analysis_quality, locales, memory, voice_ai, voice_analysis, voice_sources
 from .contracts import digest
 from .credit_meter import millicredits
 from .fencing import neutralize
@@ -61,16 +60,8 @@ MAX_ATTEMPTS = 5                  # claims without progress before an analysis s
 CALLS_PER_TICK = 2                # model calls one cron tick makes, across every analysis it claimed
 TICK_SECONDS = 60                 # no further call starts once a tick has run this long (the cron function is shared)
 QUOTE_WINDOW = 300                # a quote stands for the rest of its five-minute window and the whole next one
-# An operator may give analysis, which is rare and shapes a voice, a stronger model than everyday writing. Only a model
-# this deployment offers (POSTRIFF_MODEL_IDS) is used; anything else, or nothing, keeps the default writer model.
-ANALYSIS_MODEL_ENV = "POSTRIFF_VOICE_ANALYSIS_MODEL"
-
-
-def analysis_model(runtime, values=None):
-    """The model a corpus analysis is quoted and run on: POSTRIFF_VOICE_ANALYSIS_MODEL when the runtime offers it, else
-    the runtime's default. A started analysis keeps the model its quote bound (the receipt), whatever this says later."""
-    wanted = str((os.environ if values is None else values).get(ANALYSIS_MODEL_ENV) or "").strip()
-    return wanted if wanted and wanted in (getattr(runtime, "models", None) or [runtime.model]) else runtime.model
+# The model a quote binds comes from the analysis quality the person chose (analysis_quality: Economy, Balanced, Best).
+# A started analysis keeps the model its quote bound (the receipt), whatever the stops say later.
 MAX_BACKOFF_SECONDS = 600
 START_LIMIT = (10, 600)           # analysis starts per workspace per ten minutes (the bucket the sample analysis uses)
 MAX_SYNTHESIS_INPUT = 120         # merged observations the synthesis call may see, the strongest first
@@ -1060,7 +1051,7 @@ def public_analysis(row) -> dict:
     synthesis = receipt.get("synthesis") if isinstance(receipt.get("synthesis"), dict) else {}
     return {"id": row.get("id"), "groupKey": row.get("groupKey"), "status": row.get("status"), "failure": row.get("failure"),
             "eligible": row.get("eligible"), "analysed": row.get("analysed"), "batches": row.get("batches"), "batchesDone": row.get("batchesDone"),
-            "route": row.get("route"), "model": receipt.get("model"), "promptVersion": row.get("promptVersion"), "synthesis": synthesis.get("status"),
+            "route": row.get("route"), "model": receipt.get("model"), "quality": receipt.get("quality"), "promptVersion": row.get("promptVersion"), "synthesis": synthesis.get("status"),
             "usage": _usage(receipt), "createdAt": row.get("createdAt"), "updatedAt": row.get("updatedAt"),
             "approval": {key: approval[key] for key in ("by", "at", "quotedMicroUsd", "limitMicroUsd", "limitMilliCredits") if key in approval} if approval else None}
 
@@ -1158,8 +1149,11 @@ class VoiceCorpusAnalysis:
             raise AlphaError("Not enough available credits for this analysis. Nothing was sent or charged.", 402, code="credit_limit")
         return {"maxMilliCredits": maximum, "policy": policy, "kind": "spending_limit"}
 
-    def _basis(self, cur, workspace_id, group_key, runtime):
-        """Everything a quote binds except its time window: (basis, analysis it continues or None, posts it sends)."""
+    def _basis(self, cur, workspace_id, group_key, runtime, quality=None, model=None):
+        """Everything a quote binds except its time window: (basis, analysis it continues or None, posts it sends).
+        `quality` is the stop the person chose (analysis_quality); None means the deployment's default stop. `model` is
+        a provider's model named under "Advanced"; None means the stop's recommended model."""
+        quality, model = analysis_quality.model_for(runtime, quality, model=model)
         if self.store.active(cur, workspace_id, group_key):
             raise AlphaError("An analysis of this voice is already running.", 409, code="voice_analysis_active")
         _, posts = read_group(cur, workspace_id, group_key, self.evidence)
@@ -1167,7 +1161,7 @@ class VoiceCorpusAnalysis:
         if len(clean) < MIN_POSTS:
             raise AlphaError("Not enough writing yet: AI analysis needs at least three eligible posts.", 409, code="not_enough_posts")
         batches = plan_batches(clean)
-        model, provider = analysis_model(runtime), runtime.provider
+        provider = runtime.provider
         route, found = f"cloud:{provider}:{model}", corpus_digest(posts)
         # A run that stopped part-way over this same corpus, prompt and route continues from its last finished batch.
         prior = self.store.resumable(cur, workspace_id, group_key)
@@ -1176,7 +1170,7 @@ class VoiceCorpusAnalysis:
             prior = None
         done = int(prior.get("batchesDone") or 0) if prior else 0
         estimate = sum(voice_ai.estimate(runtime, model, batch_messages(batch)[0]) for batch in batches[done:]) + synthesis_estimate(runtime, model)
-        basis = {"groupKey": group_key, "route": route, "model": model, "provider": provider, "promptVersion": PROMPT_VERSION, "corpusDigest": found,
+        basis = {"groupKey": group_key, "quality": quality, "route": route, "model": model, "provider": provider, "promptVersion": PROMPT_VERSION, "corpusDigest": found,
                  "eligible": len(posts), "posts": len(clean), "excluded": {"instructionLike": len(posts) - len(clean)},
                  "batches": len(batches), "batchesDone": done, "calls": len(batches) - done + 1, "estimatedMicroUsd": estimate,
                  "resumes": prior["id"] if prior else None}
@@ -1198,21 +1192,49 @@ class VoiceCorpusAnalysis:
                    **{key: basis[key] for key in ("groupKey", "route", "model", "promptVersion", "corpusDigest", "batches", "batchesDone", "estimatedMicroUsd", "resumes")}}
         return {"id": digest(binding), **copy.deepcopy(basis), "expiresAt": expires, "status": "quoted"}
 
-    def quote(self, workspace_id, token, group_key=None):
-        """What analysing one voice group would cost, for an owner to approve. Nothing is sent, reserved or stored."""
+    def quote(self, workspace_id, token, group_key=None, quality=None, model=None):
+        """What analysing one voice group at one quality (and, under "Advanced", one provider's model) would cost, for
+        an owner to approve. Nothing is sent, reserved or stored."""
         group_key = self._group(group_key)
         with self._owner(workspace_id, token) as (cur, _, actor):
-            basis, _, _ = self._basis(cur, workspace_id, group_key, self._managed())
+            basis, _, _ = self._basis(cur, workspace_id, group_key, self._managed(), quality, model)
         return self._stamped(basis, workspace_id, actor, self._window())
 
-    def start(self, workspace_id, token, group_key, quote_id):
-        """The owner approves the quote with this id: the analysis is queued (or a stopped one continues) with that
-        approval stored on it. Nothing is sent here; the cron worker sends the calls."""
+    def options(self, workspace_id, token, group_key=None):
+        """Every quality stop with the quote of its recommended model, for the quality slider: {options: [{id, model,
+        available, choices, quote, reason}], defaultQuality}. `choices` are the stop's models for "Advanced · choose AI
+        provider" (quote one with `quote(..., model=...)`). A stop this deployment does not offer has reason
+        "not_offered"; one whose credit limit is more than the workspace has available has reason "credit_limit" (a
+        cheaper stop may still fit). Nothing is sent, reserved or stored."""
+        group_key = self._group(group_key)
+        runtime = self._managed()
+        listed = analysis_quality.stops(runtime)
+        rows = []
+        with self._owner(workspace_id, token) as (cur, _, actor):
+            window = self._window()
+            for stop in listed:
+                if not stop["available"]:
+                    rows.append({**stop, "quote": None, "reason": "not_offered"})
+                    continue
+                try:
+                    basis, _, _ = self._basis(cur, workspace_id, group_key, runtime, stop["id"])
+                except AlphaError as error:
+                    if error.code != "credit_limit":
+                        raise
+                    rows.append({**stop, "quote": None, "reason": "credit_limit"})
+                    continue
+                rows.append({**stop, "quote": self._stamped(basis, workspace_id, actor, window), "reason": None})
+        return {"options": rows, "defaultQuality": analysis_quality.default_stop(runtime)}
+
+    def start(self, workspace_id, token, group_key, quote_id, quality=None, model=None):
+        """The owner approves the quote with this id, at the quality (and provider's model) it was given for: the
+        analysis is queued (or a stopped one continues) with that approval stored on it. Nothing is sent here; the cron
+        worker sends the calls."""
         group_key = self._group(group_key)
         if not isinstance(quote_id, str) or not quote_id:
             raise AlphaError("Ask for a quote first, then start the analysis with that quote.", 400)
         with self._owner(workspace_id, token) as (cur, row, actor):
-            basis, prior, clean = self._basis(cur, workspace_id, group_key, self._managed())
+            basis, prior, clean = self._basis(cur, workspace_id, group_key, self._managed(), quality, model)
             window = self._window()
             quote = next((stamped for stamped in (self._stamped(basis, workspace_id, actor, candidate) for candidate in (window, window - 1)) if stamped["id"] == quote_id), None)
             if quote is None:
@@ -1228,7 +1250,7 @@ class VoiceCorpusAnalysis:
             if prior:
                 saved = self.store.requeue(cur, prior["id"], receipt={**copy.deepcopy(prior.get("receipt") or {}), "approval": approval}, requested_by=actor)
             else:
-                receipt = {"route": quote["route"], "model": quote["model"], "provider": quote["provider"], "promptVersion": PROMPT_VERSION, "corpusDigest": quote["corpusDigest"],
+                receipt = {"route": quote["route"], "model": quote["model"], "quality": quote.get("quality"), "provider": quote["provider"], "promptVersion": PROMPT_VERSION, "corpusDigest": quote["corpusDigest"],
                            "approval": approval, "usage": _usage(None), "calls": [], "dropped": {}, "postIdHashes": [], "seq": 0,
                            "excluded": {**quote["excluded"], "truncated": sum(1 for post in clean if len(post["body"].replace("\x00", "")) > MAX_POST_CHARS)}}
                 saved = self.store.create(cur, workspace_id, group_key, route=quote["route"], prompt_version=PROMPT_VERSION, corpus_digest=quote["corpusDigest"],

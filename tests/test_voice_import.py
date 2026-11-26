@@ -898,11 +898,24 @@ class HttpTests(unittest.TestCase):
         quoted = H.handle(service, WS, "session", ["analysis"], "POST", {"groupKey": "brand", "quote": True}, {})
         self.assertEqual(quoted, {"quote": {"id": "q1", "status": "quoted", "estimatedMicroUsd": 1200}})
         self.assertEqual(H.status_code(["analysis"], "POST", quoted), 200)
-        analysis.quote.assert_called_once_with(WS, "session", "brand")
+        analysis.quote.assert_called_once_with(WS, "session", "brand", None, None)
+        H.handle(service, WS, "session", ["analysis"], "POST", {"quote": True, "quality": "best"}, {})
+        analysis.quote.assert_called_with(WS, "session", None, "best", None)
+        H.handle(service, WS, "session", ["analysis"], "POST", {"quote": True, "quality": "best", "model": "google/gemini-x"}, {})
+        analysis.quote.assert_called_with(WS, "session", None, "best", "google/gemini-x")   # "Advanced · choose AI provider"
+        # The quality slider asks for every stop's quote in one call.
+        analysis.options.return_value = {"options": [{"id": "economy", "model": "m-cheap", "available": True, "quote": {"id": "q0"}, "reason": None}],
+                                         "defaultQuality": "economy"}
+        offered = H.handle(service, WS, "session", ["analysis"], "POST", {"quote": True, "options": True, "groupKey": "brand"}, {})
+        self.assertEqual((offered["defaultQuality"], H.status_code(["analysis"], "POST", offered)), ("economy", 200))
+        analysis.options.assert_called_once_with(WS, "session", "brand")
         started = H.handle(service, WS, "session", ["analysis"], "POST", {"quoteId": "q1"}, {})
         self.assertEqual((started, H.status_code(["analysis"], "POST", started)), ({"analysis": {"id": "a1", "status": "queued"}}, 202))
-        analysis.start.assert_called_once_with(WS, "session", None, "q1")
-        for bad in ({}, {"quote": False}, {"quote": True, "quoteId": "q1"}, {"quoteId": 5}, {"groupKey": 5, "quote": True}):
+        analysis.start.assert_called_once_with(WS, "session", None, "q1", None, None)
+        H.handle(service, WS, "session", ["analysis"], "POST", {"quoteId": "q2", "quality": "economy", "model": "google/gemini-x"}, {})
+        analysis.start.assert_called_with(WS, "session", None, "q2", "economy", "google/gemini-x")
+        for bad in ({}, {"quote": False}, {"quote": True, "quoteId": "q1"}, {"quoteId": 5}, {"groupKey": 5, "quote": True},
+                    {"quote": True, "quality": "premium"}, {"quoteId": "q1", "quality": 3}, {"quote": True, "model": "no-maker"}, {"quoteId": "q1", "model": 7}):
             with self.assertRaises(AlphaError) as caught:
                 H.handle(service, WS, "session", ["analysis"], "POST", bad, {})
             self.assertEqual(caught.exception.status, 400)

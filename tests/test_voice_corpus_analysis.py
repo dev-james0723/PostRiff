@@ -14,7 +14,7 @@ from unittest import mock
 
 sys.path[:0] = [str(Path(__file__).resolve().parents[1] / "src"), str(Path(__file__).resolve().parent)]
 from postriff_alpha.domain import AlphaError
-from postriff_phase2 import voice_ai, voice_corpus
+from postriff_phase2 import analysis_quality, voice_ai, voice_corpus
 from postriff_phase2.model_runtime import ServerModelRuntime
 from test_voice_corpus import PLANTED, WORDS, corpus, post
 
@@ -755,9 +755,17 @@ class ProposalFromAnalysis(Harness):
             self.assertNotIn(planted, dumped)
 
 
-class AnalysisModel(Harness):
-    """POSTRIFF_VOICE_ANALYSIS_MODEL gives analysis its own model, but only one the deployment offers."""
-    STRONG = "anthropic/claude-opus-5.5"
+class AnalysisQuality(Harness):
+    """The quality slider: each stop is quoted and run on its own model; a stop the deployment does not offer is never
+    served by another model. Stops map to models in this test with POSTRIFF_ANALYSIS_QUALITY_MODELS."""
+    CHEAP, MIDDLE, STRONG = "openai/gpt-4.1-mini", "anthropic/claude-sonnet-5", "anthropic/claude-opus-5.5"
+    STOPS = json.dumps({"economy": "openai/gpt-4.1-mini", "balanced": "anthropic/claude-sonnet-5", "best": "anthropic/claude-opus-5.5"})
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.dict(os.environ, {analysis_quality.ENV: self.STOPS})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def offering(self, *models):
         self.models_sent = []
@@ -767,29 +775,79 @@ class AnalysisModel(Harness):
             return self.transport(method, url, headers=headers, body=body, timeout=timeout)
         return ServerModelRuntime("SYNTHETIC_KEY", model=MODEL, models=list(models), transport=transport)
 
-    def test_an_offered_analysis_model_is_quoted_reserved_and_sent(self):
-        self.analysis = self.service(self.offering(MODEL, self.STRONG))
-        with mock.patch.dict(os.environ, {voice_corpus.ANALYSIS_MODEL_ENV: self.STRONG}):
-            quote, _ = self.start()
-            row = self.run_to_end()
-        self.assertEqual((quote["model"], quote["route"]), (self.STRONG, f"cloud:vercel-ai-gateway:{self.STRONG}"))
-        self.assertEqual(row["status"], "done")
+    def test_the_chosen_stop_is_quoted_reserved_and_sent_on_its_own_model(self):
+        self.analysis = self.service(self.offering(self.CHEAP, self.MIDDLE, self.STRONG))
+        quote = self.analysis.quote(WORKSPACE, "session", "brand", "best")
+        self.analysis.start(WORKSPACE, "session", "brand", quote["id"], "best")
+        row = self.run_to_end()
+        self.assertEqual((quote["quality"], quote["model"], quote["route"]), ("best", self.STRONG, f"cloud:vercel-ai-gateway:{self.STRONG}"))
+        self.assertEqual((row["status"], row["receipt"]["quality"], row["receipt"]["model"]), ("done", "best", self.STRONG))
         self.assertEqual(set(self.models_sent), {self.STRONG})
         self.assertEqual({entry["model"] for entry in self.ledger.reserved}, {self.STRONG})
+        self.assertEqual(voice_corpus.public_analysis(row)["quality"], "best")
 
-    def test_a_model_the_deployment_does_not_offer_keeps_the_default(self):
-        self.analysis = self.service(self.offering(MODEL))
-        with mock.patch.dict(os.environ, {voice_corpus.ANALYSIS_MODEL_ENV: self.STRONG}):
-            self.assertEqual(self.analysis.quote(WORKSPACE, "session", "brand")["model"], MODEL)
+    def test_options_quote_every_stop_and_the_stronger_stop_costs_more(self):
+        self.analysis = self.service(self.offering(self.CHEAP, self.MIDDLE, self.STRONG))
+        offered = self.analysis.options(WORKSPACE, "session", "brand")
+        self.assertEqual(offered["defaultQuality"], "balanced")
+        self.assertEqual([(item["id"], item["model"], item["available"], item["reason"]) for item in offered["options"]],
+                         [("economy", self.CHEAP, True, None), ("balanced", self.MIDDLE, True, None), ("best", self.STRONG, True, None)])
+        costs = [item["quote"]["estimatedMicroUsd"] for item in offered["options"]]
+        self.assertLess(costs[0], costs[1])
+        self.assertLess(costs[1], costs[2])
+        self.assertEqual(self.sent, [], "options sends nothing")
+        # Each stop's quote starts its own analysis, at the stop it was given for.
+        best = offered["options"][2]["quote"]
+        self.analysis.start(WORKSPACE, "session", "brand", best["id"], "best")
+        self.assertEqual(self.store.rows[-1]["receipt"]["model"], self.STRONG)
 
-    def test_unset_or_blank_keeps_the_default(self):
-        self.analysis = self.service(self.offering(MODEL, self.STRONG))
-        for value in ("", "   "):
-            with mock.patch.dict(os.environ, {voice_corpus.ANALYSIS_MODEL_ENV: value}):
-                self.assertEqual(self.analysis.quote(WORKSPACE, "session", "brand")["model"], MODEL)
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop(voice_corpus.ANALYSIS_MODEL_ENV, None)
-            self.assertEqual(voice_corpus.analysis_model(self.analysis._managed()), MODEL)
+    def test_a_quote_only_starts_at_the_quality_it_was_given_for(self):
+        self.analysis = self.service(self.offering(self.CHEAP, self.MIDDLE, self.STRONG))
+        cheap = self.analysis.quote(WORKSPACE, "session", "brand", "economy")
+        with self.assertRaises(AlphaError) as caught:
+            self.analysis.start(WORKSPACE, "session", "brand", cheap["id"], "best")
+        self.assertEqual(caught.exception.code, "voice_analysis_quote_stale")
+        self.assertEqual(self.store.rows, [])
+
+    def test_a_stop_the_deployment_does_not_offer_is_refused_never_replaced(self):
+        self.analysis = self.service(self.offering(self.CHEAP, self.MIDDLE))
+        with self.assertRaises(AlphaError) as caught:
+            self.analysis.quote(WORKSPACE, "session", "brand", "best")
+        self.assertEqual((caught.exception.status, caught.exception.code), (409, "analysis_quality_unavailable"))
+        offered = self.analysis.options(WORKSPACE, "session", "brand")
+        self.assertEqual([(item["id"], item["available"], item["reason"]) for item in offered["options"]],
+                         [("economy", True, None), ("balanced", True, None), ("best", False, "not_offered")])
+        with self.assertRaises(AlphaError) as caught:
+            self.analysis.quote(WORKSPACE, "session", "brand", "premium")
+        self.assertEqual((caught.exception.status, caught.exception.code), (400, "analysis_quality_invalid"))
+
+    def test_advanced_quotes_and_runs_the_named_provider_model_only(self):
+        google = "google/gemini-2.5-flash"
+        mapping = json.dumps({"economy": [self.CHEAP, google], "balanced": self.MIDDLE, "best": self.STRONG})
+        with mock.patch.dict(os.environ, {analysis_quality.ENV: mapping}):
+            self.analysis = self.service(self.offering(self.CHEAP, google, self.MIDDLE, self.STRONG))
+            offered = self.analysis.options(WORKSPACE, "session", "brand")
+            self.assertEqual([(c["model"], c["maker"]) for c in offered["options"][0]["choices"]], [(self.CHEAP, "openai"), (google, "google")])
+            self.assertEqual(offered["options"][0]["quote"]["model"], self.CHEAP, "the slider's quote is the stop's recommended model")
+            quote = self.analysis.quote(WORKSPACE, "session", "brand", "economy", google)
+            with self.assertRaises(AlphaError) as caught:                 # the quote starts only with the same model
+                self.analysis.start(WORKSPACE, "session", "brand", quote["id"], "economy")
+            self.assertEqual(caught.exception.code, "voice_analysis_quote_stale")
+            self.analysis.start(WORKSPACE, "session", "brand", quote["id"], "economy", google)
+            row = self.run_to_end()
+        self.assertEqual((row["status"], row["receipt"]["model"], row["receipt"]["quality"]), ("done", google, "economy"))
+        self.assertEqual(set(self.models_sent), {google})
+
+    def test_no_stop_named_uses_the_default_stop_and_without_stops_the_runtime_default(self):
+        self.analysis = self.service(self.offering(self.CHEAP, self.MIDDLE, self.STRONG))
+        self.assertEqual(self.analysis.quote(WORKSPACE, "session", "brand")["quality"], "balanced")
+        # Only Best is offered (a runtime always offers its own default model, so Best's model is the default here).
+        self.analysis = self.service(ServerModelRuntime("SYNTHETIC_KEY", model=self.STRONG, models=[self.STRONG], transport=self.transport))
+        self.assertEqual(self.analysis.quote(WORKSPACE, "session", "brand")["quality"], "best")
+        other = "google/gemini-2.5-flash"                              # priced, but no stop's model
+        self.analysis = self.service(ServerModelRuntime("SYNTHETIC_KEY", model=other, models=[other], transport=self.transport))
+        quote = self.analysis.quote(WORKSPACE, "session", "brand")    # no stop is offered here: today's default model
+        self.assertEqual((quote["quality"], quote["model"]), (None, other))
 
 
 class SqlStore(unittest.TestCase):

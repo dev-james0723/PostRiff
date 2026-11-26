@@ -6,7 +6,18 @@
  */
 import { ApiError, APP_GUARD_HEADER } from './client';
 import type { TokenSource } from './client';
-import type { ImportRequest, ItemsBody, PostCorrection, VoiceAnalysis, VoiceImport, VoiceImportsView, VoicePost, VoicePostPage } from '../voice-import/types';
+import type {
+  ImportRequest,
+  ItemsBody,
+  PostCorrection,
+  VoiceAnalysis,
+  VoiceAnalysisOptions,
+  VoiceAnalysisQuote,
+  VoiceImport,
+  VoiceImportsView,
+  VoicePost,
+  VoicePostPage
+} from '../voice-import/types';
 
 const seg = encodeURIComponent;
 const base = (workspaceId: string) => `/api/workspaces/${seg(workspaceId)}/voice-imports`;
@@ -80,10 +91,14 @@ export function createVoiceImportApi(getToken: TokenSource) {
       return get<VoicePostPage>(`${base(w)}/posts${suffix ? `?${suffix}` : ''}`);
     },
     correctPost: (w: string, postId: string, body: PostCorrection) => send<{ post: VoicePost }>('POST', `${base(w)}/posts/${seg(postId)}`, body),
-    /** Owner only: the cost of an AI reading of the eligible posts. Nothing is spent by asking. */
-    analysisQuote: (w: string, groupKey?: string) => send<{ quote: Record<string, unknown> }>('POST', `${base(w)}/analysis`, { ...(groupKey ? { groupKey } : {}), quote: true }),
-    /** Owner only: starts the analysis a quote described. */
-    analysisStart: (w: string, quoteId: string, groupKey?: string) => send<{ analysis: VoiceAnalysis }>('POST', `${base(w)}/analysis`, { ...(groupKey ? { groupKey } : {}), quoteId })
+    /** Owner only: the cost of an AI reading of the eligible posts at one quality. Nothing is spent by asking. */
+    analysisQuote: (w: string, groupKey?: string, quality?: VoiceAnalysisQuote['quality'], model?: string) =>
+      send<{ quote: VoiceAnalysisQuote }>('POST', `${base(w)}/analysis`, { ...(groupKey ? { groupKey } : {}), ...(quality ? { quality } : {}), ...(model ? { model } : {}), quote: true }),
+    /** Owner only: every quality stop with its own quote, for the slider. Nothing is spent by asking. */
+    analysisOptions: (w: string, groupKey?: string) => send<VoiceAnalysisOptions>('POST', `${base(w)}/analysis`, { ...(groupKey ? { groupKey } : {}), quote: true, options: true }),
+    /** Owner only: starts the analysis a quote described, at the quality the quote was given for. */
+    analysisStart: (w: string, quoteId: string, groupKey?: string, quality?: VoiceAnalysisQuote['quality'], model?: string) =>
+      send<{ analysis: VoiceAnalysis }>('POST', `${base(w)}/analysis`, { ...(groupKey ? { groupKey } : {}), ...(quality ? { quality } : {}), ...(model ? { model } : {}), quoteId })
   };
 }
 

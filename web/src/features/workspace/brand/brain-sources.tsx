@@ -7,10 +7,13 @@ import { departureHref } from './brain-navigation';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { StateMessage, Surface } from '@/components/rafii';
 import { useModels } from '@/lib/api/hooks';
 import type { ModelOption, SnapshotSource } from '@/lib/api/types';
+import { initialQuality, makerLabel, makerOf, quoteCredits, quoteUsd, type QualityId } from './analysis-quality';
+import { AdvancedProvider, AnalysisQualitySlider, type QualityStopView } from './analysis-quality-slider';
 import { OwnedPostsPicker } from './owned-posts-picker';
 import { VoiceImportPanel } from './voice-import/voice-import-panel';
 import { SelectField, FIELD_CLASS, TEXTAREA_CLASS } from '../rafii-parts';
@@ -127,13 +130,40 @@ function SourcePermissions({ source, writers, busy, run, t }: { source: Snapshot
 export function BrainAnalysis({ sources, brain, owner, busy, run, t, onReady }: Props & { onReady: () => void }) {
   const models = useModels();
   const locale = useGenUiLocale();
-  const [modelId, setModelId] = useState('');
+  // Local patterns (free) or AI analysis; AI analysis is chosen by quality on the slider. A deployment that offers no
+  // quality stop keeps the plain model list, so AI analysis never disappears before its stops are configured.
+  const [mode, setMode] = useState<'local' | 'ai'>('local');
+  const [quality, setQuality] = useState<QualityId | null>(null);
+  const [provider, setProvider] = useState<{ quality: QualityId; model: string } | null>(null);
+  const [fallbackModelId, setFallbackModelId] = useState('');
   const [instructions, setInstructions] = useState('');
   const [consent, setConsent] = useState(false);
   const [paidConsentFor, setPaidConsentFor] = useState('');
   const selected = sources.filter(s => s.active && s.selected);
   const aiModels = models.data?.models.filter(m => m.qualified && m.voiceAnalysisAvailable && m.voiceRoute) ?? [];
+  const costFor = (stopModel: string) => {
+    const known = brain.analysisQuote;
+    if (!known || known.status !== 'quoted' || known.model !== stopModel || Math.min(known.expiresAt, known.creditLimit?.expiresAt ?? known.expiresAt) * 1000 <= Date.now()) return null;
+    const credits = quoteCredits(known);
+    if (credits !== null) return `${t('about', '約', '约')} ${locale.formatNumber(credits)} ${t('credits', '點數', '点数')}`;
+    const usd = quoteUsd(known);
+    return usd === null ? null : `US$${usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2)}`;
+  };
+  // A stop's choices this workspace can actually run (qualified, with a voice route); the first is its recommendation.
+  const catalogStops = models.data?.analysisQuality ?? [];
+  const runnable = (stop: (typeof catalogStops)[number]) =>
+    (stop.choices ?? [{ model: stop.model, maker: '', available: stop.available }]).map(choice => ({ ...choice, available: choice.available && aiModels.some(m => m.id === choice.model) }));
+  const recommended = (stop: (typeof catalogStops)[number]) => runnable(stop).find(choice => choice.available)?.model ?? null;
+  const baseStops: QualityStopView[] = catalogStops.map(stop => { const pick = recommended(stop); return { id: stop.id, model: pick ?? stop.model, available: Boolean(pick), cost: pick ? costFor(pick) : null }; });
+  const sliderOffered = baseStops.some(stop => stop.available);
+  const chosenQuality = sliderOffered ? (quality && baseStops.some(stop => stop.id === quality && stop.available) ? quality : initialQuality(baseStops, models.data?.defaultAnalysisQuality)) : null;
+  const chosenStop = catalogStops.find(stop => stop.id === chosenQuality);
+  const providerChoices = chosenStop ? runnable(chosenStop) : [];
+  const picked = provider && provider.quality === chosenQuality && providerChoices.some(choice => choice.model === provider.model && choice.available) ? provider.model : null;
+  const stops = baseStops.map(stop => (stop.id === chosenQuality && picked ? { ...stop, model: picked, cost: costFor(picked) } : stop));
+  const modelId = mode === 'ai' ? (sliderOffered ? picked ?? stops.find(stop => stop.id === chosenQuality)?.model ?? '' : fallbackModelId) : '';
   const model = aiModels.find(m => m.id === modelId);
+  const resetApproval = () => { setConsent(false); setPaidConsent(false); };
   const route = model?.voiceRoute ?? 'local-rules';
   const bytes = analysisInputBytes(selected, instructions);
   const withinLimits = selected.length > 0 && selected.length <= brain.limits.maxSamples && bytes <= brain.limits.maxInputBytes;
@@ -156,15 +186,25 @@ export function BrainAnalysis({ sources, brain, owner, busy, run, t, onReady }: 
   }
   return <section data-testid='bb-step-analysis' className='space-y-4'>
     <h2 className='text-lg font-semibold'>{t('Choose how Rafii analyses your writing', '選擇 Rafii 如何分析你的文字', '选择 Rafii 如何分析你的文字')}</h2>
-    <SelectField label={t('Processing choice', '處理方式', '处理方式')} value={modelId} onChange={e => { setModelId(e.target.value); setConsent(false); setPaidConsent(false); }}><option value=''>{t('Local writing patterns · no AI model', '本地寫作模式 · 不使用 AI 模型', '本地写作模式 · 不使用 AI 模型')}</option>{aiModels.map(m => <option key={m.id} value={m.id}>{m.label} · {m.provider}</option>)}</SelectField>
-    <p className='text-sm text-muted-foreground'>{model ? t('The selected texts are sent to this named model for style analysis. Nothing becomes active.', '所選文字會傳送至此模型作風格分析，不會自動啟用。', '所选文字将发送至此模型进行风格分析，不会自动启用。') : t('Rules run on this workspace server, without an AI model. They measure writing patterns and may miss nuance.', '規則在工作區伺服器執行，不使用 AI 模型，可量度寫作模式但未必理解細節。', '规则在工作区服务器执行，不使用 AI 模型，可测量写作模式但未必理解细节。')}</p>
+    <fieldset className='flex min-w-0 flex-col gap-2'>
+      <legend className='text-foreground mb-1 text-sm font-medium'>{t('Processing choice', '處理方式', '处理方式')}</legend>
+      <RadioGroup value={mode} onValueChange={value => { setMode(value === 'ai' ? 'ai' : 'local'); resetApproval(); }} className='grid gap-2 sm:grid-cols-2'>
+        <label className='flex min-h-11 items-center gap-3 text-sm'><RadioGroupItem value='local' data-testid='bb-mode-local' />{t('Local writing patterns · free, no AI model', '本地寫作模式 · 免費，不使用 AI 模型', '本地写作模式 · 免费，不使用 AI 模型')}</label>
+        <label className='flex min-h-11 items-center gap-3 text-sm'><RadioGroupItem value='ai' data-testid='bb-mode-ai' disabled={aiModels.length === 0} />{t('AI analysis · uses credits', 'AI 分析 · 使用點數', 'AI 分析 · 使用点数')}</label>
+      </RadioGroup>
+    </fieldset>
+    {mode === 'ai' && (sliderOffered
+      ? <><AnalysisQualitySlider stops={stops} value={chosenQuality} onChange={next => { setQuality(next); resetApproval(); }} disabled={busy} t={t} />
+        <AdvancedProvider choices={providerChoices} value={picked} onChange={next => { setProvider(next && chosenQuality ? { quality: chosenQuality, model: next } : null); resetApproval(); }} disabled={busy} t={t} /></>
+      : <SelectField label={t('AI model', 'AI 模型', 'AI 模型')} value={fallbackModelId} onChange={e => { setFallbackModelId(e.target.value); resetApproval(); }}><option value=''>{t('Choose a model', '選擇模型', '选择模型')}</option>{aiModels.map(m => <option key={m.id} value={m.id}>{m.label} · {m.provider}</option>)}</SelectField>)}
+    <p className='text-sm text-muted-foreground'>{model ? t(`The selected texts are sent to ${makerLabel(makerOf(model.id)) || model.provider} for style analysis. Nothing becomes active.`, `所選文字會傳送至 ${makerLabel(makerOf(model.id)) || model.provider} 作風格分析，不會自動啟用。`, `所选文字将发送至 ${makerLabel(makerOf(model.id)) || model.provider} 进行风格分析，不会自动启用。`) : t('Rules run on this workspace server, without an AI model. They measure writing patterns and may miss nuance.', '規則在工作區伺服器執行，不使用 AI 模型，可量度寫作模式但未必理解細節。', '规则在工作区服务器执行，不使用 AI 模型，可测量写作模式但未必理解细节。')}</p>
     <p className='text-sm'>{selected.length} / {brain.limits.maxSamples} {t('samples', '範例', '样本')} · {bytes.toLocaleString()} / {brain.limits.maxInputBytes.toLocaleString()} bytes</p>
     {!withinLimits && <p role='alert'>{t('Choose 1–50 eligible samples within the input limit. Remove large samples before continuing.', '請在輸入上限內選取 1–50 個可用範例，移除過大的範例再繼續。', '请在输入上限内选择 1–50 个可用样本，移除过大的样本再继续。')}</p>}
     <details><summary className='rafii-focus min-h-11 cursor-pointer py-3'>{t('Exactly what Rafii will read', 'Rafii 將讀取的確切內容', 'Rafii 将读取的具体内容')}</summary>{selected.map(s => <blockquote key={s.id} dir='auto' className='my-3 max-h-32 overflow-auto whitespace-pre-wrap break-words border-s-2 ps-3 text-sm'><strong>{s.title || s.id}</strong><br />{s.text}</blockquote>)}</details>
     {!allAllowed && <div className='space-y-3'><label className='flex min-h-11 items-center gap-3'><Checkbox checked={consent} onCheckedChange={v => setConsent(v === true)} disabled={!owner || busy || !withinLimits} />{t('Allow selected samples for this analysis', '允許所選範例用於此分析', '允许所选样本用于此分析')}</label><Button variant='glass' className='min-h-11' disabled={!owner || busy || !consent || !withinLimits} onClick={() => void grant()}>{t('Save analysis permission', '儲存分析權限', '保存分析权限')}</Button></div>}
     {!owner && <p className='text-xs text-muted-foreground'>{t('Only an owner can grant source access or authorize paid analysis.', '只有擁有者可授權來源存取或付費分析。', '仅所有者可授权来源访问或付费分析。')}</p>}
     {model && <div className='space-y-3'><label className='block space-y-2'><span>{t('Analysis guidance (optional)', '分析指引（選填）', '分析指引（选填）')}</span><Textarea value={instructions} onChange={e => { setInstructions(e.target.value); setPaidConsent(false); }} maxLength={1500} className={TEXTAREA_CLASS} /></label><Button variant='glass' className='min-h-11' disabled={!owner || busy || !allAllowed || !withinLimits} onClick={() => void run('brand_brain_quote', { sourceIds: selected.map(s => s.id), route, model: model.id, instructions })}>{t('Get cost estimate', '取得費用估算', '获取费用估算')}</Button><p className='text-xs'>{quoteValid ? `${t('Estimated cost', '估計費用', '预计费用')}: US$${((quote?.estimatedMicroUsd ?? 0) / 1000000).toFixed(6)}` : t('Cost unavailable — choose local analysis or request a verified quote.', '費用未確認，可選擇本地分析或索取有效報價。', '费用未确认，可选择本地分析或索取有效报价。')}</p>{quoteValid && quote && <div className='space-y-1 text-xs' data-testid='bb-analysis-quote-disclosure'>{quote.creditLimit && <p>{t('Maximum credits for this analysis', '此次分析最高點數', '此次分析最高点数')}: {locale.formatNumber(quote.creditLimit.maxMilliCredits / 1000, { maximumFractionDigits: 3 })}</p>}<p>{t('Quote expires', '報價到期時間', '报价到期时间')}: {locale.formatDateTime(Math.min(quote.expiresAt, quote.creditLimit?.expiresAt ?? quote.expiresAt))}</p><p>{model.label} · {model.provider} · {locale.formatNumber(selected.length)} {t('selected samples, including the analysis guidance shown above', '個所選範例，包括上方顯示的分析指引', '个所选样本，包括上方显示的分析指引')}</p></div>}<label className='flex min-h-11 items-center gap-3'><Checkbox checked={paidConsent} onCheckedChange={v => setPaidConsent(v === true)} disabled={!quoteValid || busy} />{t('Approve one analysis using this quote and these exact texts.', '按此報價及確切文字批准一次分析。', '按此报价及具体文字批准一次分析。')}</label></div>}
-    <div className='sticky bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-10 -mx-2 bg-background/95 px-2 py-3 backdrop-blur-sm md:static md:bg-transparent md:backdrop-blur-none'><Button data-testid='bb-analyse-local' variant='action' className='min-h-11' disabled={busy || !withinLimits || !allAllowed || (!!model && (!owner || !quoteValid || !paidConsent))} onClick={() => void analyse()}>{busy ? t('Analysing selected samples…', '正在分析所選範例…', '正在分析所选样本…') : model ? t('Analyse with AI', '使用 AI 分析', '使用 AI 分析') : t('Analyse local writing patterns', '分析本地寫作模式', '分析本地写作模式')}</Button></div>
+    <div className='sticky bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-10 -mx-2 bg-background/95 px-2 py-3 backdrop-blur-sm md:static md:bg-transparent md:backdrop-blur-none'><Button data-testid='bb-analyse-local' variant='action' className='min-h-11' disabled={busy || !withinLimits || !allAllowed || (mode === 'ai' && !model) || (!!model && (!owner || !quoteValid || !paidConsent))} onClick={() => void analyse()}>{busy ? t('Analysing selected samples…', '正在分析所選範例…', '正在分析所选样本…') : model ? t('Analyse with AI', '使用 AI 分析', '使用 AI 分析') : t('Analyse local writing patterns', '分析本地寫作模式', '分析本地写作模式')}</Button></div>
     <p role='status' aria-live='polite' className='text-xs text-muted-foreground'>{busy ? t('Creating a voice proposal. Your current voice stays active.', '正在建立風格提案，目前的風格保持啟用。', '正在创建风格提案，目前的风格保持启用。') : t('Storage, analysis, writer access and future re-analysis are separate. Periodic analysis is off.', '儲存、分析、寫作存取及未來重新分析權限互相獨立，定期分析已關閉。', '保存、分析、写作访问及未来重新分析权限互相独立，定期分析已关闭。')}</p>
   </section>;
 }

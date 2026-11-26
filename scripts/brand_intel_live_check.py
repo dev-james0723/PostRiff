@@ -38,7 +38,31 @@ from pwi_real_voice_eval import OWNER, OWNER_ID, PG, cluster, now  # noqa: E402 
 MODELS = ("openai/gpt-6-sol", "openai/gpt-6-astra", "anthropic/claude-sonnet-5.5", "anthropic/claude-opus-5.5", "anthropic/claude-fable-5.2")
 # USD per million input / output tokens on the gateway catalog (2026-11-25), used for quotes and settlement.
 PRICES = {"openai/gpt-6-sol": (2.0, 10.0), "openai/gpt-6-astra": (10.0, 50.0), "anthropic/claude-sonnet-5.5": (2.0, 10.0),
-          "anthropic/claude-opus-5.5": (4.0, 20.0), "anthropic/claude-fable-5.2": (8.0, 40.0)}
+          "anthropic/claude-opus-5.5": (4.0, 20.0), "anthropic/claude-fable-5.2": (8.0, 40.0),
+          "anthropic/claude-haiku-5.5": (0.1, 0.5), "openai/gpt-6-luna": (0.1, 0.5), "openai/gpt-6.2-astra": (8.0, 40.0),
+          "google/gemini-3.5-flash-lite": (0.3, 2.5), "google/gemini-3.8-flash": (0.75, 3.75), "google/gemini-4-neon": (3.0, 15.0),
+          "deepseek/deepseek-v4-flash": (0.13, 0.26), "deepseek/deepseek-v4-pro": (1.32, 3.96),
+          "alibaba/qwen3.8-flash": (0.15, 0.47), "alibaba/qwen3.8-max": (2.0, 6.0), "alibaba/qwen3.8-max-prime": (4.0, 12.0),
+          "meta/llama-4-scout": (0.17, 0.66), "meta/muse-spark-1.2": (1.25, 4.25),
+          "mistral/mistral-small": (0.15, 0.6), "mistral/mistral-medium-3.5": (1.5, 7.5)}
+# A plain keyword rule per planted trait, so many models are scored the same way (a reader still checks the text).
+TRAIT_RULES = {
+    "T1 code-mixing": lambda s: "english" in s and ("cantonese" in s or "chinese" in s) and any(w in s for w in ("mix", "switch", "insert", "intersperse", "weave", "drop")),
+    "T2 closing question": lambda s: "question" in s and any(w in s for w in ("end", "clos", "final")),
+    "T3 piano emoji": lambda s: "emoji" in s,
+    "T4 sign-off": lambda s: any(w in s for w in ("sign-off", "sign off", "signoff", "signature", "studio name", "organisation's name", "organization's name")),
+    "T5 numbered tips": lambda s: "number" in s and any(w in s for w in ("list", "step", "tip")),
+    "T6 event format": lambda s: ("middle dot" in s or "·" in s or "separated by" in s or ("date" in s and "time" in s)) and any(w in s for w in ("event", "detail", "announcement", "logistic")),
+    "T7 no hashtags": lambda s: "hashtag" in s,
+    "T8 studio we": lambda s: "'we'" in s or "“we”" in s or "we/" in s or "first-person plural" in s or "first person plural" in s or "collective" in s or "plural" in s,
+    "T9 encouragement": lambda s: any(w in s for w in ("encourag", "reassur", "supportive")),
+}
+
+
+def traits_found(observations):
+    """Which planted traits the observations name, by TRAIT_RULES over each observation's lowercased text."""
+    texts = [str((item or {}).get("observation") or "").lower() for item in observations or []]
+    return sorted(trait for trait, rule in TRAIT_RULES.items() if any(rule(text) for text in texts))
 CONSENT = {"ownership": "mine", "voiceScope": "brand", "confirmed": True}
 TRAITS = {
     "T1 code-mixing": "Cantonese posts carry English music words (scale, recital, pedal, slot, workshop)",
@@ -95,8 +119,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True)
     parser.add_argument("--models", default=",".join(MODELS))
-    parser.add_argument("--edit-models", default="anthropic/claude-sonnet-5.5", help="comma list; every edit case runs on each")
+    parser.add_argument("--edit-models", default="anthropic/claude-sonnet-5.5", help="comma list; every edit case runs on each ('' for none)")
     parser.add_argument("--writing-batches", type=int, default=100, help="the plan allowance the disposable workspace gets")
+    parser.add_argument("--providers", default="", help='JSON {model: [gateway hosts]} for models their maker does not serve (POSTRIFF_MODEL_PROVIDERS); '
+                                                         'only hosts the gateway lists with zero data retention and no training')
     parser.add_argument("--max-usd", type=float, default=3.0, help="refuse to start when the quotes add up to more")
     parser.add_argument("--port", type=int, default=int(os.environ.get("BRAND_INTEL_LIVE_PG_PORT", "55571")))
     args = parser.parse_args()
@@ -140,8 +166,10 @@ def run(args, out, key):
     def redact(text):
         return str(text).replace(key, "<credential>")
 
+    hosts = json.loads(args.providers) if args.providers else None
+
     def runtime(model):
-        return ServerModelRuntime(key, model=model, models=selectable, prices=PRICES)
+        return ServerModelRuntime(key, model=model, models=selectable, prices=PRICES, allowed_providers=hosts)
 
     def connection():
         return psycopg.connect(dsn, client_encoding="utf8")
@@ -162,7 +190,7 @@ def run(args, out, key):
         wid = str(db.execute("SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s", (OWNER_ID,)).fetchone()[0])
         db.execute("UPDATE public.pr_workspaces SET state='{}'::jsonb WHERE id=%s", (wid,))
         db.execute("UPDATE public.pr_memberships SET status='active', role='owner' WHERE user_id=%s", (OWNER_ID,))
-    service = HostedWorkspaceService(connection, verify, vault=CredentialVault(CredentialVault.generate_key()), ideas_runtime=runtime(edit_models[0]))
+    service = HostedWorkspaceService(connection, verify, vault=CredentialVault(CredentialVault.generate_key()), ideas_runtime=runtime((edit_models or models)[0]))
     service.bootstrap(OWNER, "studio")
     # No budget is approved by hand: under POSTRIFF_BUDGET_POLICY the ledger creates and approves each budget with the
     # policy's caps when the first call is reserved, exactly as a deployment does. Every managed call also spends one
@@ -215,7 +243,11 @@ def run(args, out, key):
         row = {"model": model, "quotedUsd": quote["estimatedMicroUsd"] / 1e6}
         begun = time.monotonic()
         try:
-            started_view = analysis.start(wid, OWNER, None, quote["id"])["analysis"]
+            # Quotes hold for one five-minute window and the next; a long run asks again just before each start.
+            fresh = analysis.quote(wid, OWNER)
+            if fresh["estimatedMicroUsd"] > quote["estimatedMicroUsd"] * 1.05:
+                raise RuntimeError(f"the price rose since the run was approved ({quote['estimatedMicroUsd']} → {fresh['estimatedMicroUsd']} micro-USD)")
+            started_view = analysis.start(wid, OWNER, None, fresh["id"])["analysis"]
             analysis_id = started_view["id"]
             ticks = []
             for _ in range(60):
@@ -227,19 +259,24 @@ def run(args, out, key):
             with connection() as db:
                 status, observations, receipt, failure = db.execute(
                     "SELECT status, observations, receipt, failure_class FROM public.pr_voice_analyses WHERE id=%s", (analysis_id,)).fetchone()
+                if status in ("queued", "running"):
+                    # Held for a later retry (the product waits before trying again): recorded as such, then closed here so
+                    # the next model's analysis of the same voice can start. Only this disposable database is touched.
+                    row["heldForRetry"] = True
+                    db.execute("UPDATE public.pr_voice_analyses SET status='cancelled' WHERE id=%s", (analysis_id,))
             usage = (receipt or {}).get("usage") or {}
             row.update({"status": status, "failureClass": failure, "seconds": round(time.monotonic() - begun, 1), "ticks": len(ticks),
                         "actualUsd": (usage.get("actualMicroUsd") or 0) / 1e6, "unknownUsd": (usage.get("unknownMicroUsd") or 0) / 1e6,
                         "dropped": (receipt or {}).get("dropped"), "calls": [{k: c.get(k) for k in ("stage", "status", "inputTokens", "outputTokens", "actualMicroUsd", "seconds")}
                                                                          for c in (receipt or {}).get("calls") or []],
-                        "observations": observations})
+                        "observations": observations, "traitsFound": traits_found(observations)})
         except Exception as error:   # recorded, never hidden; the next model still runs
             row.update({"status": "error", "error": redact(f"{type(error).__name__}: {error}"), "seconds": round(time.monotonic() - begun, 1)})
             report["errors"].append({"model": model, "stage": "analysis", "error": row["error"]})
         report["analyses"].append(row)
         save()
-        print(json.dumps({k: row.get(k) for k in ("model", "status", "seconds", "actualUsd", "dropped")} | {"observations": len(row.get("observations") or [])},
-                         ensure_ascii=False), flush=True)
+        print(json.dumps({k: row.get(k) for k in ("model", "status", "seconds", "actualUsd", "dropped", "failureClass", "heldForRetry")}
+                         | {"observations": len(row.get("observations") or []), "traits": len(row.get("traitsFound") or [])}, ensure_ascii=False), flush=True)
 
     # 3. One-click tone edits on the managed route.
     edits = draft_edits.DraftEdits(service)

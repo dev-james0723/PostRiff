@@ -12,9 +12,12 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { accountReceipts, coverageLines, coverageStates, coverageTotals, MIN_ELIGIBLE, voiceGroups } from '@/lib/voice-import/coverage';
 import type { VoiceImportsView } from '@/lib/voice-import/types';
 import { SelectField } from '../../rafii-parts';
+import { qualityCopy } from '../analysis-quality-slider';
+import { isQualityId, makerLabel, makerOf, modelShortName } from '../analysis-quality';
 import { useBrainCopy } from '../brain-copy';
 import type { BrainAction, BrainTranslate } from '../brain-types';
 import { MANUAL_SETUP_HREF, REVIEW_HREF } from './deep-link';
+import { VoiceImportAnalysis } from './voice-import-analysis';
 import { PlatformRow } from './voice-import-platform';
 import { AccountReceiptCard, CoverageStates } from './voice-import-receipt';
 import { useVoiceImports, useWorkspaceAction } from './use-voice-import';
@@ -87,6 +90,7 @@ function PanelBody({ view, stale, run: outerRun, busy: outerBusy, focus, onRevie
   const access = useWorkspaceAccess();
   const canManage = checkAccess(access, { permission: 'manage_connections' });
   const canEdit = checkAccess(access, { permission: 'edit' });
+  const isOwner = checkAccess(access, { permission: 'owner' });
   const channels = useChannels();
   const own = useWorkspaceAction();
   const run = outerRun ?? own.run;
@@ -254,12 +258,19 @@ function PanelBody({ view, stale, run: outerRun, busy: outerBusy, focus, onRevie
               </div>
               {!canEdit && <p className='text-muted-foreground text-xs'>{t('Building a proposal needs edit access.', '建立提案需要編輯權限。', '建立提案需要编辑权限。')}</p>}
               {!outerRun && own.error && <StateMessage kind='error' layout='inline' title={own.error} />}
+              {group && <VoiceImportAnalysis groupKey={group.key} eligible={eligible} isOwner={isOwner} analysis={analysis} t={t} />}
             </div>
           )}
           {analysis?.status && (
-            <p className='text-muted-foreground text-xs'>
+            <p role='status' aria-live='polite' className='text-muted-foreground text-xs' data-testid='voice-import-ai-status'>
               {t('AI reading of your posts', 'AI 解讀你的貼文', 'AI 解读你的帖子')}: {analysisWord[analysis.status] ?? analysis.status.replace(/_/g, ' ')}
+              {isQualityId(analysis.quality) ? ` · ${qualityCopy(t)[analysis.quality].name}` : ''}
               {typeof analysis.analysed === 'number' && typeof analysis.eligible === 'number' ? ` · ${t('Posts read', '已讀取的貼文', '已读取的帖子')}: ${number(analysis.analysed)} / ${number(analysis.eligible)}` : ''}
+            </p>
+          )}
+          {analysis?.status && analysis.model && (
+            <p className='text-muted-foreground text-[11px] leading-snug' data-testid='voice-import-ai-model'>
+              {t('Model used', '使用的模型', '使用的模型')}: {modelShortName(analysis.model)} · {makerLabel(makerOf(analysis.model))}
             </p>
           )}
         </section>

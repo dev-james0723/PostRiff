@@ -307,3 +307,51 @@ def mount(service, connection):
     importer = voice_import.mount(service, connection, VALUES, transport=HistoryTransport())
     importer.resolver = resolve
     return importer
+
+
+# --- the AI reading of imported posts, without a network ---------------------------------------------------------------
+# The three analysis quality stops' models at their gateway prices (USD per million input / output tokens, 2026-11-25).
+ANALYSIS_PRICES = {"anthropic/claude-haiku-5.5": (0.1, 0.5), "google/gemini-3.5-flash-lite": (0.3, 2.5), "anthropic/claude-sonnet-5.5": (2.0, 10.0),
+                   "deepseek/deepseek-v4-pro": (1.32, 3.96), "anthropic/claude-opus-5.5": (4.0, 20.0), "google/gemini-4-neon": (3.0, 15.0)}
+# Two makers per stop, so "Advanced · choose AI provider" has something to choose (the synthetic transport answers any model).
+ANALYSIS_STOPS = {"economy": ["anthropic/claude-haiku-5.5", "google/gemini-3.5-flash-lite"],
+                  "balanced": ["anthropic/claude-sonnet-5.5", "deepseek/deepseek-v4-pro"],
+                  "best": ["anthropic/claude-opus-5.5", "google/gemini-4-neon"]}
+
+
+class AnalysisTransport:
+    """A stand-in for the AI Gateway that answers corpus-analysis calls only: each batch gets two abstract observations
+    citing its first posts, and the synthesis keeps what the batches said. Usage is fixed, so the ledger settles a real
+    (synthetic) cost. Anything else it is asked is an error, never a guess."""
+
+    def __call__(self, method, url, headers=None, body=None, timeout=None):
+        try:
+            payload = json.loads(body["messages"][1]["content"])
+        except (KeyError, IndexError, TypeError, ValueError):
+            return {"status": 400, "body": {"error": {"message": "The analysis fixture answers corpus-analysis calls only."}}}
+        scope = {"platforms": [], "languages": []}
+        if "posts" in payload:
+            keys = [item["id"] for item in payload["posts"]]
+            answer = {"observations": [
+                {"dimension": "tone", "observation": "Sounds warm and encouraging.", "support": keys[:3], "counter": [], "scope": scope, "confidence": "supported"},
+                {"dimension": "sentence_length", "observation": "Keeps sentences short.", "support": keys[:2], "counter": [], "scope": scope, "confidence": "supported"}]}
+        else:
+            answer = {"observations": [{"dimension": item["dimension"], "observation": item["observation"], "support": [item["id"]], "counter": [],
+                                        "scope": item.get("scope") or scope, "confidence": item.get("confidence") or "supported"}
+                                       for item in payload.get("observations", [])]}
+        return {"status": 200, "body": {"choices": [{"message": {"content": json.dumps(answer)}}], "usage": {"prompt_tokens": 1200, "completion_tokens": 300}}}
+
+
+def mount_analysis(service, values=None):
+    """Mount the AI reading of imported posts on a priced, no-network managed runtime that offers all three quality
+    stops with two makers each (the harness's --analysis-fixture). Paid calls are reserved as in production, under a
+    budget policy."""
+    import os
+    from postriff_phase2.model_runtime import ServerModelRuntime
+    from postriff_phase2.voice_corpus import VoiceCorpusAnalysis
+    os.environ.setdefault("POSTRIFF_BUDGET_POLICY", "launch-2026-09-24")
+    os.environ.setdefault("POSTRIFF_ANALYSIS_QUALITY_MODELS", json.dumps(ANALYSIS_STOPS))
+    runtime = ServerModelRuntime("fixture-gateway-key", model="anthropic/claude-sonnet-5.5", models=list(ANALYSIS_PRICES), prices=ANALYSIS_PRICES,
+                                 transport=AnalysisTransport())
+    service.voice_corpus_analysis = VoiceCorpusAnalysis(service.repository, runtime, service.ledger)
+    return service.voice_corpus_analysis

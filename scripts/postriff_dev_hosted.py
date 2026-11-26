@@ -394,6 +394,7 @@ def main():
     parser.add_argument('--growth-phase2-fixture',action='store_true',help='Phase 2 deterministic models, disposable database only')
     parser.add_argument('--history-import-fixture', action='store_true', help='History Import review/status on disposable PostgreSQL; synthetic providers only')
     parser.add_argument('--voice-import-fixture', action='store_true', help='Voice import on: dev Threads/Instagram/Bluesky/Mastodon accounts with canned synthetic history; no network')
+    parser.add_argument('--analysis-fixture', action='store_true', help='With --voice-import-fixture: the AI reading of imported posts on a priced, no-network managed runtime offering all three quality stops')
     parser.add_argument('--draft-edits', action=argparse.BooleanOptionalAction, default=True, help='one-click tone and polish edits (POSTRIFF_DRAFT_EDITS), on by default here; the fixture writers answer an edit deterministically; --no-draft-edits turns it off')
     parser.add_argument("--founder-fixture", action="store_true", help="embedded founder Control with synthetic founder identities; disposable database only")
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
@@ -438,6 +439,8 @@ def main():
         service.history_import = HistoryImporter(connection, service.oauth, transport=transport)
     # Voice import: migration 140 on this disposable database, POSTRIFF_VOICE_IMPORT on, canned history through the readers.
     voice_importer = voice_import_fixtures.mount(service, connection) if args.voice_import_fixture else None
+    # --analysis-fixture: the quality slider's three stops on a priced, no-network managed runtime (tests/voice_import_fixtures.py).
+    corpus_analysis = voice_import_fixtures.mount_analysis(service) if args.voice_import_fixture and args.analysis_fixture else None
     if args.growth_fixture:
         from postriff_phase2.growth.service import GrowthService
         service.growth=GrowthService(service,env=ENV,router_factory=Models().router)
@@ -581,6 +584,11 @@ def main():
                 print("worker tick error:", error, flush=True)
             if voice_importer is not None:
                 voice_importer.tick(max_seconds=5)   # --voice-import-fixture: advances import runs; never raises
+            if corpus_analysis is not None:
+                try:
+                    corpus_analysis.tick(max_calls=2)   # --analysis-fixture: advances an approved AI reading
+                except Exception as error:  # keep the harness alive; surface in the log
+                    print("analysis tick error:", error, flush=True)
 
     threading.Thread(target=ticker, daemon=True).start()
 

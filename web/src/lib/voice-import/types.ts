@@ -126,6 +126,45 @@ export interface VoiceAnalysis {
   eligible?: number;
   analysed?: number;
   failure?: string | null;
+  /** The analysis quality the owner approved, and the model it runs on. */
+  quality?: 'economy' | 'balanced' | 'best' | null;
+  model?: string;
+}
+
+/** A quote for one AI reading of a voice's posts (voice_corpus.VoiceCorpusAnalysis.quote). Nothing is spent by asking. */
+export interface VoiceAnalysisQuote {
+  id: string;
+  quality: 'economy' | 'balanced' | 'best' | null;
+  model: string;
+  route: string;
+  status: 'quoted';
+  expiresAt: number;
+  eligible: number;
+  posts: number;
+  batches: number;
+  calls: number;
+  estimatedMicroUsd: number;
+  /** Under credit billing: the most credits this reading may use (milli-credits). */
+  creditLimit?: { maxMilliCredits: number } | null;
+  /** Without credit billing: the plan's writing batches it holds (one per call). */
+  writingBatches: number;
+}
+
+/** One stop of the analysis quality slider with its own quote, or why it cannot be chosen now. */
+export interface VoiceAnalysisOption {
+  id: 'economy' | 'balanced' | 'best';
+  /** The stop's recommended model (what `quote` is for). */
+  model: string;
+  available: boolean;
+  /** The stop's models for "Advanced · choose AI provider". */
+  choices?: { model: string; maker: string; available: boolean }[];
+  quote: VoiceAnalysisQuote | null;
+  reason: 'not_offered' | 'credit_limit' | null;
+}
+
+export interface VoiceAnalysisOptions {
+  options: VoiceAnalysisOption[];
+  defaultQuality: 'economy' | 'balanced' | 'best' | null;
 }
 
 export interface VoiceImportsView {

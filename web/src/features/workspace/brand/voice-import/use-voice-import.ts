@@ -35,7 +35,7 @@ export function useVoiceImportApi() {
   return { api, w: workspaceId ?? '', enabled: Boolean(workspaceId) };
 }
 
-/** Runs, coverage and routes. While a run is active and `poll` is set, the receipt refreshes every five seconds. */
+/** Runs, coverage and routes. While a run or an AI reading is active and `poll` is set, the receipt refreshes every five seconds. */
 export function useVoiceImports(options: { poll?: boolean; enabled?: boolean } = {}) {
   const { api, w, enabled } = useVoiceImportApi();
   const query = useQuery({
@@ -45,7 +45,8 @@ export function useVoiceImports(options: { poll?: boolean; enabled?: boolean } =
     retry: (failures, error) => !clientAnswer(error) && failures < 2,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
-    refetchInterval: (current) => (options.poll && !current.state.error && anyImportActive(current.state.data) ? 5_000 : false),
+    refetchInterval: (current) =>
+      options.poll && !current.state.error && (anyImportActive(current.state.data) || ['queued', 'running'].includes(current.state.data?.analysis?.status ?? '')) ? 5_000 : false,
     refetchIntervalInBackground: false
   });
   return { query, view: query.data, unavailable: voiceImportUnavailable(query.error) };

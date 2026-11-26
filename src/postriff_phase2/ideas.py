@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError, clean, uid
 from postriff_alpha.generation import MATERIAL_LABEL  # noqa: F401 (legacy callers import it from here)
+from . import analysis_quality
 from .contracts import digest
 from .permissions import require
 from .source_policy import project_context, stamp
@@ -321,6 +322,10 @@ class IdeasService:
             # What "Auto" falls back to on this deployment (a workspace default, when set, lives in workspace state).
             "defaultModel": getattr(managed, "model", None),
             "featured": [m for m in managed.featured_models() if m in listed] if managed is not None and hasattr(managed, "featured_models") else [],
+            # The analysis quality slider (analysis_quality): each stop's model, whether this deployment offers it, and
+            # the stop a screen starts on. Empty without Rafii's managed route.
+            "analysisQuality": analysis_quality.stops(managed) if managed is not None else [],
+            "defaultAnalysisQuality": analysis_quality.default_stop(managed) if managed is not None else None,
             "agents": agents,
             "imageGeneration": {
                 "available": image_available,
