@@ -2534,6 +2534,61 @@
    "lockedVersion": "1.0.0"
   },
   {
+   "id": "rafii-editorial-core",
+   "version": "1.0.0",
+   "kind": "knowledge",
+   "sha256": "sha256:0e9d0e475b80ff7435fcc7c00f71c788094888eb2b949f02df8048d5118678aa",
+   "description": "Editing contract for a tone or polish edit of text the author already has: what the edit may change, what must stay (names, numbers, dates, links, quotations, conditions, hedges, language), depths, tones, the no-change result and selection scope.",
+   "intents": [
+    "draft_edit"
+   ],
+   "platforms": [
+    "*"
+   ],
+   "formats": [
+    "*"
+   ],
+   "locales": [
+    "*"
+   ],
+   "agents": [
+    "writer"
+   ],
+   "consumers": [
+    {
+     "ref": "postriff_phase2.skills:SkillLibrary.bind",
+     "probe": {
+      "destinations": [
+       {
+        "platform": "LinkedIn",
+        "language": "en"
+       }
+      ],
+      "intent": "draft_edit"
+     }
+    }
+   ],
+   "tool": null,
+   "policy": null,
+   "evaluator": null,
+   "personalization": "none",
+   "risk": "medium",
+   "tests": [
+    "tests/test_editorial_core.py",
+    "tests/test_rafii_skill_registry.py"
+   ],
+   "deprecation": "active",
+   "private": false,
+   "hashSources": [
+    {
+     "type": "skill",
+     "id": "rafii-editorial-core"
+    }
+   ],
+   "priority": 15,
+   "lockedVersion": "1.0.0"
+  },
+  {
    "id": "rafii-weekly-operator",
    "version": "1.0.0",
    "kind": "workflow",
@@ -4138,9 +4193,9 @@
   },
   {
    "id": "rafii.evaluator.humanizer",
-   "version": "1.0.0",
+   "version": "1.1.0",
    "kind": "evaluator",
-   "sha256": "sha256:f87a50bc7d127b9b4456bad26f651c660826acbc178e238f683e2a2d2d864df6",
+   "sha256": "sha256:4ccfdca4c334840ccc9873309f46b346a9a111aa34cbc9ee72b9e2351ae18e8f",
    "description": "Hidden quality stage: voice fit, synthetic-writing clusters, meaning preservation and platform/locale lint; annotates, never rewrites.",
    "intents": [
     "*"
@@ -4186,7 +4241,7 @@
      "ref": "postriff_phase2.coworker.humanizer:VERSION"
     }
    ],
-   "lockedVersion": "1.0.0"
+   "lockedVersion": "1.1.0"
   },
   {
    "id": "rafii.evaluator.meaning-preservation",

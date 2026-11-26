@@ -65,6 +65,10 @@ ACTION_CLASSES = {
 # this list exact. A new hosted action is added here or to ACTION_CLASSES, or it is refused.
 EDIT_ACTIONS = frozenset({
     "brand_brain_import", "brand_brain_analyze", "brand_brain_review", "brand_brain_preview", "brand_brain_discard", "brand_brain_feedback", "brand_brain_clean_restore", "brand_brain_manual",
+    # Brand intelligence: a proposal built from imported posts, and quick corrections on its traits. Neither activates a voice.
+    "brand_brain_import_propose", "brand_brain_trait_correct",
+    # Draft editing: dropping a pending replacement, and restoring an earlier revision's text without a model call.
+    "discard_update", "variant_restore",
     "accept_update", "adapt", "approve_source", "context", "generate", "idea", "import_propose", "language_settings", "mode",
     "opening", "p2_art_delete", "p2_art_generate", "p2_art_select", "p2_content_context", "p2_content_format", "p2_content_install_pack",
     "p2_content_interview_answer", "p2_content_interview_start", "p2_content_proposal_edit", "p2_content_proposal_save", "p2_content_proposal_test",

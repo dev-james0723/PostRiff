@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import json
+import unicodedata
 
 from postriff_alpha.domain import AlphaError
 from . import locales, voice_sources
@@ -113,6 +114,72 @@ def _language_name(label) -> str:
 def check_untrusted_samples(samples):
     if any(_INJECTION.search(sample.get('text', '')) for sample in samples):
         raise AlphaError('A selected sample contains instruction-like text. Exclude or edit it before analysis; nothing was sent.', 422)
+
+
+# An observation is guidance about form. One that carries a run of the writer's own words is a quotation, whatever the
+# analyser calls it: five words in a row, eight CJK characters in a row, or a mixed run that adds up to as much.
+COPIED_WORDS = 5
+COPIED_CJK = 8
+_ONE_CJK = re.compile(f"[{voice_sources._CJK_CHAR}]")
+
+
+def wording(text) -> list[str]:
+    """A text's words for comparison (one CJK character, or one run of letters and digits): case, width, spacing,
+    punctuation and emoji do not count."""
+    return voice_sources._COPY_TOKEN.findall(unicodedata.normalize("NFKC", text if isinstance(text, str) else "").casefold())
+
+
+def _copied_runs(tokens: list[str]) -> set[tuple]:
+    """Every shortest run long enough to be a quotation. Five words and eight CJK characters weigh the same."""
+    whole, runs = COPIED_WORDS * COPIED_CJK, set()
+    for start in range(len(tokens)):
+        weight = 0
+        for end in range(start, min(start + COPIED_CJK, len(tokens))):
+            weight += COPIED_WORDS if _ONE_CJK.fullmatch(tokens[end]) else COPIED_CJK
+            if weight >= whole:
+                runs.add(tuple(tokens[start:end + 1]))
+                break
+    return runs
+
+
+def found_runs(runs, texts) -> set[tuple]:
+    """Which of these token runs occur, in order and unbroken, in any of the texts. One pass over the texts."""
+    wanted, found = set(runs), set()
+    sizes = sorted({len(run) for run in wanted})
+    for text in texts:
+        if len(found) == len(wanted):
+            break
+        tokens = wording(text)
+        for size in sizes:
+            for start in range(len(tokens) - size + 1):
+                run = tuple(tokens[start:start + size])
+                if run in wanted:
+                    found.add(run)
+    return found
+
+
+# English function words. A shared run made of these and at most one other word ("at the end of the") is how English
+# is written, not the writer's own wording, so it does not count as copied.
+FUNCTION_WORDS = frozenset("""
+a an the and or but nor so yet if then than that this these those there here of at in on to for from by with as into
+onto about over under up down out off through between after before while again once is are was were be been being am
+do does did have has had will would can could shall should may might must i me my mine we us our ours you your yours
+he him his she her hers it its they them their theirs not no all any each every some more most such too very just
+also only own same other both few what which who whom whose when where why how s t d ll m re ve
+""".split())
+
+
+def _worded(run) -> bool:
+    """A run counts as copied wording when at least two of its words are not function words (any CJK character counts)."""
+    return sum(1 for token in run if token not in FUNCTION_WORDS) >= 2
+
+
+def copied(observations, texts) -> set[int]:
+    """Indexes of the observations that share a run of wording with any of the texts. A run made only of common
+    function words, apart from at most one other word, is ordinary phrasing and is not counted."""
+    runs = [{run for run in _copied_runs(wording(observation)) if _worded(run)} for observation in observations]
+    found = found_runs(set().union(*runs), texts) if runs else set()
+    return {index for index, own in enumerate(runs) if own & found}
 
 
 def _level(support: list[str], counter: list[str]) -> str:

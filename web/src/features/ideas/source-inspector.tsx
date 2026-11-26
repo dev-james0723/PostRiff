@@ -29,6 +29,7 @@ import { retractionImpact, retractionLines } from '@/lib/sources';
 import { cn } from '@/lib/utils';
 import { InfoTip } from '@/components/rafii';
 import { STATUS } from '@/lib/status-labels';
+import { DraftVoiceToggle } from './draft-voice-toggle';
 import { useDraftHandoff } from './use-draft';
 import { factsDigest, isWeb, kindIcon, kindLabel, LINK_PATTERN, plural, POLICIES, toEpoch, useActError, variantsUsing, type IdeaSource, type UseState } from './use-sources';
 
@@ -468,6 +469,7 @@ function ActiveBody({ source, useApproved, canEdit }: { source: IdeaSource; useA
             <p className='text-muted-foreground hidden text-xs leading-relaxed sm:block'>
               {draft.modelLabel} · {draft.destinationLabel}
             </p>
+            <DraftVoiceToggle voice={draft.voice} disabled={draft.busy || retractAct.isPending} className='self-start' />
             {reminders.length > 0 && <Notes items={reminders} />}
           </div>
           <div className='flex flex-col gap-1.5'>

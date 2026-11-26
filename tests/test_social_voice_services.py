@@ -82,6 +82,15 @@ class HostedAnalysisTests(unittest.TestCase):
         self.runtime.analyze_voice.assert_called_once()
         self.assertEqual(self.ledger.settle.call_args.args[3:5], ('completed', 200))
 
+    def test_a_paid_analysis_keeps_its_other_observations_when_one_repeats_sample_wording(self):
+        self.output['dimensions'].append({'id': 'warmth', 'observation': 'Says hello friends my own writing first.', 'support': [self.sid], 'counterEvidence': [],
+                                          'quotes': [{'sourceId': self.sid, 'text': 'Hello friends.'}]})
+        saved = self.handler.run('workspace', 'session', 1, self.payload)
+        proposal = saved['state']['speaker']['provisional']
+        self.assertEqual([item['id'] for item in proposal['dimensions']], ['openings'])
+        self.assertEqual(proposal['observations'], ['Uses a friendly greeting.'])
+        self.assertEqual(self.ledger.settle.call_args.args[3:5], ('completed', 200), 'the billed call is settled as completed, not refused')
+
     def test_non_owner_no_confirmation_and_foreign_workspace_never_call_model(self):
         for role, workspace, confirmed in [('viewer', 'workspace', True), ('owner', 'foreign', True), ('owner', 'workspace', False)]:
             self.repo.role = role

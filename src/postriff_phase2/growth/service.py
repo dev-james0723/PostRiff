@@ -634,7 +634,8 @@ class GrowthService:
                     target=next(v for v in state['variants'] if v['id']==draft['id'])
                     target.setdefault('sourceIds',[]).append(fact_source['id'])
                     response['factsNeedApproval']=True
-                self.hosted.commands(state,principal,'variant_edit',{'variantId':draft['id'],'variantRevision':draft['revision'],'text':text})
+                # The rewrite is Post Doctor's wording, applied by the person: saved as an assistant edit, never as their own.
+                self.hosted.commands(state,principal,'variant_edit',{'variantId':draft['id'],'variantRevision':draft['revision'],'text':text,'appliedFrom':'post_doctor'})
                 target=next(v for v in state['variants'] if v['id']==draft['id'])
                 target['needsReview']=True
                 if result.get('memoryReceipt'):

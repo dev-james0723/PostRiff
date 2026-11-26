@@ -332,10 +332,19 @@ def runtime_from_environment(environ=None):
         from .growth import history_import
         if history_import.enabled(values):   # needs POSTRIFF_HISTORY_IMPORT=1 as well; consent copy first (CONTRACTS)
             service.history_import = history_import.HistoryImporter(database, service.oauth, transport=http_transport)
+    # Voice import (spec 5.1): mounts service.voice_import only with POSTRIFF_VOICE_IMPORT=1; a disconnect then purges it too.
+    from . import voice_import
+    if voice_import.mount(service, database, values, transport=http_transport) is not None:
+        # AI analysis of the imported posts (spec 5.2): owner-approved quotes on the managed writer, looked up per use.
+        from .voice_corpus import VoiceCorpusAnalysis
+        service.voice_corpus_analysis = VoiceCorpusAnalysis(service.repository, service.ideas._managed_writer, service.ledger)
     from .growth.service import GrowthService
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)
     on_verified=then_capture(on_verified,service.growth.enabled('check'))
+    # One-click tone and polish edits (spec 5.4): mounts service.draft_edits only with POSTRIFF_DRAFT_EDITS=1.
+    from . import draft_edits
+    draft_edits.mount(service, values)
     worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), youtube_maintenance=service.youtube)
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
@@ -796,6 +805,12 @@ class HostedApplication:
                 if repository is not None:   # flag-independent: a failed disconnect purge is retried even after a rollback
                     from .growth.history_import import sweep_pending_purges
                     result['historyPurges'] = sweep_pending_purges(repository.connection_factory)
+                    # Imported posts of disconnected accounts, whatever POSTRIFF_VOICE_IMPORT says; never raises.
+                    from .voice_import import sweep_revoked
+                    result['voicePurges'] = sweep_revoked(repository.connection_factory)
+                voice_importer = getattr(service, 'voice_import', None)
+                if voice_importer is not None:   # POSTRIFF_VOICE_IMPORT only: bounded page reads of connected accounts; never raises
+                    result['voiceImport'] = voice_importer.tick()
                 from .growth.trends.worker import cron as trend_cron
                 result['trends'] = trend_cron(service)
                 ideas = getattr(service, 'ideas', None)
@@ -883,6 +898,13 @@ class HostedApplication:
                     result['founder'] = founder_tick(service, os.environ)
                 except Exception:
                     result['founder'] = {'status': 'unavailable'}
+                corpus_analysis = getattr(service, 'voice_corpus_analysis', None)
+                if corpus_analysis is not None:   # mounted with voice import: metered batches of analyses an owner approved
+                    # Last, and one model call a tick, so its paid calls never hold up the steps above in the shared function.
+                    try:
+                        result['voiceCorpusAnalysis'] = corpus_analysis.tick(max_calls=1)
+                    except Exception as exc:
+                        result['voiceCorpusAnalysis'] = {'status': 'unavailable', 'error': type(exc).__name__}
                 try:
                     coworker_steps = coworker_runtime.summary(result.get('coworker'))
                 except Exception:
@@ -1017,8 +1039,16 @@ class HostedApplication:
                 return phone_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] in coworker_http.RESOURCES:
                 return coworker_http.handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "voice-imports":
+                # Voice import (voice_import_http.py): 404 feature_disabled unless POSTRIFF_VOICE_IMPORT mounted the importer.
+                from . import voice_import_http
+                return voice_import_http.respond(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ['api','workspaces'] and parts[3]=='growth':
                 return growth_http.handle(self,environ,start_response,service,token,method,parts)
+            if len(parts) == 6 and parts[:2] == ["api", "workspaces"] and parts[3] == "drafts" and parts[5] == "edits":
+                # One-click tone and polish edits (draft_edits_http.py); 404 feature_disabled while POSTRIFF_DRAFT_EDITS is off.
+                from . import draft_edits_http
+                return draft_edits_http.respond(self, environ, start_response, service, token, method, parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":
                 return self._json(start_response, 200, service.billing_credit_packs(parts[2], token))
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "billing" and method == "POST":

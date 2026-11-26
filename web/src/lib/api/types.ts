@@ -262,6 +262,8 @@ export interface SnapshotVariant {
   text: string;
   revision: number;
   voiceRevision: number | null;
+  /** What the writer received for this draft; `effectiveVoiceMode` says whether the approved voice was used. */
+  memoryReceipt?: { effectiveVoiceMode?: 'neutral' | 'approved' | 'override' | 'not_supplied' } | null;
   sourceIds: string[];
   warnings: string[];
   unknowns: string[];
@@ -285,7 +287,25 @@ export interface SnapshotVariant {
     unknowns: string[];
     warnings: string[];
     runId?: string;
+    /** Set when this candidate is a one-click tone or polish edit; absent on a regenerated version. */
+    edit?: {
+      mode: 'tone' | 'polish';
+      tone?: string | null;
+      instruction?: string | null;
+      depth?: 'light' | 'standard' | 'deep' | null;
+      scope?: 'draft' | 'selection';
+      /** Code-point offsets of the rewritten passage in the text the edit started from. */
+      selection?: { start: number; end: number } | null;
+      /** Whether the edit started from the wording before the last accepted edit, or from the current text. */
+      baseKind?: 'original' | 'current';
+      baseRevision?: number;
+    };
+    /** What a deterministic check found different from the base: reminders, never a block. */
+    fidelity?: { violations: { code: string; detail?: string | null }[]; checked?: string[] };
+    noChange?: boolean;
   } | null;
+  /** The revision an accepted tone or polish edit started from, and the revision accepting it produced. */
+  editBase?: { revision: number; acceptedRevision: number } | null;
 }
 
 export type SourcePolicy = 'public_quote' | 'rewrite_approval' | 'internal_reference' | 'prohibited';
@@ -409,10 +429,17 @@ export interface VoiceProfile {
   workflow?: 'brand_brain';
   staleReason?: string;
   analysisRoute?: string;
-  analysisMethod?: 'local-rules' | 'ai' | 'user-authored';
+  analysisMethod?: 'local-rules' | 'ai' | 'user-authored' | 'voice_import';
   analysisModel?: string;
   analysisProvider?: string;
   evidenceSourceIds?: string[];
+  /** A proposal built from imported posts (`analysisMethod: 'voice_import'`). It cites posts by id and never holds their text. */
+  summary?: string;
+  topics?: string[];
+  coverage?: { eligible?: number; analysed?: number; groups?: { key: string; label?: string; eligible?: number }[]; note?: string };
+  analysisReceipt?: { id: string; route?: string; promptVersion?: string; corpusDigest?: string };
+  differences?: { against?: number | null; kept?: string[]; changed?: string[]; added?: string[] };
+  proposedAt?: string | number;
   dimensions?: {
     id: string;
     observation: string;
@@ -422,6 +449,13 @@ export interface VoiceProfile {
     evidenceLevel: 'limited' | 'supported' | 'conflicting' | 'insufficient' | 'user-defined';
     decision?: 'accept' | 'edit' | 'reject';
     userAuthored?: boolean;
+    /** Import traits: the base dimension of a scoped or interpreted trait, where and when it applies, and its evidence as post ids. */
+    dimension?: string;
+    scope?: { platforms?: string[]; accounts?: string[]; languages?: string[] };
+    period?: { from?: string | null; to?: string | null };
+    evidence?: { postIds?: string[]; count?: number; counter?: number };
+    basis?: 'measured' | 'model' | 'user';
+    status?: 'active' | 'historical';
   }[];
 }
 

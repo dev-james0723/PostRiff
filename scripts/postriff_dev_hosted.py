@@ -393,6 +393,8 @@ def main():
     parser.add_argument('--postdoctor-v2-fixture',action='store_true',help='Post Doctor v2 deterministic models, disposable database only')
     parser.add_argument('--growth-phase2-fixture',action='store_true',help='Phase 2 deterministic models, disposable database only')
     parser.add_argument('--history-import-fixture', action='store_true', help='History Import review/status on disposable PostgreSQL; synthetic providers only')
+    parser.add_argument('--voice-import-fixture', action='store_true', help='Voice import on: dev Threads/Instagram/Bluesky/Mastodon accounts with canned synthetic history; no network')
+    parser.add_argument('--draft-edits', action=argparse.BooleanOptionalAction, default=True, help='one-click tone and polish edits (POSTRIFF_DRAFT_EDITS), on by default here; the fixture writers answer an edit deterministically; --no-draft-edits turns it off')
     parser.add_argument("--founder-fixture", action="store_true", help="embedded founder Control with synthetic founder identities; disposable database only")
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
@@ -405,6 +407,11 @@ def main():
     base = os.environ.get("POSTRIFF_DEV_WEB_ORIGIN", "").rstrip("/") or f"http://127.0.0.1:{args.port}"
     transport = DevTransport()
     providers = {"linkedin": DevProvider("linkedin", "LinkedIn", base), "threads": DevProvider("threads", "Threads", base)}
+    if args.voice_import_fixture:
+        # Dev accounts that grant the read scope voice import needs (tests/voice_import_fixtures.py); Threads keeps its identity.
+        sys.path.insert(0, str(ROOT / "tests"))
+        import voice_import_fixtures
+        providers.update(voice_import_fixtures.providers(DevProvider, base))
     verifier = DevVerifier(connection)
     # OAuth rows must carry an https PostRiff callback (production guard); the dev consent page
     # redirects to the loopback callback itself, so the placeholder host is never contacted.
@@ -429,6 +436,8 @@ def main():
     if args.history_import_fixture:
         from postriff_phase2.growth.history_import import HistoryImporter
         service.history_import = HistoryImporter(connection, service.oauth, transport=transport)
+    # Voice import: migration 140 on this disposable database, POSTRIFF_VOICE_IMPORT on, canned history through the readers.
+    voice_importer = voice_import_fixtures.mount(service, connection) if args.voice_import_fixture else None
     if args.growth_fixture:
         from postriff_phase2.growth.service import GrowthService
         service.growth=GrowthService(service,env=ENV,router_factory=Models().router)
@@ -461,6 +470,12 @@ def main():
             def send(self,*_args,**_kwargs): return {'state':'sent','providerRef':'local-push'}
         service.notifications.push_transport = FakePush()
         # The existing NullTransport remains in place for email. No customer address is contacted.
+    if args.draft_edits:
+        # One-click tone and polish edits (spec D14: on in the local harness): every fixture writer answers an edit with
+        # the passage plus a fixed per-tone mark (tests/draft_edit_fixtures.py), and the route mounts as the flag mounts it.
+        sys.path.insert(0, str(ROOT / "tests"))
+        from draft_edit_fixtures import attach as attach_draft_edits
+        attach_draft_edits(service)
     social = HostedSocial(service.oauth, providers, dev_assets, transport=transport)
 
     def on_verified(cur, workspace_id, job):
@@ -564,6 +579,8 @@ def main():
                 worker.tick(max_jobs=5, max_seconds=5)
             except Exception as error:  # keep the harness alive; surface in the log
                 print("worker tick error:", error, flush=True)
+            if voice_importer is not None:
+                voice_importer.tick(max_seconds=5)   # --voice-import-fixture: advances import runs; never raises
 
     threading.Thread(target=ticker, daemon=True).start()
 

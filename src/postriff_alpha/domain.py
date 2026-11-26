@@ -406,7 +406,17 @@ class Store:
             v.update({"revision": revision, "customized": False, "needsReview": False, "blockedByRetraction": False, "proposedUpdate": None, "selectedOpening": 0})
             v.pop("sourceReviewRequired", None)
             v.pop("rejected", None)
-            v["revisions"].append({"revision": revision, "text": v["text"], "origin": "accepted-fixture-replacement", "at": now()})
+            # A tone or polish edit (the candidate carries `edit`) is recorded as what it is: which edit it was, and the
+            # revision it started from, so a later tone can start from the same wording. It is not the person's own edit.
+            edit = candidate.get("edit") if isinstance(candidate.get("edit"), dict) else None
+            record = {"revision": revision, "text": v["text"], "origin": "accepted-edit" if edit else "accepted-fixture-replacement", "at": now()}
+            if edit:
+                record["edit"] = {key: edit[key] for key in ("mode", "tone", "depth", "scope") if isinstance(edit.get(key), str)}
+                if isinstance(candidate.get("runId"), str):
+                    record["runId"] = candidate["runId"]
+                started = edit.get("baseRevision")
+                v["editBase"] = {"revision": started if type(started) is int else candidate["baseVariantRevision"], "acceptedRevision": revision}
+            v["revisions"].append(record)
             # Hosted Ideas candidates carry a pr_agent_runs id that is not in the local runs list.
             local_run = next((run for run in s["runs"] if run["id"] == v["runId"]), None)
             if local_run is not None:
@@ -419,14 +429,43 @@ class Store:
             text = clean(p.get("text", ""), 20000)
             if not text:
                 raise AlphaError("Keep some draft text, or choose a different opening.")
+            # Text an assistant suggested and the person applied (Post Doctor, Opportunity Lab) is saved like any edit,
+            # but recorded as the assistant's wording: it is not evidence of how the person writes.
+            applied = p.get("appliedFrom")
+            if applied is not None and applied not in ("post_doctor", "opportunity_lab"):
+                raise AlphaError("That is not a suggestion this draft can take text from.")
             v["text"] = text
             v["revision"] += 1
             v["customized"] = True
             # A replacement was based on the previous revision; it must never overwrite this edit.
             v["proposedUpdate"] = None
-            v["revisions"].append({"revision": v["revision"], "text": text, "origin": "author-edit", "at": now()})
+            v["revisions"].append({"revision": v["revision"], "text": text, "origin": "assistant-edit" if applied else "author-edit", "at": now(), **({"appliedFrom": applied} if applied else {})})
             # An edit keeps the draft, so it clears "don't use this" feedback. What the edit changed is a
             # learning signal for a later phase; nothing is proposed from a single edit any more.
+            v.pop("rejected", None)
+            s["savedAt"] = None
+        elif action == "discard_update":
+            # The person does not want the pending replacement. The draft's own text, revision and history are untouched.
+            self._variant(s, p.get("variantId"))["proposedUpdate"] = None
+        elif action == "variant_restore":
+            # Undo, or going back to any earlier version: its text becomes a new revision, so history is only ever
+            # added to. No model is called, and nothing here is recorded as the person's edit.
+            v = self._variant(s, p.get("variantId"))
+            if p.get("variantRevision") != v["revision"]:
+                raise AlphaError("This draft revision is stale. Reload before restoring a version.", 409, code="draft_revision_conflict")
+            wanted = p.get("restoreRevision")
+            earlier = next((r for r in v.get("revisions") or [] if type(wanted) is int and r.get("revision") == wanted
+                            and isinstance(r.get("text"), str) and r["text"].strip()), None)
+            if earlier is None:
+                raise AlphaError("That version of this draft is not available.", 404, code="draft_revision_unavailable")
+            if wanted == v["revision"]:
+                raise AlphaError("That is already the current version.")
+            v["text"] = earlier["text"]
+            v["revision"] += 1
+            v["needsReview"] = True
+            # A replacement was based on the previous revision; it must never overwrite the restored text.
+            v["proposedUpdate"] = None
+            v["revisions"].append({"revision": v["revision"], "text": earlier["text"], "origin": "restored", "restoredFrom": wanted, "at": now()})
             v.pop("rejected", None)
             s["savedAt"] = None
         elif action == "opening":

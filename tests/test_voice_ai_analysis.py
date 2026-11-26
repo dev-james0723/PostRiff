@@ -67,6 +67,45 @@ class VoiceAIRegressionTests(unittest.TestCase):
             with self.subTest(quote=quote), self.assertRaises(AlphaError):
                 module.proposal_from_output(output, self.projection, 'owner', 200, self.model, 'provider')
 
+    def test_an_observation_that_carries_a_fragment_of_a_sample_is_rejected(self):
+        module = self.module()
+        output = self.output()
+        output['dimensions'][0]['observation'] = 'Starts with hello friends, a quiet opening, and little else.'
+        self.assertNotIn(output['dimensions'][0]['observation'], self.projection['samples'][0]['text'], 'not a fully verbatim copy')
+        with self.assertRaisesRegex(AlphaError, 'abstracted'):    # nothing else to keep
+            module.proposal_from_output(output, self.projection, 'owner', 200, self.model, 'provider')
+        output['dimensions'][0]['observation'] = 'Starts with a quiet, friendly hello.'
+        self.assertEqual(module.proposal_from_output(output, self.projection, 'owner', 200, self.model, 'provider')['status'], 'proposed')
+
+    def test_one_copied_observation_is_dropped_and_the_others_are_kept(self):
+        module = self.module()
+        output = self.output()
+        output['dimensions'].append({'id': 'warmth', 'observation': 'Starts with hello friends, a quiet opening, and little else.', 'support': [self.sid],
+                                     'counterEvidence': [], 'quotes': [{'sourceId': self.sid, 'text': 'Hello friends.'}]})
+        proposal = module.proposal_from_output(output, self.projection, 'owner', 200, self.model, 'provider')
+        self.assertEqual([item['id'] for item in proposal['dimensions']], ['openings'])
+        self.assertEqual(proposal['observations'], ['Opens with a friendly greeting.'])
+        self.assertNotIn('quiet opening', json.dumps(proposal['dimensions']))
+
+    def test_a_shared_run_of_function_words_is_not_copied_wording(self):
+        module = self.module()
+        sid = add_sample(self.state, 'We post the recap at the end of the day. #studio', 'two')
+        voice_sources.apply_action(self.state, 'voice_sample_grant', {'sourceId': sid, 'grants': [{'purpose': 'analysis', 'route': self.route}], 'confirmed': True}, 'owner', 103)
+        projection = voice_sources.project(self.state, [self.sid, sid], 'analysis', self.route)
+        output = {'dimensions': [{'id': 'hashtags', 'observation': 'Places hashtags at the end of the post.', 'support': [sid], 'counterEvidence': [],
+                                  'quotes': [{'sourceId': sid, 'text': '#studio'}]}]}
+        proposal = module.proposal_from_output(output, projection, 'owner', 200, self.model, 'provider')
+        self.assertEqual(proposal['observations'], ['Places hashtags at the end of the post.'])
+
+    def test_an_observation_copied_whole_still_refuses_the_analysis(self):
+        module = self.module()
+        output = self.output()
+        output['dimensions'].append({'id': 'warmth', 'observation': 'Hello friends. A quiet opening.', 'support': [self.sid], 'counterEvidence': [],
+                                     'quotes': [{'sourceId': self.sid, 'text': 'Hello friends.'}]})
+        with self.assertRaisesRegex(AlphaError, 'abstracted') as refused:
+            module.proposal_from_output(output, self.projection, 'owner', 200, self.model, 'provider')
+        self.assertEqual(refused.exception.status, 422)
+
     def test_unknown_dimension_does_not_become_an_approved_style_trait(self):
         module = self.module()
         output = self.output()

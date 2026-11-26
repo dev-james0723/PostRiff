@@ -12,6 +12,7 @@ import { StateMessage, Surface } from '@/components/rafii';
 import { useModels } from '@/lib/api/hooks';
 import type { ModelOption, SnapshotSource } from '@/lib/api/types';
 import { OwnedPostsPicker } from './owned-posts-picker';
+import { VoiceImportPanel } from './voice-import/voice-import-panel';
 import { SelectField, FIELD_CLASS, TEXTAREA_CLASS } from '../rafii-parts';
 import type { BrainAction, BrainTranslate, BrainView } from './brain-types';
 
@@ -79,7 +80,7 @@ export function BrainSourcePicker({ sources, revision, brain, owner, busy, run, 
   </div>;
 }
 
-export function BrainSourceLedger({ sources, brain, owner, busy, run, t, selectionOnly = false }: Props & { selectionOnly?: boolean }) {
+export function BrainSourceLedger({ sources, brain, owner, busy, run, t, selectionOnly = false, onReviewImport, onManualSetup }: Props & { selectionOnly?: boolean; onReviewImport?: () => void; onManualSetup?: () => void }) {
   const locale = useGenUiLocale();
   const selectionId = useId();
   const eligible = sources.filter(s => s.active && !['guest', 'ai_generated'].includes(s.label ?? ''));
@@ -92,6 +93,8 @@ export function BrainSourceLedger({ sources, brain, owner, busy, run, t, selecti
     }
   }
   return <section className='space-y-3' aria-label={t('Sources and permissions', '來源與權限', '来源与权限')}>
+    {/* Whole-account import with its coverage receipt. It renders nothing while voice import is switched off on the server. */}
+    {!selectionOnly && <VoiceImportPanel run={run} busy={busy} onReview={onReviewImport} onManualSetup={onManualSetup} />}
     <div className='flex flex-wrap items-center justify-between gap-3'><p className='text-muted-foreground text-sm'>{selected.length} / {brain.limits.maxSamples} {t('selected', '已選取', '已选择')}</p><Button variant='quiet' className='min-h-11' disabled={busy || selected.length >= brain.limits.maxSamples || !eligible.some(s => !s.selected)} onClick={() => void selectAll()}>{t('Select all eligible shown', '選取所有可用範例', '选择所有可用样本')} ({Math.min(eligible.filter(s => !s.selected).length, Math.max(0, brain.limits.maxSamples - selected.length))})</Button></div>
     {!sources.length && <StateMessage kind='empty' title={t('No writing samples yet', '尚未加入寫作範例', '尚未添加写作样本')} />}
     {sources.map(source => <Surface key={source.id} material='quiet' padding='sm' data-testid={`${selectionOnly ? 'bb-source' : 'bb-ledger-source'}-${source.id}`}>

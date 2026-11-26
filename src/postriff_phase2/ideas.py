@@ -25,7 +25,7 @@ from .cli_runtime import ClaudeCliRuntime
 from .model_runtime import REQUEST_SECONDS, ProviderFailure, ServerModelRuntime, check_level_ceiling
 from .codex_runtime import CodexCliRuntime
 from .skills import SkillLibrary, budget_for
-from . import ai_call_events, attachment_rows, content_types, intent, learning_signals, locales, memory, research, turn_references, voice_sources, writer_defaults
+from . import ai_call_events, attachment_rows, content_types, draft_edits, intent, learning_signals, locales, memory, research, turn_references, voice_sources, writer_defaults
 
 VOICE_FALLBACK_NOTE = "Your writing samples were not available to this writer, so this draft is in a neutral voice. Allow a sample for it on the Brand page to write like you again."
 
@@ -285,6 +285,9 @@ class IdeasService:
         self.attachments_enabled = bool(attachments_enabled)
         self.notes_enabled = bool(notes_enabled)
         self.video_enabled = bool(video_enabled)
+        # One-click tone and polish edits (draft_edits): off unless the deployment mounts them. While off, a turn's
+        # `edit` key is ignored exactly as before.
+        self.edits_enabled = False
         if media_notes is not None:
             media_notes.credit_requests = self.credit_requests
 
@@ -329,6 +332,7 @@ class IdeasService:
             },
             "attachments": self.attachments_catalog(),
             "creation": self.creation_catalog(),
+            **({"draftEdits": draft_edits.catalog()} if self.edits_enabled else {}),
         }
 
     @staticmethod
@@ -1038,6 +1042,10 @@ class IdeasService:
             raise AlphaError("Selected sources or their permissions changed while writing. Review a new candidate.", 409)
         voice_sources.validate_bindings(current_state, outcome.get("voiceContext") or {})
         memory.validate_receipt(current_state, outcome.get("memoryReceipt"), outcome.get("voiceContext"))
+        if outcome.get("edit"):
+            # An edit that cannot be kept (its draft went, or the writer did not return one text) is refused before the
+            # run is settled, so the caller settles it as failed: a settlement is final, and completed spends a batch.
+            draft_edits.check_finish(current_state, artifact, outcome["edit"])
         cost_known = "costUsd" in usage and usage.get("costUsd") is not None
         settlement = self.ledger.settle(
             cur,
@@ -1081,6 +1089,10 @@ class IdeasService:
                 variant["media"] = media
                 if outcome.get("contentType"):
                     variant.update({k: outcome["contentType"].get(k) for k in ("contentTypeId", "contentTypeVersion", "formatId")})
+        if outcome.get("edit"):
+            # A tone or polish edit (draft_edits): the writer's passage goes back into the draft's text, the comparison
+            # with the base is attached as reminders, and the draft keeps its own media and separate fields.
+            draft_edits.finish(current_state, artifact, outcome["edit"])
         artifact["voiceContext"] = {key: (outcome.get("voiceContext") or {}).get(key) for key in ("mode", "bindings", "digest", "route")}
         if (outcome.get("voiceContext") or {}).get("examples"):
             artifact["voiceContext"]["examples"] = outcome["voiceContext"]["examples"]   # which samples' own text this draft read
@@ -1114,6 +1126,9 @@ class IdeasService:
         summary = {"text": f"Drafted {len(artifact['variants'])} candidate variants from {len(context['sources'])} approved sources{found}{attached}.", "runId": run_id, "research": researched or None, "artifactHash": artifact_hash, "excluded": context["excluded"], "candidateOnly": context["candidateOnly"], "intent": outcome["parsed"]["intent"], "destinations": outcome["destinations"], "plan": outcome["plan"], "model": outcome["model"], "skills": [b["id"] for b in outcome.get("skillBindings", [])], "memory": outcome.get("memoryBindings")}
         if references is not None:
             summary["references"] = references
+        if isinstance(artifact.get("edit"), dict):
+            info = artifact["edit"]
+            summary.update(text=draft_edits.summary_text(info), edit={"variantId": info.get("variantId"), **draft_edits.summary(info), "noChange": bool(info.get("noChange"))})
         self._settle_message(cur, workspace_id, conversation_id, run_id, summary)
         return artifact_hash
 
@@ -1532,7 +1547,9 @@ class IdeasService:
                 self._append_message(cur, workspace_id, conversation_id, "user", {"text": said, "sourceIds": source_ids, "intent": parsed["intent"], **sent,
                                                                                    **({"material": {k: str(v)[:120] for k, v in material_ref.items() if k in ("type", "id", "title")}} if material_ref else {})})
             skill_ids = [b["id"] for b in bound["bindings"]]
-            cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key,usage) VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s,%s::jsonb) RETURNING id::text", (conversation_id, workspace_id, principal, model_id, reasoning, digest(context), context["policyEpoch"], key, json.dumps({"request": fingerprint, **(_run_meta or {})})))
+            # A tone or polish edit (draft_edits) is its own workload in the run's usage from the start.
+            run_meta = {**(_run_meta or {}), **draft_edits.run_meta(projected.get("edit"))}
+            cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key,usage) VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s,%s::jsonb) RETURNING id::text", (conversation_id, workspace_id, principal, model_id, reasoning, digest(context), context["policyEpoch"], key, json.dumps({"request": fingerprint, **run_meta})))
             run_id = cur.fetchone()[0]
             # Credits gate before execution (§17): only a paid route reserves money or a writing batch.
             paid = runtime.cost_class == "paid"
@@ -1548,6 +1565,9 @@ class IdeasService:
             if "references" in projected:
                 # What the chips did, the post media and the per-message content type (chat-context SPEC §5.10).
                 outcome.update({"references": projected["references"], "media": projected["media"], "contentType": projected["contentType"], "derivedSourceIds": projected["derivedSourceIds"]})
+            if projected.get("edit"):
+                # A tone or polish edit: what finishing the run needs to build the candidate from the writer's passage.
+                outcome["edit"] = projected["edit"]
             from .coworker import flags as coworker_flags
             if coworker_flags.enabled("RAFII_OPPORTUNITY_FLIPPER_ENABLED"):
                 from .growth.scout import lineage
@@ -1690,10 +1710,18 @@ class IdeasService:
         Chips on the message (`references`/`attachments`) and handed-in material go through turn_references
         (chat-context SPEC §6): they reach the writer as data fields, never inside the idea, and every item is reported.
         `notes` is media_notes.lookup's output for runs, or turn_references.PRICING for estimates (padded, untrimmed)."""
+        # A tone or polish edit of an existing draft (draft_edits), read only where the deployment mounts edits: checked
+        # against the draft before anything else, so a stale or impossible edit is refused before a run exists. Its
+        # material and its instruction come from the draft and the contract, never from what the request hands in.
+        edit = draft_edits.project(state, payload) if self.edits_enabled and payload.get("edit") is not None else None
+        if edit:
+            draft_edits.require_writer(runtime)
         # Account identity is verified against this workspace's connections (v9 §4).
         destinations = intent.bind_accounts(destinations, state)
         source_ids = payload.get("sourceIds") if isinstance(payload.get("sourceIds"), list) else [s["id"] for s in state.get("sources", []) if s.get("active") and s.get("kind") != "voice_sample"][:20]
         source_ids = [source_id for source_id in source_ids if not any(s.get("id") == source_id and s.get("kind") == "voice_sample" for s in state.get("sources", []))]
+        if edit:
+            source_ids = []   # an edit reads the sources its draft was written from (added below with the draft), no others
         # A cloud route only receives sources whose egress the person consented to; local routes see local consent.
         provider_class = getattr(runtime, "provider_class", "local")
         refs = turn_references.parse(payload) if refs is None else refs
@@ -1714,11 +1742,11 @@ class IdeasService:
         # silently re-introduce an older workspace brief (which may now be private/internal-only material).
         # The writer's `idea` field is bounded (IDEA_LIMIT); long text still reaches it whole as the message or source.
         saved_brief = "" if isinstance(payload.get("sourceIds"), list) else state.get("brief", {}).get("idea", "")
-        raw_idea = text or str(payload.get("intentText") or "") or saved_brief
+        raw_idea = edit["idea"] if edit else text or str(payload.get("intentText") or "") or saved_brief
         idea = clean(raw_idea[:IDEA_LIMIT], IDEA_LIMIT)
         resolved = None
         if turn_references.present(refs) or handed_in:
-            material_text = clean(payload["material"], MAX_TEXT) if isinstance(payload.get("material"), str) else None
+            material_text = edit["passage"] if edit else clean(payload["material"], MAX_TEXT) if isinstance(payload.get("material"), str) else None
             resolved = turn_references.resolve(
                 state, refs, actor=actor, provider_class=provider_class, route_kind="fixture" if isinstance(runtime, FixtureAgentRuntime) else provider_class,
                 text=raw_idea, payload_material=material_text, material_ref=payload.get("materialRef") if isinstance(payload.get("materialRef"), dict) else None,
@@ -1740,6 +1768,9 @@ class IdeasService:
             # A template chip chooses this message's content type (recurring > template > workspace selection, SPEC §6.4).
             selection, rule_ids, note = self._content_selection(state, resolved["contentType"], note=turn_references.REMINDERS["template_fallback"])
             automation_notes += [note] if note else []
+        if edit:
+            # An edit keeps the content type its draft has: that scopes the learned preferences it may read.
+            selection, rule_ids = edit["contentType"], ()
         content_type_id = selection.get("contentTypeId")
         # A how-to that names no steps still drafts; the person gets a reminder next to it, never a block.
         reminders = [content_types.TUTORIAL_REMINDER] if content_types.missing_tutorial_input(rule_ids, idea, context) else []
@@ -1786,7 +1817,7 @@ class IdeasService:
         if style_examples:
             request["voiceSamples"] = [{key: item[key] for key in ("platform", "language", "text")} for item in style_examples]
         length_limits = remembered_length_limits(state, shared["learned"]["used"], destinations, content_type_id if content_type_id != "unclassified" else None)
-        if length_limits:
+        if length_limits and not edit:   # an edit changes wording, not length: a remembered maximum must not shorten the text
             request["lengthLimits"] = length_limits   # a remembered length travels as a number, not only as a VOICE.md sentence
         if level is not None:
             request["level"] = level   # the managed writer's reasoning level (translate_reasoning); `reasoning` keeps the pass
@@ -1809,17 +1840,34 @@ class IdeasService:
                 context = request["context"]
                 source_ids = [item for item in source_ids if any(s["id"] == item for s in context["sources"]) or any(e["id"] == item for e in context["excluded"])]
             reminders = list(dict.fromkeys(reminders + list(report["reminders"])))
+        if edit:
+            # The passage must reach the writer whole: one that saw part of it would return part of it. The read-only
+            # context comes after it and is the first thing to go when the request is over its size budget.
+            request["edit"] = edit["request"]
+            request["material"] = draft_edits.material(edit, request.get("material"),
+                                                       reason=next((item["message"] for item in (report or {}).get("unused", []) if item.get("kind") == "post"), None))
+            measure = getattr(runtime, "_user_payload", None)
+            if (len(request["material"]) > 1 and notes is not turn_references.PRICING and callable(measure)
+                    and len(json.dumps(measure(request), ensure_ascii=False).encode()) > turn_references.BUDGET_BYTES):
+                request["material"] = request["material"][:1]
         # Step ③: skills are bound by destination, format, intent and content type, and recorded
         # by id/version/sha256 (design §7). The voice contract carries only the parts this turn uses.
         from contextlib import nullcontext
         from .skill_compiler import workflow_context
         trend_selected = any(s.get("id") in source_ids and (s.get("origin") or {}).get("trendLineage") for s in state.get("sources", []))
         with workflow_context("rafii-trend-intelligence") if trend_selected else nullcontext():
-            bound = self.skills.bind(destinations, selection.get("formatId"), parsed["intent"],
-                                     content_type_id if content_type_id != "unclassified" else None,
-                                     max_chars=budget_for(runtime.cost_class), explicit=(resolved or {}).get("skillIds") or ())
+            if edit:
+                # The editing contract, the editing pack for each language the draft is written in, and the adapters.
+                bound = self.skills.bind(destinations, None, draft_edits.INTENT, None, max_chars=budget_for(runtime.cost_class), languages=edit["languages"])
+            else:
+                bound = self.skills.bind(destinations, selection.get("formatId"), parsed["intent"],
+                                         content_type_id if content_type_id != "unclassified" else None,
+                                         max_chars=budget_for(runtime.cost_class), explicit=(resolved or {}).get("skillIds") or ())
         request["skills"] = bound
         projected = {"destinations": destinations, "sourceIds": source_ids, "context": context, "shared": shared, "memoryReceipt": memory_receipt, "voiceContext": voice_context, "request": request, "bound": bound, "reminders": reminders}
+        if edit:
+            # What finishing the run needs to build the candidate: never sent to the writer, never stored on the run.
+            projected["edit"] = {key: edit[key] for key in ("variantId", "variantRevision", "record", "baseText", "passage", "selection", "language")}
         if resolved:
             used_types = selection if resolved["contentType"] and selection.get("contentTypeId") != "unclassified" else None
             projected.update({"references": report, "media": resolved["media"], "materialRef": resolved["materialRef"], "reworkOf": resolved["reworkOf"],
@@ -2042,6 +2090,10 @@ class IdeasService:
             created.clear()
             rework = artifact.get("reworkOf")
             original = next((v for v in state["variants"] if v.get("id") == rework), None) if rework else None
+            edit = artifact.get("edit") if isinstance(artifact.get("edit"), dict) else None
+            if edit:
+                # A tone or polish edit attaches only to the revision it was written for, and only when it changed something.
+                draft_edits.check_apply(artifact, original)
             for candidate in artifact["variants"]:
                 if separate or artifact.get("forCampaign"):
                     # An automation run, or a post written for a campaign: new content, never an update to an unrelated draft.
@@ -2069,6 +2121,14 @@ class IdeasService:
                 # through candidate, variant, approval manifest and observed outcomes.
                 values["trendLineage"] = [copy.deepcopy(b) for b in artifact.get("trendLineage", [])
                                            if b["platform"] == candidate["platform"] and b["channel_id"] == candidate.get("channelId")]
+                if edit:
+                    # How the candidate was made and what the comparison found, plus the samples the draft was written from.
+                    extra = draft_edits.candidate_values(values, candidate, original)
+                    if not old:
+                        # A new draft (the edited one is already in the queue) starts its own history; the edit stays on its run.
+                        extra.pop("edit", None)
+                        extra.pop("fidelity", None)
+                    values.update(extra)
                 if old:
                     if artifact.get("scoutLineage"):
                         values["scoutLineage"] = [b for b in artifact["scoutLineage"] if b["executionPlan"]["platform"] == candidate["platform"] and b["executionPlan"]["account"] == candidate.get("channelId")]

@@ -1,10 +1,12 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { JobDetailSheet } from '@/components/jobs/job-detail-sheet';
 import { ReviewApproveButton } from '@/components/jobs/review-approve-button';
-import { useSnapshot } from '@/lib/api/hooks';
+import { ApiError } from '@/lib/api/client';
+import { useAct, useModels, useSnapshot } from '@/lib/api/hooks';
 import Link from 'next/link';
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
 import { NativeDraftFacts } from '@/features/agent/native-draft-facts';
@@ -25,6 +27,7 @@ import { COLUMN_META, findCard, findSuccessor, FOOTER_WORDS, toEpoch, type Board
 import { isCancellable } from './job-state';
 import { badgeClass, canSetAside, cardBadge, copyText, REVISION_ORIGIN, scheduleGate, type CardActions, type CardPermissions } from './pipeline-card';
 import { reasonLabel } from './set-aside-dialog';
+import { TONE_COPY, choiceName, draftEditsEnabled } from './tone-edit-contract';
 
 const KIND_LABEL: Record<BoardCard['kind'], string> = { source: 'Source', draft: 'Draft', review: 'Review', job: 'Post' };
 
@@ -63,10 +66,35 @@ function TextBlock({ text }: { text: string }) {
 
 const linkClass = 't-learn rafii-focus text-foreground inline-flex min-h-9 items-center gap-0.5 rounded-md text-sm font-medium hover:underline';
 
-function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: Board; state: SnapshotState | undefined; onShow: (card: BoardCard) => void }) {
+function DraftDetails({ card, board, state, permissions, onShow }: { card: BoardCard; board: Board; state: SnapshotState | undefined; permissions: CardPermissions; onShow: (card: BoardCard) => void }) {
   const variant = card.variant;
+  const snapshot = useSnapshot();
+  const act = useAct();
+  const models = useModels();
+  const [working, setWorking] = useState<string | null>(null);
   if (!variant || !card.draft) return null;
   const situation = card.draft;
+  // Restoring a version and discarding a proposed update are draft-edit actions: offered to editors, and only
+  // while the server has one-click edits on (the same catalogue entry that shows the tone control in the editor).
+  const canChange = draftEditsEnabled(models.data) && permissions.canEdit && !permissions.readOnly;
+  const copy = TONE_COPY.en.sheet;
+  const proposed = variant.proposedUpdate;
+
+  async function change(key: string, action: 'discard_update' | 'variant_restore', payload: Record<string, unknown>, done: { title: string; description?: string }, failed: string) {
+    if (!snapshot.data || act.isPending) return;
+    setWorking(key);
+    try {
+      await act.mutateAsync({ revision: snapshot.data.revision, action, payload });
+      toast.success(done.title, { description: done.description });
+    } catch (err) {
+      // Something changed first (409): load the latest and let the person decide again.
+      const stale = err instanceof ApiError && err.status === 409;
+      if (stale) void snapshot.refetch();
+      toast.error(failed, { description: stale ? copy.changed : err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setWorking(null);
+    }
+  }
   const channel = state?.phase2?.channels.find((c) => c.platform === variant.platform);
   const sources = (state?.sources ?? []) as PipelineSource[];
   const revisions = (variant.revisions ?? []).toReversed();
@@ -80,11 +108,24 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
         <DraftPreview platform={variant.platform} text={card.body} account={channel?.account ?? state?.speaker?.label ?? variant.platform} channelId={channel?.id} scale={0.5} className='self-center' />
         {!channel && <p className='text-muted-foreground text-xs'>No {variant.platform} account connected.</p>}
       </Section>
-      {variant.proposedUpdate ? (
+      {proposed ? (
         <>
           <Section title='Proposed update'>
-            <TextBlock text={variant.proposedUpdate.text} />
-            <p className='text-muted-foreground text-xs'>Scheduling or editing accepts it.</p>
+            <TextBlock text={proposed.text} />
+            {proposed.edit ? (
+              <p className='text-muted-foreground text-xs'>
+                {copy.proposedEdit(choiceName(proposed.edit), proposed.edit.scope === 'selection' || proposed.edit.selection ? TONE_COPY.en.scopeSelection : TONE_COPY.en.scopeDraft)}
+                {/* Scheduling takes a waiting version only while it was written for the voice that is active now. */}
+                {proposed.voiceRevision === (state?.speaker?.activeRevision ?? null) && ` ${copy.scheduling}`}
+              </p>
+            ) : (
+              <p className='text-muted-foreground text-xs'>Scheduling or editing accepts it.</p>
+            )}
+            {canChange && (
+              <Button variant='glass' size='control' className='self-start' disabled={act.isPending} onClick={() => void change('discard', 'discard_update', { variantId: variant.id }, { title: copy.discardedTitle }, copy.discardFailed)}>
+                {working === 'discard' ? copy.discarding : copy.discard}
+              </Button>
+            )}
           </Section>
           <Section title='Current text'>
             <TextBlock text={variant.text} />
@@ -165,10 +206,13 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
           <ol className='flex flex-col gap-2'>
             {revisions.map((revision) => {
               const at = toEpoch(revision.at);
+              const origin = REVISION_ORIGIN[revision.origin] ?? revision.origin.replace(/-/g, ' ');
+              // The current text is not a version to go back to, and neither is an older copy of the same words.
+              const restorable = canChange && revision.revision !== variant.revision && revision.text !== variant.text;
               return (
                 <li key={`${revision.revision}-${revision.origin}`} className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3 py-2'>
                   <p className='text-sm'>
-                    <span className='font-medium'>{REVISION_ORIGIN[revision.origin] ?? revision.origin.replace(/-/g, ' ')}</span>
+                    <span className='font-medium'>{origin}</span>
                     {at ? (
                       <span className='text-muted-foreground' title={formatDateTime(at)}>
                         {' '}
@@ -177,6 +221,21 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
                     ) : null}
                   </p>
                   <p className='text-muted-foreground line-clamp-2 text-xs whitespace-pre-wrap'>{revision.text}</p>
+                  {restorable && (
+                    <Button
+                      variant='quiet'
+                      size='sm'
+                      className='mt-1 -ml-2 min-h-11 px-2'
+                      aria-label={copy.restoreVersionOf(at ? `${origin}, ${relativeTime(at)}` : origin)}
+                      disabled={act.isPending}
+                      onClick={() =>
+                        void change(`restore:${revision.revision}`, 'variant_restore', { variantId: variant.id, variantRevision: variant.revision, restoreRevision: revision.revision }, { title: copy.restoredTitle, description: copy.restoredDetail }, copy.restoreFailed)
+                      }
+                    >
+                      <Icons.history data-icon='inline-start' />
+                      {working === `restore:${revision.revision}` ? copy.restoring : copy.restoreVersion}
+                    </Button>
+                  )}
                 </li>
               );
             })}
@@ -496,7 +555,7 @@ export function DetailSheet({
                   <SheetActions card={current} permissions={permissions} actions={actions} cancelPending={cancelPending} holdEpoch={holdEpoch} />
                   {/* A job's instruction is part of its receipt below; a draft's warning or failed job reads first. */}
                   {current.tag && current.kind === 'draft' && <p className='text-foreground text-sm font-medium'>{current.tag}</p>}
-                  {current.kind === 'draft' && <DraftDetails card={current} board={board} state={state} onShow={onShow} />}
+                  {current.kind === 'draft' && <DraftDetails card={current} board={board} state={state} permissions={permissions} onShow={onShow} />}
                   {(current.kind === 'review' || current.kind === 'job') && <ManifestDetails card={current} board={board} onShow={onShow} />}
                   {current.kind === 'review' && <ReviewDetails card={current} permissions={permissions} />}
                   {current.kind === 'source' && <SourceDetails card={current} />}

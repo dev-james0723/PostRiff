@@ -47,6 +47,7 @@ import { cn } from '@/lib/utils';
 import { CapabilityChips } from './capability-chips';
 import { ChannelHistorySheet } from './channel-history-sheet';
 import { HistoryImportControl } from './history-import-control';
+import { VoiceImportEntry } from '@/features/workspace/brand/voice-import/voice-import-entry';
 import { historyImportCopy } from '@/lib/channels/history-import-copy';
 import { usePreferences } from '@/lib/preferences';
 import type { ConnectRequest } from './connect-sheet';
@@ -445,6 +446,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           </StatefulButton>
         )}
         <HistoryImportControl channel={channel} provider={provider} canManage={canManage} />
+        <VoiceImportEntry channel={channel} provider={provider} />
         {canManage && !disconnected && (
           <StatefulButton
             variant='outline'

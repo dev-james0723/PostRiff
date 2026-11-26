@@ -14,6 +14,8 @@ import { languageLabel, textAttributes } from '@/lib/locales';
 import { workflowKey } from '@/lib/time-back/active-time';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
 import { PostDoctorPanel } from '@/features/growth/post-doctor-panel';
+import { relocateSelection, type TextRange } from './tone-edit-contract';
+import { ToneEditPanel } from './tone-edit-panel';
 
 /* Elevated glass dialog on the existing primitive (DNA §12.2); the editor is a readable, regular 15–16px surface (DNA §21.2). */
 const DIALOG = 'rafii-elevated rounded-[var(--rafii-radius-dialog)] p-5 ring-0 sm:max-w-xl md:p-6';
@@ -32,6 +34,29 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
   const [text, setText] = useState(variant?.text ?? '');
   const notes = variant ? limitNotes({channel: resolveChannelSlug(undefined, variant.platform), channelName: variant.platform, account: '', text, media: [], publishAt: new Date(), timeZone: 'UTC'}) : [];
   const dirty = variant !== undefined && (text !== variant.text || variant.rejected === true);
+  // The textarea's selection (UTF-16 offsets) with the text it was read from: once the text is anything else, the
+  // offsets name nothing and a tone or polish edit applies to the whole draft.
+  const [picked, setPicked] = useState<(TextRange & { of: string }) | null>(null);
+  const selection = picked && picked.of === text ? picked : null;
+
+  function notePick(target: HTMLTextAreaElement, shown: string) {
+    const { selectionStart: start, selectionEnd: end } = target;
+    // A stored CRLF reads back from a textarea as LF, so the offsets count only while both hold the same text.
+    setPicked(start === end || target.value !== shown ? null : { start, end, of: shown });
+  }
+
+  /** Saves the text and stays open, for an edit that works on the saved revision (`ToneEditPanel`). */
+  async function persist() {
+    if (!variant || !snapshot.data) throw new Error('This draft is gone.');
+    const saved = await act.mutateAsync({ revision: snapshot.data.revision, action: 'variant_edit', payload: { variantId: variant.id, variantRevision: variant.revision, text } });
+    const stored = saved.state.variants?.find((item) => item.id === variant.id);
+    if (!stored) throw new Error('The saved draft is unavailable. Reload before continuing.');
+    // The server trims the ends: the editor shows what was stored, and the selection follows its passage.
+    const moved = selection ? relocateSelection(text, selection, stored.text) : null;
+    setPicked(moved ? { ...moved, of: stored.text } : null);
+    setText(stored.text);
+    return { variant: stored, revision: saved.revision };
+  }
 
   async function save() {
     if (!variant || !snapshot.data) return;
@@ -56,13 +81,16 @@ export function EditDraftDialog({ variantId, open, onOpenChange }: { variantId: 
         </DialogHeader>
         {variant ? (
           <>
-            <Textarea {...textAttributes(variant.language)} value={text} onChange={(e) => setText(e.target.value)} rows={12} className={EDITOR} aria-label='Draft text' autoFocus />
+            <Textarea {...textAttributes(variant.language)} value={text} onChange={(e) => { setText(e.target.value); notePick(e.target, e.target.value); }} onSelect={(e) => notePick(e.currentTarget, text)} rows={12} className={EDITOR} aria-label='Draft text' autoFocus />
             {notes.map((note, index) => <p key={index} className={note.tone === 'problem' ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}>{note.text}</p>)}
             {notes.length === 0 && <p className='text-muted-foreground text-xs tabular-nums'>{Array.from(text).length} characters</p>}
+            {/* Keyed inside by draft and revision; renders nothing while the server has one-click edits off. */}
+            <ToneEditPanel variant={variant} text={text} selection={selection} save={persist} onText={setText} />
             <PostDoctorPanel key={`${variant.id}:${variant.revision}`} variant={variant} dirty={dirty} onAccepted={setText} />
             <OpportunityLabPanel draft={{ id: variant.id, revision: variant.revision, platform: variant.platform, text, dirty }} onApply={async edit => {
               if (!snapshot.data || dirty || variant.revision !== edit.expected_revision) throw new Error('The draft changed. Save and check again.');
-              const saved = await act.mutateAsync({ revision: snapshot.data.revision, action: 'variant_edit', payload: { variantId: variant.id, variantRevision: edit.expected_revision, text: edit.text } });
+              // `appliedFrom`: the Lab wrote this text, so it is not counted as the person's own edit for learning.
+              const saved = await act.mutateAsync({ revision: snapshot.data.revision, action: 'variant_edit', payload: { variantId: variant.id, variantRevision: edit.expected_revision, text: edit.text, appliedFrom: 'opportunity_lab' } });
               const savedVariant = saved.state.variants?.find((item) => item.id === variant.id);
               if (!savedVariant) throw new Error('The saved draft is unavailable. Reload before continuing.');
               setText(savedVariant.text);

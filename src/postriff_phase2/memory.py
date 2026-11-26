@@ -90,10 +90,161 @@ def boundary_fields(state):
     return fields
 
 
+# --- Trait scope (brand intelligence spec 5.6) --------------------------------------------------------------------------
+# A trait may say where it holds: {platforms, accounts, languages}. Platform ids are compared without case, spaces or
+# punctuation, so "LinkedIn" and "linkedin", "Google Business Profile" and "google_business_profile" are one platform.
+SCOPE_KEYS = ("platforms", "accounts", "languages")
+
+
+def platform_key(value):
+    return "".join(ch for ch in value.casefold() if ch.isalnum()) if isinstance(value, str) else ""
+
+
+def platform_name(value):
+    """The product's own name for a platform id, or None: an id we do not know is never printed as text."""
+    from .skills import CHANNEL_SKILLS
+    key = platform_key(value)
+    return next((name for name in CHANNEL_SKILLS if platform_key(name) == key), None) if key else None
+
+
+def trait_scope(trait):
+    """The trait's non-empty scope lists, or {} when it applies everywhere."""
+    scope = trait.get("scope") if isinstance(trait, dict) and isinstance(trait.get("scope"), dict) else {}
+    found = {key: [item for item in scope[key] if isinstance(item, str) and item] for key in SCOPE_KEYS if isinstance(scope.get(key), list)}
+    return {key: items for key, items in found.items() if items}
+
+
+def _settled(trait):
+    """Kept, established and current: a trait that may render at all."""
+    return trait.get("decision") != "reject" and trait.get("evidenceLevel") not in ("conflicting", "insufficient") and trait.get("status") != "historical"
+
+
+def applies_everywhere(trait):
+    """A trait that belongs in a profile's plain observation list: kept, established, current, and not tied to a
+    platform, an account or a language. Everything that reads `observations` may then treat it as general."""
+    return _settled(trait) and not trait_scope(trait)
+
+
+def _language_matches(wanted, language):
+    """A trait's or a lesson's language covers a draft's language and its regional forms: `zh-Hant` reaches
+    `zh-Hant-HK` and `yue-Hant-HK` drafts, `en` every English draft (learning.applies reads a scope the same way)."""
+    if not isinstance(language, str) or not language:
+        return False
+    chain = {language, *locales.scope_chain(language)}
+    return any(isinstance(item, str) and (item in chain or (locales.canonical(item, family_ok=True) or item) in chain) for item in wanted)
+
+
+def _account_key(value):
+    return value.strip().lstrip("@").casefold() if isinstance(value, str) else ""
+
+
+def _destination_accounts(destination, state):
+    """Every name a destination's account goes by: its connection id and label, and for a connected channel the
+    platform's own account id (what an imported account is keyed by)."""
+    names = {_account_key(destination.get(key)) for key in ("channelId", "account")}
+    phase2 = (state or {}).get("phase2") if isinstance((state or {}).get("phase2"), dict) else {}
+    label = _account_key(destination.get("account"))
+    for channel in phase2.get("channels") or []:
+        if isinstance(channel, dict) and ((destination.get("channelId") and channel.get("id") == destination.get("channelId"))
+                                          or (label and _account_key(channel.get("account")) == label)):
+            names.update(_account_key(channel.get(key)) for key in ("id", "account", "providerAccountId"))
+    names.discard("")
+    return names
+
+
+def trait_applies(trait, destinations, state=None):
+    """Whether a trait renders for a request to these destinations. An unscoped trait renders everywhere. A scoped one
+    renders only for a request that names destinations, when one of them matches every key the scope lists (platform,
+    language, account). A trait tied to accounts belongs to a voice kept separate: it renders only when every
+    destination is one of its accounts, so it never reaches another account's draft."""
+    scope = trait_scope(trait)
+    if not scope:
+        return True
+    found = []
+    for destination in destinations or []:
+        if isinstance(destination, dict):
+            found.append((not scope.get("platforms") or platform_key(destination.get("platform")) in {platform_key(item) for item in scope["platforms"]})
+                         and (not scope.get("languages") or _language_matches(scope["languages"], destination.get("language")))
+                         and (not scope.get("accounts") or bool({_account_key(item) for item in scope["accounts"]} & _destination_accounts(destination, state))))
+    return bool(found) and (all(found) if scope.get("accounts") else any(found))
+
+
+def scope_label(trait):
+    """How VOICE.md names where a scoped trait holds: platform and language names the product knows; never an
+    account's id or handle."""
+    scope, parts = trait_scope(trait), []
+    if scope.get("platforms"):
+        parts.append(" / ".join(dict.fromkeys(name for name in map(platform_name, scope["platforms"]) if name)) or "some channels")
+    if scope.get("languages"):
+        parts.append(" / ".join(dict.fromkeys(locales.display(item) for item in scope["languages"] if locales.canonical(item, family_ok=True))) or "some languages")
+    if scope.get("accounts"):
+        parts.append("one account" if len(scope["accounts"]) == 1 else "some accounts")
+    return " · ".join(parts)
+
+
+def voice_items(profile, destinations=None, state=None):
+    """What VOICE.md lists under Observations: (the profile's plain observations, [(trait, line)] for each scoped trait
+    that applies to these destinations). A trait marked as old style (`historical`) never renders, and neither does a
+    scoped trait's wording on its own, even where a profile saved by older code still lists it as a plain observation."""
+    dimensions = [item for item in profile.get("dimensions") or [] if isinstance(item, dict) and isinstance(item.get("observation"), str)]
+    general = {item["observation"] for item in dimensions if applies_everywhere(item)} | {item for item in profile.get("userGuidance") or [] if isinstance(item, str)}
+    hidden = {item["observation"] for item in dimensions if trait_scope(item) or item.get("status") == "historical"} - general
+    plain = [item for item in profile.get("observations") or [] if not (isinstance(item, str) and item in hidden)]
+    return plain, [(item, f"- [{scope_label(item)}] {item['observation']}") for item in dimensions if trait_scope(item) and _settled(item) and trait_applies(item, destinations, state)]
+
+
+# --- Approved Genome lessons (brand intelligence spec 5.6) ---------------------------------------------------------------
+MAX_GENOME_LINES = 12
+
+
+def _cohort_known(value):
+    return isinstance(value, str) and value.strip().casefold() not in ("", "unknown", "*", "any", "all")
+
+
+def genome_applies(statement, destinations):
+    """Whether an approved Genome lesson belongs to a request for these destinations: its cohort's platform, connection
+    and language each match one destination wherever both name one. An unknown cohort value matches any destination,
+    and so does a destination that names no account."""
+    if not destinations:
+        return True
+    cohort = statement.get("cohort") if isinstance(statement.get("cohort"), dict) else {}
+    platform, connection, language = (cohort.get(key) for key in ("platform", "connectionId", "language"))
+    for destination in destinations:
+        if not isinstance(destination, dict):
+            continue
+        if _cohort_known(platform) and destination.get("platform") and platform_key(platform) != platform_key(destination["platform"]):
+            continue
+        if _cohort_known(connection) and destination.get("channelId") and connection != destination["channelId"]:
+            continue
+        if _cohort_known(language) and destination.get("language") and not _language_matches([language], destination["language"]):
+            continue
+        return True
+    return False
+
+
+def genome_lines(genome, destinations=None):
+    """The supported lessons of an approved Genome that VOICE.md carries for these destinations: the twelve newest
+    (lessons are appended as they are approved), in the Genome's own order."""
+    statements = [item for item in (genome or {}).get("statements") or [] if isinstance(item, dict) and item.get("grade") == "supported" and isinstance(item.get("text"), str)]
+    return [item for item in statements if genome_applies(item, destinations)][-MAX_GENOME_LINES:]
+
+
+def _section_lines(body, title):
+    """The lines under one `## <title>` heading of a rendered file."""
+    lines, inside = set(), False
+    for line in body.splitlines():
+        if line.startswith("## "):
+            inside = line[3:] == title
+        elif inside:
+            lines.add(line)
+    return lines
+
+
 def render_files(state, shareable=None, destinations=None, content_type_id=None):
     """Return five derived files as {name, purpose, source, body, editHref}. Owner/local views may include private boundaries.
     With `shareable`, BOUNDARIES.md keeps only boundaries whose privacy is listed and says how many it left out.
-    With `destinations`, VOICE.md carries only the learned preferences that apply to them (a prompt slice)."""
+    With `destinations`, VOICE.md carries only the learned preferences, scoped traits and Genome lessons that apply to
+    them (a prompt slice); without, no scoped trait at all. A trait marked as old style is never rendered."""
     state = state or {}
     speaker = state.get("speaker") or {}
     hub = state.get("brandHub") or {}
@@ -115,12 +266,14 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
     ])
 
     if revision:
+        # A trait scoped to a platform, language or account is listed, labelled, only for a destination it matches.
+        plain, scoped = voice_items(profile, destinations, state)
         voice = "\n".join([
             "# Voice", "",
             f"Revision {revision.get('revision')} · approved {_when(revision.get('approvedAt'))} · {revision.get('reason', '')}".rstrip(" ·"), "",
             f"Tone: {profile.get('tone') or '(not set)'}", "",
             "## Observations", "How to handle what you supply. A trait is never a reason to add a detail, habit or admission you did not supply.",
-            *([f"- {item}" for item in profile.get("observations") or []] or ["- (none recorded)"]), "",
+            *([f"- {item}" for item in plain] + [line for _, line in scoped] or ["- (none recorded)"]), "",
             *learning.render_lines(state, destinations, content_type_id), "",
             "## Writing example", ("> " + str(profile.get("writingExample")).replace("\n", "\n> ")) if profile.get("writingExample") else "(none supplied)", "",
             "## Unknowns kept explicit", *([f"- {item}" for item in profile.get("unknowns") or []] or ["- (none)"]),
@@ -137,11 +290,12 @@ def render_files(state, shareable=None, destinations=None, content_type_id=None)
     if withheld:
         body += f"\n\n> {withheld} more boundar{'y is' if withheld == 1 else 'ies are'} private or local-only and not shared here. Keep drafts conservative about personal details."
 
-    # Approved Genome extends the current voice file; stale/deleted/revoked evidence is excluded.
+    # Approved Genome extends the current voice file; stale/deleted/revoked evidence is excluded. With destinations, only
+    # the lessons of a cohort they match.
     from .growth.service import current_genome
     approved_genome=current_genome(state)
     if approved_genome:
-        lines=[s['text'] for s in approved_genome.get('statements',[]) if s.get('grade')=='supported'][:12]
+        lines=[s['text'] for s in genome_lines(approved_genome, destinations)]
         if lines:
             voice+='\n\n## Approved Creator Genome\nObserved writing preferences, never new personal facts or guaranteed outcomes.\n'+'\n'.join('- '+line for line in lines)
     agent = "\n".join(["# Agent", "", "How Rafii works with you.", ""] + [f"- {rule}" for rule in AGENT_RULES])
@@ -331,6 +485,16 @@ def prepare_writer(state, provider_class, writer_route, *, destinations=None, co
     omitted = list(dict.fromkeys(learned["omitted"] + [key for key in learned["used"] if key not in actual_ids]))
     shared["learned"] = {**learned, "used": actual_ids, "statements": [available[key]["statement"] for key in actual_ids], "omitted": omitted}
     shared["files"] = files
+    # Which voice traits and Genome lessons reached the writer, by id: a line counts only when it was sent whole.
+    from .growth.service import current_genome
+    sent = _section_lines(voice_body, "Observations")
+    plain, scoped = voice_items(profile, destinations, state)
+    lines = {id(trait): line for trait, line in scoped}
+    traits_included = list(dict.fromkeys(
+        trait["id"] for trait in profile.get("dimensions") or [] if isinstance(trait, dict) and isinstance(trait.get("id"), str) and isinstance(trait.get("observation"), str)
+        and (lines.get(id(trait)) if trait_scope(trait) else f"- {trait['observation']}" if applies_everywhere(trait) and trait["observation"] in plain else None) in sent))
+    lessons_sent = _section_lines(voice_body, "Approved Creator Genome")
+    genome_included = [item.get("id") for item in genome_lines(current_genome(state), destinations) if f"- {item['text']}" in lessons_sent]
     source_ids = set(profile.get("evidenceSourceIds") or []) | {b.get("id") for b in (voice_context or {}).get("bindings", [])}
     source_ids.update(item.get("id") for item in ((state.get("brandHub") or {}).get("genome") or {}).get("evidenceBindings", []))
     source_grants = [{"id": s.get("id"), "hash": s.get("hash"), "active": s.get("active"),
@@ -348,6 +512,7 @@ def prepare_writer(state, provider_class, writer_route, *, destinations=None, co
                     + ([{"kind": "boundaries", "reason": "privacy", "count": shared["withheldBoundaries"]}] if shared["withheldBoundaries"] else []),
                "preferenceSetDigest": fingerprint(learning.active_items(state)), "preferenceSetRevision": learning.revision(state),
                "preferencesIncludedDigest": fingerprint([available[key] for key in actual_ids]),
+               "traitsIncluded": traits_included, "genomeIncluded": genome_included,
                "identityContextRevision": fingerprint(raw_files["IDENTITY.md"]),
                "boundaryPolicyRevision": fingerprint(boundary_fields(state)),
                "sourceGrantDigest": fingerprint(source_grants), "voiceContextDigest": fingerprint(voice_context or {}), "memoryContextDigest": fingerprint(files),

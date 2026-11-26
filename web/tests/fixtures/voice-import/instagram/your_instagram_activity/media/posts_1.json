@@ -1,0 +1,40 @@
+[
+  {
+    "media": [
+      {
+        "uri": "media/posts/202501/synthetic_0006.jpg",
+        "creation_timestamp": 1736000000,
+        "title": "Studio notes: a quiet hour before the lesson.",
+        "media_metadata": {
+          "camera_metadata": {
+            "has_camera_metadata": false
+          }
+        },
+        "cross_post_source": {
+          "source_app": "FB"
+        }
+      }
+    ]
+  },
+  {
+    "media": [
+      {
+        "uri": "media/posts/202502/synthetic_0007.jpg",
+        "creation_timestamp": 1738500000,
+        "title": ""
+      }
+    ],
+    "title": "ä»\u008aæ\u0097¥æ\u0095\u0099ç\u0090´ï¼\u008cå­¸ç\u0094\u009fé\u0080²æ­¥å\u0092\u0097 ð\u009f\u008e¹",
+    "creation_timestamp": 1738500060
+  },
+  "not a post entry",
+  {
+    "media": [
+      {
+        "uri": "media/posts/202503/synthetic_0008.jpg",
+        "creation_timestamp": 1741000000,
+        "title": "A caption already in real Unicode: 練習 ✅"
+      }
+    ]
+  }
+]

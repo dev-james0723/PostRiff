@@ -209,6 +209,10 @@ class PostgresWorkspaceRepository:
             raise AlphaError("Hosted command routing has not been configured.", 503)
         if not isinstance(action, str) or not isinstance(payload, dict):
             raise AlphaError("Expected a structured command.")
+        if action == "variant_edit" and "appliedFrom" in payload and payload["appliedFrom"] != "opportunity_lab":
+            # A client may say it applied Opportunity Lab text. "post_doctor" comes only from the server's own Post Doctor
+            # accept (growth/service.py calls the commands directly); anything else is the person's own edit.
+            payload = {key: value for key, value in payload.items() if key != "appliedFrom"}
         audit_event = (lambda state: ("memory.egress_decided", "cloud", {"cloud": memory.egress(state).get("cloud") is True})) if action == memory.EGRESS_ACTION else None
         if action == research.CONSENT_ACTION:
             audit_event = lambda state: ("research.egress_decided", "web", {"web": research.consent(state).get("web") is True})
@@ -231,7 +235,13 @@ class PostgresWorkspaceRepository:
         if action in ("p2_review", "p2_approve", "p2_approve_many", "raffi_run_commit"):
             from .billing import require_publishing
             after = lambda cur, state, principal: require_publishing(cur, workspace_id, self.clock())
-        return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event, after=after)
+        trusted = lambda state, principal: self.commands(state, principal, action, payload)
+        from . import draft_edits
+        if action in draft_edits.ACTION_EVENTS:
+            # Accepting, discarding or undoing a tone or polish edit: its draft_edit.* product event is written once, with
+            # the state, in this transaction. Never a learning signal.
+            trusted, after = draft_edits.measured(trusted, action, payload, workspace_id, after)
+        return self.command(workspace_id, token, expected_revision, trusted, requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event, after=after)
 
 
 class _NoDatabase:
@@ -338,7 +348,7 @@ class HostedPhase2Commands:
                 variant = state["variants"][-1]
                 selected_type = next((item for item in content_projection(state)["catalog"] if item["id"] == selection["contentTypeId"]), None)
                 variant.update({"contentTypeId": selection["contentTypeId"], "contentTypeVersion": selection["contentTypeVersion"], "formatId": selection["formatId"], "contentSkillRouteIds": selected_type["skillRouteIds"] if selected_type else []})
-            if action in ("variant_edit", "opening"):
+            if action in ("variant_edit", "opening", "variant_restore"):
                 variant = self.engine._variant(state, payload.get("variantId"))
                 variant["needsReview"] = True
                 previous = variant.pop("uncertaintyReview", {})
@@ -891,6 +901,10 @@ class HostedWorkspaceService:
         if action in ('voice_profile_analyze', 'brand_brain_analyze') and isinstance(payload, dict) and payload.get('route', 'local-rules') != 'local-rules':
             from .voice_ai import HostedVoiceAnalysis
             return HostedVoiceAnalysis(self).run(workspace_id, token, revision, payload, require_quote=action == 'brand_brain_analyze')
+        if action in ('brand_brain_import_propose', 'brand_brain_trait_correct') and isinstance(payload, dict):
+            # Voice import (POSTRIFF_VOICE_IMPORT): the proposal's posts are read from the evidence store on the server.
+            from . import voice_corpus
+            return voice_corpus.hosted_action(self, workspace_id, token, revision, action, payload)
         return self._present(self.repository.mutate(workspace_id, token, revision, action, payload))
 
     # --- Workspaces, members, invitations, sessions, audit (architecture spec 8, 9, 21) ---
