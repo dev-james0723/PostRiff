@@ -26,6 +26,23 @@ class Contractions(unittest.TestCase):
 
 
 
+class NamesAtTheStartOfASentence(unittest.TestCase):
+    """One capitalised word opening a sentence is not read as a name, so a name that moves into or out of that position
+    is still the same name. Found in a live edit: "Fees for January" → "January fees" was reported as a changed name."""
+
+    def test_a_name_moved_to_the_start_of_a_sentence_is_not_missing(self):
+        source = "Lessons resume on 2 January. Fees for January are due by 31 December."
+        self.assertNotIn("name_changed", codes(source, "Lessons will resume on 2 January. January fees are due by 31 December."))
+
+    def test_a_name_moved_out_of_the_opening_position_is_not_added(self):
+        source = "January fees are due by 31 December."
+        self.assertNotIn("name_added", codes(source, "Please pay the fees for January by 31 December."))
+
+    def test_a_name_that_is_really_gone_is_still_reported(self):
+        self.assertIn("name_changed", codes("Ask Maria about the recital.", "Ask the office about the recital."))
+        self.assertIn("name_changed", codes("Tickets are with Maria Chen at the door.", "Tickets are with our teacher at the door."))
+
+
 class AddedApologies(unittest.TestCase):
     """An apology the source did not make is an added feeling (editorial contract: add no feeling)."""
 

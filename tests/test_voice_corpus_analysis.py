@@ -5,10 +5,12 @@ the evidence store and the repository are in-memory stand-ins with the productio
 """
 import copy
 import json
+import os
 import sys
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
 
 sys.path[:0] = [str(Path(__file__).resolve().parents[1] / "src"), str(Path(__file__).resolve().parent)]
 from postriff_alpha.domain import AlphaError
@@ -751,6 +753,43 @@ class ProposalFromAnalysis(Harness):
             self.assertNotIn(first_words(item["body"], 5), dumped)
         for planted in PLANTED:
             self.assertNotIn(planted, dumped)
+
+
+class AnalysisModel(Harness):
+    """POSTRIFF_VOICE_ANALYSIS_MODEL gives analysis its own model, but only one the deployment offers."""
+    STRONG = "anthropic/claude-opus-5.5"
+
+    def offering(self, *models):
+        self.models_sent = []
+
+        def transport(method, url, headers=None, body=None, timeout=None):
+            self.models_sent.append(body.get("model"))
+            return self.transport(method, url, headers=headers, body=body, timeout=timeout)
+        return ServerModelRuntime("SYNTHETIC_KEY", model=MODEL, models=list(models), transport=transport)
+
+    def test_an_offered_analysis_model_is_quoted_reserved_and_sent(self):
+        self.analysis = self.service(self.offering(MODEL, self.STRONG))
+        with mock.patch.dict(os.environ, {voice_corpus.ANALYSIS_MODEL_ENV: self.STRONG}):
+            quote, _ = self.start()
+            row = self.run_to_end()
+        self.assertEqual((quote["model"], quote["route"]), (self.STRONG, f"cloud:vercel-ai-gateway:{self.STRONG}"))
+        self.assertEqual(row["status"], "done")
+        self.assertEqual(set(self.models_sent), {self.STRONG})
+        self.assertEqual({entry["model"] for entry in self.ledger.reserved}, {self.STRONG})
+
+    def test_a_model_the_deployment_does_not_offer_keeps_the_default(self):
+        self.analysis = self.service(self.offering(MODEL))
+        with mock.patch.dict(os.environ, {voice_corpus.ANALYSIS_MODEL_ENV: self.STRONG}):
+            self.assertEqual(self.analysis.quote(WORKSPACE, "session", "brand")["model"], MODEL)
+
+    def test_unset_or_blank_keeps_the_default(self):
+        self.analysis = self.service(self.offering(MODEL, self.STRONG))
+        for value in ("", "   "):
+            with mock.patch.dict(os.environ, {voice_corpus.ANALYSIS_MODEL_ENV: value}):
+                self.assertEqual(self.analysis.quote(WORKSPACE, "session", "brand")["model"], MODEL)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(voice_corpus.ANALYSIS_MODEL_ENV, None)
+            self.assertEqual(voice_corpus.analysis_model(self.analysis._managed()), MODEL)
 
 
 class SqlStore(unittest.TestCase):

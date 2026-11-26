@@ -21,6 +21,7 @@ import hashlib
 import json
 import logging
 import math
+import os
 import re
 import time
 import uuid
@@ -60,6 +61,16 @@ MAX_ATTEMPTS = 5                  # claims without progress before an analysis s
 CALLS_PER_TICK = 2                # model calls one cron tick makes, across every analysis it claimed
 TICK_SECONDS = 60                 # no further call starts once a tick has run this long (the cron function is shared)
 QUOTE_WINDOW = 300                # a quote stands for the rest of its five-minute window and the whole next one
+# An operator may give analysis, which is rare and shapes a voice, a stronger model than everyday writing. Only a model
+# this deployment offers (POSTRIFF_MODEL_IDS) is used; anything else, or nothing, keeps the default writer model.
+ANALYSIS_MODEL_ENV = "POSTRIFF_VOICE_ANALYSIS_MODEL"
+
+
+def analysis_model(runtime, values=None):
+    """The model a corpus analysis is quoted and run on: POSTRIFF_VOICE_ANALYSIS_MODEL when the runtime offers it, else
+    the runtime's default. A started analysis keeps the model its quote bound (the receipt), whatever this says later."""
+    wanted = str((os.environ if values is None else values).get(ANALYSIS_MODEL_ENV) or "").strip()
+    return wanted if wanted and wanted in (getattr(runtime, "models", None) or [runtime.model]) else runtime.model
 MAX_BACKOFF_SECONDS = 600
 START_LIMIT = (10, 600)           # analysis starts per workspace per ten minutes (the bucket the sample analysis uses)
 MAX_SYNTHESIS_INPUT = 120         # merged observations the synthesis call may see, the strongest first
@@ -1156,7 +1167,7 @@ class VoiceCorpusAnalysis:
         if len(clean) < MIN_POSTS:
             raise AlphaError("Not enough writing yet: AI analysis needs at least three eligible posts.", 409, code="not_enough_posts")
         batches = plan_batches(clean)
-        model, provider = runtime.model, runtime.provider
+        model, provider = analysis_model(runtime), runtime.provider
         route, found = f"cloud:{provider}:{model}", corpus_digest(posts)
         # A run that stopped part-way over this same corpus, prompt and route continues from its last finished batch.
         prior = self.store.resumable(cur, workspace_id, group_key)

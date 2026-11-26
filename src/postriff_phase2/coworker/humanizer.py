@@ -148,7 +148,7 @@ def _tokens(text, brand_terms):
     numbers = Counter(n.replace(",", "") for n in lex["number"].findall(rest))
     for term in brand_terms:
         rest = rest.replace(term, " ")
-    names = Counter()
+    names, openers = Counter(), Counter()
     for match in lex["name"].finditer(rest):
         token = match.group(0)
         before = rest[:match.start()].rstrip()
@@ -157,6 +157,7 @@ def _tokens(text, brand_terms):
             if parts[0] in lex["stop"]:
                 parts = parts[1:]
             elif len(parts) == 1:
+                openers[token] += 1   # kept aside: a name that moves here (or away from here) is not a changed name
                 continue  # a single capitalised word opening a sentence is not evidence of a name
             if not parts:
                 continue
@@ -170,15 +171,15 @@ def _tokens(text, brand_terms):
                 found[match.group(0).lower()] += 1
         categories[category] = found
     brands = Counter({term: text.count(term) for term in brand_terms})
-    return dates, numbers, names, categories, brands
+    return dates, numbers, names, categories, brands, openers
 
 
 def meaning_diff(source, candidate, brand_terms=()):
     """What the candidate changed relative to its source: [{code, detail}] in VIOLATIONS order. Empty = preserved.
     Counts, not presence: dropping one of two hedges is a lost hedge."""
     brand_terms = [t for t in brand_terms or () if t]
-    sd, sn, s_names, sc, sb = _tokens(source, brand_terms)
-    od, on, o_names, oc, ob = _tokens(candidate, brand_terms)
+    sd, sn, s_names, sc, sb, s_openers = _tokens(source, brand_terms)
+    od, on, o_names, oc, ob, o_openers = _tokens(candidate, brand_terms)
     total = lambda counter: sum(counter.values())  # noqa: E731
     found = {}
     if sn - on:
@@ -187,10 +188,12 @@ def meaning_diff(source, candidate, brand_terms=()):
         found["number_added"] = f"not in the source: {sorted(on - sn)[:5]}"
     if sd != od:
         found["date_changed"] = f"source {sorted(sd)[:3]} vs candidate {sorted(od)[:3]}"
-    if s_names - o_names:
-        found["name_changed"] = f"missing: {sorted(s_names - o_names)[:4]}"
-    elif o_names - s_names:
-        found["name_added"] = f"not in the source: {sorted(o_names - s_names)[:4]}"
+    # A name that now opens a sentence (or no longer does) is still there: that position is not read as a name.
+    missing, added = s_names - o_names - o_openers, o_names - s_names - s_openers
+    if missing:
+        found["name_changed"] = f"missing: {sorted(missing)[:4]}"
+    elif added:
+        found["name_added"] = f"not in the source: {sorted(added)[:4]}"
     get = lambda cats, key: cats.get(key) or __import__("collections").Counter()  # noqa: E731
     if total(get(oc, "negation")) < total(get(sc, "negation")):
         found["negation_lost"] = "the candidate has fewer negations than the source"
