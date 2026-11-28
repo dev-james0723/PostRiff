@@ -1,0 +1,149 @@
+{
+  "scope": "Offline analysis, editing and rendering with original procedural footage and synthesized test tones.",
+  "generator": "scripts/creative_video_media_example.py",
+  "aiProviderRequests": 0,
+  "providerSpendUsd": 0,
+  "humanCreativeAcceptance": "not performed",
+  "costPerAcceptedCreative": null,
+  "liveGenerationLatencySeconds": null,
+  "python": "3.12.8",
+  "pillow": "13.0.0",
+  "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+  "seconds": {
+    "referenceAnalysis": 0.1453,
+    "firstRender": 0.918,
+    "revisedRender": 0.9322
+  },
+  "decodedFramesCompared": 96,
+  "unchangedTailFrames": 66,
+  "firstExport": {
+    "width": 720,
+    "height": 1280,
+    "durationMs": 4000,
+    "fps": 24.0,
+    "frameCount": 96,
+    "hasAudio": true,
+    "audioDurationMs": 4000,
+    "captionTrack": true,
+    "mime": "video/mp4",
+    "sha256": "b07d64f8bbf0fe23e31f31d0c2cf55df1fc9cf29df458a4b67085f8ad5b3b5ff",
+    "bytes": 296512,
+    "aspectRatio": "9:16",
+    "scenes": [
+      {
+        "sceneId": "scene-1",
+        "clipId": "original-1",
+        "trimStartMs": 0,
+        "caption": "A turn to begin.",
+        "startFrame": 0,
+        "frameCount": 30,
+        "startMs": 0,
+        "endMs": 1250,
+        "clipSha256": "4a7e54c929b91c11cdc5cf21a5828bb57df18f97ae495a9a691168ebbaf9833a"
+      },
+      {
+        "sceneId": "scene-2",
+        "clipId": "original-2",
+        "trimStartMs": 0,
+        "caption": "Time in motion.",
+        "startFrame": 30,
+        "frameCount": 36,
+        "startMs": 1250,
+        "endMs": 2750,
+        "clipSha256": "fae8b1551f9815931aa18fe8b85982242b8fe6c111b3ceaec23daf165e271c9f"
+      },
+      {
+        "sceneId": "scene-3",
+        "clipId": "original-3",
+        "trimStartMs": 0,
+        "caption": "Find your tempo.",
+        "startFrame": 66,
+        "frameCount": 30,
+        "startMs": 2750,
+        "endMs": 4000,
+        "clipSha256": "8bc06c58e9863b298d19f370e50fdd118183e081b7b83d596d1722e1634c1b22"
+      }
+    ],
+    "renderer": "rafii-composition-v1"
+  },
+  "revisedExport": {
+    "width": 720,
+    "height": 1280,
+    "durationMs": 4000,
+    "fps": 24.0,
+    "frameCount": 96,
+    "hasAudio": true,
+    "audioDurationMs": 4000,
+    "captionTrack": true,
+    "mime": "video/mp4",
+    "sha256": "c20db785936f5827359b10a2b2ad62af7344049c7a22af7be54a0729ff2fc5f0",
+    "bytes": 331023,
+    "aspectRatio": "9:16",
+    "scenes": [
+      {
+        "sceneId": "scene-1",
+        "clipId": "revised-intro",
+        "trimStartMs": 0,
+        "caption": "Start with one turn.",
+        "startFrame": 0,
+        "frameCount": 30,
+        "startMs": 0,
+        "endMs": 1250,
+        "clipSha256": "724e7e3c23d1b7fb8bc2315a8d3ad7f18150df7d5e6ad0ab6ba0123400ecc66a"
+      },
+      {
+        "sceneId": "scene-2",
+        "clipId": "original-2",
+        "trimStartMs": 0,
+        "caption": "Time in motion.",
+        "startFrame": 30,
+        "frameCount": 36,
+        "startMs": 1250,
+        "endMs": 2750,
+        "clipSha256": "fae8b1551f9815931aa18fe8b85982242b8fe6c111b3ceaec23daf165e271c9f"
+      },
+      {
+        "sceneId": "scene-3",
+        "clipId": "original-3",
+        "trimStartMs": 0,
+        "caption": "Find your tempo.",
+        "startFrame": 66,
+        "frameCount": 30,
+        "startMs": 2750,
+        "endMs": 4000,
+        "clipSha256": "8bc06c58e9863b298d19f370e50fdd118183e081b7b83d596d1722e1634c1b22"
+      }
+    ],
+    "renderer": "rafii-composition-v1"
+  },
+  "artifacts": {
+    "original-1.mp4": {
+      "bytes": 29625,
+      "sha256": "4a7e54c929b91c11cdc5cf21a5828bb57df18f97ae495a9a691168ebbaf9833a"
+    },
+    "original-2.mp4": {
+      "bytes": 67386,
+      "sha256": "fae8b1551f9815931aa18fe8b85982242b8fe6c111b3ceaec23daf165e271c9f"
+    },
+    "original-3.mp4": {
+      "bytes": 26727,
+      "sha256": "8bc06c58e9863b298d19f370e50fdd118183e081b7b83d596d1722e1634c1b22"
+    },
+    "original-cut.mp4": {
+      "bytes": 296512,
+      "sha256": "b07d64f8bbf0fe23e31f31d0c2cf55df1fc9cf29df458a4b67085f8ad5b3b5ff"
+    },
+    "reference.mp4": {
+      "bytes": 120818,
+      "sha256": "5f0864c0d9f6e501e179346a3eb8d12d1bfafce9ef0f3b723d3b5d035ea508d6"
+    },
+    "revised-cut.mp4": {
+      "bytes": 331023,
+      "sha256": "c20db785936f5827359b10a2b2ad62af7344049c7a22af7be54a0729ff2fc5f0"
+    },
+    "revised-intro.mp4": {
+      "bytes": 31822,
+      "sha256": "724e7e3c23d1b7fb8bc2315a8d3ad7f18150df7d5e6ad0ab6ba0123400ecc66a"
+    }
+  }
+}

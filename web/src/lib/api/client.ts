@@ -1,4 +1,6 @@
 import type { LibraryMetadataHistory, LibraryMetadataReceipt, LibraryMetadataSelection } from './library-metadata';
+import type { ReferenceFrames } from './creative-video';
+import type { CreateCreativeProject, CreativeAspect, CreativePerformance, CreativePlan, CreativePlatform, CreativeQuoteReply, CreativeSceneEdit, CreativeSettings, CreativeVideoList, CreativeVideoReply } from './creative-video';
 import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation, YouTubePolicyStatus, YouTubeAgentPageOptions, YouTubeAgentHistory, YouTubeAgentArchiveResult } from '@/lib/youtube/types';
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
@@ -103,6 +105,8 @@ export class ApiError extends Error {
 export type TokenSource = () => Promise<string | null>;
 
 const ws = (id: string) => `/api/workspaces/${encodeURIComponent(id)}`;
+const creativeProjects = (w: string) => `${ws(w)}/creative-video/projects`;
+const creativeProject = (w: string, id: string) => `${creativeProjects(w)}/${encodeURIComponent(id)}`;
 /** A drafting request that has not answered by then is treated as a lost response and resent with its key. */
 const DRAFT_TIMEOUT_MS = 150_000;
 
@@ -147,13 +151,45 @@ export function createApi(getToken: TokenSource) {
     );
   }
 
-  async function blob(path: string): Promise<Blob> {
-    const res = await fetch(path, { headers: await headers() });
+  async function blob(path: string, signal?: AbortSignal): Promise<Blob> {
+    const res = await fetch(path, { headers: await headers(), signal });
     if (!res.ok) await parse(res);
     return res.blob();
   }
 
   return {
+    creativeVideoList: (w: string) => get<CreativeVideoList>(creativeProjects(w)),
+    creativeReferenceLink: (w: string, url: string) =>
+      send<{ assetId: string; durationSeconds: number }>('POST', `${ws(w)}/creative-video/reference-link`, { url }),
+    creativeVideoPerformance: (w: string, id: string, revision: number) =>
+      get<CreativePerformance>(`${creativeProject(w, id)}/performance?revision=${encodeURIComponent(revision)}`),
+    creativeVideoFrame: (w: string, id: string, revision: number, frame: number, signal?: AbortSignal) =>
+      blob(`${creativeProject(w, id)}/frame?revision=${revision}&frame=${frame}`, signal),
+    creativeReferenceFrames: async (w: string, id: string, revision: number, page: number, signal?: AbortSignal) =>
+      parse<ReferenceFrames>(await fetch(`${creativeProject(w, id)}/reference-frames?revision=${revision}&page=${page}`,
+        { headers: await headers(), cache: 'no-store', signal })),
+    creativeVideoCreate: (w: string, body: CreateCreativeProject) =>
+      send<CreativeVideoReply>('POST', creativeProjects(w), body),
+    creativeVideoProject: (w: string, id: string, revision?: number) =>
+      get<CreativeVideoReply>(creativeProject(w, id) + (revision == null ? '' : `?revision=${encodeURIComponent(revision)}`)),
+    creativeVideoEdit: (w: string, id: string, body: { revision: number; scenes: CreativeSceneEdit[]; sceneOrder?: string[] }) =>
+      send<CreativeVideoReply>('POST', `${creativeProject(w, id)}/edit`, body),
+    creativeVideoVariants: (w: string, id: string, body: { revision: number; requestId: string; reuseRightsConfirmed: true; targets: { platform: CreativePlatform; aspectRatio: CreativeAspect }[] }) =>
+      send<{ projects: { id: string; platform: CreativePlatform; aspectRatio: CreativeAspect }[] }>('POST', `${creativeProject(w, id)}/variants`, body),
+    creativeVideoQuote: (w: string, id: string, body: { revision: number; sceneId: string; settings: CreativeSettings }) =>
+      send<CreativeQuoteReply>('POST', `${creativeProject(w, id)}/quote`, body),
+    creativeVideoPlan: (w: string, id: string, body: { revision: number; settings: CreativeSettings; sceneSettings?: Record<string, CreativeSettings> }) =>
+      send<CreativePlan>('POST', `${creativeProject(w, id)}/plan`, body),
+    creativeVideoGenerate: (w: string, id: string, body: { revision: number; sceneId: string; quoteId: string; confirmed: true }) =>
+      send<CreativeVideoReply>('POST', `${creativeProject(w, id)}/generate`, body),
+    creativeVideoCancel: (w: string, id: string, body: { revision: number; sceneId: string }) =>
+      send<CreativeVideoReply>('POST', `${creativeProject(w, id)}/cancel`, body),
+    creativeVideoReview: (w: string, id: string, body: { revision: number; sceneId: string; accepted: boolean }) =>
+      send<CreativeVideoReply>('POST', `${creativeProject(w, id)}/review`, body),
+    creativeVideoPoll: (w: string, id: string, body: { revision: number; sceneId: string }) =>
+      send<CreativeVideoReply>('POST', `${creativeProject(w, id)}/poll`, body),
+    creativeVideoRender: (w: string, id: string, body: { revision: number }) =>
+      send<CreativeVideoReply>('POST', `${creativeProject(w, id)}/render`, body),
     /* Growth advice never sends a post. Each model request has its own explicit confirmation. */
     radarCatalog: (w: string) => get<RadarCatalog>(`${ws(w)}/growth/radar/catalog`),
     radarScans: (w: string) => get<{ scans: RadarScan[] }>(`${ws(w)}/growth/radar/scans`),

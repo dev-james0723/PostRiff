@@ -41,6 +41,8 @@ def isolated_environment(values):
         raise ValueError('Staging secret fingerprints must be a JSON object.') from error
     if not isinstance(pins, dict):
         raise ValueError('Staging secret fingerprints must be a JSON object.')
+    if any(value for name, value in result.items() if name.startswith('RAFII_CREATIVE_VIDEO_')):
+        raise ValueError('Preview must leave paid creative video credentials and routing disabled.')
     names = {'POSTRIFF_SUPABASE_SECRET_KEY', 'POSTRIFF_CREDENTIAL_KEY', 'CRON_SECRET', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'AI_GATEWAY_API_KEY', 'RESEND_API_KEY',
              'RESEND_WEBHOOK_SECRET', 'POSTRIFF_VAPID_PRIVATE_KEY', 'POSTRIFF_NOTIFICATION_SIGNING_KEY',
              'RAFII_PHONE_ENCRYPTION_KEY','TWILIO_AUTH_TOKEN', 'DIAL_API_KEY', 'DIAL_AUDIO_SIGNING_SECRET',

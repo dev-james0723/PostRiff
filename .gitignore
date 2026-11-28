@@ -59,4 +59,18 @@ control-web/tsconfig.tsbuildinfo
 control-web/.env*
 !control-web/.env.example
 docs/rafii-control-v2/evidence/raw/
+# Local Hypit research recordings. Their third-party footage is not a Rafii distribution asset.
+/docs/creative-intelligence/examples/hypit-complex-explainer-reference.mp4
+/docs/creative-intelligence/examples/hypit-complex-explainer-analysis-89s.mp4
+# Craft's local session can contain prompts, screenshots and account-specific receipts.
+/attachments/
+/build-activity.log
+/capture/
+/checks/asks/
+/craft.json
+/feed.json
+/inbox/
+/investigation.cany/
+/usage.json
+/docs/creative-intelligence/examples/veo-experiment-20261127.*
 /.founder-signin-evidence/

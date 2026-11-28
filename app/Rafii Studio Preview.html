@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rafii Video Studio · Sample edit</title>
+  <style>
+    :root { color-scheme: light dark; font: 100%/1.5 "Inter", system-ui, sans-serif; }
+    body { max-width: 52rem; margin: auto; padding: 1.5rem; }
+    h1, h2, p { margin-block: 0 0.6rem; }
+    h1 { font-size: clamp(1.8rem, 5vw, 2.7rem); }
+    h2 { font-size: 1.1rem; }
+    main { display: grid; gap: 1.5rem; }
+    .cuts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 1.25rem; }
+    video { display: block; width: 100%; max-height: 60vh; aspect-ratio: 9 / 16; background: #101414; border-radius: 0.6rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Rafii Video Studio</h1>
+      <p><a href="http://localhost:47632/local-studio">Open the local video editor</a> to analyze a reference, edit footage and export your cut.
+        Start it with <strong>Open Rafii Video Editor.command</strong>. For your signed-in brand and project workspace, open <strong>Start Rafii Studio.command</strong>.</p>
+      <p>Compare two cuts of the four-second timer study. The opening shot changes. From 1.25 seconds onward, both cuts match.</p>
+    </header>
+    <div class="cuts">
+      <section aria-labelledby="first-cut">
+        <h2 id="first-cut">First cut</h2>
+        <video controls playsinline preload="metadata" aria-labelledby="first-cut"
+          poster="../web/public/rafii/studio-examples/original-cut-500ms.png"
+          src="../web/public/rafii/studio-examples/original-cut.mp4">
+          <track kind="captions" label="English" srclang="en" src="../web/public/rafii/studio-examples/original-cut.vtt">
+        </video>
+      </section>
+      <section aria-labelledby="revised-cut">
+        <h2 id="revised-cut">Revised opening</h2>
+        <video controls playsinline preload="metadata" aria-labelledby="revised-cut"
+          poster="../web/public/rafii/studio-examples/revised-cut-500ms.png"
+          src="../web/public/rafii/studio-examples/revised-cut.mp4">
+          <track kind="captions" label="English" srclang="en" src="../web/public/rafii/studio-examples/revised-cut.vtt">
+        </video>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

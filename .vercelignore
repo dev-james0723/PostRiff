@@ -39,6 +39,19 @@ web/.next/
 web/.env*.local
 
 # Local task state, research archives and private tooling never enter a deployment.
+/app/.local-evidence/
+/app/.studio-build/
+/app/.supabase-site/
+/attachments/
+/build-activity.log
+/capture/
+/checks/
+/craft.json
+/feed.json
+/inbox/
+/investigation.cany/
+/reference/
+/usage.json
 /.codex/
 /.claude/
 /.agents/

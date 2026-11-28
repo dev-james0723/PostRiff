@@ -1,0 +1,6 @@
+!Start Rafii Studio.command
+!Start Rafii Workspace.command
+.supabase-site/
+.studio-build/
+.local-evidence/
+!Open Rafii Video Editor.command

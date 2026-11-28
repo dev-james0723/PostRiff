@@ -22,7 +22,7 @@ import { badgeClass, copyHash, dimensionsOf, useAssetImage } from './asset-card'
 import { imageRuleChecks } from './image-rules';
 import type { AssetUse, LibraryAsset } from './use-library';
 import { toast } from 'sonner';
-import { kindOf } from '@/lib/media/asset-kinds';
+import { isPostableVideo, kindOf } from '@/lib/media/asset-kinds';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetFileThumbnail } from './asset-thumbnail';
@@ -336,6 +336,12 @@ function DetailActions({
           <Link href='/app/ideas' className={cn('t-learn flex-1 sm:flex-none', buttonVariants({ variant: 'glass', size: 'control' }))}>
             Open Ideas
             <LearnMoreChevron />
+          </Link>
+        ) : null}
+        {canEdit && isPostableVideo(asset) && (asset.duration ?? 0) <= 90 && (asset.bytes ?? 0) <= 64 * 1024 * 1024 ? (
+          <Link href={`/app/creative?reference=${encodeURIComponent(asset.id)}`} className={buttonVariants({ variant: 'glass', size: 'control' })}>
+            <Icons.video aria-hidden />
+            Use as video reference
           </Link>
         ) : null}
         {!mediaAsset ? (

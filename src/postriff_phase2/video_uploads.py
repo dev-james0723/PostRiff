@@ -226,6 +226,23 @@ class VideoUploads:
             raise AlphaError(MSG["sign_in"], 403)
 
     # --- begin ------------------------------------------------------------------------------------------------------
+    def reserve_slot(self, cur, state, workspace_id, principal, upload_id, mime, size):
+        """Reserve one immutable Library upload under the workspace lock, including generated MP4s."""
+        object_name = f"{upload_id}.{MIMES[mime]}"
+        library=getattr(self.service, "library", None)
+        if library is not None:
+            library.assert_capacity(cur,state,workspace_id,size)
+        mine, total = self.rows.pending_counts(cur, workspace_id, principal)
+        if mine >= PENDING_PER_MEMBER or total >= PENDING_PER_WORKSPACE:
+            raise AlphaError(MSG["caps"], 429, code="video_pending_caps")
+        if self.rows.bytes_since(cur, workspace_id, 24 * 3600) + size > self.policy.daily_bytes:
+            raise AlphaError(MSG["caps"], 429, code="video_daily_bytes")
+        stored = sum(int(a.get("bytes") or 0) for a in (state.get("phase2") or {}).get("assets", []) if asset_kinds.kind_of(a) == "video" and not a.get("deleted"))
+        if stored + self.rows.pending_bytes(cur, workspace_id) + size > self.policy.workspace_max_bytes:
+            raise AlphaError(MSG["caps"], 429, code="video_workspace_bytes")
+        return self.rows.insert(cur, {"id": upload_id, "workspaceId": workspace_id, "createdBy": principal, "bucket": self.policy.bucket,
+                                         "objectName": object_name, "mime": mime, "declaredBytes": size})
+
     def begin(self, workspace_id, token, body):
         from .permissions import require
         self._session_only(token)
@@ -254,19 +271,7 @@ class VideoUploads:
                 raise AlphaError("Hosted sample workspaces are read-only.", 403, code="sample_read_only")
             if state.get("accountDeletion"):
                 raise AlphaError("Account deletion is pending.", 409, code="account_deletion_pending")
-            library=getattr(self.service, "library", None)
-            if library is not None:
-                library.assert_capacity(cur,state,workspace_id,size)
-            mine, total = self.rows.pending_counts(cur, workspace_id, principal)
-            if mine >= PENDING_PER_MEMBER or total >= PENDING_PER_WORKSPACE:
-                raise AlphaError(MSG["caps"], 429, code="video_pending_caps")
-            if self.rows.bytes_since(cur, workspace_id, 24 * 3600) + size > self.policy.daily_bytes:
-                raise AlphaError(MSG["caps"], 429, code="video_daily_bytes")
-            stored = sum(int(a.get("bytes") or 0) for a in (state.get("phase2") or {}).get("assets", []) if asset_kinds.kind_of(a) == "video" and not a.get("deleted"))
-            if stored + self.rows.pending_bytes(cur, workspace_id) + size > self.policy.workspace_max_bytes:
-                raise AlphaError(MSG["caps"], 429, code="video_workspace_bytes")
-            expires = self.rows.insert(cur, {"id": upload_id, "workspaceId": workspace_id, "createdBy": principal, "bucket": self.policy.bucket,
-                                             "objectName": object_name, "mime": mime, "declaredBytes": size})
+            expires = self.reserve_slot(cur, state, workspace_id, principal, upload_id, mime, size)
         try:
             resumable = self.storage.signed_resumable_upload(workspace_id, object_name, mime) if body.get('transport') == 'tus' else None
             url = resumable['endpoint'] if resumable else self.storage.signed_upload_url(workspace_id, "video", object_name)
@@ -431,7 +436,8 @@ class VideoUploads:
                  "hash": hashlib.sha256(f"video:{name}:{evidence['bytes']}:{evidence['etag']}".encode()).hexdigest(),
                  **({"poster": {k: staged[0][k] for k in ("objectName", "hash", "width", "height", "bytes")}} if staged else {}),
                  "frames": staged, "verified": {"container": True, "locationChecked": evidence["locationChecked"], "locationCleared": bool(body.get("locationCleared"))},
-                 "processing": "ready", "uploadedBy": upload["createdBy"], "execution": "hosted-private-storage", "deleted": False}
+                 "processing": "ready", "uploadedBy": upload["createdBy"], "execution": "hosted-private-storage",
+                 "provenance": {"operation": "workspace_upload"}, "deleted": False}
 
         def mark_committed(cur, _state, _principal):
             self.rows.set_status(cur, workspace_id, upload_id, "committed")

@@ -6,13 +6,17 @@ needs the owner to confirm again. Absent means off.
 """
 from __future__ import annotations
 
+import uuid
 from postriff_alpha.domain import AlphaError
+from .creative_video_models import VERTEX_FAST
 
 ACTION = "media_egress"
 SCOPE = ("photo", "video_frames", "photo_edit")   # what the consent covers (SPEC §5.13)
 PURPOSES = ("vision", "image")
 PROVIDER_LABELS = {"openai": "OpenAI", "gateway": "Vercel AI Gateway"}
 CONSENT_MESSAGE = "The workspace owner hasn't allowed Rafii to look at photos and videos."
+FIRST_FRAME_PURPOSE = "video_first_frame"
+FIRST_FRAME_PROCESSOR = {"id": f"vertex-veo:{VERTEX_FAST}", "label": "Google Cloud Veo 3.1 Fast"}
 
 
 def processor(provider, model):
@@ -43,6 +47,13 @@ def allowed(state, processor_or_id):
     return decision(state).get("cloud") is True and bool(pid) and pid in processor_ids(state)
 
 
+def first_frame_grant(state):
+    grant = decision(state).get("firstFrame")
+    if isinstance(grant, dict) and grant.get("processor") == FIRST_FRAME_PROCESSOR["id"]:
+        return grant.get("grantId")
+    return None
+
+
 def require(state, purpose, processor_or_id):
     if purpose not in PURPOSES:
         raise AlphaError("Unsupported media purpose.", 400)
@@ -60,6 +71,19 @@ def apply_action(state, action, payload, actor, now, processors=()):
     payload = payload if isinstance(payload, dict) else {}
     if "processors" in payload:
         raise AlphaError("Invalid consent request.", 400)
+    if payload.get("purpose") == FIRST_FRAME_PURPOSE:
+        if (set(payload) != {"purpose", "cloud", "confirmed"} or type(payload["cloud"]) is not bool
+                or payload["confirmed"] is not True):
+            raise AlphaError("Confirm the Google Cloud Veo first-frame permission.", 400)
+        prior = decision(state)
+        updated = dict(prior)
+        if payload["cloud"] and not first_frame_grant(state):
+            updated["firstFrame"] = {"grantId": uuid.uuid4().hex, "decidedBy": actor, "decidedAt": now,
+                                     "processor": FIRST_FRAME_PROCESSOR["id"]}
+        elif not payload["cloud"]:
+            updated.pop("firstFrame", None)
+        state["mediaEgress"] = updated
+        return True
     if not set(payload) <= {"cloud", "confirmed"} or not isinstance(payload.get("cloud"), bool) or payload.get("confirmed") is not True:
         raise AlphaError("Choose whether Rafii may look at photos and videos, and confirm it.", 400)
     current = [p for p in processors or () if isinstance(p, dict) and isinstance(p.get("id"), str) and p["id"]]
@@ -71,7 +95,10 @@ def apply_action(state, action, payload, actor, now, processors=()):
         for item in earlier + [{"id": p["id"], "label": str(p.get("label") or p["id"])} for p in current]:
             if item["id"] not in {k["id"] for k in kept}:
                 kept.append({"id": item["id"], "label": item.get("label") or item["id"]})
+    prior_grant = decision(state).get("firstFrame")
     state["mediaEgress"] = {"cloud": payload["cloud"], "decidedBy": actor, "decidedAt": now, "processors": kept, "scope": list(SCOPE)}
+    if payload["cloud"] and prior_grant:
+        state["mediaEgress"]["firstFrame"] = prior_grant
     return True
 
 

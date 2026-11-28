@@ -183,14 +183,14 @@ def _safe_open(root, relative):
         os.close(fd)
 
 
-def _run(argv, source, *, deadline, output_cap):
+def _run(argv, source, *, deadline, output_cap, pass_fds=()):
     """Bound memory/time, kill our child group on failure, never expose stderr."""
     source.seek(0)
     if time.monotonic() >= deadline:
         _fail('media_processing_deadline')
     try:
         process = subprocess.Popen(argv, stdin=source, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            shell=False, close_fds=True, start_new_session=True,
+            shell=False, close_fds=True, pass_fds=pass_fds, start_new_session=True,
             env={'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'})
     except OSError:
         _fail('media_executable_unavailable')

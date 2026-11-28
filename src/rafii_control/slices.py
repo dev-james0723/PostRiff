@@ -12,6 +12,7 @@ import logging
 
 SLICES = (
     'founder_metrics_revenue',   # §8.A revenue, billing events, MRR and bridge, credits, forecasts
+    'founder_creative_video',    # reviewed model availability and aggregate video costs
     'founder_metrics_ai',        # §8.B AI call events, tokens, latency, fallback, rollups, cost per useful outcome
     'founder_metrics_product',   # §8.C product taxonomy, activation, adoption, retention, time back
     'founder_risk',              # §8.C customer risk flags and saved views

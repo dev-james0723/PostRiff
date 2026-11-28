@@ -1,0 +1,428 @@
+{
+  "study": "Hypit complex explainer timing study",
+  "runUtc": "2026-11-28T04:16:54.713445+00:00",
+  "scope": "Local Rafii function execution on a third-party reference excerpt and a fictional brand. The output contains original, silent procedural motion cards and Rafii captions. No reference pixels, words, audio or source graphic assets entered the composition. This does not validate the signed-in Studio workflow, speech alignment, identity replacement, semantic scene recreation, B-roll or effects cloning.",
+  "reference": {
+    "localFile": "hypit-complex-explainer-analysis-89s.mp4",
+    "sha256": "afbdfaa351419e5d4171e4b9f88715acddc992797ab8c8735baab5e59544685b",
+    "bytes": 29176616,
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1080,
+        "height": 1920,
+        "avg_frame_rate": "30/1",
+        "duration": "89.066667",
+        "nb_frames": "2672"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "avg_frame_rate": "0/0",
+        "duration": "89.002667",
+        "nb_frames": "4173"
+      }
+    ],
+    "analyzerDurationMs": 89067,
+    "decodedFrames": 2672,
+    "sampledFrames": 713,
+    "sampleIntervalMs": 125,
+    "detectedShotSpansMs": [
+      [
+        0,
+        5125
+      ],
+      [
+        5125,
+        6625
+      ],
+      [
+        6625,
+        10500
+      ],
+      [
+        10500,
+        12750
+      ],
+      [
+        12750,
+        13875
+      ],
+      [
+        13875,
+        25625
+      ],
+      [
+        25625,
+        29125
+      ],
+      [
+        29125,
+        74875
+      ],
+      [
+        74875,
+        78250
+      ],
+      [
+        78250,
+        89067
+      ]
+    ]
+  },
+  "fictionalInput": {
+    "brief": {
+      "brief": "Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight."
+    },
+    "context": {
+      "brand": "Moss Dial Works",
+      "subject": "the Moss Dial pocket sundial",
+      "audience": "weekend walkers",
+      "tone": "clear and curious",
+      "preferences": []
+    }
+  },
+  "method": {
+    "model": "storyboard-v1",
+    "settings": {
+      "level": "draft",
+      "requirements": [
+        "no-cloud",
+        "programmatic"
+      ]
+    },
+    "aspectRatio": "9:16",
+    "availableMilliCredits": 0,
+    "externalModelCalls": 0,
+    "externalModelCostUsd": 0,
+    "python": "3.12.8",
+    "pillow": "13.0.0",
+    "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "worktreeBase": "6b706eeb08c19300fc39186bfb32adea12849afa",
+    "worktreeModuleSha256": {
+      "creative_video_media": "242d8781c313798dfbe99109a7d626bbb4ad8147776f86166e3ea19f19a42df6",
+      "creative_video_blueprint": "a454f30c0d4dc1e6ce33ca262a067cd128853dd3c78668d998e3431798013889",
+      "creative_video_strategy": "0052e962aa2928c07cd87e2324f33b22ecca5bca46fc35cd464ba9cfc5d66c19",
+      "creative_video_models": "671b91ad06f8cc6d323807b001f265d703303d4cf2f348b5082df45366c97c10",
+      "creative_video_storyboard": "3331db83d5ceaf7d518162c2c04025f9f14a2af291725d480547ab69e3b7d41f",
+      "creative_video_assets": "43bc69b49607a45e8cc8601909350212ec4a48b0d836b14168b3992df6e64d39"
+    },
+    "recipe": [
+      "analysis = analyze_reference(reference.read_bytes(), count_frames=True)",
+      "plan = adapt(brief, analysis, context)",
+      "adapter = adapter_for(STORYBOARD, {})",
+      "For each scene, route_scene(settings, duration_ms=scene[\"durationMs\"], aspect_ratio=\"9:16\", available_models={STORYBOARD}, available_millicredits=0); call apply_direction(scene[\"direction\"], strategy), then adapter.submit and adapter.poll with this prompt and strategy.",
+      "validate_generated_clip(video, strategy[\"outputProfile\"]); store video under its sceneId and assign scene.clipId = scene.sceneId",
+      "out, receipt = render_composition(plan, clips, aspect_ratio=\"9:16\")",
+      "ffmpeg -v error -xerror -i hypit-timing-study.mp4 -map 0:v:0 -f framemd5 -"
+    ],
+    "elapsedSeconds": {
+      "referenceAnalysis": 17.398,
+      "compose": 8.713,
+      "throughFullDecode": 46.44
+    }
+  },
+  "scenes": [
+    {
+      "scene": "scene-1",
+      "referenceSpanMs": [
+        0,
+        5125
+      ],
+      "direction": "Open on the Moss Dial pocket sundial in use. Start the action immediately. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Use balanced lighting. Set a clear and curious tone.",
+      "caption": "Meet the Moss Dial pocket sundial.",
+      "validatedTakeFrames": 123,
+      "takeSha256": "29880e27796412aa52d6b93a0e028ff5cc8b2ea6c4495423f4233706453be89e",
+      "localGenerationAndValidationSeconds": 1.006,
+      "exportFrameSpan": [
+        0,
+        123
+      ]
+    },
+    {
+      "scene": "scene-2",
+      "referenceSpanMs": [
+        5125,
+        6625
+      ],
+      "direction": "Show step 1 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original quick-paced shot for Moss Dial Works for weekend walkers. Try low-key lighting. Set a clear and curious tone.",
+      "caption": "A closer look.",
+      "validatedTakeFrames": 36,
+      "takeSha256": "e25cee69a772069021aaeccb04c930a3824092c857fbc485ba1ac5e7bf4eda5c",
+      "localGenerationAndValidationSeconds": 0.42,
+      "exportFrameSpan": [
+        123,
+        159
+      ]
+    },
+    {
+      "scene": "scene-3",
+      "referenceSpanMs": [
+        6625,
+        10500
+      ],
+      "direction": "Show step 2 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original steady-paced shot for Moss Dial Works for weekend walkers. Try low-key lighting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 93,
+      "takeSha256": "5af7e04cad5b0d1ef0874e84dc837c5d530dae60e56cf60b9c109a8fa06b8548",
+      "localGenerationAndValidationSeconds": 0.589,
+      "exportFrameSpan": [
+        159,
+        252
+      ]
+    },
+    {
+      "scene": "scene-4",
+      "referenceSpanMs": [
+        10500,
+        12750
+      ],
+      "direction": "Show step 3 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original steady-paced shot for Moss Dial Works for weekend walkers. Try low-key lighting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 54,
+      "takeSha256": "bd109e1dc2fe6a1a4ddd91574771c533820de2ab79f016f9fbc1f882b4424165",
+      "localGenerationAndValidationSeconds": 0.53,
+      "exportFrameSpan": [
+        252,
+        306
+      ]
+    },
+    {
+      "scene": "scene-5",
+      "referenceSpanMs": [
+        12750,
+        13875
+      ],
+      "direction": "Show step 4 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original quick-paced shot for Moss Dial Works for weekend walkers. Use a bright setting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 27,
+      "takeSha256": "bc7ad3131b7d27b118b5bade5ed8cfa3328cca52f31c04c3282deeab98fcd0c4",
+      "localGenerationAndValidationSeconds": 0.52,
+      "exportFrameSpan": [
+        306,
+        333
+      ]
+    },
+    {
+      "scene": "scene-6",
+      "referenceSpanMs": [
+        13875,
+        19750
+      ],
+      "direction": "Show step 5 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Try low-key lighting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 141,
+      "takeSha256": "f9c509d1fcb8ac13766cade54fa4b36eac60175d50895b3a9f7d93c90ec106e7",
+      "localGenerationAndValidationSeconds": 1.071,
+      "exportFrameSpan": [
+        333,
+        474
+      ]
+    },
+    {
+      "scene": "scene-7",
+      "referenceSpanMs": [
+        19750,
+        25625
+      ],
+      "direction": "Show step 6 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Try low-key lighting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 141,
+      "takeSha256": "5efc73af79e589d457d3b1be1c2f7caefff979d770caceaad7b346af188df880",
+      "localGenerationAndValidationSeconds": 0.906,
+      "exportFrameSpan": [
+        474,
+        615
+      ]
+    },
+    {
+      "scene": "scene-8",
+      "referenceSpanMs": [
+        25625,
+        29125
+      ],
+      "direction": "Show step 7 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original steady-paced shot for Moss Dial Works for weekend walkers. Use balanced lighting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 84,
+      "takeSha256": "1a1fe32fdf8ccccd3ca8122dbc5b4d996cebf7bea002c8ae24cdf3eaef4342e7",
+      "localGenerationAndValidationSeconds": 0.775,
+      "exportFrameSpan": [
+        615,
+        699
+      ]
+    },
+    {
+      "scene": "scene-9",
+      "referenceSpanMs": [
+        29125,
+        36750
+      ],
+      "direction": "Show step 8 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Use a bright setting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 183,
+      "takeSha256": "05709b790edafa81b9d4549835bea8cfb91f22c84805f09114567833313752a0",
+      "localGenerationAndValidationSeconds": 1.176,
+      "exportFrameSpan": [
+        699,
+        882
+      ]
+    },
+    {
+      "scene": "scene-10",
+      "referenceSpanMs": [
+        36750,
+        44375
+      ],
+      "direction": "Show step 9 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Use a bright setting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 183,
+      "takeSha256": "2475e3de777bc37f1b36026d5c248cf42994baa259d8555919b64a335c167580",
+      "localGenerationAndValidationSeconds": 1.099,
+      "exportFrameSpan": [
+        882,
+        1065
+      ]
+    },
+    {
+      "scene": "scene-11",
+      "referenceSpanMs": [
+        44375,
+        52000
+      ],
+      "direction": "Show step 10 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Use a bright setting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 183,
+      "takeSha256": "426200ebf73b982a8d6a54ceb2587b4e54bee7726a08ba70bc1bac0dd82e8ddd",
+      "localGenerationAndValidationSeconds": 1.029,
+      "exportFrameSpan": [
+        1065,
+        1248
+      ]
+    },
+    {
+      "scene": "scene-12",
+      "referenceSpanMs": [
+        52000,
+        59625
+      ],
+      "direction": "Show step 11 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Use a bright setting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 183,
+      "takeSha256": "71faefc1a93ecf46b7a7cc8b4f8099adf348654924bb4637ea0822b7542f1d21",
+      "localGenerationAndValidationSeconds": 1.272,
+      "exportFrameSpan": [
+        1248,
+        1431
+      ]
+    },
+    {
+      "scene": "scene-13",
+      "referenceSpanMs": [
+        59625,
+        67250
+      ],
+      "direction": "Show step 12 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Use a bright setting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 183,
+      "takeSha256": "4b96ca220ecaea9b54f8a605c783e31afc54d6c76953912e72955d4c0956ffbd",
+      "localGenerationAndValidationSeconds": 1.363,
+      "exportFrameSpan": [
+        1431,
+        1614
+      ]
+    },
+    {
+      "scene": "scene-14",
+      "referenceSpanMs": [
+        67250,
+        74875
+      ],
+      "direction": "Show step 13 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Use a bright setting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 183,
+      "takeSha256": "74379cd7a3b6a05105bd62db8ca3d40bb409f8bf248c48208c1f3dafc3411c55",
+      "localGenerationAndValidationSeconds": 0.879,
+      "exportFrameSpan": [
+        1614,
+        1797
+      ]
+    },
+    {
+      "scene": "scene-15",
+      "referenceSpanMs": [
+        74875,
+        78250
+      ],
+      "direction": "Show step 14 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original steady-paced shot for Moss Dial Works for weekend walkers. Use balanced lighting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 81,
+      "takeSha256": "79b25d4cebc53b9eb650bb09ec29085c074466ffbd91d68850a81b6826dbcec0",
+      "localGenerationAndValidationSeconds": 0.473,
+      "exportFrameSpan": [
+        1797,
+        1878
+      ]
+    },
+    {
+      "scene": "scene-16",
+      "referenceSpanMs": [
+        78250,
+        83658
+      ],
+      "direction": "Show step 15 from a new angle with the Moss Dial pocket sundial in motion. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Use a bright setting. Set a clear and curious tone.",
+      "caption": "",
+      "validatedTakeFrames": 130,
+      "takeSha256": "56068918fc83c985ac470ab0b85c8a711a844bd43418ea0d96101bebe42c036b",
+      "localGenerationAndValidationSeconds": 0.651,
+      "exportFrameSpan": [
+        1878,
+        2008
+      ]
+    },
+    {
+      "scene": "scene-17",
+      "referenceSpanMs": [
+        83658,
+        89067
+      ],
+      "direction": "Finish on the Moss Dial pocket sundial. Leave room for the campaign's invitation. Campaign brief — Show a walker opening the dial, aligning the brass pin, and reading a patch of afternoon sunlight. Create an original lingering-paced shot for Moss Dial Works for weekend walkers. Use a bright setting. Set a clear and curious tone.",
+      "caption": "Explore more from Moss Dial Works.",
+      "validatedTakeFrames": 130,
+      "takeSha256": "9eb815926f473c0f8298bfdfd706dc5404ba29ba14ae509aeb675658699c60ff",
+      "localGenerationAndValidationSeconds": 0.693,
+      "exportFrameSpan": [
+        2008,
+        2138
+      ]
+    }
+  ],
+  "export": {
+    "file": "web/public/rafii/studio-examples/hypit-timing-study.mp4",
+    "sha256": "210523bd86030121dd1c0e1a42e17a65b5513647814c30636b4d4b7666e82a81",
+    "bytes": 637063,
+    "durationMs": 89083,
+    "decodedFrames": 2138,
+    "distinctDecodedFrameDigests": 2048,
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 720,
+        "height": 1280,
+        "avg_frame_rate": "24/1",
+        "duration": "89.083333",
+        "nb_frames": "2138"
+      },
+      {
+        "codec_name": "mov_text",
+        "codec_type": "subtitle",
+        "avg_frame_rate": "0/0",
+        "duration": "89.083000",
+        "nb_frames": "6"
+      }
+    ],
+    "captionsSrt": "1\n00:00:00,000 --> 00:00:05,125\nMeet the Moss Dial pocket sundial.\n\n2\n00:00:05,125 --> 00:00:06,625\nA closer look.\n\n3\n00:01:23,667 --> 00:01:29,083\nExplore more from Moss Dial Works.",
+    "relativePlaybackUrl": "/rafii/studio-examples/hypit-timing-study.mp4"
+  }
+}

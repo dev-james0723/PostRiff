@@ -34,6 +34,13 @@ export const navGroups: NavGroup[] = [
         access: { permission: 'edit' }
       },
       {
+        title: 'Video Studio',
+        url: '/app/creative',
+        icon: 'video',
+        items: [],
+        access: { permission: 'read' }
+      },
+      {
         title: 'Automations',
         url: '/app/automations',
         icon: 'bolt',

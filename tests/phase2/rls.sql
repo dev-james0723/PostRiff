@@ -198,3 +198,16 @@ end $$;
 
 -- RAPv2 owner decisions (2026-10-16): incident banner, step-up notices, previous address for 14 days.
 \ir ../../migrations/postriff/129_rapv2_owner_decisions.sql
+
+-- Private reference-to-video projects and their editorial revisions.
+\ir ../../migrations/postriff/131_creative_video_projects.sql
+-- Hosted Supabase grants its bypass-RLS service role table rights by default.
+alter default privileges in schema public grant all on tables to service_role;
+\ir ../../migrations/postriff/132_creative_video_quotes.sql
+alter default privileges in schema public revoke all on tables from service_role;
+do $$ begin
+ if not has_table_privilege('service_role','public.pr_creative_video_model_policy','SELECT')
+    or has_table_privilege('service_role','public.pr_creative_video_model_policy','INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+   raise exception 'creative model policy must remain read-only for the service role';
+ end if;
+end $$;

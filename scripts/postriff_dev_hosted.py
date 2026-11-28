@@ -276,6 +276,17 @@ class DevAssets:
         self.objects[('mime',workspace_id,object_name)] = content_type
         return '/'.join(key)
 
+    def put_reserved_video(self, workspace_id, object_name, raw):
+        with self.upload_lock:
+            self.put_immutable(workspace_id, "video", object_name, raw, "video/mp4")
+
+    def get_verified_video(self, workspace_id, object_name, *, expected_bytes, expected_mime, expected_etag):
+        with self.upload_lock:
+            info = self.object_info(workspace_id, "video", object_name)
+            if (info["bytes"], info["mime"], info["etag"]) != (expected_bytes, expected_mime, expected_etag):
+                raise AlphaError("Approved video changed or is unavailable.", 409, code="video_changed")
+            return self.get_bounded(workspace_id, "video", object_name, 100_000_000)
+
     def receive_upload(self, token, raw, mime):
         with self.upload_lock:
             target = self.uploads.pop(token, None)

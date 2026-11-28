@@ -40,6 +40,7 @@ import {
   type OutcomeRow
 } from './adapters';
 import { ForecastChart } from './forecast-chart';
+import { CreativeVideoCost } from './creative-video-cost';
 import { ReconcileQueue } from './reconcile-queue';
 
 /**
@@ -301,6 +302,7 @@ export function AiCostView() {
       </TabAnchor>
 
       <TabAnchor section='ai-cost' tab='reconcile' active={tab}>
+        <CreativeVideoCost key={mode} />
         <Panel title='Reconcile queue' description='Usage rows whose provider cost is still unknown. Reconciling records the provider’s own cost with a reference, needs the usage.reconcile capability and a fresh second factor, and writes an audit entry.'>
           <ReconcileQueue onEvidence={evidence.open} />
         </Panel>

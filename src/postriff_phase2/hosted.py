@@ -62,6 +62,23 @@ def known_zone(name):
     return True
 
 
+def active_workspace_row(cur, workspace_id, principal, *, allow_deleting=False):
+    """Lock the tenant and verify the actor is still active before accessing workspace data."""
+    cur.execute(f"SELECT w.revision,w.state,{MEMBER_COLUMNS} FROM public.pr_workspaces w JOIN public.pr_memberships m ON m.workspace_id=w.id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE w.id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR UPDATE OF w", (workspace_id, principal))
+    row = cur.fetchone()
+    if not row:
+        # Same status and message whether the workspace is foreign or nonexistent.
+        raise AlphaError("Workspace unavailable.", 403)
+    state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+    if state.get('accountDeletion') and not (allow_deleting and row[2] == 'owner'):
+        raise AlphaError('Account deletion is pending. Only deletion can continue.', 409, code='account_deletion_pending')
+    if state.get('accountBlock'):
+        # A founder account block froze this workspace (operator_actions): every request and background run stops here.
+        from .operator_actions import blocked_error
+        raise blocked_error()
+    return row
+
+
 def _membership(row):
     return Membership.from_row(*row[2:7])
 
@@ -146,20 +163,16 @@ class PostgresWorkspaceRepository:
         from .api_tokens import is_api_token
         api_grant = self.api_tokens.resolve(token, workspace_id) if is_api_token(token) else None
         principal = api_grant["createdBy"] if api_grant else self.verify_session(token)  # Verified identity only.
+        with self._principal_transaction(workspace_id, principal, api_grant=api_grant, token=token,
+                                         allow_deleting=allow_deleting) as result:
+            yield result
+
+    @contextmanager
+    def _principal_transaction(self, workspace_id, principal, *, api_grant=None, token=None, allow_deleting=False):
+        """Use current account and workspace policy for a verified session or a bound internal job."""
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute(f"SELECT w.revision,w.state,{MEMBER_COLUMNS} FROM public.pr_workspaces w JOIN public.pr_memberships m ON m.workspace_id=w.id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE w.id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR UPDATE OF w", (workspace_id, principal))
-                row = cur.fetchone()
-                if not row:
-                    # Same status and message whether the workspace is foreign or nonexistent.
-                    raise AlphaError("Workspace unavailable.", 403)
-                state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
-                if state.get('accountDeletion') and not (allow_deleting and row[2] == 'owner'):
-                    raise AlphaError('Account deletion is pending. Only deletion can continue.', 409, code='account_deletion_pending')
-                if state.get('accountBlock'):
-                    # A founder account block froze this workspace (operator_actions): every request and background run stops here.
-                    from .operator_actions import blocked_error
-                    raise blocked_error()
+                row = active_workspace_row(cur, workspace_id, principal, allow_deleting=allow_deleting)
                 if api_grant:
                     self.api_tokens.validate(cur, token, workspace_id)  # Lock the live grant through this transaction.
                 from .agent_runtime_v2 import authz
@@ -193,16 +206,20 @@ class PostgresWorkspaceRepository:
                 raise AlphaError("Workspace changed; reload.", 409, code="workspace_revision_conflict")
             source = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             state = trusted_command(copy.deepcopy(source), principal)
-            if not isinstance(state, dict):
-                raise AlphaError("The hosted command returned invalid state.", 500)
-            cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
-            if audit_event:
-                audit(cur, workspace_id, principal, *audit_event(state))
-            for effect in self.effects:
-                effect(cur, workspace_id, source, state, principal)
+            self.save_state(cur, workspace_id, source, state, principal, audit_event=audit_event)
             if after:
                 after(cur, state, principal)
             return {"revision": revision+1, "state": state, "membership": _membership(row).summary()}
+
+    def save_state(self, cur, workspace_id, source, state, principal, *, audit_event=None):
+        """Save an authorized command under the workspace lock and capture its canonical effects."""
+        if not isinstance(state, dict):
+            raise AlphaError("The hosted command returned invalid state.", 500)
+        cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
+        if audit_event:
+            audit(cur, workspace_id, principal, *audit_event(state))
+        for effect in self.effects:
+            effect(cur, workspace_id, source, state, principal)
 
     def mutate(self, workspace_id, token, expected_revision, action, payload):
         if self.commands is None:
@@ -219,7 +236,11 @@ class PostgresWorkspaceRepository:
         if action.startswith(('voice_sample', 'brand_brain_')) or action == 'voice_profile_analyze':
             audit_event = lambda state: ('voice.' + action, payload.get('sourceId', ''), {'requestId': payload.get('requestId'), 'activeRevision': state.get('speaker', {}).get('activeRevision')})
         after = None
-        if action == media_consent.ACTION:
+        if action == media_consent.ACTION and payload.get("purpose") == media_consent.FIRST_FRAME_PURPOSE:
+            audit_event = lambda state: ("media.egress_decided", media_consent.FIRST_FRAME_PURPOSE,
+                {"cloud": bool(media_consent.first_frame_grant(state)),
+                 "processor": media_consent.FIRST_FRAME_PROCESSOR["id"]})
+        elif action == media_consent.ACTION:
             # Chat-context SPEC §8.1: the owner's decision is audited with the processors it names, and turning it off
             # deletes the kept notes in the same transaction.
             audit_event = lambda state: ("media.egress_decided", "cloud", {"cloud": media_consent.decision(state).get("cloud") is True, "processors": media_consent.processor_ids(state)})

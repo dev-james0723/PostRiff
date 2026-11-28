@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en" data-theme="rafii">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Video Studio · Rafii</title>
+  <link rel="stylesheet" href="/studio-theme.css">
+  <link rel="stylesheet" href="/studio-editor.css">
+  <script src="/studio-editor.js" defer></script>
+  <script src="/studio-workspace.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#workspace">Skip to editor</a>
+  <header class="topbar">
+    <div class="identity"><span class="mark" aria-hidden="true">R</span><strong>Rafii</strong><span class="divider"></span><span>Video Studio</span></div>
+    <div class="actions"><a class="workspace-link" href="/app/creative?workspace=1">Rafii workspace</a><span class="local"><span aria-hidden="true"></span> Local editor</span></div>
+  </header>
+  <main id="workspace">
+    <div class="project-head">
+      <div>
+        <p class="context" id="project-kind">Sample project</p>
+        <h1 id="heading">Timer study</h1>
+        <p class="metadata" id="project-meta">Opening the edit…</p>
+      </div>
+      <div class="actions" id="project-actions">
+        <button id="new" type="button">New project</button>
+        <button id="open" type="button">Open project</button>
+        <input id="open-file" type="file" accept=".json,application/json" hidden>
+        <button id="save" type="button">Save project</button>
+        <button class="primary" id="export" type="button" disabled>Export MP4 <span aria-hidden="true">↗</span></button>
+      </div>
+    </div>
+    <div id="notice" class="notice" role="status" aria-live="polite"></div>
+    <button id="retry-editor" type="button" hidden>Retry editor</button>
+    <noscript>Enable JavaScript to edit this project. The sample cut can be played below.</noscript>
+    <div class="desk">
+      <div class="cut-column">
+        <section class="panel monitor" aria-labelledby="preview-heading">
+          <div class="panel-bar"><h2 id="preview-heading">Preview</h2><span class="tag" id="monitor-mode">Sample cut</span></div>
+          <div class="stage">
+            <video id="player" controls playsinline preload="metadata" aria-label="Cut preview"
+                src="/rafii/studio-examples/original-cut.mp4" poster="/rafii/studio-examples/original-cut-500ms.png">
+              <track kind="captions" label="English" srclang="en" src="/rafii/studio-examples/original-cut.vtt">
+            </video>
+            <p id="empty-preview" hidden>Assign production footage to preview this scene.</p>
+          </div>
+          <div class="monitor-footer"><span id="monitor-detail" class="muted">Timer study · First cut</span><button id="preview" type="button" disabled>Preview cut</button></div>
+          <div id="workspace-transfer"></div>
+        </section>
+        <section class="panel timeline" aria-labelledby="timeline-heading">
+          <div class="panel-bar"><div class="section-title"><h2 id="timeline-heading">Timeline</h2><span class="tag" id="duration">—</span></div>
+            <div class="actions"><button class="quiet" id="undo" type="button" disabled>Undo</button><button id="add" type="button">Add scene</button></div></div>
+          <ol class="scene-list" id="timeline"></ol>
+          <p id="empty-timeline" class="muted inset" hidden>Generate a blueprint or add your first scene.</p>
+        </section>
+      </div>
+      <aside class="panel inspector" aria-label="Project inspector">
+        <div class="switcher" aria-label="Editor panels">
+          <button type="button" data-panel="scene" aria-controls="scene-panel" aria-pressed="true">Scene</button>
+          <button type="button" data-panel="media" aria-controls="media-panel" aria-pressed="false">Media</button>
+          <button type="button" data-panel="blueprint" aria-controls="blueprint-panel" aria-pressed="false">Blueprint</button>
+        </div>
+        <section id="scene-panel" class="pane" aria-labelledby="scene-heading">
+          <div class="section-title"><p class="context" id="scene-kicker">Scene 01</p></div>
+          <h2 id="scene-heading">Scene editor</h2>
+          <p id="no-scene" class="muted" hidden>Select or add a scene to edit its footage and caption.</p>
+          <form id="scene-form" class="form">
+            <label>Scene name<input id="scene-name" required maxlength="90" autocomplete="off"></label>
+            <label>Production clip<select id="scene-clip"></select></label>
+            <div class="pair">
+              <label>Source start (s)<input id="trim" type="number" min="0" max="89.999" step=".001" required></label>
+              <label>Duration (s)<input id="length" type="number" min=".042" max="8" step=".001" required></label>
+            </div>
+            <label>Caption<textarea id="caption" rows="2" maxlength="120"></textarea></label>
+            <details id="direction-details"><summary>Proposed shot direction</summary><label class="details-body">Direction<textarea id="direction" rows="3" maxlength="600"></textarea></label></details>
+            <p id="scene-error" class="error" role="alert" hidden></p>
+            <button id="apply" type="submit" class="primary">Apply scene changes</button>
+            <div class="scene-actions"><button id="earlier" type="button">Move earlier</button><button id="later" type="button">Move later</button><button id="remove" class="quiet" type="button">Remove</button></div>
+          </form>
+        </section>
+        <section id="media-panel" class="pane" aria-labelledby="media-heading" hidden>
+          <p class="context">Project media</p><h2 id="media-heading">Footage &amp; reference</h2>
+          <form id="import-form" class="form">
+            <h3>Production footage</h3>
+            <p class="muted">Import the original video you want to use in your cut. MP4 or MOV, up to 16 MiB and 90 seconds per file.</p>
+            <label>Production file<input id="production-file" type="file" accept=".mp4,.mov,video/mp4,video/quicktime" required></label>
+            <label class="check"><input id="production-rights" type="checkbox" required>I have permission to edit and export this footage.</label>
+            <div id="relink-note" hidden><p>Relinking <strong id="relink-target"></strong></p><button id="relink-cancel" class="quiet" type="button">Cancel relink</button></div>
+            <button id="import" type="submit">Import footage</button>
+          </form>
+          <ul id="library" class="library" aria-label="Production clips"></ul>
+          <div class="rule"></div>
+          <form id="audio-form" class="form">
+            <h3>Soundtrack</h3>
+            <p class="muted">Replace the cut’s original sound with music or narration. MP3, WAV or AAC, up to 16 MiB and 90 seconds.</p>
+            <p id="audio-status" class="tag">Using production audio</p>
+            <label>Audio file<input id="audio-file" type="file" accept=".mp3,.wav,.m4a,.aac" required></label>
+            <label class="check"><input id="audio-rights" type="checkbox" required>I have permission to include this audio in my export.</label>
+            <div class="actions"><button id="audio-add" type="submit">Use audio</button><button id="audio-remove" class="quiet" type="button" hidden>Remove audio</button></div>
+          </form>
+          <div class="rule"></div>
+          <form id="reference-form" class="form">
+            <h3>Reference analysis</h3>
+            <p class="muted">Measure the cut timing of a reference to guide an original shot plan.</p>
+            <label>Reference source<select id="reference-source"><option value="sample">Bundled timer reference</option><option value="file">My reference file</option></select></label>
+            <label id="reference-file-label" hidden>Reference file<input id="reference-file" type="file" accept=".mp4,.mov,video/mp4,video/quicktime"></label>
+            <label class="check"><input id="reference-rights" type="checkbox" required>I have permission to analyze this reference and adapt its timing.</label>
+            <button id="analyze" type="submit">Analyze reference</button>
+          </form>
+          <section id="signals" class="signals" aria-label="Measured reference signals" hidden></section>
+          <section id="contact-sheet" class="signals" aria-labelledby="frames-heading" hidden>
+            <h3 id="frames-heading">Reference frames</h3>
+            <label>Coverage<select id="frames-coverage"><option value="scenes">By shot</option><option value="intervals">At regular intervals</option></select></label>
+            <button id="frames-toggle" type="button" aria-expanded="false" aria-controls="frames-content">Show frames</button>
+            <div id="frames-content" hidden>
+              <div id="frame-options" class="frame-options" aria-label="Choose a reference frame"></div>
+              <figure class="selected-frame">
+                <img id="frame-image" alt="" hidden>
+                <figcaption id="frame-caption"></figcaption>
+              </figure>
+              <p id="frame-direction" class="muted" hidden></p>
+              <div id="frame-paging" class="actions" hidden>
+                <button id="frames-prev" type="button">Previous page</button><span id="frames-page"></span>
+                <button id="frames-next" type="button">Next page</button>
+              </div>
+            </div>
+          </section>
+        </section>
+        <section id="blueprint-panel" class="pane" aria-labelledby="blueprint-heading" hidden>
+          <p class="context">Creative brief</p><h2 id="blueprint-heading">Plan your cut</h2>
+          <form id="brief-form" class="form">
+            <label>Project name<input id="project-name" maxlength="120" required autocomplete="off"></label>
+            <label>Frame<select id="aspect"><option>9:16</option><option>16:9</option><option>1:1</option></select></label>
+            <label>Creative brief<textarea id="brief" rows="3" maxlength="1200" placeholder="What are you showing, and what should viewers do next?"></textarea></label>
+            <details><summary>Brand and audience</summary><div class="form details-body">
+              <p class="muted">These details apply to this local project. Approved Brand Brain context is available in your signed-in workspace.</p>
+              <label>Brand<input id="brand" maxlength="120"></label><label>Subject<input id="subject" maxlength="120"></label>
+              <label>Audience<input id="audience" maxlength="160"></label>
+            </div></details>
+            <button id="update-project" type="submit">Save project details</button>
+          </form>
+          <div class="rule"></div>
+          <h3>Original shot plan</h3>
+          <p class="muted" id="blueprint-help">Analyze a reference in Media, then generate a scene-by-scene plan from your brief.</p>
+          <button id="blueprint" type="button" class="primary">Generate blueprint</button>
+        </section>
+      </aside>
+    </div>
+    <footer><p>Project files save your edit decisions. Keep imported footage to relink it when reopening.</p><button id="clear" class="quiet" type="button">Clear session</button></footer>
+  </main>
+</body>
+</html>

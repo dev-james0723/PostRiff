@@ -1,0 +1,51 @@
+{
+  "aspectRatio": "9:16",
+  "clips": {
+    "original-1": "original-1.mp4",
+    "original-2": "original-2.mp4",
+    "original-3": "original-3.mp4",
+    "revised-intro": "revised-intro.mp4"
+  },
+  "versions": [
+    [
+      {
+        "sceneId": "scene-1",
+        "clipId": "original-1",
+        "durationMs": 1250,
+        "caption": "A turn to begin."
+      },
+      {
+        "sceneId": "scene-2",
+        "clipId": "original-2",
+        "durationMs": 1500,
+        "caption": "Time in motion."
+      },
+      {
+        "sceneId": "scene-3",
+        "clipId": "original-3",
+        "durationMs": 1250,
+        "caption": "Find your tempo."
+      }
+    ],
+    [
+      {
+        "sceneId": "scene-1",
+        "clipId": "revised-intro",
+        "durationMs": 1250,
+        "caption": "Start with one turn."
+      },
+      {
+        "sceneId": "scene-2",
+        "clipId": "original-2",
+        "durationMs": 1500,
+        "caption": "Time in motion."
+      },
+      {
+        "sceneId": "scene-3",
+        "clipId": "original-3",
+        "durationMs": 1250,
+        "caption": "Find your tempo."
+      }
+    ]
+  ]
+}

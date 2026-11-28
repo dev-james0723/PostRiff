@@ -1,0 +1,99 @@
+{
+  "width": 216,
+  "height": 384,
+  "fps": 24.0,
+  "durationMs": 4000,
+  "hasAudio": true,
+  "captionTrack": false,
+  "sha256": "5f0864c0d9f6e501e179346a3eb8d12d1bfafce9ef0f3b723d3b5d035ea508d6",
+  "scenes": [
+    {
+      "startMs": 0,
+      "endMs": 1250,
+      "durationMs": 1250,
+      "measurements": {
+        "meanRgb": [
+          217,
+          206,
+          190
+        ],
+        "meanLuma": 0.8129,
+        "centerLuma": 0.8097,
+        "edgeLuma": 0.8139,
+        "embeddedCaptionCues": 0,
+        "meanFrameChange": 0.001,
+        "openingCutScore": 0.0,
+        "audioRms": 0.0882,
+        "audioPeak": 0.1325,
+        "quietFraction": 0.0
+      },
+      "pacing": "quick",
+      "interpretation": "A quick, bright shot with little visible change. A soundtrack is present."
+    },
+    {
+      "startMs": 1250,
+      "endMs": 2750,
+      "durationMs": 1500,
+      "measurements": {
+        "meanRgb": [
+          47,
+          44,
+          43
+        ],
+        "meanLuma": 0.1756,
+        "centerLuma": 0.1691,
+        "edgeLuma": 0.1777,
+        "embeddedCaptionCues": 0,
+        "meanFrameChange": 0.0105,
+        "openingCutScore": 0.6283,
+        "audioRms": 0.0881,
+        "audioPeak": 0.1294,
+        "quietFraction": 0.0
+      },
+      "pacing": "quick",
+      "interpretation": "A quick, dark shot with little visible change. A soundtrack is present."
+    },
+    {
+      "startMs": 2750,
+      "endMs": 4000,
+      "durationMs": 1250,
+      "measurements": {
+        "meanRgb": [
+          218,
+          207,
+          192
+        ],
+        "meanLuma": 0.8181,
+        "centerLuma": 0.784,
+        "edgeLuma": 0.8294,
+        "embeddedCaptionCues": 0,
+        "meanFrameChange": 0.0009,
+        "openingCutScore": 0.6328,
+        "audioRms": 0.0883,
+        "audioPeak": 0.1291,
+        "quietFraction": 0.0
+      },
+      "pacing": "quick",
+      "interpretation": "A quick, bright shot with little visible change. A soundtrack is present."
+    }
+  ],
+  "measured": {
+    "method": "rafii-rgb-audio-v1",
+    "sampleIntervalMs": 125,
+    "sampledFrameCount": 32,
+    "hasChangingFrames": true,
+    "audioSampleRateHz": 8000,
+    "embeddedCaptions": {
+      "state": "no_embedded_track",
+      "cues": []
+    }
+  },
+  "inferences": [
+    "Hard-cut candidates are estimates from consecutive sampled frames.",
+    "Pacing and lighting descriptions refer to relative duration, mean color and frame change."
+  ],
+  "unavailable": [
+    "Hook wording, speech, typography, product identity, camera direction and narrative intent require review.",
+    "Audience retention, conversion and other performance metrics require measured platform data."
+  ]
+}

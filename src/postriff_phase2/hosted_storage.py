@@ -268,6 +268,15 @@ class SupabaseStorage:
             raise AlphaError("Private storage did not create a safe upload URL.", 502)
         return f"{self.project_url}/storage/v1{signed}"
 
+    def put_reserved_video(self, workspace_id, object_name, raw):
+        """Fill one server-reserved immutable video slot using its single-object upload grant."""
+        if not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_VIDEO_BODY:
+            raise AlphaError("This generated video exceeds the storage limit.", 413)
+        url = self.signed_upload_url(workspace_id, "video", object_name)
+        status, _, _ = self.send("PUT", url, {"Content-Type": "video/mp4", "x-upsert": "false"}, raw)
+        if status not in (200, 201, 204):
+            raise AlphaError("Could not confirm the private video upload.", 502, code="creative_upload_unconfirmed")
+
     def signed_resumable_upload(self, workspace_id, object_name, mime):
         """Official signed TUS grant for one immutable video; never a user/service-role JWT."""
         if mime not in ('video/mp4', 'video/quicktime'):
